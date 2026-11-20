@@ -18,9 +18,14 @@
 //   case too, which lets one pass over the text find every form; a chance
 //   match of that length in ordinary text is vanishingly unlikely.
 //
-// Each match is replaced by `REDACTED`. Text with no match passes through
-// byte for byte, binary included: the scrubber works on bytes, never on a
-// decoded string.
+// A raw run from the start of a key's secret part, inside one of its vendor's
+// public object ids, is left in place (see `PUBLIC_ID_PREFIXES`): Stripe's ids
+// share a run of characters with the account's own key, and an id has to come
+// back whole to be usable.
+//
+// Every other match is replaced by `REDACTED`. Text with no match passes
+// through byte for byte, binary included: the scrubber works on bytes, never
+// on a decoded string.
 //
 // The body is scrubbed as a stream. At a chunk boundary the scrubber holds
 // back only a short tail, and only while that tail is made of bytes that
@@ -50,6 +55,79 @@ const PUBLIC_PREFIXES = CREDENTIAL_PREFIXES;
 export function publicPrefix(value: string): string {
   return PUBLIC_PREFIXES.find((prefix) => value.startsWith(prefix)) ?? '';
 }
+
+// The object ids a vendor returns, by the prefixes of the keys it issues.
+// A Stripe object id (`price_1Ud8kn…`) carries a run of characters that the
+// account's secret key carries too, from the part of the key that names the
+// account. That run identifies the account, not the secret, and the id is
+// unusable without it. So a match inside one of these ids is kept, as long as
+// it is:
+//
+// - a raw run (never an encoded form) of the first `ID_WINDOW_LENGTH`
+//   characters of a registered key's secret part, for a key of that vendor.
+//   However many ids a response holds, and however many responses there are,
+//   this exemption returns no more of the secret than that window;
+// - inside the id's body: only letters and digits from the id's prefix up to
+//   the end of the match, the prefix itself following a byte that can't be
+//   part of an id, and no more than `MAX_ID_LENGTH` bytes from the start of
+//   the prefix to the end of the match;
+// - from a key whose secret part is at least `MIN_ID_KEY_SECRET_LENGTH`
+//   long, so the window is a small part of it.
+//
+// Any other run, or one anywhere else, is still removed.
+const PUBLIC_ID_PREFIXES: readonly {
+  keyPrefixes: readonly string[];
+  idPrefixes: readonly string[];
+}[] = [
+  {
+    keyPrefixes: ['sk_live_', 'sk_test_', 'rk_live_', 'rk_test_'],
+    idPrefixes: [
+      'acct_',
+      'ba_',
+      'card_',
+      'ch_',
+      'cn_',
+      'cs_live_',
+      'cs_test_',
+      'cus_',
+      'evt_',
+      'ii_',
+      'in_',
+      'pi_',
+      'plink_',
+      'pm_',
+      'po_',
+      'price_',
+      'prod_',
+      'promo_',
+      'py_',
+      're_',
+      'seti_',
+      'si_',
+      'src_',
+      'sub_',
+      'tok_',
+      'tr_',
+      'txn_',
+    ],
+  },
+];
+
+// How much of the start of a key's secret part may be kept inside a public id.
+// A Stripe secret key's secret part opens with one character and the
+// account's 16-character id body, and its ids share 10 or 11 characters with
+// that stretch.
+const ID_WINDOW_LENGTH = 24;
+
+// The longest stretch of an id, from its prefix to the end of a kept match.
+// Stripe's ids are well under it. The stream keeps at least this much of
+// what it already delivered, so it sees the same prefix in every pass.
+const MAX_ID_LENGTH = 128;
+
+// The shortest secret part a key may have for runs of it to be kept inside an
+// id: so that at least 40 characters past `ID_WINDOW_LENGTH` are never
+// returned. A current Stripe secret key's is about 99 characters.
+const MIN_ID_KEY_SECRET_LENGTH = ID_WINDOW_LENGTH + 40;
 
 // The longest escape sequence the decoded view understands, in bytes:
 // `&#x` plus eight hex digits and `;`, or a `\uXXXX\uXXXX` surrogate pair.
@@ -98,6 +176,16 @@ function folded(bytes: Uint8Array): Uint8Array {
     result[i] = FOLD[bytes[i]];
   }
   return result;
+}
+
+function isLetterOrDigit(byte: number): boolean {
+  let lower = fold(byte);
+  return (byte >= 0x30 && byte <= 0x39) || (lower >= 0x61 && lower <= 0x7a);
+}
+
+// A byte that can sit inside a vendor's object id, prefix included.
+function isIdByte(byte: number): boolean {
+  return isLetterOrDigit(byte) || byte === 0x5f; // _
 }
 
 function hexValue(byte: number): number {
@@ -432,6 +520,10 @@ export class CredentialScrubber {
   private needles = new NeedleSet();
   private heldBytes = new Set<number>();
   private registered = new Set<string>();
+  // The registered keys whose runs may be kept inside their vendor's public
+  // ids: the start of each key's secret part (`ID_WINDOW_LENGTH` characters,
+  // folded), beside that vendor's id prefixes.
+  private idKeys: { idPrefixes: readonly string[]; window: string }[] = [];
 
   constructor() {
     for (let byte of Buffer.from(ESCAPE_SYNTAX, 'latin1')) {
@@ -461,6 +553,54 @@ export class CredentialScrubber {
       // overlaps the needle above, so a full echo is one match.
       this.addForms(secret, true);
     }
+    let vendor = PUBLIC_ID_PREFIXES.find(({ keyPrefixes }) =>
+      keyPrefixes.includes(prefix),
+    );
+    if (vendor && secret.length >= MIN_ID_KEY_SECRET_LENGTH) {
+      this.idKeys.push({
+        idPrefixes: vendor.idPrefixes,
+        window: latin1(
+          folded(Buffer.from(secret.slice(0, ID_WINDOW_LENGTH), 'latin1')),
+        ),
+      });
+    }
+  }
+
+  // Whether the match `bytes[start, end)` is a raw run from the start of a
+  // registered key's secret part inside one of its vendor's public ids, and
+  // so stays (see `PUBLIC_ID_PREFIXES`).
+  private isInPublicId(bytes: Uint8Array, [start, end]: [number, number]) {
+    if (this.idKeys.length === 0 || end - start > ID_WINDOW_LENGTH) {
+      return false;
+    }
+    for (let i = start; i < end; i++) {
+      if (!isLetterOrDigit(bytes[i])) return false;
+    }
+    // The id's body runs back from the match to just after its prefix.
+    let body = start;
+    let limit = Math.max(0, end - MAX_ID_LENGTH);
+    while (body > limit && isLetterOrDigit(bytes[body - 1])) body--;
+    let run = latin1(folded(bytes.subarray(start, end)));
+    return this.idKeys.some(
+      ({ idPrefixes, window }) =>
+        window.includes(run) &&
+        idPrefixes.some((idPrefix) => {
+          let from = body - idPrefix.length;
+          return (
+            from >= limit &&
+            (from === 0 || !isIdByte(bytes[from - 1])) &&
+            latin1(bytes, from, body) === idPrefix
+          );
+        }),
+    );
+  }
+
+  // The matches in `bytes` that are removed: every one but those kept inside
+  // a public id.
+  private rangesToRemove(bytes: Uint8Array): [number, number][] {
+    return this.findRanges(bytes).filter(
+      (range) => !this.isInPublicId(bytes, range),
+    );
   }
 
   private addForms(value: string, partial: boolean) {
@@ -538,7 +678,7 @@ export class CredentialScrubber {
 
   scrubBytes(bytes: Uint8Array): Uint8Array {
     if (this.isEmpty) return bytes;
-    let ranges = this.findRanges(bytes);
+    let ranges = this.rangesToRemove(bytes);
     if (ranges.length === 0) return bytes;
     return Buffer.concat(this.redact(bytes, ranges, 0, bytes.length));
   }
@@ -579,7 +719,10 @@ export class CredentialScrubber {
     let context: Uint8Array = new Uint8Array(0);
     // Read but not yet delivered.
     let pending: Uint8Array = new Uint8Array(0);
-    let lookbehind = this.holdbackBytes;
+    // At least one byte more than `MAX_ID_LENGTH`, for the byte before an id's
+    // prefix, so a match kept inside an id is kept in every pass that sees it,
+    // even one the window's limit splits.
+    let lookbehind = Math.max(this.holdbackBytes, MAX_ID_LENGTH + 1);
 
     let release = (
       controller: ReadableStreamDefaultController<Uint8Array>,
@@ -592,7 +735,7 @@ export class CredentialScrubber {
         ? bytes.length
         : Math.max(base, this.releasePoint(bytes));
       if (point > base) {
-        let ranges = this.findRanges(bytes);
+        let ranges = this.rangesToRemove(bytes);
         let parts = this.redact(bytes, ranges, base, point);
         let out = parts.length === 1 ? parts[0] : Buffer.concat(parts);
         if (out.byteLength > 0) controller.enqueue(new Uint8Array(out));

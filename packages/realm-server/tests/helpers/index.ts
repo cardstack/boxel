@@ -1595,6 +1595,7 @@ export async function createRealm({
   audioSizeLimitBytes,
   videoSizeLimitBytes,
   transpileCoordinator,
+  transpilerIdentity,
   fullIndexOnStartup,
   skipBootIndex,
   mediaCacheAdapter,
@@ -1630,6 +1631,9 @@ export async function createRealm({
   // is the only thing serializing them — that's the behavior we want to
   // exercise.
   transpileCoordinator?: PopulateCoordinator;
+  // Forwarded to the Realm constructor's `transpilerIdentity` option, so a
+  // test can mount the same realm as two installations would.
+  transpilerIdentity?: string;
   // Forwarded to the Realm constructor's `fullIndexOnStartup` option so
   // tests can exercise the bootstrap-realm code path in `Realm.#startup`
   // (the kind='bootstrap' branch that triggers the CS-11245 broadcast).
@@ -1758,6 +1762,7 @@ export async function createRealm({
           process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
         ),
       transpileCoordinator,
+      transpilerIdentity,
       mediaCacheAdapter,
       cardDocumentCache,
       ...(history ? { history } : {}),
@@ -1840,6 +1845,7 @@ export async function runTestRealmServer({
   oauthTestResources,
   oauthTestDocumentOrigins,
   oauthNewClientLimit,
+  oauthUnconnectedClientCap,
   oauthAuthorizationLimit,
   oauthTokenLimit,
   secureOriginAppOrigins,
@@ -1892,6 +1898,9 @@ export async function runTestRealmServer({
   oauthNewClientLimit?: ConstructorParameters<
     typeof RealmServer
   >[0]['oauthNewClientLimit'];
+  // The provider's cap on never-connected clients; omit for the production
+  // default.
+  oauthUnconnectedClientCap?: number;
   // The provider's limit on starting a flow; omit for the production default.
   oauthAuthorizationLimit?: ConstructorParameters<
     typeof RealmServer
@@ -1989,6 +1998,7 @@ export async function runTestRealmServer({
     reconciler,
     virtualNetwork,
     matrixClient,
+    automationAccountStanding: testAutomationAdmissionChecks.accountStanding,
     realmServerSecretSeed,
     realmSecretSeed,
     matrixRegistrationSecret,
@@ -2018,6 +2028,7 @@ export async function runTestRealmServer({
       ? { __testOnlyOAuthDocumentOrigins: oauthTestDocumentOrigins }
       : {}),
     ...(oauthNewClientLimit ? { oauthNewClientLimit } : {}),
+    ...(oauthUnconnectedClientCap ? { oauthUnconnectedClientCap } : {}),
     ...(oauthAuthorizationLimit ? { oauthAuthorizationLimit } : {}),
     ...(oauthTokenLimit ? { oauthTokenLimit } : {}),
     ...(secureOriginAppOrigins ? { secureOriginAppOrigins } : {}),
@@ -2211,6 +2222,7 @@ export async function runTestRealmServerWithRealms({
     reconciler,
     virtualNetwork,
     matrixClient,
+    automationAccountStanding: testAutomationAdmissionChecks.accountStanding,
     realmServerSecretSeed,
     realmSecretSeed,
     matrixRegistrationSecret,
@@ -3563,6 +3575,7 @@ async function buildBaseRealmTemplate(
       reconciler: makeTestReconciler(dbAdapter, [base]),
       virtualNetwork,
       matrixClient,
+      automationAccountStanding: testAutomationAdmissionChecks.accountStanding,
       realmServerSecretSeed,
       realmSecretSeed,
       grafanaSecret,
@@ -4150,3 +4163,12 @@ export const testAccountStandings = new Map<string, AccountStanding>();
 export const testAutomationAdmissionChecks: AutomationAdmissionChecks = {
   accountStanding: async (user) => testAccountStandings.get(user) ?? 'usable',
 };
+
+// A resume's admission that admits every payer, for a test of what resuming
+// does once its payer is admitted.
+export async function admitAnyPayer(
+  _payer: string,
+  _firstRun: { at: number | null },
+): Promise<undefined> {
+  return undefined;
+}

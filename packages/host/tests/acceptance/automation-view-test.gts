@@ -3,7 +3,12 @@ import { click, settled, waitFor, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, rri, testRealmInfo } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  rri,
+  testRealmInfo,
+  type Realm,
+} from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -124,11 +129,28 @@ const ACTIVE = {
   ],
 };
 
+// A card module the realm indexes after the automation's status was asked.
+const NOTE_MODULE = `
+  import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+  export class Note extends CardDef {
+    static displayName = 'Note';
+    @field body = contains(StringField);
+    static isolated = class Isolated extends Component<typeof this> {
+      <template><p data-test-note><@fields.body /></p></template>
+    };
+  }
+`;
+
+// What the status route answers: a direct writer the automation's
+// attributes, and any other viewer the realm lets read that it isn't a
+// direct writer.
 type Answer = { status: number; attributes?: Record<string, unknown> };
 
 module('Acceptance | automation view', function (hooks) {
   let answer: Answer;
   let asked: string[];
+  let realm: Realm;
 
   setupApplicationTest(hooks);
   setupCatalogTestSubset(hooks);
@@ -146,7 +168,7 @@ module('Acceptance | automation view', function (hooks) {
     });
     setupUserSubscription();
     setupAuthEndpoints();
-    await setupAcceptanceTestRealm({
+    ({ realm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -167,12 +189,12 @@ module('Acceptance | automation view', function (hooks) {
           },
         },
       },
-    });
+    }));
 
     // The realm's status route answers from the server's automation row,
     // which an in-browser test realm doesn't have. Each test says what the
-    // route answers.
-    answer = { status: 403 };
+    // route answers; by default, that the viewer isn't a direct writer.
+    answer = { status: 200 };
     asked = [];
     getService('network').virtualNetwork.mount(
       async (request: Request) => {
@@ -188,13 +210,18 @@ module('Acceptance | automation view', function (hooks) {
           });
         }
         return new Response(
-          JSON.stringify({
-            data: {
-              type: 'automation-status',
-              id: AUTOMATION,
-              attributes: answer.attributes,
-            },
-          }),
+          JSON.stringify(
+            answer.attributes
+              ? {
+                  data: {
+                    type: 'automation-status',
+                    id: AUTOMATION,
+                    attributes: answer.attributes,
+                  },
+                  meta: { directWriter: true },
+                }
+              : { data: null, meta: { directWriter: false } },
+          ),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       },
@@ -229,7 +256,7 @@ module('Acceptance | automation view', function (hooks) {
     await waitFor('[data-test-automation-status]', { timeout: 10000 });
   }
 
-  test('a viewer the route refuses sees the card alone, with who turns the automation on and who pays', async function (assert) {
+  test("a viewer who isn't a direct writer sees the card alone, with who turns the automation on and who pays", async function (assert) {
     await openIsolated();
     await waitUntil(() => asked.length > 0, { timeout: 10000 });
     assert.deepEqual(
@@ -247,6 +274,11 @@ module('Acceptance | automation view', function (hooks) {
         'This trigger stops after 30 runs or at the end of Jan 15, 2030, whichever comes first.',
         "the card's own bounds still read",
       );
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .doesNotExist(
+        'without the server status, the card says nothing about webhook runs',
+      );
 
     await openFormat('embedded');
     assert.dom('[data-test-automation-embedded-state]').doesNotExist();
@@ -257,6 +289,41 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-fitted-state]').doesNotExist();
   });
 
+  // The in-page indexer this test runs listens for the host's auth-error
+  // event, which any 401 or 403 through `authedFetch` sends, and fails the
+  // next load it races on one. The status route's answer to a viewer who
+  // isn't a direct writer is no such refusal, so a card module the realm
+  // indexes after that viewer opens an automation still loads.
+  test("a card the realm indexes after a viewer who isn't a direct writer opens an automation still loads", async function (assert) {
+    await openIsolated();
+    await waitUntil(() => asked.length > 0, { timeout: 10000 });
+    await settled();
+    assert.dom('[data-test-automation-status]').doesNotExist();
+
+    await realm.write('note.gts', NOTE_MODULE);
+    await realm.write(
+      'notes/first.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { body: 'Loaded beside the automation' },
+          meta: { adoptsFrom: { module: '../note', name: 'Note' } },
+        },
+      }),
+    );
+    await visitOperatorMode({
+      stacks: [
+        [{ id: AUTOMATION, format: 'isolated' }],
+        [{ id: `${testRealmURL}notes/first`, format: 'isolated' }],
+      ],
+    });
+    await waitFor('[data-test-note]', { timeout: 10000 });
+    assert
+      .dom('[data-test-note]')
+      .hasText('Loaded beside the automation', 'the other card loads');
+    assert.dom('[data-test-automation]').exists();
+  });
+
   test('an automation nobody has switched on reads as off', async function (assert) {
     answer = {
       status: 200,
@@ -264,6 +331,11 @@ module('Acceptance | automation view', function (hooks) {
     };
     await openIsolated();
     await waitForStatus();
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .doesNotExist(
+        'a server that starts runs from webhooks, or says nothing, gets no warning',
+      );
     assert.dom('[data-test-automation-state="Off"]').exists();
     assert.dom('[data-test-automation-header-state="Off"]').exists();
     assert
@@ -275,6 +347,27 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-trigger-progress]').doesNotExist();
   });
 
+  test('each webhook trigger warns that the trigger can’t fire while the server starts no runs from webhooks', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        switchedOn: false,
+        webhookDeliveriesStartRuns: false,
+        lastRun: null,
+        currentRun: null,
+      },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-webhook-notice]', { timeout: 10000 });
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .exists({ count: 1 }, 'the webhook trigger, and no other, warns');
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .hasText(
+        'This trigger can’t fire, Boxel doesn’t run automations from webhooks.',
+      );
+  });
   test("an active automation shows its payer, next run and each trigger's progress", async function (assert) {
     answer = { status: 200, attributes: ACTIVE };
     await openIsolated();
@@ -685,7 +778,7 @@ module('Acceptance | automation view', function (hooks) {
     }
   });
 
-  test('a viewer the route refuses still sees the milestones the script declares', async function (assert) {
+  test("a viewer who isn't a direct writer still sees the milestones the script declares", async function (assert) {
     await openIsolated(PLANNED);
     await waitFor('[data-test-automation-who-pays]', { timeout: 10000 });
     await waitFor(
@@ -726,7 +819,7 @@ module('Acceptance | automation view', function (hooks) {
       );
   });
 
-  test('a viewer the route refuses is told who sees the milestones', async function (assert) {
+  test("a viewer who isn't a direct writer is told who sees the milestones", async function (assert) {
     await openIsolated();
     await waitFor('[data-test-automation-who-pays]', { timeout: 10000 });
     assert
@@ -799,6 +892,60 @@ module('Acceptance | automation view', function (hooks) {
       .doesNotIncludeText('Last error', 'no streak, no last error');
   });
 
+  test('an automation paused for an invalid declaration lists each problem where the problem is on the card', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        state: 'paused',
+        pauseReason: 'invalid-declaration',
+        pauseProblems: [
+          {
+            code: 'cron-too-frequent',
+            path: 'triggers.1.expression',
+            message:
+              '"58,1 0,23 * * *" can fire twice 3 minutes apart, and Boxel runs an automation\'s cron trigger at most once every 5 minutes',
+          },
+          {
+            code: 'missing-cap',
+            path: 'caps.writes',
+            message: 'Set the "Saves" limit',
+          },
+        ],
+      },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-pause-problems]', { timeout: 10000 });
+    assert
+      .dom('[data-test-automation-state-sentence]')
+      .hasText(
+        'Boxel paused the automation because the automation’s settings have problems. Boxel will resume the automation once someone who can edit this workspace fixes each problem below.',
+      );
+    assert
+      .dom('[data-test-automation-pause-problem="Trigger “hourly”"]')
+      .includesText('can fire twice 3 minutes apart');
+    assert
+      .dom('[data-test-automation-pause-problem="Limits"]')
+      .includesText('Set the "Saves" limit');
+
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    await openFormat('embedded');
+    await openIsolated();
+    await waitUntil(
+      () =>
+        text('[data-test-automation-state-sentence]')?.includes(
+          'Someone who can edit this workspace paused',
+        ),
+      { timeout: 10000 },
+    );
+    assert
+      .dom('[data-test-automation-pause-problems]')
+      .doesNotExist('another pause reason lists no problems');
+  });
+
   test('a paused, waiting and done automation each read with that state', async function (assert) {
     let cases: [Record<string, unknown>, string, string][] = [
       [
@@ -810,6 +957,11 @@ module('Acceptance | automation view', function (hooks) {
         { state: 'paused', pauseReason: 'caps-raised' },
         'Paused',
         'Someone raised a limit above what the payer agreed to pay for, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and agrees to the new limits.',
+      ],
+      [
+        { state: 'paused', pauseReason: 'webhook-changed' },
+        'Paused',
+        'A workspace administrator pointed a trigger at an incoming webhook the payer didn’t agree to, so Boxel paused the automation. Boxel runs nothing until a workspace administrator resumes the automation and agrees to the new webhook.',
       ],
       [
         { state: 'paused', pauseReason: 'payer-lost-access' },
@@ -1062,7 +1214,7 @@ module('Acceptance | automation view', function (hooks) {
       .includesText('0 of 3');
   });
 
-  test('a viewer the route refuses sees the declared milestones but no runs in the fitted and embedded views', async function (assert) {
+  test("a viewer who isn't a direct writer sees the declared milestones but no runs in the fitted and embedded views", async function (assert) {
     await openFormat('embedded', PLANNED);
     await waitFor('[data-test-automation-embedded-milestones="planned"]', {
       timeout: 10000,

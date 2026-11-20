@@ -33,6 +33,7 @@ import {
   withRealmPath,
   type RealmRequest,
 } from './helpers/index.ts';
+import { writeAndSettlePrerenderHtml } from './helpers/indexing.ts';
 
 // CS-11028: regression coverage for the persist-after-invalidate race in
 // Realm.#transpiledModuleCache. The scenario: reader A enters fallbackHandle for
@@ -60,14 +61,24 @@ module(basename(import.meta.filename), function () {
       let realmURL = new URL('http://127.0.0.1:4444/test/');
       let testRealm: Realm;
       let request: RealmRequest;
+      let dbAdapter: PgAdapter;
 
       function onRealmSetup(args: {
         testRealm: Realm;
         testRealmHttpServer: Server;
         request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
       }) {
         testRealm = args.testRealm;
         request = withRealmPath(args.request, realmURL);
+        dbAdapter = args.dbAdapter;
+      }
+
+      // Writes the modules a test starts from and waits for the render job
+      // the write starts. That job can load a module, which fills the
+      // transpile cache these tests expect to miss.
+      function writeModules(files: Record<string, string>): Promise<void> {
+        return writeAndSettlePrerenderHtml(dbAdapter, testRealm, files);
       }
 
       setupPermissionedRealmCached(hooks, {
@@ -122,7 +133,7 @@ module(basename(import.meta.filename), function () {
 
       test('in-flight transpile result is dropped when invalidateCache fires concurrently', async function (assert) {
         let modulePath = 'race-invalidate.gts';
-        await testRealm.write(modulePath, transpilerHeavySource);
+        await writeModules({ [modulePath]: transpilerHeavySource });
         testRealm.__testOnlyClearCaches();
 
         let inflight = fireRequest(modulePath);
@@ -158,8 +169,10 @@ module(basename(import.meta.filename), function () {
       test('invalidateCache of an unrelated path does not drop the in-flight cache write', async function (assert) {
         let primaryPath = 'race-primary.gts';
         let unrelatedPath = 'race-unrelated.gts';
-        await testRealm.write(primaryPath, transpilerHeavySource);
-        await testRealm.write(unrelatedPath, transpilerHeavySource);
+        await writeModules({
+          [primaryPath]: transpilerHeavySource,
+          [unrelatedPath]: transpilerHeavySource,
+        });
         testRealm.__testOnlyClearCaches();
 
         let inflight = fireRequest(primaryPath);
@@ -194,7 +207,7 @@ module(basename(import.meta.filename), function () {
         // and leave the "race-alias" alias serving stale bytes.
         let canonicalPath = 'race-alias.gts';
         let aliasPath = 'race-alias';
-        await testRealm.write(canonicalPath, transpilerHeavySource);
+        await writeModules({ [canonicalPath]: transpilerHeavySource });
         testRealm.__testOnlyClearCaches();
 
         let inflight = fireRequest(aliasPath);
@@ -241,7 +254,7 @@ module(basename(import.meta.filename), function () {
         // post-await cache.set silently fill the slot writeMany just
         // cleared. This test exercises the same code path the user does.
         let modulePath = 'race-write.gts';
-        await testRealm.write(modulePath, transpilerHeavySource);
+        await writeModules({ [modulePath]: transpilerHeavySource });
         testRealm.__testOnlyClearCaches();
 
         let inflight = fireRequest(modulePath);
@@ -272,7 +285,7 @@ module(basename(import.meta.filename), function () {
 
       test('in-flight transpile result is dropped when __testOnlyClearCaches fires concurrently', async function (assert) {
         let modulePath = 'race-clear.gts';
-        await testRealm.write(modulePath, transpilerHeavySource);
+        await writeModules({ [modulePath]: transpilerHeavySource });
         testRealm.__testOnlyClearCaches();
 
         let inflight = fireRequest(modulePath);
@@ -313,14 +326,21 @@ module(basename(import.meta.filename), function () {
       let realmURL = new URL('http://127.0.0.1:4444/test/');
       let testRealm: Realm;
       let request: RealmRequest;
+      let dbAdapter: PgAdapter;
 
       function onRealmSetup(args: {
         testRealm: Realm;
         testRealmHttpServer: Server;
         request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
       }) {
         testRealm = args.testRealm;
         request = withRealmPath(args.request, realmURL);
+        dbAdapter = args.dbAdapter;
+      }
+
+      function writeModules(files: Record<string, string>): Promise<void> {
+        return writeAndSettlePrerenderHtml(dbAdapter, testRealm, files);
       }
 
       setupPermissionedRealmCached(hooks, {
@@ -418,10 +438,27 @@ module(basename(import.meta.filename), function () {
       // does NOT work here: this repo's QUnit JUnit reporter only
       // serializes `data.errors` for failed tests, so passing diagnostic
       // rows are silently dropped from the CI report.
+      //
+      // A failed assertion does not throw, so a test that reaches its last
+      // line has not necessarily passed. `watch` records every failed
+      // assertion, and `shouldDump` is true when one failed or the test threw.
       function createDiagLog(testLabel: string) {
         let started = Date.now();
         let events: string[] = [];
+        let sawFailedAssertion = false;
         return {
+          watch(assert: Assert) {
+            let pushResult = assert.pushResult.bind(assert);
+            assert.pushResult = (result) => {
+              if (!result.result) {
+                sawFailedAssertion = true;
+              }
+              pushResult(result);
+            };
+          },
+          shouldDump(reachedEnd: boolean) {
+            return !reachedEnd || sawFailedAssertion;
+          },
           note(label: string, extra: Record<string, unknown> = {}) {
             let snapshot = {
               t: Date.now() - started,
@@ -443,7 +480,7 @@ module(basename(import.meta.filename), function () {
 
       test('N concurrent same-path readers trigger exactly one transpile call', async function (assert) {
         let modulePath = 'dedup-same-path.gts';
-        await testRealm.write(modulePath, transpilerHeavySource);
+        await writeModules({ [modulePath]: transpilerHeavySource });
         testRealm.__testOnlyClearCaches();
 
         // Park A at the gate so the in-flight window is held open until
@@ -481,6 +518,7 @@ module(basename(import.meta.filename), function () {
         let pendingB: ReturnType<typeof fireRequest> | undefined;
         let pendingC: ReturnType<typeof fireRequest> | undefined;
         let diag = createDiagLog('N concurrent same-path readers');
+        diag.watch(assert);
         let passed = false;
         // The compile reads the module's stored bytes through the operation
         // core, and that read sits inside the region this dedup shares — so
@@ -493,6 +531,12 @@ module(basename(import.meta.filename), function () {
         core.openStoredFile = (localPath) => {
           if (localPath === modulePath) {
             sourceReads += 1;
+            // The stack names the route that read the file, so a failed
+            // read count says which reader was the extra one.
+            diag.note('source-read', {
+              sourceReads,
+              stack: new Error().stack?.split('\n').slice(2, 14).join(' <- '),
+            });
           }
           return openStoredFile(localPath);
         };
@@ -547,7 +591,7 @@ module(basename(import.meta.filename), function () {
               (p): p is ReturnType<typeof fireRequest> => p !== undefined,
             ),
           );
-          if (!passed) {
+          if (diag.shouldDump(passed)) {
             diag.dump();
           }
         }
@@ -556,8 +600,10 @@ module(basename(import.meta.filename), function () {
       test('concurrent different-path readers each trigger their own transpile (no false coalesce)', async function (assert) {
         let pathA = 'dedup-a.gts';
         let pathB = 'dedup-b.gts';
-        await testRealm.write(pathA, transpilerHeavySource);
-        await testRealm.write(pathB, transpilerHeavySource);
+        await writeModules({
+          [pathA]: transpilerHeavySource,
+          [pathB]: transpilerHeavySource,
+        });
         testRealm.__testOnlyClearCaches();
 
         let before = testRealm.__testOnlyGetTranspileCallCount();
@@ -582,8 +628,10 @@ module(basename(import.meta.filename), function () {
       test('in-flight entry survives an unrelated path’s invalidate', async function (assert) {
         let primaryPath = 'dedup-primary.gts';
         let unrelatedPath = 'dedup-unrelated.gts';
-        await testRealm.write(primaryPath, transpilerHeavySource);
-        await testRealm.write(unrelatedPath, transpilerHeavySource);
+        await writeModules({
+          [primaryPath]: transpilerHeavySource,
+          [unrelatedPath]: transpilerHeavySource,
+        });
         testRealm.__testOnlyClearCaches();
 
         // Park transpile at a gate so the inflight state is deterministic.
@@ -631,7 +679,7 @@ module(basename(import.meta.filename), function () {
 
       test('in-flight entry is dropped when its own path is invalidated; later caller starts a fresh transpile', async function (assert) {
         let modulePath = 'dedup-self-invalidate.gts';
-        await testRealm.write(modulePath, transpilerHeavySource);
+        await writeModules({ [modulePath]: transpilerHeavySource });
         testRealm.__testOnlyClearCaches();
 
         // Both transpiles will await the same gate — releasing it lets
@@ -685,7 +733,7 @@ module(basename(import.meta.filename), function () {
 
       test('identity-checked cleanup: A in-flight + invalidate + B in-flight + A settles → B survives', async function (assert) {
         let modulePath = 'dedup-identity.gts';
-        await testRealm.write(modulePath, transpilerHeavySource);
+        await writeModules({ [modulePath]: transpilerHeavySource });
         testRealm.__testOnlyClearCaches();
 
         // Independent gates per call so A and B can be released
@@ -777,10 +825,10 @@ module(basename(import.meta.filename), function () {
       test('errored transpile is shared with concurrent waiters and the in-flight slot releases on rejection', async function (assert) {
         let modulePath = 'dedup-error.gts';
         // Syntactically invalid .gts source — transpileJS will throw.
-        await testRealm.write(
-          modulePath,
-          'this is not a valid gts file <template>oops</template>',
-        );
+        await writeModules({
+          [modulePath]:
+            'this is not a valid gts file <template>oops</template>',
+        });
         testRealm.__testOnlyClearCaches();
 
         // Without a gate, transpileJS throws fast on invalid source — A
@@ -824,6 +872,7 @@ module(basename(import.meta.filename), function () {
         let pendingA: ReturnType<typeof fireRequest> | undefined;
         let pendingB: ReturnType<typeof fireRequest> | undefined;
         let diag = createDiagLog('errored transpile shared');
+        diag.watch(assert);
         let passed = false;
         try {
           let before = testRealm.__testOnlyGetTranspileCallCount();
@@ -913,7 +962,7 @@ module(basename(import.meta.filename), function () {
               (p): p is ReturnType<typeof fireRequest> => p !== undefined,
             ),
           );
-          if (!passed) {
+          if (diag.shouldDump(passed)) {
             diag.dump();
           }
         }
@@ -1259,6 +1308,7 @@ module(basename(import.meta.filename), function () {
       async function buildPeerRealm(args: {
         dir: string;
         coordinator: ModuleCacheCoordinator;
+        transpilerIdentity?: string;
       }): Promise<Realm> {
         let virtualNetwork = createVirtualNetwork();
         let prerenderer = await getTestPrerenderer();
@@ -1278,11 +1328,14 @@ module(basename(import.meta.filename), function () {
           runner,
           dbAdapter,
           transpileCoordinator: args.coordinator,
+          transpilerIdentity: args.transpilerIdentity,
         });
         return realm;
       }
 
-      async function setupTwoPeers(): Promise<{
+      async function setupTwoPeers(
+        transpilerIdentities: { a?: string; b?: string } = {},
+      ): Promise<{
         realmA: Realm;
         realmB: Realm;
         coordA: ModuleCacheCoordinator;
@@ -1322,10 +1375,12 @@ module(basename(import.meta.filename), function () {
         let realmA = await buildPeerRealm({
           dir: testRealmDir,
           coordinator: coordA,
+          transpilerIdentity: transpilerIdentities.a,
         });
         let realmB = await buildPeerRealm({
           dir: testRealmDir,
           coordinator: coordB,
+          transpilerIdentity: transpilerIdentities.b,
         });
 
         // Drop anything either realm filled during construction so the
@@ -1371,6 +1426,82 @@ module(basename(import.meta.filename), function () {
             'peer B served from the L2 row peer A wrote — no babel ran on peer B',
           );
         } finally {
+          await coordA.shutDown();
+          await coordB.shutDown();
+        }
+      });
+
+      // A rolling deploy that upgrades a transpiler package runs peers of both
+      // installations against one shared cache until the old ones stop.
+      test('a peer under other transpiler packages compiles over the L2 row a peer wrote, rather than serving it', async function (assert) {
+        let { realmA, realmB, coordA, coordB, cardPath } = await setupTwoPeers({
+          a: 'old-packages',
+          b: 'new-packages',
+        });
+        try {
+          let respA = await realmA.handle(moduleRequest(realmA, cardPath));
+          assert.strictEqual(respA?.status, 200, 'peer A served the module');
+
+          let respB = await realmB.handle(moduleRequest(realmB, cardPath));
+          assert.strictEqual(respB?.status, 200, 'peer B served the module');
+          assert.strictEqual(
+            realmB.__testOnlyGetTranspileCallCount(),
+            1,
+            "peer B compiled the module, after its recheck under the lock rejected peer A's row",
+          );
+          assert.notStrictEqual(
+            respB?.headers.get('etag'),
+            respA?.headers.get('etag'),
+            'under a validator of its own',
+          );
+        } finally {
+          await coordA.shutDown();
+          await coordB.shutDown();
+        }
+      });
+
+      test('a peer that waits on a peer under other transpiler packages compiles for itself when the wait ends', async function (assert) {
+        let { realmA, realmB, coordA, coordB, cardPath } = await setupTwoPeers({
+          a: 'old-packages',
+          b: 'new-packages',
+        });
+        try {
+          // As in the coalesce test below: A takes the lock and parks inside
+          // its compile, and B finds the lock held and waits for A's NOTIFY.
+          let releaseGate!: () => void;
+          let gate = new Promise<void>((resolve) => {
+            releaseGate = resolve;
+          });
+          realmA.__testOnlyDelayTranspile(() => gate);
+          realmB.__testOnlyDelayTranspile(() => gate);
+
+          let pA = realmA.handle(moduleRequest(realmA, cardPath));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          let pB = realmB.handle(moduleRequest(realmB, cardPath));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          releaseGate();
+          let [respA, respB] = await Promise.all([pA, pB]);
+          assert.strictEqual(respA?.status, 200, 'peer A served 200');
+          assert.strictEqual(respB?.status, 200, 'peer B served 200');
+          assert.strictEqual(
+            realmA.__testOnlyGetTranspileCallCount(),
+            1,
+            'peer A, the winner, compiled the module',
+          );
+          assert.strictEqual(
+            realmB.__testOnlyGetTranspileCallCount(),
+            1,
+            'peer B rejected the row peer A wrote under its packages, and compiled the module too',
+          );
+          assert.notStrictEqual(
+            respB?.headers.get('etag'),
+            respA?.headers.get('etag'),
+            'each under a validator of its own',
+          );
+        } finally {
+          realmA.__testOnlyDelayTranspile(undefined);
+          realmB.__testOnlyDelayTranspile(undefined);
           await coordA.shutDown();
           await coordB.shutDown();
         }
@@ -1506,7 +1637,10 @@ module(basename(import.meta.filename), function () {
 
       // Started with no boot index and no file watcher, so between one run and
       // the next nothing reaches the shared cache but the reads themselves.
-      async function mountRealm(dir: string): Promise<Realm> {
+      async function mountRealm(
+        dir: string,
+        transpilerIdentity?: string,
+      ): Promise<Realm> {
         let virtualNetwork = createVirtualNetwork();
         let definitionLookup = new CachingDefinitionLookup(
           dbAdapter,
@@ -1524,6 +1658,7 @@ module(basename(import.meta.filename), function () {
           runner,
           dbAdapter,
           skipBootIndex: true,
+          transpilerIdentity,
         });
         await realm.start();
         return realm;
@@ -1621,6 +1756,85 @@ module(basename(import.meta.filename), function () {
         assert.true(
           (await sharedCacheBody())?.includes('AfterRestart'),
           'and the shared cache now holds that compile',
+        );
+      });
+
+      test('a module compiled under other transpiler packages is compiled again when the realm comes back', async function (assert) {
+        let dir = realmDirHolding('Unchanged');
+        let earlierRun = await mountRealm(dir, 'packages-before');
+        let first = await getModule(earlierRun);
+        assert.strictEqual(
+          first.status,
+          200,
+          'the earlier run served the module',
+        );
+        assert.true(
+          (await sharedCacheBody())?.includes('Unchanged'),
+          'and left its compile in the shared cache',
+        );
+        if (!first.etag) {
+          throw new Error('the earlier run served the module without an etag');
+        }
+
+        // The file is the same; only the packages that compile it changed, as
+        // a deploy that upgrades one of them changes them.
+        let laterRun = await mountRealm(dir, 'packages-after');
+        let revalidated = await getModule(laterRun, {
+          'If-None-Match': first.etag,
+        });
+        assert.strictEqual(
+          revalidated.status,
+          200,
+          "a client revalidating the earlier run's compile is sent a module",
+        );
+        assert.notStrictEqual(
+          revalidated.etag,
+          first.etag,
+          'under a validator of its own',
+        );
+        assert.strictEqual(
+          laterRun.__testOnlyGetTranspileCallCount(),
+          1,
+          "compiled again, rather than read from the earlier run's row",
+        );
+
+        let again = await getModule(laterRun, {
+          'If-None-Match': revalidated.etag!,
+        });
+        assert.strictEqual(
+          again.status,
+          304,
+          'and the new validator holds while the packages stay the same',
+        );
+      });
+
+      test('a module compiled under the same transpiler packages is served from the shared cache when the realm comes back', async function (assert) {
+        let dir = realmDirHolding('Unchanged');
+        let earlierRun = await mountRealm(dir, 'same-packages');
+        let first = await getModule(earlierRun);
+        assert.strictEqual(
+          first.status,
+          200,
+          'the earlier run served the module',
+        );
+
+        let laterRun = await mountRealm(dir, 'same-packages');
+        let served = await getModule(laterRun);
+        assert.strictEqual(
+          served.status,
+          200,
+          'the later run served the module',
+        );
+        assert.strictEqual(
+          served.etag,
+          first.etag,
+          'under the validator the earlier run gave it',
+        );
+        assert.strictEqual(served.body, first.body, 'with the same compile');
+        assert.strictEqual(
+          laterRun.__testOnlyGetTranspileCallCount(),
+          0,
+          "read from the earlier run's row, with no compile",
         );
       });
 

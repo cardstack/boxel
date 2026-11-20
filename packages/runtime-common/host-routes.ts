@@ -342,6 +342,10 @@ export interface HostRoutesValidation {
   // were dropped for now, and a later validation may keep them. A caller
   // must not keep an incomplete validation as final.
   complete: boolean;
+  // The path patterns of the routes dropped because their type was
+  // unavailable, and of the routes under them: the paths a later validation
+  // may route. Empty when the validation is complete.
+  unavailableRoutePatterns: readonly RoutePathPattern[];
 }
 
 export interface ValidateHostRoutesOptions {
@@ -423,7 +427,32 @@ class Validator {
     routes = this.applyRealmWideRules(routes);
     routes = this.dropRedirectCycles(routes);
     this.warnNoAddressFromOneCard(routes);
-    return { routes, warnings: this.warnings, complete: this.complete };
+    return {
+      routes,
+      warnings: this.warnings,
+      complete: this.complete,
+      unavailableRoutePatterns: this.unavailableRoutePatterns(),
+    };
+  }
+
+  private unavailableRoutePatterns(): RoutePathPattern[] {
+    let unavailable = this.warnings
+      .filter((w) => w.code === 'type-unavailable')
+      .map((w) => w.position);
+    let patterns: RoutePathPattern[] = [];
+    for (let warning of this.warnings) {
+      let underUnavailable = unavailable.some((position) =>
+        position.every((index, i) => warning.position[i] === index),
+      );
+      if (!warning.dropped || !underUnavailable) {
+        continue;
+      }
+      let parsed = parseRoutePathPattern(warning.path);
+      if (parsed.ok) {
+        patterns.push(parsed.pattern);
+      }
+    }
+    return patterns;
   }
 
   private validateList(

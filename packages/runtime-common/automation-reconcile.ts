@@ -23,7 +23,9 @@
 //   run catches up on everything since, because the realm is the state.
 //
 //   `abandonAutomationRun` ends a run (reason `job-lost`; `complete` when its
-//   commit landed), and the run is charged for what it used. A pending run
+//   commit landed), the run is charged for what it used, and its automation
+//   pauses if its own runs have failed too many times in a row
+//   (`pauseAfterRepeatedFailures`). A pending run
 //   whose extra job was lost too is ended the same way, as is a scheduled run
 //   whose automation is paused or no longer switched on, or whose trigger is
 //   gone from its card.
@@ -52,6 +54,8 @@ import {
   MAX_RUN_SECONDS,
 } from './automation-declaration.ts';
 import { chargeAutomationRun } from './automation-run-charge.ts';
+import type { ReportAutomationChange } from './automation-change-events.ts';
+import type { ReportRunChange } from './automation-run-events.ts';
 import { logRunPlatformLine } from './automation-run-log.ts';
 import {
   abandonAutomationRun,
@@ -63,6 +67,7 @@ import {
   type AutomationDeclarationRead,
   type AutomationTickOutcome,
 } from './automation-tick.ts';
+import { pauseAfterRepeatedFailures } from './automations.ts';
 import type { DBAdapter } from './db.ts';
 import { param, query } from './expression.ts';
 import { enqueueAutomationRunJob } from './jobs/run-command.ts';
@@ -113,6 +118,11 @@ export interface AutomationReconcileOptions {
   // (`heartbeatJob`). A pass after a long outage can outlast the job's
   // timeout.
   onProgress?: () => void;
+  // Told of each automation the overdue pass or a pause for repeated
+  // failures changes, such as one paused for an invalid declaration, and of
+  // each run such a pause cancels, once the change commits.
+  reportRunChange?: ReportRunChange;
+  reportAutomationChange?: ReportAutomationChange;
 }
 
 // What reconcile did with one run whose job was gone:
@@ -198,6 +208,8 @@ export async function reconcileAutomations(
     overdueBy: graceSeconds,
     pageSize: options.pageSize,
     onProgress: options.onProgress,
+    reportAutomationChange: options.reportAutomationChange,
+    reportRunChange: options.reportRunChange,
   });
   let steps: Record<string, number> = {};
   for (let [name, step] of reconcileSteps) {
@@ -385,8 +397,46 @@ async function reconcileLostRun(
       runId,
       log: options.log,
     });
+    if (decided.run.state === 'error') {
+      await pauseIfFailingRepeatedly(dbAdapter, decided.run, options);
+    }
   }
   return decided;
+}
+
+// Once reconcile has ended a run as an error, pauses its automation if its
+// own runs have now failed too many times in a row, as the worker does after
+// each run it ends. It asks after the automation's row is let go, since the
+// pause takes the row itself. Whether the run counts toward the streak is the
+// streak's own rule: `job-lost` doesn't, and asking anyway makes up a check
+// that an earlier failed run's attempt never got to. A failure to pause is
+// logged, and the next failed run asks again.
+async function pauseIfFailingRepeatedly(
+  dbAdapter: DBAdapter,
+  run: AutomationRun,
+  options: AutomationReconcileOptions,
+): Promise<void> {
+  try {
+    let result = await pauseAfterRepeatedFailures(
+      dbAdapter,
+      run.automationId,
+      {},
+      {
+        reportRunChange: options.reportRunChange,
+        reportAutomationChange: options.reportAutomationChange,
+      },
+    );
+    if (result?.paused) {
+      options.log.warn(
+        `automation ${run.automationId} paused after repeated failed runs; reconcile ended run ${run.id} (${run.errorReason ?? 'error'})`,
+      );
+    }
+  } catch (error) {
+    options.log.error(
+      `could not check whether automation run ${run.id}'s failure pauses its automation:`,
+      error,
+    );
+  }
 }
 
 // No unfinished `run-command` job carries the run's `dedupeKey`

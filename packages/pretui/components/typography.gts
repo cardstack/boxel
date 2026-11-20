@@ -332,21 +332,27 @@ export class Link extends Component<LinkSignature> {
       data-variant={{this.variant}}
       data-test-pretui-link
       ...attributes
-    >{{yield}}{{#if @external}}<span class='pretui-link-ext' aria-hidden='true'>↗</span><VisuallyHidden>
+    ><span class='pretui-link-text'>{{yield}}</span>{{#if @external}}<span class='pretui-link-ext' aria-hidden='true'>↗</span><VisuallyHidden>
           (opens in a new tab)</VisuallyHidden>{{/if}}</a>
     <style scoped>
       @layer PretComponent {
         .pretui-link {
           color: var(--pretui-link-ink, var(--primary));
+          text-decoration-line: none;
+          border-radius: 2px;
+        }
+        /* The underline is on the text, not the a: an a's underline runs
+           under every inline child, the icon included. The icon stays a
+           plain inline, so it never wraps away from the last word. */
+        .pretui-link-text {
           text-decoration-line: underline;
           text-decoration-thickness: 1px;
           text-underline-offset: 0.18em;
-          border-radius: 2px;
         }
-        .pretui-link[data-variant='quiet'] {
+        .pretui-link[data-variant='quiet'] .pretui-link-text {
           text-decoration-line: none;
         }
-        .pretui-link:hover {
+        .pretui-link:hover .pretui-link-text {
           text-decoration-line: underline;
           text-decoration-thickness: 2px;
         }

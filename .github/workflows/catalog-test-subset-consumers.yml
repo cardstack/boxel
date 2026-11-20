@@ -66,6 +66,8 @@ on:
       - ".mise.toml"
       - ".github/actions/**"
       - "mise-tasks/**"
+      # test-services:realm-server runs realm-historian (ADR 018 §1.4).
+      - "packages/realm-historian/**"
       - "packages/observability/scripts/**"
       - "traefik/**"
   # Two PRs that each pass alone can still break the run together.
@@ -82,6 +84,7 @@ on:
       - ".mise.toml"
       - ".github/actions/**"
       - "mise-tasks/**"
+      - "packages/realm-historian/**"
       - "packages/observability/scripts/**"
       - "traefik/**"
 

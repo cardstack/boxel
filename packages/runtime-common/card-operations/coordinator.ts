@@ -284,7 +284,8 @@ export interface CommitBatchOptions {
   history?: WriteContext;
   // The automation run this batch commits for, set only by the commit of a
   // run's batch: the files the batch creates are recorded as the run's
-  // automation's (see `WriteOptions.automationRun`).
+  // automation's, and the indexing it causes is charged to the run's identity
+  // (see `WriteOptions.automationRun`).
   automationRun?: AutomationRunWrite;
   // Who a batch by a caller who isn't signed in is made as, once its entries
   // are admitted: the acting user the first admitted write's grant names

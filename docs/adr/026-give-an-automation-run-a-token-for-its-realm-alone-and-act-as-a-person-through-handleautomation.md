@@ -77,15 +77,17 @@ grant gives write to a module in the automation's realm that the run loads.
 The realm server MUST handle each request to a realm that carries a run
 token through `Realm.handleAutomation`, and through no other entry point.
 `Realm.handleAutomation` MUST refuse a call unless the run's row says the run
-is still running, its time limit has not passed, and its caps are not spent.
-A cancel or a pause MUST stop the run's next call.
+is still running, its time limit has not passed, its caps are not spent, and
+the run's identity is a direct writer of the automation's realm (§1.5). A
+cancel or a pause MUST stop the run's next call.
 
 A realm-server route that serves a run's requests to no realm, such as
 forwarding its AI requests or the batch path (ADR 030), MUST make the same
 checks against the run's row before it acts: the token verifies under the
 run-token key, its identity's sessions were not revoked after it was minted,
-the run is running and owned by the token's attempt, and the caps that bound
-what the route does are not spent. Every other realm-server route MUST refuse
+the run is running and owned by the token's attempt, the run's identity is a
+direct writer of the automation's realm, and the caps that bound what the
+route does are not spent. Every other realm-server route MUST refuse
 a run token.
 
 Only a run token MUST reach automation mode. The server MUST treat a request
@@ -112,8 +114,9 @@ from the tab. Each automation call MUST be recorded in `key_uses` with
 
 Every call and write of a run MUST take the full permission check as the
 run's identity (ADR 006). The run's identity MUST be a direct writer of the
-automation's realm when the run is admitted. That MUST be confirmed again
-just before the run's writes commit. A run MUST NOT act as the realm's own
+automation's realm when the run is admitted and at each of the run's calls,
+and a call that finds it is not MUST end the run. That MUST be confirmed
+again just before the run's writes commit. A run MUST NOT act as the realm's own
 user, as a service identity, or through `assume-user`. A policy grant MUST
 NOT make a user a payer or a run's identity.
 
@@ -177,7 +180,9 @@ credit, and a run acts with their authority while nobody watches, so only an
 administrator may be one. A policy grant can give write access to many
 people. If a grant could make someone a payer, whoever edits the policy could
 choose who pays. Permissions change while an automation runs on its
-schedule, so direct write is checked again just before the writes land.
+schedule, and while a run runs, so direct write is checked again at each of
+the run's calls, which stop spending in the person's name as soon as they
+lose it, and just before the writes land.
 
 A direct writer can change `realm.json` and the policy card (ADR 024 §1.3),
 and so can a run that acts as one. A run is unattended and handles

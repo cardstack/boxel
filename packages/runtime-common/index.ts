@@ -1969,6 +1969,7 @@ export * from './request-timings.ts';
 export * from './write-timing.ts';
 export * from './prerendered-html-format.ts';
 export * from './call-api-key-kind.ts';
+export * from './call-api-body-kinds.ts';
 export * from './query-field-utils.ts';
 export * from './relationship-utils.ts';
 export * from './formats.ts';
@@ -2061,7 +2062,9 @@ export * from './host-routes.ts';
 export * from './host-route-resolver.ts';
 export * from './host-route-address.ts';
 export * from './host-route-lookups.ts';
+export * from './host-route-canonical-address.ts';
 export * from './route-pattern.ts';
+export * from './path-specifier.ts';
 
 export type {
   CardDocument,

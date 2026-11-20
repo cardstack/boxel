@@ -311,7 +311,9 @@ let stats = {
 // bytes crossing the network, and that distinction decides whether a slow
 // number is the platform's problem or the observer's. Run from a laptop against
 // a remote region, the body leg dominates and a single end-to-end figure says
-// almost nothing about the server.
+// almost nothing about the server. `bytes` is the decoded document's size:
+// `fetch` asks for a compressed response and decodes it, so the network carries
+// a fraction of it.
 function record(
   label: string,
   headersMs: number,

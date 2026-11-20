@@ -80,11 +80,55 @@ export interface GitHubClient {
   ): Promise<WriteFilesToBranchResult>;
 }
 
+// GitHub answers a rate-limited request with a 403 or a 429. Its guidance
+// for secondary limits is to wait for `retry-after`, else until
+// `x-ratelimit-reset` when `x-ratelimit-remaining` is 0, else at least a
+// minute, growing the wait on each further refusal.
+const MAX_RATE_LIMIT_RETRIES = 3;
+const DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
+// A wait longer than this (a spent primary quota can reset up to an hour
+// away) fails the step instead, so the user can retry later.
+const MAX_RATE_LIMIT_WAIT_MS = 5 * 60_000;
+// Added to a wait until `x-ratelimit-reset`, so that a retry does not arrive
+// before GitHub's clock reaches the reset time.
+const RATE_LIMIT_RESET_MARGIN_MS = 1_000;
+// All the rate-limit waiting one write (or one standalone request) may do.
+// It holds one full back-off (60 + 120 + 240 s), and stops a write of many
+// blobs from waiting that long for each one.
+const MAX_TOTAL_RATE_LIMIT_WAIT_MS = 10 * 60_000;
+// GitHub asks for at least a second between requests that create content.
+const DEFAULT_MUTATION_PAUSE_MS = 1_000;
+
+interface WaitBudget {
+  remainingMs: number;
+}
+
+function newWaitBudget(): WaitBudget {
+  return { remainingMs: MAX_TOTAL_RATE_LIMIT_WAIT_MS };
+}
+
+export interface OctokitGitHubClientOptions {
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+  mutationPauseMs?: number;
+}
+
 export class OctokitGitHubClient implements GitHubClient {
   private token: string | undefined;
+  private sleep: (ms: number) => Promise<void>;
+  private now: () => number;
+  private mutationPauseMs: number;
 
-  constructor(token: string | undefined) {
+  constructor(
+    token: string | undefined,
+    options: OctokitGitHubClientOptions = {},
+  ) {
     this.token = token;
+    this.sleep =
+      options.sleep ??
+      ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.now = options.now ?? Date.now;
+    this.mutationPauseMs = options.mutationPauseMs ?? DEFAULT_MUTATION_PAUSE_MS;
   }
 
   async openPullRequest(
@@ -169,6 +213,7 @@ export class OctokitGitHubClient implements GitHubClient {
   async writeFilesToBranch(
     params: WriteFilesToBranchParams,
   ): Promise<WriteFilesToBranchResult> {
+    let budget = newWaitBudget();
     let branch = normalizeBranchName(params.branch);
 
     if (!branch) {
@@ -199,6 +244,7 @@ export class OctokitGitHubClient implements GitHubClient {
     let branchRef = await this.request<{
       object: { sha: string };
     }>({
+      budget,
       action: 'get branch ref',
       method: 'GET',
       path: `/repos/${params.owner}/${params.repo}/git/ref/heads/${encodeURIComponent(branch)}`,
@@ -208,6 +254,7 @@ export class OctokitGitHubClient implements GitHubClient {
     let parentCommit = await this.request<{
       tree: { sha: string };
     }>({
+      budget,
       action: 'get parent commit',
       method: 'GET',
       path: `/repos/${params.owner}/${params.repo}/git/commits/${parentCommitSha}`,
@@ -217,11 +264,13 @@ export class OctokitGitHubClient implements GitHubClient {
     if (params.syncFolder && params.folderMustBeNewOn) {
       let base = normalizeBranchName(params.folderMustBeNewOn);
       let baseRef = await this.request<{ object: { sha: string } }>({
+        budget,
         action: 'get base branch ref',
         method: 'GET',
         path: `/repos/${params.owner}/${params.repo}/git/ref/heads/${encodeURIComponent(base)}`,
       });
       let baseCommit = await this.request<{ tree: { sha: string } }>({
+        budget,
         action: 'get base commit',
         method: 'GET',
         path: `/repos/${params.owner}/${params.repo}/git/commits/${baseRef.object.sha}`,
@@ -232,6 +281,7 @@ export class OctokitGitHubClient implements GitHubClient {
           params.repo,
           baseCommit.tree.sha,
           params.syncFolder,
+          budget,
         )
       ) {
         throw new Error(
@@ -249,6 +299,7 @@ export class OctokitGitHubClient implements GitHubClient {
           );
         }
         let commits = await this.request<{ commit: { message: string } }[]>({
+          budget,
           action: 'list commits touching the folder',
           method: 'GET',
           path: `/repos/${params.owner}/${params.repo}/commits?sha=${encodeURIComponent(branch)}&path=${encodeURIComponent(params.syncFolder)}&per_page=${COMMITS_PER_PAGE}&page=${page}`,
@@ -267,31 +318,35 @@ export class OctokitGitHubClient implements GitHubClient {
       }
     }
 
+    // One blob at a time: GitHub's secondary rate limits penalize concurrent
+    // requests that create content, and a listing can have many files.
     let tree: {
       path: string;
       mode: '100644';
       type: 'blob';
       sha: string | null;
-    }[] = await Promise.all(
-      normalizedFiles.map(async (file) => {
-        let blob = await this.request<{ sha: string }>({
-          action: 'create blob',
-          method: 'POST',
-          path: `/repos/${params.owner}/${params.repo}/git/blobs`,
-          body: {
-            content: file.content,
-            encoding: file.isBinary ? 'base64' : 'utf-8',
-          },
-        });
-
-        return {
-          path: file.path,
-          mode: '100644' as const,
-          type: 'blob' as const,
-          sha: blob.sha,
-        };
-      }),
-    );
+    }[] = [];
+    for (let [index, file] of normalizedFiles.entries()) {
+      if (index > 0 && this.mutationPauseMs > 0) {
+        await this.sleep(this.mutationPauseMs);
+      }
+      let blob = await this.request<{ sha: string }>({
+        budget,
+        action: 'create blob',
+        method: 'POST',
+        path: `/repos/${params.owner}/${params.repo}/git/blobs`,
+        body: {
+          content: file.content,
+          encoding: file.isBinary ? 'base64' : 'utf-8',
+        },
+      });
+      tree.push({
+        path: file.path,
+        mode: '100644',
+        type: 'blob',
+        sha: blob.sha,
+      });
+    }
 
     if (params.syncFolder) {
       let keptPaths = new Set(normalizedFiles.map((file) => file.path));
@@ -300,6 +355,7 @@ export class OctokitGitHubClient implements GitHubClient {
         params.repo,
         baseTreeSha,
         params.syncFolder,
+        budget,
       );
       for (let path of existingPaths) {
         if (!keptPaths.has(path)) {
@@ -312,6 +368,7 @@ export class OctokitGitHubClient implements GitHubClient {
     let createdTree = await this.request<{
       sha: string;
     }>({
+      budget,
       action: 'create tree',
       method: 'POST',
       path: `/repos/${params.owner}/${params.repo}/git/trees`,
@@ -324,6 +381,7 @@ export class OctokitGitHubClient implements GitHubClient {
     let createdCommit = await this.request<{
       sha: string;
     }>({
+      budget,
       action: 'create commit',
       method: 'POST',
       path: `/repos/${params.owner}/${params.repo}/git/commits`,
@@ -335,6 +393,7 @@ export class OctokitGitHubClient implements GitHubClient {
     });
 
     await this.request({
+      budget,
       action: 'update branch ref',
       method: 'PATCH',
       path: `/repos/${params.owner}/${params.repo}/git/refs/heads/${encodeURIComponent(branch)}`,
@@ -358,6 +417,7 @@ export class OctokitGitHubClient implements GitHubClient {
     repo: string,
     rootTreeSha: string,
     path: string,
+    budget: WaitBudget,
   ): Promise<boolean> {
     let treeSha = rootTreeSha;
     let segments = path.split('/').filter(Boolean);
@@ -366,6 +426,7 @@ export class OctokitGitHubClient implements GitHubClient {
         tree: { path: string; type: string; sha: string }[];
         truncated?: boolean;
       }>({
+        budget,
         action: 'get tree',
         method: 'GET',
         path: `/repos/${owner}/${repo}/git/trees/${treeSha}`,
@@ -387,6 +448,7 @@ export class OctokitGitHubClient implements GitHubClient {
     repo: string,
     rootTreeSha: string,
     folder: string,
+    budget: WaitBudget,
   ): Promise<string[]> {
     let segments = folder.split('/').filter(Boolean);
     let treeSha = rootTreeSha;
@@ -394,6 +456,7 @@ export class OctokitGitHubClient implements GitHubClient {
       let { tree } = await this.request<{
         tree: { path: string; type: string; sha: string }[];
       }>({
+        budget,
         action: 'get tree',
         method: 'GET',
         path: `/repos/${owner}/${repo}/git/trees/${treeSha}`,
@@ -408,6 +471,7 @@ export class OctokitGitHubClient implements GitHubClient {
       tree: { path: string; type: string }[];
       truncated?: boolean;
     }>({
+      budget,
       action: 'get folder tree',
       method: 'GET',
       path: `/repos/${owner}/${repo}/git/trees/${treeSha}?recursive=1`,
@@ -435,32 +499,49 @@ export class OctokitGitHubClient implements GitHubClient {
     method,
     path,
     body,
+    budget = newWaitBudget(),
   }: {
     action: string;
     method: 'GET' | 'POST' | 'PATCH';
     path: string;
     body?: unknown;
+    budget?: WaitBudget;
   }): Promise<T> {
     let token = this.getToken();
     let response: Response;
 
-    try {
-      response = await fetch(`${GITHUB_API_BASE}${path}`, {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          'Content-Type': 'application/json',
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-    } catch (error) {
-      throw toGitHubError(action, error);
-    }
+    for (let attempt = 0; ; attempt++) {
+      try {
+        response = await fetch(`${GITHUB_API_BASE}${path}`, {
+          method,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Content-Type': 'application/json',
+          },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+      } catch (error) {
+        throw toGitHubError(action, error);
+      }
 
-    if (!response.ok) {
+      if (response.ok) {
+        break;
+      }
+
       let payload = await readErrorPayload(response);
+      if (
+        attempt < MAX_RATE_LIMIT_RETRIES &&
+        isRateLimited(response, payload)
+      ) {
+        let waitMs = rateLimitWaitMs(response, attempt, this.now());
+        if (waitMs <= MAX_RATE_LIMIT_WAIT_MS && waitMs <= budget.remainingMs) {
+          budget.remainingMs -= waitMs;
+          await this.sleep(waitMs);
+          continue;
+        }
+      }
       throw new Error(
         `Failed to ${action} (${response.status}): ${JSON.stringify(payload)}`,
       );
@@ -511,6 +592,58 @@ async function readErrorPayload(response: Response): Promise<unknown> {
   } catch {
     return text;
   }
+}
+
+function isRateLimited(response: Response, payload: unknown): boolean {
+  if (response.status === 429) {
+    return true;
+  }
+  if (response.status !== 403) {
+    return false;
+  }
+  if (
+    response.headers.has('retry-after') ||
+    response.headers.get('x-ratelimit-remaining') === '0'
+  ) {
+    return true;
+  }
+  let { message, documentation_url } =
+    payload && typeof payload === 'object'
+      ? (payload as { message?: unknown; documentation_url?: unknown })
+      : { message: payload, documentation_url: undefined };
+  return (
+    /rate limit|abuse detection/i.test(String(message ?? '')) ||
+    /secondary-rate-limits/.test(String(documentation_url ?? ''))
+  );
+}
+
+function rateLimitWaitMs(
+  response: Response,
+  attempt: number,
+  nowMs: number,
+): number {
+  let retryAfter = response.headers.get('retry-after')?.trim();
+  if (retryAfter) {
+    // RFC 9110 allows either a number of seconds or an HTTP date.
+    let seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return seconds * 1000;
+    }
+    let date = Date.parse(retryAfter);
+    if (Number.isFinite(date)) {
+      return Math.max(0, date - nowMs);
+    }
+  }
+  if (response.headers.get('x-ratelimit-remaining') === '0') {
+    let resetSeconds = Number(response.headers.get('x-ratelimit-reset') ?? NaN);
+    let untilReset = resetSeconds * 1000 - nowMs;
+    // A reset time that has already passed (clock skew, or a limit that
+    // outlasts it) says nothing about how long to wait: back off instead.
+    if (Number.isFinite(untilReset) && untilReset > 0) {
+      return untilReset + RATE_LIMIT_RESET_MARGIN_MS;
+    }
+  }
+  return DEFAULT_RATE_LIMIT_WAIT_MS * 2 ** attempt;
 }
 
 function toGitHubError(action: string, error: unknown): Error {

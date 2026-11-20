@@ -35,6 +35,7 @@ import {
   proxyAsset,
 } from './middleware/index.ts';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp.ts';
+import { compressResponse } from './middleware/compress-response.ts';
 import {
   clientAddress,
   clientAddressSettingsFromEnv,
@@ -76,6 +77,8 @@ import {
 } from './lib/realm-host-urls-domains.ts';
 import { translateAtHostURLs } from './lib/realm-host-urls-boundary.ts';
 import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
+import { matrixAccountStanding } from './lib/automation-admission-checks.ts';
+import type { AccountStanding } from '@cardstack/runtime-common/automation-admission';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
 const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
@@ -731,6 +734,7 @@ export class RealmServer {
   private matrixRegistrationSecret: string | undefined;
   private matrixAdminUsername: string | undefined;
   private matrixAdminPassword: string | undefined;
+  private automationAccountStanding: (user: string) => Promise<AccountStanding>;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
@@ -786,6 +790,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     matrixAdminUsername,
     matrixAdminPassword,
+    automationAccountStanding,
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
@@ -799,6 +804,7 @@ export class RealmServer {
     googleSignIn,
     oauthProvider,
     oauthNewClientLimit,
+    oauthUnconnectedClientCap,
     oauthAuthorizationLimit,
     oauthTokenLimit,
     __testOnlyOAuthResources,
@@ -836,6 +842,10 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     matrixAdminUsername?: string;
     matrixAdminPassword?: string;
+    // What the Matrix server says of an account, for the admission a resume
+    // makes of its new payer. Defaults to asking the Matrix server's admin
+    // API with `matrixAdminUsername` and `matrixAdminPassword`.
+    automationAccountStanding?: (user: string) => Promise<AccountStanding>;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
     domainsForPublishedRealms?: {
@@ -880,6 +890,10 @@ export class RealmServer {
     // The provider's limit on new clients. Unset, the default
     // (`new-client-limit.ts`).
     oauthNewClientLimit?: NewClientLimit;
+    // How many clients registered by dynamic client registration that never
+    // connected the provider keeps before it refuses registration. Unset, the
+    // default (`unconnected-client-cap.ts`).
+    oauthUnconnectedClientCap?: number;
     // The provider's limit on starting a flow. Unset, the default
     // (`authorization.ts`).
     oauthAuthorizationLimit?: CallerLimit;
@@ -938,6 +952,17 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixAdminUsername = matrixAdminUsername;
     this.matrixAdminPassword = matrixAdminPassword;
+    this.automationAccountStanding =
+      automationAccountStanding ??
+      ((user) =>
+        matrixAccountStanding(
+          {
+            matrixURL: matrixClient.matrixURL,
+            matrixAdminUsername,
+            matrixAdminPassword,
+          },
+          user,
+        ));
     this.getRegistrationSecret = getRegistrationSecret;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
     this.hostURLDomains = HostURLDomains.fromDeployment(
@@ -988,6 +1013,7 @@ export class RealmServer {
           domainsForPublishedRealms?.boxelSpace,
         ].filter((domain): domain is string => Boolean(domain)),
         newClientLimit: oauthNewClientLimit,
+        unconnectedClientCap: oauthUnconnectedClientCap,
         authorizationLimit: oauthAuthorizationLimit,
         tokenLimit: oauthTokenLimit,
         testOnlyResources: __testOnlyOAuthResources,
@@ -1035,6 +1061,9 @@ export class RealmServer {
       .use(clientAddress(this.clientAddress))
       .use(httpLogging)
       .use(instanceIdHeader)
+      // Outside the host URL translation and every route, so it compresses
+      // each response body as it is finally sent.
+      .use(compressResponse)
       // A request on a host URL is made to name its realm's URL here, ahead
       // of every route that looks a realm up (ADR 033 §1.2).
       .use(resolveHostURLs(this.hostURLResolver))
@@ -1160,6 +1189,7 @@ export class RealmServer {
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           matrixAdminUsername: this.matrixAdminUsername,
           matrixAdminPassword: this.matrixAdminPassword,
+          automationAccountStanding: this.automationAccountStanding,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           hostURLDomains: this.hostURLDomains,
           hostURLResolver: this.hostURLResolver,

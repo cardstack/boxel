@@ -107,6 +107,11 @@ definitions live under `eval-realm/bulk-operations/`, with the vendors and
 invoices beside them; `bulk-records` builds its 159 cards from a seed script.
 Their `expectedChangedCards` list a sample of each task's targets, and the
 judge checks the rest from the workspace snapshot.
+`api-orders-sales-report` builds a Sales Report card from a month of orders
+saved from a shop's orders API: 420 orders in one JSON file, which its seed
+script writes, with string prices and four payment statuses. It grades whether
+the assistant reshapes the data with `realm.transform` rather than a
+JavaScript loop in the script, and whether the totals are exact to the cent.
 
 Three evaluations test the assistant as a guide to Boxel rather than a
 builder. Each asks five questions in one session, with a Project card open,

@@ -71,6 +71,7 @@ module(basename(import.meta.filename), function () {
         'incremental-index',
         'lint-source',
         'media-cache-gc',
+        'oauth-provider-cleanup',
         'prerender-html-reconcile',
         'prerender_html',
         'run-command',

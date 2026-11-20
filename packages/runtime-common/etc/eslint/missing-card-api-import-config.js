@@ -29,6 +29,7 @@ module.exports = {
     EthereumAddressField: ['default', '@cardstack/base/ethereum-address'],
     MarkdownField: ['default', '@cardstack/base/markdown'],
     NumberField: ['default', '@cardstack/base/number'],
+    PathSpecifierField: ['default', '@cardstack/base/path-specifier'],
     PercentageField: ['default', '@cardstack/base/percentage'],
     PhoneNumberField: ['default', '@cardstack/base/phone-number'],
     StringField: ['default', '@cardstack/base/string'],

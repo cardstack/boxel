@@ -11,6 +11,7 @@ import type {
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
+  AnonymousRequest,
   isOperationFailure,
   policyQueryScope,
   RealmAuthorityPolicyScopeError,
@@ -187,6 +188,7 @@ function stubCore(
     uncompilable,
     lookups = [],
     generation,
+    realmConfig = {},
   }: {
     reads?: { policy: number };
     ruleOn?: ResolvedCodeRef;
@@ -195,6 +197,9 @@ function stubCore(
     // The lookup's definition generation. A lookup without one offers its
     // answers no lifetime, so nothing it serves is remembered.
     generation?: () => number;
+    // The governed realm's settings, which a predicate reads as
+    // `realmConfig()`.
+    realmConfig?: Record<string, unknown>;
   } = {},
 ): OperationCore {
   let policy: CompiledRealmPolicy = {
@@ -215,6 +220,7 @@ function stubCore(
   };
   return {
     realmURL: REALM,
+    realmConfig: async () => realmConfig,
     resolveCodeRef: (codeRef: CodeRef) =>
       isResolvedCodeRef(codeRef) ? codeRef : undefined,
     definitionLookup: {
@@ -496,6 +502,98 @@ module(basename(import.meta.filename), function () {
       { kind: 'denied' },
       'a query grant whose predicate compiled no filter',
     );
+  });
+
+  module('a grant whose predicate reads nothing of the card', function () {
+    const LISTED = 'realmConfig("providers") | any(. == actor())';
+    function settledGrant(source = LISTED): Grant {
+      return {
+        operation: 'listOpen',
+        where: { source, canonical: source, snapshot: false, readsActor: true },
+        settledFilter: { 'item.on': SCHEDULE },
+      };
+    }
+
+    test('contributes every card of its type to a caller the predicate holds for', async function (assert) {
+      let result = await scope('listOpen', [settledGrant()], [SCHEDULE], {
+        realmConfig: { providers: ['@someone-else:localhost', ACTOR] },
+      });
+      assert.deepEqual(result, {
+        kind: 'scoped',
+        filters: [scoped({ type: SCHEDULE })],
+      });
+    });
+
+    test('contributes nothing to a caller it fails for', async function (assert) {
+      assert.deepEqual(
+        await scope('listOpen', [settledGrant()], [SCHEDULE], {
+          realmConfig: { providers: ['@someone-else:localhost'] },
+        }),
+        { kind: 'denied' },
+        'a caller the list leaves out',
+      );
+      assert.deepEqual(
+        await scope('listOpen', [settledGrant()], [SCHEDULE]),
+        { kind: 'denied' },
+        'a realm whose settings hold no list',
+      );
+    });
+
+    test('contributes nothing where the predicate throws', async function (assert) {
+      assert.deepEqual(
+        await scope('listOpen', [settledGrant()], [SCHEDULE], {
+          realmConfig: { providers: 7 },
+        }),
+        { kind: 'denied' },
+      );
+    });
+
+    test('contributes beside a grant whose filter reads the card, each as it admits', async function (assert) {
+      let result = await scope(
+        'listOpen',
+        [{ operation: 'listOpen', filter: OWN_FILTER }, settledGrant()],
+        [SCHEDULE],
+        { realmConfig: { providers: [ACTOR] } },
+      );
+      assert.deepEqual(result, {
+        kind: 'scoped',
+        filters: [scoped(OWN), scoped({ type: SCHEDULE })],
+      });
+    });
+
+    test("is settled for a caller who isn't signed in through its reading for them, and for a signed-in caller through theirs", async function (assert) {
+      const OPEN = 'actor() == "anonymous" and realmConfig("open") == true';
+      let grant: Grant = {
+        operation: 'query',
+        where: { source: OPEN, canonical: OPEN, snapshot: false },
+        anonymous: { id: 'open-search', writes: false },
+        anonymousSettledFilter: { 'item.on': SCHEDULE },
+      };
+      let search = (
+        open: boolean,
+        principal: SearchPrincipal = {
+          kind: 'anonymous',
+          request: new AnonymousRequest(async () => ({
+            failure: 'no-write',
+          })),
+        },
+      ) =>
+        policyQueryScope(stubCore([grant], { realmConfig: { open } }), {
+          operation: 'query',
+          types: [SCHEDULE],
+          principal,
+        });
+      assert.deepEqual(await search(true), {
+        kind: 'scoped',
+        filters: [scoped({ type: SCHEDULE })],
+      });
+      assert.deepEqual(await search(false), { kind: 'denied' });
+      assert.deepEqual(
+        await search(true, { kind: 'user', user: ACTOR }),
+        { kind: 'denied' },
+        'the grant has no reading for a signed-in caller',
+      );
+    });
   });
 
   test('a query declared out of every policy’s reach contributes nothing, whatever the policy grants', async function (assert) {

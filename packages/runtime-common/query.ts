@@ -7,6 +7,7 @@ import {
   type JsonValue,
 } from './json-validation.ts';
 import { InvalidQueryError } from './invalid-query-error.ts';
+import { parsePathSpecifier } from './path-specifier.ts';
 import {
   type CodeRef,
   isCodeRef,
@@ -78,6 +79,7 @@ export type Filter =
   | ContainsFilter
   | RangeFilter
   | MatchesFilter
+  | PathsFilter
   | CardTypeFilter;
 
 export interface TypedFilter {
@@ -179,6 +181,16 @@ export interface ContainsFilter extends TypedFilter {
  */
 export interface MatchesFilter extends TypedFilter {
   matches: string;
+}
+
+// The entries stored at realm paths a path specifier names (ADR 037): a list
+// of prefixes, relative to the root of each realm the search reads, and an
+// entry matches when its file falls under any of them. `blog/` matches every
+// entry stored in `blog/`, and `blog/post-1.json` that one card or file. An
+// empty list has no path limit. A policy that limits a search grant to some
+// paths composes one of these into the search it scopes.
+export interface PathsFilter extends TypedFilter {
+  paths: string[];
 }
 
 export function isCardTypeFilter(filter: Filter): filter is CardTypeFilter {
@@ -488,6 +500,7 @@ const FILTER_OPERATOR_ASSERTS: Record<
   contains: assertContainsFilter,
   range: assertRangeFilter,
   matches: assertMatchesFilter,
+  paths: assertPathsFilter,
 };
 
 const FILTER_OPERATORS = Object.keys(FILTER_OPERATOR_ASSERTS);
@@ -767,6 +780,28 @@ function assertRangeFilter(
       }
     });
   });
+}
+
+function assertPathsFilter(
+  filter: any,
+  pointer: string[],
+): asserts filter is PathsFilter {
+  let pathsPointer = pointer.concat('paths');
+  if (
+    !Array.isArray(filter.paths) ||
+    filter.paths.some((path: unknown) => typeof path !== 'string')
+  ) {
+    throw new InvalidQueryError(
+      `${pathsPointer.join('/')}: paths must be a list of path prefixes`,
+    );
+  }
+  let parsed = parsePathSpecifier(filter.paths);
+  if (!parsed.ok) {
+    let [first] = parsed.errors;
+    throw new InvalidQueryError(
+      `${pathsPointer.concat(String(first.prefixIndex)).join('/')}: ${first.message}`,
+    );
+  }
 }
 
 function assertMatchesFilter(

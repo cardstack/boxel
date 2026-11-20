@@ -3,12 +3,16 @@ import type { Definition } from '../definitions.ts';
 import type { Filter } from '../query.ts';
 import { policyFilterFromWire } from '../search-entry.ts';
 import type { OperationCore } from './dispatch.ts';
-import { unresolvableAsUndefined } from './types.ts';
+import {
+  unresolvableAsUndefined,
+  type OperationQueryFilterTemplate,
+} from './types.ts';
 import {
   authorizationCardIds,
   matchingGrants,
   nonGrantableInChain,
   policyUnavailable,
+  settleForSearch,
   type MatchedGrant,
 } from './gate.ts';
 import {
@@ -59,6 +63,16 @@ import { lowerQueryOperation } from './query.ts';
 //   recorded as `policy-not-filterable` when the policy compiles, and it
 //   contributes nothing here rather than widening the search to rows it cannot
 //   judge. Its single-instance evaluation is untouched.
+//
+// A grant whose predicate reads nothing of the card, such as
+// `realmConfig("reviewers") | any(. == actor())`, compiled a filter too: every
+// card of its rule's type, which it contributes only where the predicate holds
+// for this search's caller. Such a predicate says who the caller is and
+// nothing about any card, so it holds or fails for every row alike. It is run
+// once per search, before anything is composed, the way the gate runs it for
+// one card, and no row is judged. Where it holds, the filter admits exactly the
+// rows the predicate would; where it fails or throws, the grant contributes
+// nothing.
 //
 // A caller with nothing to contribute is scoped to nothing rather than to
 // everything: an absent grant is a refusal here, as it is at the gate.
@@ -449,7 +463,9 @@ function ownDeclaration(
 // the compared path differently from the rule's type. For a caller who isn't
 // signed in, only a grant whose `where` names them matches, through the filter
 // it reads as for them, and only where the request's anonymous admission lets
-// their address in through it.
+// their address in through it. A grant whose predicate reads nothing of the
+// card contributes its settled filter only where that predicate holds for the
+// caller.
 //
 // A compiled filter stands the caller as the `{ $ref: 'actor' }` marker a
 // declared query uses, so filling one in is the substitution a named query
@@ -483,7 +499,8 @@ async function grantFilters(
   for (let candidate of matched) {
     let { grant } = candidate;
     let filter =
-      searcher.kind === 'user' ? grant.filter : grant.anonymousFilter;
+      (searcher.kind === 'user' ? grant.filter : grant.anonymousFilter) ??
+      (await settledFilter(core, candidate, searcher));
     if (!filter) {
       continue;
     }
@@ -496,12 +513,52 @@ async function grantFilters(
         `a compiled query grant on "${operation}" lowered to no filter`,
       );
     }
+    let scoped = withoutMisreadings(policyFilterFromWire(bound.filter), grant);
     filters.push({
-      filter: withoutMisreadings(policyFilterFromWire(bound.filter), grant),
+      // A grant limited to some paths admits only the cards stored under
+      // them, so its paths narrow its filter (ADR 038 §1.5). They travel in
+      // the filter, so an explain shows them with the rest of it.
+      filter: grant.paths
+        ? {
+            every: [
+              scoped,
+              { paths: grant.paths.prefixes.map((prefix) => prefix.source) },
+            ],
+          }
+        : scoped,
       matched: candidate,
     });
   }
   return filters;
+}
+
+// The settled filter of a grant whose predicate reads nothing of the card,
+// where that predicate holds for this search's caller. Undefined where it
+// doesn't hold, where it throws, and where the grant carries no settled filter
+// for such a caller.
+//
+// Loading the evaluator and reading the realm's settings are the realm's own
+// work, and a failure of either propagates, as it does from the gate (see
+// `evaluate`). The realm's own search fails with a server error, as any
+// operation does when the gate can't judge it, and a federated search answers
+// without this realm's rows and is marked incomplete. Composing nothing instead would answer a
+// caller the predicate holds for with an empty search that reports no fault.
+async function settledFilter(
+  core: OperationCore,
+  matched: MatchedGrant,
+  searcher: Searcher,
+): Promise<OperationQueryFilterTemplate | undefined> {
+  let filter =
+    searcher.kind === 'user'
+      ? matched.grant.settledFilter
+      : matched.grant.anonymousSettledFilter;
+  if (!filter) {
+    return undefined;
+  }
+  let actor = searcher.kind === 'user' ? searcher.actor : ANONYMOUS_ACTOR;
+  return (await settleForSearch(core, matched, actor)) === 'holds'
+    ? filter
+    : undefined;
 }
 
 // `filter` with each comparison of a path some type reads differently kept

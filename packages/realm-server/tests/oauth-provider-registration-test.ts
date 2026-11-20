@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
+import { randomBytes } from 'crypto';
 import { dirSync } from 'tmp';
 import fsExtra from 'fs-extra';
 import supertest from 'supertest';
@@ -10,6 +11,7 @@ import {
   closeServer,
   createVirtualNetwork,
   fixtureDir,
+  insertUser,
   matrixURL,
   runTestRealmServer,
   setupDB,
@@ -20,6 +22,14 @@ import {
   testOAuthSecureOriginURL,
 } from './helpers/oauth-provider.ts';
 import { oauthProviderAdapter } from '../lib/oauth-provider/adapter.ts';
+import {
+  UNCONNECTED_CLIENT_RETENTION_SECONDS,
+  deleteExpiredOAuthProviderRows,
+} from '../lib/oauth-provider/cleanup.ts';
+import {
+  createGrant,
+  markGrantExchanged,
+} from '../lib/oauth-provider/grants.ts';
 import type { NewClientLimit } from '../lib/oauth-provider/new-client-limit.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
@@ -48,6 +58,7 @@ const ROOMY_LIMIT: NewClientLimit = {
 interface StartOptions {
   provider?: boolean;
   newClientLimit?: NewClientLimit;
+  unconnectedClientCap?: number;
   // How many proxies of ours sit in front of the server, so a test can name
   // each caller in `X-Forwarded-For`.
   trustedProxyHops?: number;
@@ -59,6 +70,7 @@ async function start({
   runner,
   provider = true,
   newClientLimit = ROOMY_LIMIT,
+  unconnectedClientCap,
   trustedProxyHops = 0,
 }: {
   dbAdapter: PgAdapter;
@@ -86,6 +98,7 @@ async function start({
       ? {
           oauthProvider: testOAuthProviderConfig(),
           oauthNewClientLimit: newClientLimit,
+          oauthUnconnectedClientCap: unconnectedClientCap,
         }
       : {}),
   });
@@ -141,6 +154,7 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
       return row?.metadata as Record<string, unknown> | undefined;
     },
     clientAdapter: () => oauthProviderAdapter(db!)('Client'),
+    db: () => db!,
     storedClientCount: async () => {
       let [{ count }] = await db!.execute(
         `SELECT count(*)::int AS count FROM oauth_provider_dynamic_clients`,
@@ -523,6 +537,71 @@ module(basename(import.meta.filename), function () {
       let response = await server.register(loopbackClient);
       assert.strictEqual(response.status, 403);
       assert.strictEqual(await server.storedClientCount(), 0, 'none stored');
+    });
+  });
+
+  module('at the cap on never-connected clients', function (hooks) {
+    let server = setupServer(hooks, { unconnectedClientCap: 2 });
+
+    async function fill(): Promise<string[]> {
+      let clientIds = [];
+      for (let i = 0; i < 2; i++) {
+        let response = await server.register(loopbackClient);
+        if (response.status !== 201) {
+          throw new Error(`registration ${i} answered ${response.status}`);
+        }
+        clientIds.push(response.body.client_id as string);
+      }
+      return clientIds;
+    }
+
+    test('registration is refused with when to retry, and nothing is stored', async function (assert) {
+      await fill();
+      let response = await server.register(loopbackClient);
+      assert.strictEqual(response.status, 503);
+      assert.strictEqual(response.body.error, 'temporarily_unavailable');
+      assert.strictEqual(response.headers['retry-after'], '3600');
+      assert.strictEqual(await server.storedClientCount(), 2, 'none stored');
+    });
+
+    test('a client that connects makes room', async function (assert) {
+      let [clientId] = await fill();
+      let db = server.db();
+      let matrixId = `@cap-${randomBytes(6).toString('hex')}:localhost`;
+      let { id: userId } = await insertUser(
+        db,
+        matrixId,
+        `cus_${matrixId}`,
+        null,
+      );
+      let grantId = await createGrant(db, {
+        userId,
+        clientId,
+        resources: {},
+        renewing: true,
+        consentedAt: new Date(),
+      });
+      assert.strictEqual(
+        (await server.register(loopbackClient)).status,
+        503,
+        'a grant whose code is not exchanged yet connects nothing',
+      );
+      await markGrantExchanged(db, grantId!);
+      assert.strictEqual((await server.register(loopbackClient)).status, 201);
+    });
+
+    test('a client the cleanup deletes makes room', async function (assert) {
+      let [clientId] = await fill();
+      let db = server.db();
+      await db.execute(
+        `UPDATE oauth_provider_dynamic_clients
+            SET created_at = now() - make_interval(secs => $2)
+          WHERE client_id = $1`,
+        { bind: [clientId, UNCONNECTED_CLIENT_RETENTION_SECONDS + 60] },
+      );
+      await deleteExpiredOAuthProviderRows(db);
+      assert.strictEqual((await server.register(loopbackClient)).status, 201);
+      assert.strictEqual(await server.storedClientCount(), 2);
     });
   });
 

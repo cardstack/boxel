@@ -317,6 +317,11 @@ The harness splits the two legs so this cannot be misread silently:
 It prints a warning when the body leg takes more than half the end-to-end time.
 Treat that warning as "these latency numbers are not about the realm server".
 
+The byte counts are the decoded documents' sizes. The realm server compresses
+card and search responses, and Node's `fetch` asks for gzip (and brotli over
+HTTPS) and decodes what comes back, so the network carries a sixth to a twelfth
+of the reported bytes. The `body` leg times that compressed transfer.
+
 **Byte counts are trustworthy regardless of where the driver runs; latency is
 not.** So a payload change can be evaluated from anywhere, but a latency claim
 cannot.

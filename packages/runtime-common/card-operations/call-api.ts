@@ -25,6 +25,7 @@ import type { ResolvedCodeRef } from '../code-ref.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
+import { CALL_API_BODY_KINDS } from '../call-api-body-kinds.ts';
 import {
   CALL_API_KEY_KINDS,
   isCallApiKeyKind,
@@ -137,6 +138,7 @@ export interface CallApiClauses {
   query?: unknown;
   json?: unknown;
   graphql?: unknown;
+  form?: unknown;
   perInstance?: unknown;
   keyKind?: unknown;
 }
@@ -220,7 +222,7 @@ export function lowerCallApi(
         fail(
           'slot-out-of-place',
           at,
-          `\`${slot.text}\` in \`${at}\` is outside a header value, a query value, a path value and the JSON body, which are the only places a credential is filled into`,
+          `\`${slot.text}\` in \`${at}\` is outside a header value, a query value, a path value and the body, which are the only places a credential is filled into`,
         );
         continue;
       }
@@ -236,7 +238,10 @@ export function lowerCallApi(
   };
 
   // The method.
-  let hasBody = clauses.json !== undefined || clauses.graphql !== undefined;
+  let bodies = CALL_API_BODY_KINDS.filter(
+    (kind) => clauses[kind] !== undefined,
+  );
+  let hasBody = bodies.length > 0;
   let method: CallApiMethod = hasBody ? 'POST' : 'GET';
   if (clauses.method !== undefined) {
     if (!METHODS.includes(clauses.method as CallApiMethod)) {
@@ -364,16 +369,18 @@ export function lowerCallApi(
 
   // The body.
   let body: CallApiBodyTemplate | undefined;
-  if (clauses.json !== undefined && clauses.graphql !== undefined) {
+  if (bodies.length > 1) {
     fail(
       'invalid-request',
-      'json',
-      `a request carries one body — \`json\` or \`graphql\`, not both`,
+      bodies[0],
+      `a request carries one body — \`json\`, \`graphql\` or \`form\` — and this one gives ${bodies.map((kind) => `\`${kind}\``).join(' and ')}`,
     );
   } else if (clauses.json !== undefined) {
     body = { kind: 'json', value: lowerValue(clauses.json, 'json', 'body') };
   } else if (clauses.graphql !== undefined) {
     body = lowerGraphql(clauses.graphql, fail, readSlots, lowerValue);
+  } else if (clauses.form !== undefined) {
+    body = lowerForm(clauses.form, fail, readSlots, lowerValue);
   }
 
   // Each slot once, and each name for one slot.
@@ -431,6 +438,46 @@ export function lowerCallApi(
     }),
     ...(clauses.perInstance === true ? { perInstance: true as const } : {}),
   };
+}
+
+// A form body's fields. A field's name is sent as written, so a slot can't
+// stand in one; its value may be text, a number, a boolean, a typed reference,
+// or objects and lists of those, which `encodeFormBody` names with brackets.
+function lowerForm(
+  form: unknown,
+  fail: (
+    code: OperationLoweringIssueCode,
+    path: string,
+    message: string,
+  ) => void,
+  readSlots: (
+    text: string,
+    at: string,
+    placement: CallApiSlotPlacement | undefined,
+  ) => void,
+  lowerValue: (
+    value: unknown,
+    path: string,
+    placement: CallApiSlotPlacement | undefined,
+  ) => OperationTemplate,
+): CallApiBodyTemplate | undefined {
+  if (!isPlainObject(form) || isMarker(form)) {
+    fail(
+      'invalid-request',
+      'form',
+      `\`form\` must map each field name to its value`,
+    );
+    return undefined;
+  }
+  let fields: Record<string, OperationTemplate> = {};
+  for (let [name, value] of Object.entries(form)) {
+    readSlots(name, 'form', undefined);
+    if (name.length === 0) {
+      fail('invalid-request', 'form', `a \`form\` field needs a name`);
+    }
+    fields[name] = lowerValue(value, `form.${name}`, 'body');
+  }
+  return { kind: 'form', fields };
 }
 
 const KEY_KIND_LIST = CALL_API_KEY_KINDS.map((k) => `"${k}"`).join(', ');
@@ -829,6 +876,8 @@ export function callApiReadsActor(request: OperationCallApi): boolean {
   ];
   if (request.body?.kind === 'json') {
     templates.push(request.body.value);
+  } else if (request.body?.kind === 'form') {
+    templates.push(...Object.values(request.body.fields));
   } else if (request.body?.variables) {
     templates.push(...Object.values(request.body.variables));
   }
@@ -860,6 +909,9 @@ export interface CallApiRequest {
   url: string;
   headers: Record<string, string>;
   body?: string;
+  // How `body` is encoded, which is how a credential filled into it is
+  // encoded too.
+  bodyEncoding?: CallApiBodyEncoding;
   // Each slot the request carries, with the token that stands where it goes.
   slots: (CallApiSlot & { token: string })[];
 }
@@ -1214,7 +1266,15 @@ export async function buildCallApiRequest(
   }
 
   let body: string | undefined;
-  if (request.body) {
+  let bodyEncoding: CallApiBodyEncoding | undefined;
+  if (request.body?.kind === 'form') {
+    let fields: Record<string, unknown> = {};
+    for (let [field, template] of Object.entries(request.body.fields)) {
+      fields[field] = await fill.json(template, `form.${field}`, tokenFor);
+    }
+    body = encodeFormBody(fields);
+    bodyEncoding = 'form';
+  } else if (request.body) {
     let json =
       request.body.kind === 'json'
         ? await fill.json(request.body.value, 'json', tokenFor)
@@ -1231,18 +1291,96 @@ export async function buildCallApiRequest(
               : {}),
           };
     body = JSON.stringify(json);
-    if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) {
-      headers['content-type'] = 'application/json';
-    }
+    bodyEncoding = 'json';
+  }
+  if (
+    bodyEncoding &&
+    !Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')
+  ) {
+    headers['content-type'] = BODY_CONTENT_TYPES[bodyEncoding];
   }
 
   return {
     method: request.method,
     url: target.href,
     headers,
-    ...(body !== undefined ? { body } : {}),
+    ...(body !== undefined ? { body, bodyEncoding } : {}),
     slots,
   };
+}
+
+export type CallApiBodyEncoding = 'json' | 'form';
+
+const BODY_CONTENT_TYPES: Record<CallApiBodyEncoding, string> = {
+  json: 'application/json',
+  form: 'application/x-www-form-urlencoded',
+};
+
+// A form body as `application/x-www-form-urlencoded` text, in the bracket
+// convention form-taking APIs read:
+//
+//   * text, a number or a boolean is one `name=value` pair;
+//   * an object's members are named `name[member]`;
+//   * a list that is a field's whole value repeats the field's name for each
+//     item that is text, a number or a boolean (`MediaUrl=a&MediaUrl=b`), and
+//     so does a list under a name ending in `[]`, written as a field
+//     (`expand[]=a&expand[]=b`) or a member (`name[member][]=a`);
+//   * every other list item is numbered, `name[0]`, `name[0][price]`, as the
+//     item's position. A name repeated below the top level would be read as
+//     one value by a parser that keeps the last of a repeated name, so a list
+//     nested in an object or another list is always numbered;
+//   * null leaves the member out, and so does an empty list or object, since
+//     a form has no way to send one.
+//
+// An object's members, the fields included, go out in the order of their
+// names, never the order they were declared in. The lowered entry is read
+// back from a `jsonb` column, which keeps an object's keys in an order of its
+// own, so declaration order would hold for the call that fills the cache and
+// not for the calls after it. Sorting sends one body for one declaration and
+// one payload, whichever copy it was built from. A list keeps its order.
+//
+// A slot's token is letters, digits and `_`, which this encoding leaves as
+// they are, so the client finds it here and fills it form-encoded too.
+export function encodeFormBody(fields: Record<string, unknown>): string {
+  let pairs = new URLSearchParams();
+  // `repeats`: a list here sends its plain items under this name, once each.
+  let add = (name: string, value: unknown, repeats: boolean) => {
+    if (value === null || value === undefined) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      let base = name.endsWith('[]') ? name.slice(0, -2) : name;
+      value.forEach((item, index) => {
+        let structured = item !== null && typeof item === 'object';
+        if (repeats && !structured) {
+          add(name, item, false);
+        } else {
+          add(`${base}[${index}]`, item, false);
+        }
+      });
+      return;
+    }
+    if (typeof value === 'object') {
+      for (let [member, inner] of byName(value)) {
+        let repeated = member.endsWith('[]');
+        add(
+          repeated ? `${name}[${member.slice(0, -2)}][]` : `${name}[${member}]`,
+          inner,
+          repeated,
+        );
+      }
+      return;
+    }
+    pairs.append(name, String(value));
+  };
+  for (let [name, value] of byName(fields)) {
+    add(name, value, true);
+  }
+  return pairs.toString();
+}
+
+function byName(value: object): [string, unknown][] {
+  return Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 // Letters, digits and `_`, which percent-encoding, JSON escaping and a header

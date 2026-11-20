@@ -4,6 +4,7 @@ export type FittedFormatId =
   | 'double-strip'
   | 'double-wide-strip'
   | 'expanded-card'
+  | 'extra-wide-card'
   | 'full-card'
   | 'large-badge'
   | 'large-tile'
@@ -13,6 +14,7 @@ export type FittedFormatId =
   | 'small-badge'
   | 'small-tile'
   | 'tall-tile'
+  | 'triple-extra-wide-strip'
   | 'triple-strip'
   | 'triple-wide-strip';
 
@@ -85,6 +87,12 @@ export const FITTED_FORMATS: FittedFormatGallery = [
         width: 400,
         height: 105,
       },
+      {
+        id: 'triple-extra-wide-strip',
+        title: 'Triple Extra Wide Strip',
+        width: 720,
+        height: 105,
+      },
     ],
   },
   {
@@ -142,6 +150,12 @@ export const FITTED_FORMATS: FittedFormatGallery = [
         title: 'Expanded Card',
         width: 400,
         height: 445,
+      },
+      {
+        id: 'extra-wide-card',
+        title: 'Extra Wide Card',
+        width: 720,
+        height: 240,
       },
     ],
   },

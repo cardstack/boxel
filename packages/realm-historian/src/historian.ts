@@ -17,8 +17,9 @@
 // then unless the transaction stayed open past the grace period.
 //
 // The recorders share one semaphore, which caps how many do I/O at once, and
-// a recorder with nothing uncommitted is dropped once it has been idle for a
-// while.
+// another, which caps how many sweeps walk realm directories at once. A
+// recorder with nothing uncommitted and no sweep under way is dropped once it
+// has been idle for a while.
 //
 // Background work, such as reconcile passes and maintenance, is scheduled
 // per realm by `background.ts` over the realms the task loaded, and runs in
@@ -95,9 +96,15 @@ export interface RecordingOptions {
   idleAfterMs?: number;
   // Appended changes to files larger than this become size-only entries.
   sizeOnlyThresholdBytes?: number;
+  // A file a sweep finds different that is larger than this becomes a
+  // size-only entry.
+  sizeOnlyAboveBytes?: number;
+  // How many sweeps walk realm directories at once.
+  walkConcurrency?: number;
 }
 
 const DEFAULT_POLL_MS = 1000;
+const DEFAULT_WALK_CONCURRENCY = 2;
 const DEFAULT_CLOCK_GRACE_MS = 1000;
 const DEFAULT_IDLE_AFTER_MS = 5 * 60_000;
 
@@ -110,6 +117,7 @@ export class Historian {
   // for too.
   #stopping = new Set<Promise<void>>();
   #io: Semaphore;
+  #walks: Semaphore;
   #background: BackgroundScheduler;
   // The shards whose realms the consumer's position accounts for.
   #loadedShards = new Set<number>();
@@ -130,6 +138,9 @@ export class Historian {
     this.#lease = new LeaseManager(options.db, options.lease);
     this.#io = new Semaphore(
       options.recording?.ioConcurrency ?? DEFAULT_IO_CONCURRENCY,
+    );
+    this.#walks = new Semaphore(
+      options.recording?.walkConcurrency ?? DEFAULT_WALK_CONCURRENCY,
     );
     this.#background = new BackgroundScheduler({
       ...options.background,
@@ -362,11 +373,13 @@ export class Historian {
       historyRoot,
       holder: lease.holder,
       io: this.#io,
+      walks: this.#walks,
       onFatal: (error) => this.#fail(error),
       beat,
       onCommits,
       limits: recording?.limits,
       sizeOnlyThresholdBytes: recording?.sizeOnlyThresholdBytes,
+      sizeOnlyAboveBytes: recording?.sizeOnlyAboveBytes,
     });
   }
 

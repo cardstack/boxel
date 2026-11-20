@@ -43,6 +43,17 @@ export interface BillableCallOptions {
   signal: AbortSignal;
   // The allowlisted destination the call goes to, named in the timing line.
   destination: string;
+  // The route the call came in on (`_request-forward`, `_openrouter`), named
+  // in the timing line.
+  route: string;
+  // When the route's handler started on the request, in epoch ms. The timing
+  // line's `requestMs` runs from here, so the handler's own work before the
+  // call is admitted counts toward `localMs`. Omitted, it is when this call
+  // started.
+  requestStartedAt?: number;
+  // The request's logging correlation id, named in the timing line as
+  // `corr=<id>` like the request's `realm:requests` lines, so the three join.
+  correlationId?: string;
   // What the call's spend is recorded as paying for. Omitted, it is an AI call
   // with no reference; a call an automation run makes names the run.
   charge?: AICallCharge;
@@ -153,14 +164,82 @@ export async function withBillableCall(
     if (signal.aborted && outcome === 'uncharged') {
       outcome = 'client-gone';
     }
-    log.info(
-      `billable call user=${matrixUserId} destination=${opts.destination} outcome=${outcome} inFlight=${
-        inFlight ?? '-'
-      } totalMs=${Date.now() - startedAt} lockWaitMs=${timing.lockWaitMs} capacityWaitMs=${
-        timing.capacityWaitMs
-      } upstreamMs=${timing.upstreamMs} costMs=${timing.costMs}`,
-    );
+    log.info(billableCallLine(opts, outcome, inFlight, startedAt, timing));
   }
+}
+
+// The timing line for one call, as `key=value` pairs Loki's `logfmt` parser
+// reads:
+// - `totalMs`: from admission starting to the call being settled.
+// - `requestMs`: from the route's handler starting on the request to the call
+//   being settled; `totalMs` when the route names no start.
+// - `lockWaitMs`: waiting for the user's cost lock, which admission and
+//   recording the cost each take once.
+// - `capacityWaitMs`: waiting for one of the user's in-flight slots.
+// - `upstreamMs`: the route's call: sending the request upstream and relaying
+//   the response to the client as it is read, streamed or not, so a client
+//   that reads slowly lengthens it. For an automation run's request it also
+//   holds counting the call against the run's cap.
+// - `costMs`: learning what the call cost.
+// - `localMs`: the rest of `requestMs`, the server's own work: reading and
+//   checking the request, the database work inside the lock, and recording
+//   the cost.
+// Time the request spent before its handler started, in the browser, on the
+// way to the realm server or queued in it, is not on this line. It is the gap
+// between the client's start (its `server-request` event's `ts` less
+// `duration_ms`) and the `<--` arrival line `realm:requests` logs for the same
+// `corr`, less the browser clock's offset from the server's, which the same
+// session's fast requests to other endpoints measure the same way. The
+// client's `duration_ms` and the `-->` line's `dur` cannot be
+// subtracted for it: the client's ends when the response headers arrive, which
+// a forwarded JSON or streamed response sends with its first upstream bytes,
+// and `dur` ends when the response does, after the cost is recorded.
+export function billableCallLine(
+  opts: Pick<
+    BillableCallOptions,
+    | 'matrixUserId'
+    | 'destination'
+    | 'route'
+    | 'requestStartedAt'
+    | 'correlationId'
+  >,
+  outcome: string,
+  inFlight: number | undefined,
+  startedAt: number,
+  timing: {
+    lockWaitMs: number;
+    capacityWaitMs: number;
+    upstreamMs: number;
+    costMs: number;
+  },
+  now = Date.now(),
+): string {
+  let totalMs = now - startedAt;
+  let requestMs = now - (opts.requestStartedAt ?? startedAt);
+  let localMs = Math.max(
+    0,
+    requestMs -
+      timing.lockWaitMs -
+      timing.capacityWaitMs -
+      timing.upstreamMs -
+      timing.costMs,
+  );
+  return [
+    'billable call',
+    `user=${opts.matrixUserId}`,
+    `route=${opts.route}`,
+    `destination=${opts.destination}`,
+    `outcome=${outcome}`,
+    `inFlight=${inFlight ?? '-'}`,
+    `totalMs=${totalMs}`,
+    `requestMs=${requestMs}`,
+    `lockWaitMs=${timing.lockWaitMs}`,
+    `capacityWaitMs=${timing.capacityWaitMs}`,
+    `upstreamMs=${timing.upstreamMs}`,
+    `costMs=${timing.costMs}`,
+    `localMs=${localMs}`,
+    ...(opts.correlationId ? [`corr=${opts.correlationId}`] : []),
+  ].join(' ');
 }
 
 // Resolves the call's cost and, if there is one, spends it and gives the slot

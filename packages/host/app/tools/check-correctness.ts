@@ -56,13 +56,16 @@ function mayNameInstance(href: string): boolean {
 }
 
 // What reading a file as a card instance found: no card instance at that URL,
-// an error the instance carries, or a clean document and the index generation
-// it was written at. A read that fails without a card error says nothing
-// about the file.
+// an error the instance carries, a clean document and the index generation it
+// was written at, or a read the realm turned away for now (a 503 with
+// `Retry-After`, its answer while it is still rendering the card's type
+// definition). A read that fails without a card error says nothing about the
+// file.
 type InstanceRead =
   | { kind: 'not-an-instance' }
   | { kind: 'error'; error: string }
   | { kind: 'clean'; generation?: number }
+  | { kind: 'not-ready' }
   | { kind: 'unknown' };
 
 // How many targets are checked at once. A module check is a prerender on the
@@ -566,6 +569,10 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       let cardId = this.network.virtualNetwork.unresolveURL(href);
       if (read.kind === 'error') {
         errors.push(`${read.error} (${instanceErrorNote})`);
+      } else if (read.kind === 'not-ready' && !render) {
+        warnings.push(
+          `${cardId}: not checked, because the realm was still rendering its type's definition`,
+        );
       } else if (render?.kind === 'error') {
         errors.push(`${render.error} (${instanceErrorNote})`);
       } else if (render?.kind === 'unknown') {
@@ -642,8 +649,11 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   // An error is what the instance's index visit recorded, which the realm
   // answers with in place of the document, or what its current render
   // recorded, which the document carries as `meta.renderError`; otherwise
-  // the read gives the index generation the document was written at. A read
-  // that fails without a card error is logged.
+  // the read gives the index generation the document was written at. A 503
+  // with `Retry-After` is the realm asking to be read again later, which says
+  // nothing about the instance — right after a module edit, it is usually the
+  // edited module's definition still being rendered. A read that fails
+  // without a card error is logged.
   private async readInstance(cardHref: string): Promise<InstanceRead> {
     let cardId = this.network.virtualNetwork.unresolveURL(cardHref);
     try {
@@ -656,6 +666,10 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       if (response.status === 404) {
         await response.body?.cancel().catch(() => undefined);
         return { kind: 'not-an-instance' };
+      }
+      if (response.status === 503 && response.headers.has('Retry-After')) {
+        await response.body?.cancel().catch(() => undefined);
+        return { kind: 'not-ready' };
       }
       let body = await response.json().catch(() => undefined);
       if (!response.ok) {

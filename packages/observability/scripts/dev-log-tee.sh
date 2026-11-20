@@ -4,7 +4,7 @@
 # every byte through to stdout unchanged.
 #
 # Used by the local mise dev tasks (see mise-tasks/services/{realm-server,
-# worker, prerender, prerender-mgr}) so the local Alloy log scraper can pick
+# worker, prerender, prerender-mgr, realm-historian}) so the local Alloy log scraper can pick
 # up natively-run boxel processes via `loki.source.file`. Alloy's Docker
 # socket discovery only sees containers, and these processes are not
 # containerized in the dev loop.

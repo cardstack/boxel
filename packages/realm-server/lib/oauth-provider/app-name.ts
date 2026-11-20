@@ -28,7 +28,13 @@ export interface AppName {
   verified: boolean;
   // The name a client that registered itself gave, shown only as unverified.
   claimedName?: string;
+  // Set when `shown` is a phrase standing in for a name Boxel doesn't have:
+  // an app on the user's own computer, or one with no redirect URI to go by.
+  // A page that words the app itself reads this, never the phrase.
+  standIn?: AppStandIn;
 }
+
+export type AppStandIn = 'loopback' | 'unknown';
 
 // A client ID metadata document's client ID is an HTTPS URL. A client that
 // registered itself gets an ID Boxel generated, never a URL.
@@ -68,22 +74,24 @@ export function appName({
     case 'dynamic':
       return {
         kind,
-        shown: shownForRedirect(redirectUri),
+        ...shownForRedirect(redirectUri),
         verified: false,
         ...(clientName ? { claimedName: clientName } : {}),
       };
   }
 }
 
-function shownForRedirect(redirectUri: string | undefined): string {
+function shownForRedirect(
+  redirectUri: string | undefined,
+): Pick<AppName, 'shown' | 'standIn'> {
   let url = parseURL(redirectUri);
   if (!url) {
-    return UNKNOWN_APP_NAME;
+    return { shown: UNKNOWN_APP_NAME, standIn: 'unknown' };
   }
   if (isLoopbackRedirect(url)) {
-    return LOOPBACK_APP_NAME;
+    return { shown: LOOPBACK_APP_NAME, standIn: 'loopback' };
   }
-  return registrableDomain(url.hostname);
+  return { shown: registrableDomain(url.hostname) };
 }
 
 function parseURL(value: string | undefined): URL | undefined {
