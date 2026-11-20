@@ -343,8 +343,17 @@ export interface AnonymousRouteOptions {
   counted: 'once-served' | 'by-handler' | 'never';
 }
 
+// A route as its router registered it, which an OAuth controller matches a
+// scope's route map against (ADR 021 §1.3).
+export interface RegisteredRoute {
+  method: Method;
+  mimeType: SupportedMimeType;
+  path: string;
+}
+
 export interface Route {
   handler: Handler;
+  registered: RegisteredRoute;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
   appliesArchivedSeal: boolean;
@@ -454,6 +463,7 @@ export class Router {
     }
     routes.set(path, {
       handler,
+      registered: { method, mimeType, path },
       consumesCoarseOutcome: opts.consumesCoarseOutcome === true,
       coarseReadOnly: opts.coarseReadOnly === true,
       appliesArchivedSeal: opts.appliesArchivedSeal === true,

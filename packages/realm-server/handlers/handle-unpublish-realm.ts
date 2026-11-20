@@ -20,9 +20,9 @@ import {
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
   setContextResponse,
+  requestUser,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   collectAllFilePaths,
@@ -40,8 +40,8 @@ export default function handleUnpublishRealm({
   serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token) {
+    let user = requestUser(ctxt);
+    if (!user) {
       await sendResponseForSystemError(
         ctxt,
         'token is required to unpublish realm',
@@ -93,7 +93,7 @@ export default function handleUnpublishRealm({
 
       let publishedRealmInfo = publishedRealmData[0];
 
-      let { user: ownerUserId } = token;
+      let ownerUserId = user;
       let parsedSourceRealmURL = new URL(publishedRealmInfo.source_url);
       let permissions = await fetchRealmPermissions(
         dbAdapter,

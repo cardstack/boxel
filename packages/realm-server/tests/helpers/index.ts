@@ -395,6 +395,15 @@ import {
   type Pricing,
   type PricingReporter,
 } from '../../lib/pricing.ts';
+import {
+  boxelApi,
+  boxelApiForRealms,
+} from '../../lib/oauth-provider/boxel-api.ts';
+import {
+  buildRegistry,
+  oauthIssuer,
+} from '../../lib/oauth-provider/registry.ts';
+import type { RealmOAuthResource } from '@cardstack/runtime-common/oauth-route-admission';
 export { realmInfoExtraKeys, withoutRealmInfoExtras };
 
 // Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
@@ -1610,6 +1619,7 @@ export async function createRealm({
   linkShapePolicy,
   cardDocumentCache = new CardDocumentCache(),
   realmFor,
+  oauth,
   policyPointerOf,
   published,
   history,
@@ -1681,6 +1691,9 @@ export async function createRealm({
   cardDocumentCache?: CardDocumentCache;
   // The other realms the realm can reach, for an explain on its policy card
   // that asks about a target in one of them.
+  // Forwarded to the Realm constructor's `oauth` option: the OAuth resource
+  // whose tokens the realm accepts.
+  oauth?: RealmOAuthResource;
   realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
   // A realm's policy pointer, read without mounting it, for the audit of a
   // policy change.
@@ -1784,6 +1797,7 @@ export async function createRealm({
           }
         : {}),
       callApi: createCallApiSender(dbAdapter),
+      ...(oauth ? { oauth } : {}),
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -1977,6 +1991,18 @@ export async function runTestRealmServer({
     ...(cardDocumentCache ? { cardDocumentCache } : {}),
     ...(published ? { published: true as const } : {}),
     ...(history ? { history } : {}),
+    // The realm is one of the Boxel API's controllers whenever the server
+    // runs the OAuth provider, as in production.
+    ...(oauthProvider
+      ? {
+          oauth: boxelApiForRealms(
+            boxelApi(dbAdapter, {
+              issuer: oauthIssuer(realmURL.origin),
+              registry: buildRegistry(oauthIssuer(realmURL.origin)),
+            }),
+          ),
+        }
+      : {}),
   });
 
   await testRealm.logInToMatrix();
