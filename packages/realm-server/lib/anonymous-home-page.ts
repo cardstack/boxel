@@ -209,17 +209,23 @@ async function homeCardModules(
 
 // The status the realm answers a visitor who isn't signed in with, for a
 // `GET` of `url` asking for `accept`, and the `Retry-After` it sent, in
-// seconds, when it sent one.
-async function anonymousRead(
+// seconds, when it sent one. The request carries no credentials.
+// `addressHeaders` are the client-address headers it carries, so the realm
+// admits, limits and refuses it as it would a request from that address. By
+// default it comes from the check's own address.
+export async function anonymousRead(
   realm: Realm,
   url: string,
   accept: string,
+  addressHeaders: Record<string, string> = {
+    [CLIENT_IP_HEADER]: ANONYMOUS_HOME_PAGE_CHECK_ADDRESS,
+  },
 ): Promise<{ status: number; retryAfter?: number }> {
   let response: ResponseWithNodeStream | null = await realm.handle(
     new Request(url, {
       headers: {
+        ...addressHeaders,
         Accept: accept,
-        [CLIENT_IP_HEADER]: ANONYMOUS_HOME_PAGE_CHECK_ADDRESS,
       },
     }),
   );
@@ -234,4 +240,14 @@ async function anonymousRead(
     status: response.status,
     ...(Number.isFinite(retryAfter) && retryAfter > 0 ? { retryAfter } : {}),
   };
+}
+
+// The status alone, for a caller that has no use for `Retry-After`.
+export async function anonymousStatus(
+  realm: Realm,
+  url: string,
+  accept: string,
+  addressHeaders?: Record<string, string>,
+): Promise<number> {
+  return (await anonymousRead(realm, url, accept, addressHeaders)).status;
 }
