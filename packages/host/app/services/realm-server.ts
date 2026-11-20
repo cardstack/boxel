@@ -2030,7 +2030,7 @@ export default class RealmServerService
     );
 
     if (!response.ok) {
-      throw new Error(await response.text());
+      throw new Error(refusalReason(await response.text()));
     }
 
     return response.json();
@@ -2113,13 +2113,24 @@ function hostURLFromResource({ id, attributes }: HostURLResource): HostURL {
   };
 }
 
-// The reason in a realm-server error body (`{ "errors": ["…"] }`), or the
-// body itself when it has none.
-function refusalReason(body: string): string {
+// The reason in a realm-server error body, or the body itself when it has
+// none. Each entry of `errors` is a string, or a JSON:API error object whose
+// `detail` or `title` says what went wrong.
+export function refusalReason(body: string): string {
   try {
-    let reason = JSON.parse(body)?.errors?.[0];
-    if (typeof reason === 'string') {
-      return reason;
+    let errors: unknown = JSON.parse(body)?.errors;
+    if (Array.isArray(errors)) {
+      let reasons = errors
+        .map((error) =>
+          typeof error === 'string' ? error : (error?.detail ?? error?.title),
+        )
+        .filter(
+          (reason): reason is string =>
+            typeof reason === 'string' && reason.length > 0,
+        );
+      if (reasons.length > 0) {
+        return reasons.join(' ');
+      }
     }
   } catch {
     // not JSON; the body is the reason
