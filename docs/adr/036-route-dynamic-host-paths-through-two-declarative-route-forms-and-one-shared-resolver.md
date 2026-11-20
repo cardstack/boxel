@@ -139,12 +139,11 @@ prerendered HTML carry, and on a page served on a host URL, that host URL.
 The stored HTML MUST carry the address. A realm with no host URL has no
 routed addresses: a link given a card or an id MUST give the card's own URL,
 and a link given a type and field values, or a route name, MUST give
-`undefined`. Such a link has done what this ADR requires, so it is not one of
-the links that §1.8 records as a warning. The server MUST NOT work out a
-routed address when a response leaves it. Translating between the realm's
-URL and a host URL at that boundary is ADR 033 §1.5: it changes the URL an
-address is on, never its routed path. A change to the realm's routes MUST run
-the realm's HTML visits again. A link into another realm MUST keep that card's own URL.
+`undefined`. The server MUST NOT work out a routed address when a response
+leaves it. Translating between the realm's URL and a host URL at that
+boundary is ADR 033 §1.5: it changes the URL an address is on, never its
+routed path. A change to the realm's routes MUST run the realm's HTML visits
+again. A link into another realm MUST keep that card's own URL.
 
 ### 1.8. Links are portable across realms
 
