@@ -7,6 +7,7 @@ import {
   readTokenLimit,
   readNewClientLimit,
   readOAuthProviderConfig,
+  readUnconnectedClientCap,
 } from './lib/oauth-provider/config.ts';
 import { writeSync } from 'node:fs';
 import {
@@ -100,6 +101,7 @@ import {
 } from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
 import { checkPricingAtStartup } from './lib/pricing.ts';
+import { transpilerIdentity } from './lib/transpiler-identity.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -501,6 +503,9 @@ const oauthProvider = readOAuthProviderConfig(process.env, {
 const oauthNewClientLimit = oauthProvider
   ? readNewClientLimit(process.env)
   : undefined;
+const oauthUnconnectedClientCap = oauthProvider
+  ? readUnconnectedClientCap(process.env)
+  : undefined;
 const oauthAuthorizationLimit = oauthProvider
   ? readAuthorizationLimit(process.env)
   : undefined;
@@ -784,6 +789,21 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // of it.
   let cardDocumentCache = new CardDocumentCache();
 
+  // Names the installed packages that compile modules, so a module compiled
+  // under other ones isn't served from a cache. The same installation gives
+  // the same value in every process, so peers serving the same realm share
+  // their compiles. Without it the server still serves, with only
+  // `TRANSPILE_VERSION` to tell one transpiler from another.
+  let transpilerId: string | undefined;
+  try {
+    transpilerId = transpilerIdentity();
+    log.info(`Transpiler identity: ${transpilerId}`);
+  } catch (e) {
+    log.error(
+      `Could not compute the transpiler identity; cached module compiles are checked against TRANSPILE_VERSION alone: ${String(e)}`,
+    );
+  }
+
   if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
     log.info('Skipping modules cache clear on startup (opted out via env)');
   } else {
@@ -920,6 +940,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           // crosstalk between the two flows is a benign hash miss in
           // each direction.
           transpileCoordinator: moduleCacheCoordinator,
+          transpilerIdentity: transpilerId,
           cardSizeLimitBytes: Number(
             process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
           ),
@@ -1029,6 +1050,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       ? {
           oauthProvider,
           oauthNewClientLimit,
+          oauthUnconnectedClientCap,
           oauthAuthorizationLimit,
           oauthTokenLimit,
         }

@@ -28,6 +28,7 @@ import {
 import { MatrixClient } from './matrix-client.ts';
 import type { MediaCacheAdapter } from './media-cache.ts';
 import type { MeteredCharges } from './metered-charges.ts';
+import type { OAuthProviderCleanup } from './tasks/oauth-provider-cleanup.ts';
 import type { AIBatchSettlement } from './ai-batches.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs, MintRunToken } from './tasks/index.ts';
@@ -235,6 +236,7 @@ export class Worker {
   #mintRunToken: MintRunToken | undefined;
   #automationAdmissionChecks: AutomationAdmissionChecks | undefined;
   #meteredCharges: MeteredCharges | undefined;
+  #oauthProviderCleanup: OAuthProviderCleanup | undefined;
   #aiBatchSettlement: AIBatchSettlement | undefined;
 
   constructor({
@@ -258,6 +260,7 @@ export class Worker {
     skipPrerenderHtmlRealms,
     mediaCacheAdapter,
     meteredCharges,
+    oauthProviderCleanup,
     aiBatchSettlement,
   }: {
     indexWriter: IndexWriter;
@@ -289,6 +292,8 @@ export class Worker {
     automationAdmissionChecks?: AutomationAdmissionChecks;
     // See `TaskArgs.meteredCharges`.
     meteredCharges?: MeteredCharges;
+    // See `TaskArgs.oauthProviderCleanup`.
+    oauthProviderCleanup?: OAuthProviderCleanup;
     // See `TaskArgs.aiBatchSettlement`.
     aiBatchSettlement?: AIBatchSettlement;
   }) {
@@ -312,6 +317,7 @@ export class Worker {
     this.#skipPrerenderHtmlRealms = skipPrerenderHtmlRealms ?? [];
     this.#mediaCacheAdapter = mediaCacheAdapter;
     this.#meteredCharges = meteredCharges;
+    this.#oauthProviderCleanup = oauthProviderCleanup;
     this.#aiBatchSettlement = aiBatchSettlement;
   }
 
@@ -343,6 +349,7 @@ export class Worker {
       mediaCacheAdapter: this.#mediaCacheAdapter,
       skipPrerenderHtmlRealms: this.#skipPrerenderHtmlRealms,
       meteredCharges: this.#meteredCharges,
+      oauthProviderCleanup: this.#oauthProviderCleanup,
       aiBatchSettlement: this.#aiBatchSettlement,
     };
 
@@ -371,6 +378,11 @@ export class Worker {
         this.#queue.register(`media-cache-gc`, Tasks['mediaCacheGc'](taskArgs)),
       'scoped-css-gc': () =>
         this.#queue.register(`scoped-css-gc`, Tasks['scopedCssGc'](taskArgs)),
+      'oauth-provider-cleanup': () =>
+        this.#queue.register(
+          `oauth-provider-cleanup`,
+          Tasks['oauthProviderCleanup'](taskArgs),
+        ),
       'lint-source': () =>
         this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
       'full-reindex': () =>

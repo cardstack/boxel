@@ -7,14 +7,12 @@
 // `oauth_provider_objects` (`objects.ts`); access and refresh tokens are in
 // `oauth_provider_tokens` (`tokens.ts`).
 
-import { randomBytes } from 'crypto';
 import Provider, { type Adapter, type AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import {
   endGrant,
   GRANT_STATE_COLUMNS,
   grantUsable,
-  type GrantEndReason,
   type GrantState,
 } from './grants.ts';
 import {
@@ -24,20 +22,8 @@ import {
   OAuthProviderAdapter,
   SessionAdapter,
 } from './objects.ts';
-import { TokenAdapter } from './tokens.ts';
-
-// The ID dynamic client registration gives a client: 24 random bytes in
-// base64url, so always 32 characters of that alphabet. A client ID metadata
-// document's ID is an `https://` URL, which can never take this form.
-const DYNAMIC_CLIENT_ID = /^[A-Za-z0-9_-]{32}$/;
-
-export function newDynamicClientId(): string {
-  return randomBytes(24).toString('base64url');
-}
-
-export function isDynamicClientId(id: string): boolean {
-  return DYNAMIC_CLIENT_ID.test(id);
-}
+import { grantEndReasonOnRoute, TokenAdapter } from './tokens.ts';
+import { isDynamicClientId } from './dynamic-client-id.ts';
 
 export class OAuthProviderStorageError extends Error {
   name = 'OAuthProviderStorageError';
@@ -84,6 +70,8 @@ export function oauthProviderAdapter(
 // is off. A second store under an ID fails rather than replacing the client.
 // It never consumes a client, and finds none by grant, user code or
 // interaction.
+// The daily cleanup deletes a client nothing has used for a while
+// (`cleanup.ts`); it is not found from then on, and has to register again.
 //
 // The library looks here for every client ID it is sent before it turns to a
 // metadata document, so an ID registration could not have given (a metadata
@@ -132,16 +120,6 @@ interface GrantRow extends GrantState {
   created: number | string;
   expires: number | string;
 }
-
-// Why the library revokes a grant, by the route it revokes it on: the token
-// endpoint revokes one when a code or refresh token is used again, and the
-// revocation endpoint when its client revokes one of its tokens. The
-// revocation endpoint is off for now (`provider.ts`), so only the token
-// endpoint revokes one yet.
-const REVOKED_ON: Record<string, GrantEndReason> = {
-  token: 'reuse',
-  revocation: 'client',
-};
 
 // The OAuth grants, in `oauth_provider_grants` (`grants.ts`). Boxel creates
 // every grant itself when a flow finishes. The library saves one only in its
@@ -207,8 +185,7 @@ class GrantAdapter extends OAuthProviderAdapter {
   }
 
   async destroy(id: string): Promise<void> {
-    let route = Provider.ctx?.oidc?.route;
-    let reason = route ? REVOKED_ON[route] : undefined;
+    let reason = grantEndReasonOnRoute(Provider.ctx?.oidc?.route);
     if (!reason) {
       throw new OAuthProviderStorageError(
         `the OAuth provider ends a grant only on a reuse or a client's revocation`,

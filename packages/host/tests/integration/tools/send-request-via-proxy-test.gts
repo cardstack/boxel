@@ -4,6 +4,10 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { X_BOXEL_LOGGING_CORRELATION_ID_HEADER } from '@cardstack/runtime-common';
+
+import type ClientTelemetryService from '@cardstack/host/services/client-telemetry';
+import type { ServerRequestEvent } from '@cardstack/host/services/client-telemetry';
 import RealmService from '@cardstack/host/services/realm';
 import SendRequestViaProxyTool from '@cardstack/host/tools/send-request-via-proxy';
 
@@ -30,6 +34,12 @@ class StubRealmService extends RealmService {
 
 module('Integration | tools | send-request-via-proxy', function (hooks) {
   setupRenderingTest(hooks);
+
+  // The correlation ids the realm server received on `_request-forward`.
+  let receivedCorrelationIds: (string | null)[] = [];
+  hooks.beforeEach(function () {
+    receivedCorrelationIds = [];
+  });
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -43,6 +53,9 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
     {
       route: '_request-forward',
       getResponse: async (req: Request) => {
+        receivedCorrelationIds.push(
+          req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+        );
         const body = await req.json();
 
         // Handle different test scenarios based on URL or other parameters
@@ -618,5 +631,47 @@ module('Integration | tools | send-request-via-proxy', function (hooks) {
     );
     const responseData = await result.response.json();
     assert.true(responseData.answeredLate, 'the late answer is delivered');
+  });
+  test('a forwarded request is recorded as a server-request event the server can join', async function (assert) {
+    let telemetry = getService('client-telemetry') as ClientTelemetryService;
+    telemetry.enableForTest();
+    telemetry.drainBufferForTest();
+    try {
+      const requestForwardCommand = new SendRequestViaProxyTool(
+        getService('tool-service').toolContext,
+      );
+      const result = await requestForwardCommand.execute(
+        createMockSendRequestViaProxyInput(),
+      );
+      assert.strictEqual(result.response.status, 200);
+
+      let events = telemetry
+        .drainBufferForTest()
+        .filter(
+          (event): event is ServerRequestEvent =>
+            event.event_type === 'server-request' &&
+            (event as ServerRequestEvent).endpoint === '_request-forward',
+        );
+      assert.strictEqual(events.length, 1, 'one server-request event');
+      assert.strictEqual(events[0].method, 'POST');
+      assert.strictEqual(events[0].status, 200);
+      assert.strictEqual(
+        receivedCorrelationIds.length,
+        1,
+        'the realm server received the request once',
+      );
+      assert.ok(
+        receivedCorrelationIds[0],
+        'the request carried a correlation id',
+      );
+      assert.strictEqual(
+        events[0].correlation_id,
+        receivedCorrelationIds[0],
+        'the event names the id the realm server received',
+      );
+    } finally {
+      telemetry.drainBufferForTest();
+      telemetry.teardown();
+    }
   });
 });

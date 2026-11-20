@@ -16,6 +16,10 @@ export default class MessageService extends Service {
   // App-scoped wiring, like RealmServerService.eventSubscribers: a service
   // registers once in its constructor, so logout leaves these in place.
   private firstSubscriptionListeners = new Set<(realm: string) => void>();
+  // Per realm, how many events this tab has received. Monotonic, and never
+  // reset: a reader compares two readings to learn whether an event arrived
+  // between them.
+  #eventCounts = new Map<string, number>();
 
   constructor(...args: ConstructorParameters<typeof Service>) {
     super(...args);
@@ -71,6 +75,13 @@ export default class MessageService extends Service {
     };
   }
 
+  // How many events this tab has received for `realmURL`, under any of its
+  // spellings. Advanced before any subscriber hears the event, so a subscriber
+  // reacting to an event already reads the advanced count.
+  realmEventCount(realmURL: string): number {
+    return this.#eventCounts.get(this.keyFor(realmURL)) ?? 0;
+  }
+
   // The realms that have at least one subscriber.
   subscribedRealms(): string[] {
     return [...this.listenerCallbacks.keys()];
@@ -112,10 +123,12 @@ export default class MessageService extends Service {
     if (!realmURL) {
       return;
     }
+    let key = this.keyFor(realmURL);
+    this.#eventCounts.set(key, (this.#eventCounts.get(key) ?? 0) + 1);
     // A callback can unsubscribe while the event is delivered, which removes
     // it from this list; iterating a copy keeps that from skipping the next
     // callback.
-    let callbacks = this.listenerCallbacks.get(this.keyFor(realmURL));
+    let callbacks = this.listenerCallbacks.get(key);
     [...(callbacks ?? [])].forEach((cb) => {
       cb(event);
     });

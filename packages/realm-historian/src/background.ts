@@ -2,7 +2,8 @@
 // reconcile passes, sweeps and maintenance. Each kind of work says when it
 // comes due on a realm: as soon as the realm is loaded, a fixed time after
 // the kind last ran, once revisions have been committed since then, or when
-// asked. Due work starts in the order it came due, at most `concurrency`
+// asked, which a kind can do for itself from a query it polls with, so a
+// schedule kept in Postgres survives a restart. Due work starts in the order it came due, at most `concurrency`
 // jobs at once across the task and one at a time on each realm, so it runs
 // at lower concurrency than recording.
 //
@@ -12,12 +13,14 @@
 // commits. A realm with no recorder gets one, and the task drops that
 // recorder again once it is idle.
 //
-// A job that is skipped, because the realm had events in hand, or that was
-// cut short because the realm's events filled the queue behind it, stays
-// due and is tried again a moment later, from the beginning: a kind ends
-// promptly once its signal fires, and is safe to start again. A job that
+// A job that is skipped, because the realm had events or a sweep in hand, or
+// that was cut short because the realm's events filled the queue behind it,
+// stays due and is tried again a moment later, from the beginning: a kind
+// ends promptly once its signal fires, and is safe to start again. A job that
 // fails, or that its recorder can't run because the realm stalled or the
 // recorder stopped, is logged and tried again after the kind's retry delay.
+// A kind skipped on a realm for an hour on end logs a warning, once an hour.
+// A kind that runs outside the queue (`outsideQueue`) is never skipped.
 
 import { logger } from '@cardstack/runtime-common';
 import type { RecordedRealm } from './realms.ts';
@@ -34,6 +37,10 @@ const DEFAULT_RETRY_AFTER_MS = 60_000;
 // How long a skipped job waits before it is tried again, so a realm that
 // keeps receiving events isn't offered the job on every turn.
 const SKIPPED_RETRY_AFTER_MS = 1000;
+// How long a kind is skipped on a realm before a warning says so, and how
+// often the warning repeats while it still is.
+const SKIPPED_WARN_AFTER_MS = 60 * 60_000;
+const DEFAULT_POLL_EVERY_MS = 60_000;
 
 export interface BackgroundResult {
   // Makes the kind due on the realm again this long from now, whether or not
@@ -60,6 +67,15 @@ export interface BackgroundKind {
   retryAfterMs?: number;
   // Whether a failure stalls the realm (`BackgroundJob.stallOnFailure`).
   stallOnFailure?: boolean;
+  // Whether the job runs outside the realm's queue
+  // (`BackgroundJob.outsideQueue`), and so runs whether or not the realm has
+  // events in hand.
+  outsideQueue?: boolean;
+  // Asked every `pollEveryMs` which of the task's realms the kind is due on,
+  // by registry id. Each realm it names is requested (`request`). The first
+  // poll comes with the first dispatch.
+  poll?(realmIds: string[]): Promise<string[]>;
+  pollEveryMs?: number;
   // A cheap check made before each job starts, and so before a recorder is
   // started for it. False means the realm needs nothing, which counts as a
   // run.
@@ -99,6 +115,10 @@ interface Due {
   lastCommitAt: number;
   // Not before this, after a skip or a failure.
   notBefore: number;
+  // When the kind was first skipped of the skips since it last ran, failed
+  // or was unavailable, and when that was last warned of.
+  skippedSince: number;
+  skipWarnedAt: number;
 }
 
 type Ending =
@@ -117,6 +137,9 @@ export class BackgroundScheduler {
   #jobs = new Set<Promise<void>>();
   #stopped = false;
   #dispatchQueued = false;
+  // By kind name, for the kinds that poll: when the next poll is due, and
+  // the poll in progress.
+  #polls = new Map<string, { nextAt: number; running?: Promise<void> }>();
 
   constructor(options: BackgroundSchedulerOptions) {
     this.#kinds = options.kinds ?? [];
@@ -169,6 +192,8 @@ export class BackgroundScheduler {
           commits: 0,
           lastCommitAt: -Infinity,
           notBefore: -Infinity,
+          skippedSince: Infinity,
+          skipWarnedAt: -Infinity,
         });
       }
       this.#schedule.set(id, kinds);
@@ -209,6 +234,7 @@ export class BackgroundScheduler {
     if (this.#stopped) {
       return;
     }
+    this.#startPolls();
     let free = this.#concurrency - this.#jobs.size;
     if (free <= 0) {
       return;
@@ -269,12 +295,56 @@ export class BackgroundScheduler {
     });
   }
 
-  // Starts nothing more, and resolves once the running jobs have ended.
-  // Stopping the recorders is what ends a long job early.
+  // Starts the polls that are due, without waiting for them. A realm a
+  // poll names is requested once the poll ends.
+  #startPolls(): void {
+    let now = this.#now();
+    for (let kind of this.#kinds) {
+      if (!kind.poll) {
+        continue;
+      }
+      let poll = this.#polls.get(kind.name);
+      if (!poll) {
+        poll = { nextAt: -Infinity };
+        this.#polls.set(kind.name, poll);
+      }
+      if (poll.running || now < poll.nextAt || this.#realms.size === 0) {
+        continue;
+      }
+      let state = poll;
+      state.running = kind
+        .poll([...this.#realms.keys()])
+        .then(
+          (realmIds) => {
+            for (let realmId of realmIds) {
+              this.request(realmId, kind.name);
+            }
+          },
+          (error) => {
+            log.warn(`polling for ${kind.name} failed: ${String(error)}`);
+          },
+        )
+        .finally(() => {
+          state.running = undefined;
+          state.nextAt =
+            this.#now() + (kind.pollEveryMs ?? DEFAULT_POLL_EVERY_MS);
+          this.#dispatchSoon();
+        });
+    }
+  }
+
+  // Starts nothing more, and resolves once the running jobs and polls have
+  // ended. Stopping the recorders is what ends a long job early.
   async stop(): Promise<void> {
     this.#stopped = true;
-    while (this.#jobs.size > 0) {
-      await Promise.all(this.#jobs);
+    let running = () => [
+      ...this.#jobs,
+      ...[...this.#polls.values()].flatMap((poll) =>
+        poll.running ? [poll.running] : [],
+      ),
+    ];
+    for (let pending = running(); pending.length > 0; pending = running()) {
+      await Promise.all(pending);
     }
   }
 
@@ -319,6 +389,7 @@ export class BackgroundScheduler {
       let outcome = await recorder.runBackground({
         kind: kind.name,
         stallOnFailure: kind.stallOnFailure,
+        outsideQueue: kind.outsideQueue,
         run: async (context) => {
           ran.result = await kind.run(realm, context);
         },
@@ -342,6 +413,10 @@ export class BackgroundScheduler {
     if (ending.outcome !== 'ran') {
       due.requestedAt = Math.min(due.requestedAt, started.request);
     }
+    if (ending.outcome !== 'skipped') {
+      due.skippedSince = Infinity;
+      due.skipWarnedAt = -Infinity;
+    }
     switch (ending.outcome) {
       case 'ran': {
         due.timerAt =
@@ -357,9 +432,20 @@ export class BackgroundScheduler {
       }
       case 'skipped':
         due.notBefore = now + SKIPPED_RETRY_AFTER_MS;
-        log.debug(
-          `${kind.name} on ${realm.url} was skipped: the realm has events in hand`,
-        );
+        due.skippedSince = Math.min(due.skippedSince, now);
+        if (
+          now - due.skippedSince >= SKIPPED_WARN_AFTER_MS &&
+          now - due.skipWarnedAt >= SKIPPED_WARN_AFTER_MS
+        ) {
+          due.skipWarnedAt = now;
+          log.warn(
+            `${kind.name} on ${realm.url} has been skipped for ${Math.floor((now - due.skippedSince) / 60_000)} minutes: the realm has had events or a sweep in hand every time it came due`,
+          );
+        } else {
+          log.debug(
+            `${kind.name} on ${realm.url} was skipped: the realm has events or a sweep in hand`,
+          );
+        }
         return;
       case 'unavailable':
         due.notBefore = now + retryAfterMs;
@@ -380,7 +466,7 @@ export class BackgroundScheduler {
 // Refuses timings that would make a kind due on every turn: a kind due after
 // no commits, or due again, or retried, after no time at all.
 function checkKind(kind: BackgroundKind): void {
-  let positive = (name: 'everyMs' | 'retryAfterMs') => {
+  let positive = (name: 'everyMs' | 'retryAfterMs' | 'pollEveryMs') => {
     let value = kind[name];
     if (value !== undefined && !(value > 0)) {
       throw new Error(
@@ -390,6 +476,7 @@ function checkKind(kind: BackgroundKind): void {
   };
   positive('everyMs');
   positive('retryAfterMs');
+  positive('pollEveryMs');
   let { afterCommits, quietMs } = kind;
   if (
     afterCommits !== undefined &&

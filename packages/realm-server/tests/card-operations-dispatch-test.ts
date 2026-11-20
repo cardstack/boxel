@@ -1227,9 +1227,8 @@ module(basename(import.meta.filename), function () {
       };
       let notReady = (error: OperationError, target: string) => {
         assert.strictEqual(error.status, 503, `${target} answers 503`);
-        assert.strictEqual(error.code, 'target-not-indexed');
+        assert.strictEqual(error.code, 'definition-not-ready');
         assert.deepEqual(error.meta, {
-          awaitingIndex: true,
           retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
         });
       };
@@ -1253,14 +1252,18 @@ module(basename(import.meta.filename), function () {
         definitionNotReady(`${REALM}person-1`, PERSON).error,
       );
       assert.strictEqual(seen.status, 503);
-      assert.strictEqual(seen.code, 'target-not-indexed');
+      assert.strictEqual(seen.code, 'definition-not-ready');
       assert.strictEqual(seen.id, undefined, 'the card is not named');
       assert.false(
         JSON.stringify(seen).includes(JSON.stringify(PERSON)),
         'the type is not named',
       );
+      assert.strictEqual(
+        seen.detail,
+        'a definition this request needs is still being rendered; retry shortly',
+        'the caller is told to wait for a definition, not for the index',
+      );
       assert.deepEqual(seen.meta, {
-        awaitingIndex: true,
         retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
       });
     });
@@ -1290,7 +1293,7 @@ module(basename(import.meta.filename), function () {
         runOperation(core, invoke(CARD, 'read')),
       );
       assert.strictEqual(error.status, 503);
-      assert.strictEqual(error.code, 'target-not-indexed');
+      assert.strictEqual(error.code, 'definition-not-ready');
     });
     test('a card whose type entry is unreadable still reads', async function (assert) {
       // The built-in `read` consults no definition, so refusing here would make
@@ -2256,7 +2259,7 @@ module(basename(import.meta.filename), function () {
         resolveGatedOperation(core, target, 'draft', reader),
       );
       assert.strictEqual(toReader.status, 503, 'a reader declined only writes');
-      assert.strictEqual(toReader.code, 'target-not-indexed');
+      assert.strictEqual(toReader.code, 'definition-not-ready');
     });
 
     test('a rule on an ancestor in the recorded chain applies', async function (assert) {

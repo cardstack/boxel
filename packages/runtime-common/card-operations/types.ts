@@ -540,6 +540,11 @@ export type PolicyIssueCode =
   // A grant with no operation name, or a `where` that is neither BXL source
   // nor the annotated `{ bxl, snapshot }` form.
   | 'invalid-grant'
+  // A grant whose `paths` isn't a list of prefixes, or holds a prefix the path
+  // specifier refuses. Recorded once for each such prefix. The whole grant is
+  // left out: leaving out only the bad prefixes could leave an empty list,
+  // which means no path limit.
+  | 'invalid-paths'
   // A grant naming an operation its rule's type neither declares nor carries
   // as a built-in behavior. A grant matches the name a caller invokes, so such
   // a grant would match nothing.
@@ -1237,6 +1242,9 @@ export type PolicyExplanationReason =
   // No rule governing the target's type has a grant for the operation. On the
   // search lane, none has one that compiled to a search filter.
   | 'no-grant'
+  // Grants for the operation match the target's type, but none of their paths
+  // covers the target's path, or where a create would store its card.
+  | 'outside-paths'
   // Grants for the operation matched, and none of their predicates held.
   | 'predicate-false'
   // A predicate threw. Grants union, so this is the answer only where no
@@ -1293,6 +1301,9 @@ export interface ExplainedGrant {
   // Where the grant is in the policy card, as `rules[2].grants[1]`, so an
   // explanation and an issue name the same grant the same way.
   path: string;
+  // The prefixes the grant is limited to, as the author wrote them. Absent for
+  // a grant with no path limit.
+  paths?: string[];
   // The predicate as the author wrote it. Absent for a grant with no
   // condition.
   where?: string;
@@ -1367,6 +1378,9 @@ export type ExplainedGrantOutcome =
   | 'held'
   | 'did-not-hold'
   | 'threw'
+  // The grant's paths don't cover the target's path, or where a create would
+  // store its card, so the gate set it aside without evaluating it.
+  | 'outside-paths'
   // The gate decided without evaluating it: an earlier grant admitted the
   // invocation, or a refusal came first. On the search lane every predicate
   // that reads the card is this: a search runs a grant's filter over the index
@@ -1659,8 +1673,18 @@ export type OperationErrorCode =
   | 'target-not-found'
   // The target's source file is on disk but the realm has not indexed it yet.
   // Separate from `target-not-found` because waiting resolves it: the write
-  // landed and the index row is coming.
+  // landed and the index row is coming. It is about the target's index row
+  // alone; a type definition the request is waiting on is
+  // `definition-not-ready`.
   | 'target-not-indexed'
+  // A type definition the request needs is still being rendered. Definitions
+  // come from the realm's definition cache, not from the index: on a miss the
+  // realm renders the module, and a render that has not finished within the
+  // request's deadline turns the request away rather than holding it open.
+  // Nothing was done and nothing the caller sent is wrong, so it carries a 503
+  // with `meta.retryAfterSeconds`, and the render keeps going so that a retry
+  // finds the definition cached.
+  | 'definition-not-ready'
   // The target exists but its index row is an error row, so there is no clean
   // state to work from. The row's own HTTP status carries through, which is
   // why this is distinct from `internal-error`: a recorded 403 is the caller's
@@ -1887,27 +1911,24 @@ export async function unresolvableAsUndefined<T>(
 // on the queue.
 export const DEFINITION_RETRY_AFTER_SECONDS = 5;
 
-// A refusal over a type definition the realm cannot produce yet: its module is
-// being rebuilt, or its render is queued behind other work and did not finish
+// A refusal over a type definition the realm is still rendering: a miss in its
+// definition cache whose render is queued behind other work and did not finish
 // within the request's deadline. Nothing was done, and nothing the caller sent
-// is wrong, so it carries `target-not-indexed` — the code that says waiting
-// resolves it — as a 503 with `meta.retryAfterSeconds`, which the operations
-// response turns into a `Retry-After`.
+// is wrong, so it is a `definition-not-ready` 503 with
+// `meta.retryAfterSeconds`, which the operations response and the card+json
+// read turn into a `Retry-After`.
 export function definitionNotReady(
   id: string | undefined,
   codeRef: unknown,
-  reason = 'is not available yet',
+  reason = 'is still being rendered',
 ): OperationFailure {
   return new OperationFailure({
     ...(id ? { id } : {}),
     status: 503,
-    code: 'target-not-indexed',
+    code: 'definition-not-ready',
     title: 'Definition not ready',
     detail: `the definition of ${JSON.stringify(codeRef)} ${reason}; retry shortly`,
-    meta: {
-      awaitingIndex: true,
-      retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
-    },
+    meta: { retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS },
   });
 }
 
@@ -1956,23 +1977,30 @@ export function isWriteLockTimeout(err: unknown): err is OperationFailure {
 // the predicate throws. A caller who may read the realm is told it as the 500
 // it is.
 //
-// A refusal over something not indexed yet keeps its status and its retry
-// hint and loses the rest: the detail of a definition's names its type, which
-// is the realm's module path and export name, and the id names a card. Such a
-// caller may be told to wait, not what they are waiting for.
+// A refusal over a card not indexed yet, or a definition still being
+// rendered, keeps its status, its code and its retry hint and loses the rest:
+// the detail of a definition's names its type, which is the realm's module
+// path and export name, and the id names a card. Such a caller may be told to
+// wait, not what they are waiting for.
 //
 // A refusal of any other kind passes through. Such a caller is refused, as
 // the target is resolved, every invocation the gate did not admit outright, a
 // write whose predicate is still to run included. So nothing past that point
 // is about a target they were not admitted to.
 export function refusalForNonReader(error: OperationError): OperationError {
-  if (error.code === 'target-not-indexed') {
+  if (
+    error.code === 'target-not-indexed' ||
+    error.code === 'definition-not-ready'
+  ) {
     let { entry, awaitingIndex, retryAfterSeconds } = error.meta ?? {};
     return {
       status: error.status,
       code: error.code,
       title: error.title,
-      detail: 'what this request needs is not indexed yet; retry shortly',
+      detail:
+        error.code === 'definition-not-ready'
+          ? 'a definition this request needs is still being rendered; retry shortly'
+          : 'what this request needs is not indexed yet; retry shortly',
       meta: {
         ...(entry !== undefined ? { entry } : {}),
         ...(awaitingIndex !== undefined ? { awaitingIndex } : {}),

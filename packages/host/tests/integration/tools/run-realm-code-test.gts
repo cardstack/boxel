@@ -4101,6 +4101,7 @@ module(
     setupRenderingTest(hooks);
     setupLocalIndexing(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
       autostart: true,
       activeRealms: [testRealmURL, readOnlyRealmURL],
       realmPermissions: {
@@ -5862,6 +5863,12 @@ return reasons;`);
       `a program that does not parse says so: ${parse}`,
     );
     assert.true(
+      [loop, parse].every((reason) =>
+        reason.includes('@cardstack/skills/source-code-editing/SKILL.md'),
+      ),
+      'an error the program caused names the skill that teaches the dialect',
+    );
+    assert.true(
       spelling.includes('"jq" (the default) or "readable"'),
       `an unknown spelling names the ones there are: ${spelling}`,
     );
@@ -5876,6 +5883,29 @@ return reasons;`);
     assert.true(
       inherited.includes('"jq" (the default) or "readable"'),
       `a name every object inherits is not a spelling: ${inherited}`,
+    );
+  });
+
+  test('realm.transform says what the input was when the program fails on it', async function (assert) {
+    // A program written for the array inside a response, run on the
+    // response itself.
+    await assert.rejects(
+      run(
+        `await realm.transform({ orders: [{ id: 1 }], page_info: {} }, 'map(.id)');`,
+      ),
+      /realm\.transform: the program failed: .*\. The input is an object with keys "orders" \(an array of 1 item\), "page_info" \(an object\)\.\nBefore the next program, read the realm\.transform section of @cardstack\/skills\/source-code-editing\/SKILL\.md/,
+    );
+    await assert.rejects(
+      run(`await realm.transform([{ id: 1, tags: [] }], '.id');`),
+      /The input is an array of 1 item; the first is an object with keys "id", "tags"\./,
+    );
+    await assert.rejects(
+      run(`await realm.transform([{}], '.id');`),
+      /The input is an array of 1 item; the first is an empty object\./,
+    );
+    await assert.rejects(
+      run(`await realm.transform({ ['k'.repeat(500)]: 1 }, '.[0]');`),
+      /The input is an object with keys "k{40}…" \(a number\)\./,
     );
   });
 

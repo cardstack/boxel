@@ -54,6 +54,7 @@ const MEMO = { module: `${OFFICE}memo`, name: 'Memo' };
 const URGENT_MEMO = { module: `${OFFICE}urgent-memo`, name: 'UrgentMemo' };
 const NOTE = { module: `${OFFICE}note`, name: 'Note' };
 const LEDGER = { module: `${OFFICE}ledger`, name: 'Ledger' };
+const RECEIPT = { module: `${OFFICE}receipt`, name: 'Receipt' };
 
 const MEMO_MODULE = `
   import { contains, field, CardDef } from "@cardstack/base/card-api";
@@ -120,19 +121,34 @@ const LEDGER_MODULE = `
   }
 `;
 
+// Declares its `delete` on a create, which makes a new card rather than
+// removing the one a `DELETE` names.
+const RECEIPT_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation } from "@cardstack/base/operations";
+  export class Receipt extends CardDef {
+    @field body = contains(StringField);
+
+    @operation static delete = { base: 'create', of: () => Receipt };
+  }
+`;
+
 type Rule = {
   targetType: { module: string; name: string };
   grants: { operation: string }[];
 };
 
-const OFFICE_RULES: Rule[] = [MEMO, NOTE, LEDGER].map((targetType) => ({
-  targetType,
-  grants: [
-    { operation: 'create' },
-    { operation: 'update' },
-    { operation: 'delete' },
-  ],
-}));
+const OFFICE_RULES: Rule[] = [MEMO, NOTE, LEDGER, RECEIPT].map(
+  (targetType) => ({
+    targetType,
+    grants: [
+      { operation: 'create' },
+      { operation: 'update' },
+      { operation: 'delete' },
+    ],
+  }),
+);
 
 function document(
   type: { module: string; name: string },
@@ -183,6 +199,7 @@ module(basename(import.meta.filename), function (hooks) {
             'urgent-memo.gts': URGENT_MEMO_MODULE,
             'note.gts': NOTE_MODULE,
             'ledger.gts': LEDGER_MODULE,
+            'receipt.gts': RECEIPT_MODULE,
             'memos/admin.json': document(MEMO, {
               body: 'Kept by the admin',
               status: 'posted',
@@ -198,6 +215,7 @@ module(basename(import.meta.filename), function (hooks) {
             'notes/admin.json': document(NOTE, { body: 'A note' }),
             'notes/reader.json': document(NOTE, { body: 'A note' }),
             'ledgers/l1.json': document(LEDGER, { body: 'Ledger' }),
+            'receipts/r1.json': document(RECEIPT, { body: 'Receipt' }),
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -646,6 +664,18 @@ module(basename(import.meta.filename), function (hooks) {
           (await storedAttributes('ledgers/l1.json'))?.body,
           'Ledger',
           `${writer.name}: and nothing is written`,
+        );
+      }
+    });
+
+    test('an update or delete declared on a create is refused, since it leaves a new card rather than changing the one named', async function (assert) {
+      for (let writer of WRITERS) {
+        let deleted = await deleteCard('receipts/r1', writer.auth());
+        assert.strictEqual(deleted.status, 405, status(deleted));
+        assert.strictEqual(
+          (await storedAttributes('receipts/r1.json'))?.body,
+          'Receipt',
+          `${writer.name}: and the receipt is still there`,
         );
       }
     });

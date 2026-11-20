@@ -21,6 +21,7 @@ import {
   ri,
   rri,
   searchEntryWireQueryFromQuery,
+  SKILLS_REALM_PREFIX,
   SupportedMimeType,
   validateWriteSize,
   type CapabilityAnswer,
@@ -3794,6 +3795,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'field path. Neither has the ' +
     ".data of a card's .json file. realm.cards.get throws when it cannot " +
     'read the card, with the reason, so a card it answers was found. ' +
+    'To filter, group, sum or sort a list of more than a few dozen items a ' +
+    'script holds (an API response, a JSON file, the cards a search found), ' +
+    'use realm.transform, not a ' +
+    'JavaScript loop: pass it the array itself, not the response around ' +
+    'it, and return only the result, never the raw data. Before the first ' +
+    `program, read the realm.transform section of ${SKILLS_REALM_PREFIX}source-code-editing/SKILL.md. ` +
     'A card that ' +
     'realm.cards.get reports as not indexed while the workspace is not ' +
     'indexing will not index by waiting: run ' +

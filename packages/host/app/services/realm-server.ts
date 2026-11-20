@@ -1428,8 +1428,6 @@ export default class RealmServerService
   // one of its realms is unreadable, so routing that through the event would
   // abort a whole render over a single query field the card can render without.
   private fetcherForRealms(realms: string[]): typeof globalThis.fetch {
-    let timingMiddleware = (this.serverRequestTimingMiddleware ??=
-      createServerRequestTimingMiddleware(getOwner(this)!));
     return fetcher(
       this.network.fetch,
       [
@@ -1437,13 +1435,32 @@ export default class RealmServerService
         // Innermost, so it wraps each real network attempt: an auth-retry is
         // recorded as its own retried-flagged attempt rather than folded into
         // the first attempt's duration.
-        timingMiddleware,
+        this.timingMiddleware(),
       ],
       this.network.virtualNetwork,
     );
   }
 
+  private timingMiddleware(): FetcherMiddlewareHandler {
+    return (this.serverRequestTimingMiddleware ??=
+      createServerRequestTimingMiddleware(getOwner(this)!));
+  }
+
   private serverRequestTimingMiddleware: FetcherMiddlewareHandler | undefined;
+
+  // A request-forward call carries its own bearer token, so it needs no
+  // authorization middleware, only the timing one: the call is recorded as a
+  // `server-request` event for `_request-forward`, and its correlation id
+  // reaches the realm server's `realm:requests` line and its `billable call`
+  // line, which splits the server's time into waiting for the user's cost
+  // lock and in-flight slots, the upstream call, and the server's own work.
+  private get timedFetch(): typeof globalThis.fetch {
+    return fetcher(
+      this.network.fetch,
+      [this.timingMiddleware()],
+      this.network.virtualNetwork,
+    );
+  }
 
   // `RealmServerTokenSource`. The realm-server session token is what the
   // federated endpoints validate. The per-realm token is the fallback for a
@@ -1554,7 +1571,7 @@ export default class RealmServerService
 
     let responded = false;
     try {
-      const response = await this.network.fetch(
+      const response = await this.timedFetch(
         `${this.url.href}_request-forward`,
         {
           method: 'POST',
