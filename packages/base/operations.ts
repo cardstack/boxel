@@ -869,7 +869,9 @@ export interface CallApiOperationDeclaration extends OperationCommon {
   // that is an object or a list, `name[0][member]`. A list nested in an
   // object or another list is numbered item by item, `name[0][tags][1]`,
   // unless its member's name ends in `[]`. A value that is null, and an empty
-  // list or object, is left out, since a form has no way to send one.
+  // list or object, is left out, since a form has no way to send one. Fields,
+  // and an object's members, are sent in the order of their names rather
+  // than the order they are written in; a list keeps its order.
   readonly form?: { readonly [name: string]: OperationValue };
   // A GraphQL request, sent as a JSON body. The document is a fixed string,
   // and every value it takes is passed as a variable, never written into it.

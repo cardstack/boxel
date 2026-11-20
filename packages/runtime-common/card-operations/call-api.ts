@@ -1332,6 +1332,13 @@ const BODY_CONTENT_TYPES: Record<CallApiBodyEncoding, string> = {
 //   * null leaves the member out, and so does an empty list or object, since
 //     a form has no way to send one.
 //
+// An object's members, the fields included, go out in the order of their
+// names, never the order they were declared in. The lowered entry is read
+// back from a `jsonb` column, which keeps an object's keys in an order of its
+// own, so declaration order would hold for the call that fills the cache and
+// not for the calls after it. Sorting sends one body for one declaration and
+// one payload, whichever copy it was built from. A list keeps its order.
+//
 // A slot's token is letters, digits and `_`, which this encoding leaves as
 // they are, so the client finds it here and fills it form-encoded too.
 export function encodeFormBody(fields: Record<string, unknown>): string {
@@ -1354,7 +1361,7 @@ export function encodeFormBody(fields: Record<string, unknown>): string {
       return;
     }
     if (typeof value === 'object') {
-      for (let [member, inner] of Object.entries(value)) {
+      for (let [member, inner] of byName(value)) {
         let repeated = member.endsWith('[]');
         add(
           repeated ? `${name}[${member.slice(0, -2)}][]` : `${name}[${member}]`,
@@ -1366,10 +1373,14 @@ export function encodeFormBody(fields: Record<string, unknown>): string {
     }
     pairs.append(name, String(value));
   };
-  for (let [name, value] of Object.entries(fields)) {
+  for (let [name, value] of byName(fields)) {
     add(name, value, true);
   }
   return pairs.toString();
+}
+
+function byName(value: object): [string, unknown][] {
+  return Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 // Letters, digits and `_`, which percent-encoding, JSON escaping and a header

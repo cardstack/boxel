@@ -64,7 +64,7 @@ module(basename(import.meta.filename), function () {
     );
     assert.strictEqual(
       built.body,
-      'To=%2B15551234567&Body=Your+code+is+4+%26+2',
+      'Body=Your+code+is+4+%26+2&To=%2B15551234567',
     );
     assert.strictEqual(built.bodyEncoding, 'form');
     assert.strictEqual(
@@ -138,25 +138,48 @@ module(basename(import.meta.filename), function () {
       }),
     );
     assert.deepEqual(pairs(built.body), [
-      ['mode', 'payment'],
-      ['quantity', '2'],
-      ['livemode', 'false'],
       ['MediaUrl', 'https://img.example/1.png'],
       ['MediaUrl', 'https://img.example/2.png'],
       ['expand[]', 'line_items'],
       ['expand[]', 'customer'],
-      ['metadata[order]', 'ord_7'],
       ['line_items[0][price]', 'price_A'],
       ['line_items[0][quantity]', '1'],
       ['line_items[0][tax_rates][0]', 'txr_1'],
       ['line_items[0][tax_rates][1]', 'txr_2'],
       ['line_items[1][price]', 'price_B'],
       ['line_items[1][quantity]', '3'],
-      ['subscription_data[default_tax_rates][]', 'txr_1'],
+      ['livemode', 'false'],
+      ['metadata[order]', 'ord_7'],
+      ['mode', 'payment'],
       ['nested[0][0]', 'a'],
       ['nested[0][1]', 'b'],
       ['nested[1][0]', 'c'],
+      ['quantity', '2'],
+      ['subscription_data[default_tax_rates][]', 'txr_1'],
     ]);
+  });
+
+  test('members go out in the order of their names, whatever order they are declared or stored in', async function (assert) {
+    let declared = lower({
+      To: 'x',
+      Body: 'y',
+      metadata: { order: 'o', buyer: 'b' },
+    });
+    let stored = lower({
+      metadata: { buyer: 'b', order: 'o' },
+      Body: 'y',
+      To: 'x',
+    });
+    let [one, other] = await Promise.all(
+      [declared, stored].map((request) =>
+        buildCallApiRequest('sms', request, values()),
+      ),
+    );
+    assert.strictEqual(
+      one.body,
+      'Body=y&To=x&metadata%5Bbuyer%5D=b&metadata%5Border%5D=o',
+    );
+    assert.strictEqual(other.body, one.body);
   });
 
   test('a value that is null or missing is left out', async function (assert) {
@@ -179,7 +202,7 @@ module(basename(import.meta.filename), function () {
     ]);
     let built = await buildCallApiRequest('sms', request, values());
     let [slot] = built.slots;
-    assert.strictEqual(built.body, `To=x&ApiKey=${slot.token}`);
+    assert.strictEqual(built.body, `ApiKey=${slot.token}&To=x`);
     assert.false(
       built.body!.includes('apiKey'),
       'the slot text itself is not sent',

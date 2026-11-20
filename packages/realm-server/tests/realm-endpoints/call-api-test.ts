@@ -336,15 +336,15 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     assert.deepEqual(
       [...new URLSearchParams(received.body)],
       [
-        ['To', '+15551234567'],
         ['From', TESTER],
         ['MediaUrl', 'https://img.example/1.png'],
         ['MediaUrl', 'https://img.example/2.png'],
-        ['metadata[order]', 'cardstack'],
+        ['To', '+15551234567'],
         ['line_items[0][price]', 'price_A'],
         ['line_items[0][quantity]', '1'],
         ['line_items[1][price]', 'price_B'],
         ['line_items[1][quantity]', '3'],
+        ['metadata[order]', 'cardstack'],
       ],
     );
   });

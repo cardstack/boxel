@@ -105,7 +105,11 @@ object or list item (`line_items[0][price]`); a list nested in an object or a
 list is numbered item by item (`line_items[0][tax_rates][1]`), because a
 parser that keeps the last of a repeated name (Rack, PHP, Stripe) would read a
 repeated nested name as one value, and a member named `x[]` is the one
-exception; null, an empty list and an empty object are left out. The built request carries
+exception; null, an empty list and an empty object are left out. Fields and
+members go out sorted by name at every depth: the lowered entry comes back
+from the definition cache's `jsonb` column with its keys in `jsonb`'s own
+order, so declaration order would hold only for the call that filled the
+cache. The built request carries
 `bodyEncoding: 'form'`, and the outbound client fills a slot's token in a form
 body form-encoded rather than JSON-escaped, so a value holding `&` or `=` stays
 one field.
