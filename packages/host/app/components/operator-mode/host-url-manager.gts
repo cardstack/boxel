@@ -991,6 +991,7 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
 const HostURLManager: TemplateOnlyComponent<Signature> = <template>
   <ModalContainer
     class='host-url-manager'
+    @cardContainerClass='host-url-manager-box'
     @title='Host URLs'
     @size='medium'
     @isOpen={{@isOpen}}
@@ -1016,6 +1017,12 @@ const HostURLManager: TemplateOnlyComponent<Signature> = <template>
   </ModalContainer>
 
   <style scoped>
+    /* The dialog is as tall as its content, and scrolls its content when
+       that is taller than the window. */
+    :deep(.host-url-manager-box) {
+      height: auto;
+      max-height: 100%;
+    }
     .realm-name {
       color: var(--foreground);
       font-weight: 600;
