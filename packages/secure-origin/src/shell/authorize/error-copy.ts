@@ -68,7 +68,7 @@ export function errorCopy(
     case 'answered':
       return {
         heading: 'This request was already answered',
-        info: 'It was answered in another window. There’s nothing more to do here.',
+        info: 'There’s nothing more to do here.',
       };
     case 'rate-limited':
       return {

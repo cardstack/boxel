@@ -37,7 +37,7 @@ import {
 } from './authorization.ts';
 import { createGrant, deleteGrant } from './grants.ts';
 import {
-  destroyConsentDecision,
+  cancelConsentDecision,
   sha256Hex,
   takeConsentDecision,
   takeConsentTickets,
@@ -101,7 +101,13 @@ export function finishHandler({
     let clientId = interaction.params.client_id;
 
     if (ctxt.query.cancel === '1') {
-      await destroyConsentDecision(dbAdapter, uid);
+      // Closed for as long as the interaction could last, so the flow can't
+      // be decided, or ended with an error, while it is cancelled.
+      await cancelConsentDecision(
+        dbAdapter,
+        uid,
+        Math.max(1, (interaction.exp ?? 0) - Math.floor(Date.now() / 1000)),
+      );
       if (!(await finish(ctxt, provider, { error: 'access_denied' }))) {
         return refuse('no-interaction');
       }

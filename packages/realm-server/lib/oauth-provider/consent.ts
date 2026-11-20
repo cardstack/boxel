@@ -29,8 +29,7 @@ import {
   CONSENT_TICKET_TTL_SECONDS,
   decideFlow,
   endUndecidedFlow,
-  findConsentDecision,
-  storeAuthorizationError,
+  isFlowDecided,
 } from './objects.ts';
 import type { OAuthResource, OAuthScope } from './registry.ts';
 import { respond, secureWindowUser } from './secure-window-user.ts';
@@ -113,7 +112,7 @@ export function consentDetailsHandler(deps: ConsentDeps): Koa.Middleware {
       return respond(ctxt, 404, { error: FIXED_ERROR_PAGES.expired });
     }
     // A decided flow shows no consent: the page says it was answered.
-    if (await findConsentDecision(deps.dbAdapter, ctxt.params.uid)) {
+    if (await isFlowDecided(deps.dbAdapter, ctxt.params.uid)) {
       return respond(ctxt, 409, { error: 'decided' });
     }
     let account: AccountContact;
@@ -163,8 +162,9 @@ export function consentDetailsHandler(deps: ConsentDeps): Koa.Middleware {
 // timeout. The flow can't finish after that, and the answer, 400
 // `bad-request`, carries the reference of an error the authorize page's error
 // page shows, whose "Return" sends the app `server_error` (ADR 021 §1.8). A
-// flow that already has a decision isn't ended, and answers 409 `decided`:
-// the window that made it may still be finishing the flow.
+// flow that already has a decision, or was finished or cancelled, isn't
+// ended, and answers 409 `decided`: the window that decided it may still be
+// finishing the flow.
 export function consentDecisionHandler(deps: ConsentDeps): Koa.Middleware {
   return async function handleConsentDecision(ctxt) {
     let user = await secureWindowUser(ctxt, deps);
@@ -220,25 +220,25 @@ export function consentDecisionHandler(deps: ConsentDeps): Koa.Middleware {
 // Ends a flow whose answer couldn't be read, and answers the reference of the
 // error the authorize page shows for it.
 async function endUnreadable(ctxt: Koa.Context, deps: ConsentDeps, flow: Flow) {
-  let ended = await endUndecidedFlow(
+  let reference = await endUndecidedFlow(
     deps.dbAdapter,
     ctxt.params.uid,
     flow.remainingSeconds,
+    {
+      error: 'server_error',
+      reason: 'unreadable-decision',
+      clientId: flow.client.clientId,
+      ...(flow.redirectUri !== undefined
+        ? {
+            redirectUri: flow.redirectUri,
+            ...(flow.state !== undefined ? { state: flow.state } : {}),
+          }
+        : {}),
+    },
   );
-  if (!ended) {
+  if (!reference) {
     return respond(ctxt, 409, { error: 'decided' });
   }
-  let reference = await storeAuthorizationError(deps.dbAdapter, {
-    error: 'server_error',
-    reason: 'unreadable-decision',
-    clientId: flow.client.clientId,
-    ...(flow.redirectUri !== undefined
-      ? {
-          redirectUri: flow.redirectUri,
-          ...(flow.state !== undefined ? { state: flow.state } : {}),
-        }
-      : {}),
-  });
   log.info(
     `consent refused: unreadable decision, flow ended: ${describe(
       flow,
