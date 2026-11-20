@@ -75,6 +75,7 @@ const REALM_USER = '@node-test_realm:localhost';
 const DAILY = 'automation/daily';
 const NO_MONTHLY_CAP = 'automation/no-monthly-cap';
 const HOOKED = 'automation/hooked';
+const BATCHED = 'automation/batched';
 const HOOK_PATH = 'whk_routes';
 const OUTSIDER = '@automation-routes-outsider:localhost';
 // Automations whose daily credit cap the tests reach: one with a webhook
@@ -223,6 +224,19 @@ module(basename(import.meta.filename), function (hooks) {
         ],
       }),
       [`${BROKEN}-script.js`]: 'await realm.fs.writeText(\n',
+      ...automationFixture({
+        operations: [],
+        path: BATCHED,
+        batchedAI: true,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
       ...automationFixture({
         operations: [],
         path: NO_MONTHLY_CAP,
@@ -397,6 +411,35 @@ module(basename(import.meta.filename), function (hooks) {
         currentPricing()?.version,
         'at the server’s current prices',
       );
+    });
+
+    test('a card that turns on batched AI is estimated with each run’s AI counted twice', async function (assert) {
+      let estimateOf = async (path: string) => {
+        let response = await request
+          .get(AUTOMATION_SWITCH_ON_PATH)
+          .query({ realm: realm.url, automation: cardURL(path) })
+          .set('Authorization', auth(OWNER));
+        assert.strictEqual(response.status, 200, response.text);
+        return response.body.data.attributes.estimate;
+      };
+      let plain = await estimateOf(DAILY);
+      let batched = await estimateOf(BATCHED);
+      assert.strictEqual(
+        plain.perRun.aiCredits,
+        ROOMY_AUTOMATION_CAPS.aiCredits,
+        'a card that doesn’t batch counts its AI cap once',
+      );
+      assert.strictEqual(
+        batched.perRun.aiCredits,
+        ROOMY_AUTOMATION_CAPS.aiCredits * 2,
+        'a card that batches counts it twice',
+      );
+      assert.strictEqual(
+        batched.perRun.computeCredits,
+        plain.perRun.computeCredits,
+        'only the AI part changes',
+      );
+      assert.true(batched.credits > plain.credits);
     });
 
     test('the estimate says webhook triggers start no runs, for a card with one', async function (assert) {
