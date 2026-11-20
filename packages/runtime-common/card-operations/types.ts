@@ -423,6 +423,10 @@ export type OperationLoweringIssueCode =
   // and no other base serves any: a write answers with the card's data, and a
   // `readSource` serves stored bytes.
   | 'html-without-rendering'
+  // An `output` on a card's `create`, `update` or `delete`. Those are what a
+  // card's write routes carry out, and each route answers as it always does,
+  // so the projection would reshape an `/_operations` call's answer alone.
+  | 'output-on-card-route-write'
   // An `html` declaration that is not an object naming prerendered formats,
   // each `shareable` or `unshareable`.
   | 'invalid-html-declaration'

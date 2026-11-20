@@ -205,6 +205,18 @@ const BASE_DEF_OPERATIONS = operationsCarriedBy('base');
 // refuses the name too, so no stored definition can carry one either.
 const NOT_DECLARABLE: readonly BaseOperationName[] = ['readSource'];
 
+// The operations a card's write routes carry out: a card+json `POST`, `PATCH`
+// or `DELETE` runs the one its verb is named for, and an `/_atomic` or
+// card+source write of a card document runs its `create`, `update` or
+// `delete`. Each route answers as it always does, so a card declares no
+// `output` under these names: it would reshape an `/_operations` call's answer
+// and no other route's. Lowering refuses the same projection in a stored entry.
+const CARD_ROUTE_OPERATION_NAMES: readonly string[] = [
+  'create',
+  'update',
+  'delete',
+];
+
 function isNotDeclarable(name: string): boolean {
   return NOT_DECLARABLE.includes(name as BaseOperationName);
 }
@@ -1572,6 +1584,15 @@ function assertValidDeclaration(
   if (base === 'validate' && declaration.output !== undefined) {
     throw new Error(
       `${label}: a "validate" operation answers with what the policy card compiles to, as compiling reports it, so it carries no \`output\` to reshape it`,
+    );
+  }
+  if (
+    declaration.output !== undefined &&
+    defFamily(owner) === 'card' &&
+    CARD_ROUTE_OPERATION_NAMES.includes(key)
+  ) {
+    throw new Error(
+      `${label}: "${key}" is the operation a card's write routes carry out, and each of them answers as it always does, so it carries no \`output\` to reshape its answer`,
     );
   }
   assertReferencesResolve(label, declaration, paramNames);

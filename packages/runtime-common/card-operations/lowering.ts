@@ -219,6 +219,20 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
 // The name an ad-hoc search is invoked under, which no declaration may take.
 const AD_HOC_QUERY_NAME = 'query';
 
+// The operations a card's write routes carry out: a card+json `POST`, `PATCH`
+// or `DELETE` runs the one its verb is named for, and an `/_atomic` or
+// card+source write of a card document runs its `create` or `update`, or its
+// `delete` for a removal. Each route answers as it always does, so only an
+// `/_operations` call answers with what an `output` shapes. A projection under
+// one of these names would reshape that one route's answer and no other. The
+// authoring decorator refuses it where it is written, and lowering refuses it
+// in a stored entry, which outlives the code that built it.
+const CARD_ROUTE_OPERATION_NAMES: ReadonlySet<string> = new Set([
+  'create',
+  'update',
+  'delete',
+]);
+
 // Lower every declared operation on one type.
 //
 // `raw` is the authored view — `getDeclaredOperations`, not `getOperations`.
@@ -606,6 +620,16 @@ async function lowerOperation(
       'unrunnable-program',
       'output',
       `a "validate" operation answers with what the policy card compiles to, as compiling reports it, so this projection would never be reached`,
+    );
+  } else if (
+    declaration.output !== undefined &&
+    context.definition.type === 'card-def' &&
+    CARD_ROUTE_OPERATION_NAMES.has(sink.operation)
+  ) {
+    sink.add(
+      'output-on-card-route-write',
+      'output',
+      `"${sink.operation}" is the operation a card's write routes carry out, and each of them answers as it always does, so this projection would reshape the answer to an /_operations call and to no other route`,
     );
   } else {
     let output = await lowerOutput(

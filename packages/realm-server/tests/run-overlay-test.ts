@@ -78,6 +78,43 @@ export class Notice extends CardDef {
     transformations: bxl\`.status = .headline;\`,
   };
 }`,
+      // A memo's type declares its own create, update and delete: its create
+      // and update stamp the memo, and its delete withdraws the memo rather
+      // than removing it.
+      'memo.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+import { bxl, operation, params } from 'https://cardstack.com/base/operations';
+export class Memo extends CardDef {
+  @field body = contains(StringField);
+  @field stamp = contains(StringField);
+  @field status = contains(StringField);
+  @operation static create = {
+    base: 'create',
+    of: () => Memo,
+    params: { body: StringField },
+    input: bxl\`{body: (.attributes.body // .body)}\`,
+    fill: { body: params('body'), stamp: 'created' },
+  };
+  @operation static update = {
+    base: 'update',
+    input: bxl\`. + {attributes: ((.attributes // {}) + {stamp: "updated"})}\`,
+  };
+  @operation static delete = { base: 'transform', set: { status: 'withdrawn' } };
+}`,
+      'memos/m1.json': {
+        data: {
+          type: 'card',
+          attributes: { body: 'First', status: 'posted' },
+          meta: { adoptsFrom: { module: rri('../memo'), name: 'Memo' } },
+        },
+      },
+      'memos/m2.json': {
+        data: {
+          type: 'card',
+          attributes: { body: 'Second', status: 'posted' },
+          meta: { adoptsFrom: { module: rri('../memo'), name: 'Memo' } },
+        },
+      },
       'notices/drill.json': {
         data: {
           type: 'card',
@@ -1299,6 +1336,117 @@ export class Mine extends Automation {}`;
       (await readCard(session(), 'people/ada')).data.attributes.name,
       'Ada',
     );
+  });
+
+  function memo(attributes: Record<string, unknown>) {
+    return JSON.stringify({
+      data: {
+        type: 'card',
+        attributes,
+        meta: { adoptsFrom: { module: '../memo', name: 'Memo' } },
+      },
+    });
+  }
+
+  function memoSource(
+    op: 'add' | 'update',
+    href: string,
+    attributes: Record<string, unknown>,
+  ) {
+    return {
+      op,
+      href,
+      data: {
+        type: 'source',
+        attributes: { content: memo(attributes) },
+        meta: {},
+      },
+    };
+  }
+
+  async function remove(token: string, path: string, accept: string) {
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}${path}`, {
+        method: 'DELETE',
+        headers: { Accept: accept, Authorization: `Bearer ${token}` },
+      }),
+    ))!;
+    return { status: response.status, text: await response.text() };
+  }
+
+  test('a run’s writes carry out the create, update and delete its card’s type declares, on every route', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+
+    let synced = await atomic(token, [
+      memoSource('add', './memos/new.json', { body: 'Synced' }),
+      memoSource('update', './memos/m1.json', {
+        body: 'Synced',
+        status: 'posted',
+      }),
+    ]);
+    assert.strictEqual(synced.status, 201, synced.text);
+    let [created] = JSON.parse(synced.text)['atomic:results'] as {
+      data: { id: string };
+    }[];
+    let mintedPath = created.data.id
+      .replace(realmURL.href, '')
+      .replace(/\.json$/, '');
+    let minted = await readCard(token, mintedPath);
+    assert.strictEqual(minted.status, 200, minted.text);
+    assert.strictEqual(
+      minted.data.attributes.stamp,
+      'created',
+      '/_atomic carries out the type’s create',
+    );
+    assert.strictEqual(
+      (await readCard(token, 'memos/m1')).data.attributes.stamp,
+      'updated',
+      '/_atomic carries out the type’s update',
+    );
+
+    let saved = await writeText(
+      token,
+      'memos/m2.json',
+      memo({ body: 'Saved', status: 'posted' }),
+    );
+    assert.strictEqual(saved.status, 204, saved.text);
+    assert.strictEqual(
+      (await readCard(token, 'memos/m2')).data.attributes.stamp,
+      'updated',
+      'card+source carries out the type’s update',
+    );
+
+    let deleted = await remove(token, 'memos/m1', SupportedMimeType.CardJson);
+    assert.strictEqual(deleted.status, 204, deleted.text);
+    assert.strictEqual(
+      (await readCard(token, 'memos/m1')).data.attributes.status,
+      'withdrawn',
+      'a card+json DELETE carries out the type’s soft delete',
+    );
+    let removed = await remove(token, 'memos/m2.json', SOURCE);
+    assert.strictEqual(removed.status, 204, removed.text);
+    assert.strictEqual(
+      (await readCard(token, 'memos/m2')).data.attributes.status,
+      'withdrawn',
+      'a card+source removal carries out the type’s soft delete',
+    );
+
+    assert.deepEqual(
+      (await overlayRows(run.id)).map((row) => row.path),
+      [`${mintedPath}.json`, 'memos/m1.json', 'memos/m2.json'].sort(),
+      'every result is staged in the overlay',
+    );
+    let realmMemo = await readCard(session(), 'memos/m1');
+    assert.strictEqual(
+      realmMemo.data.attributes.status,
+      'posted',
+      'and the realm’s memo is as it was',
+    );
+    assert.strictEqual(realmMemo.data.attributes.stamp, null);
   });
 
   test('a run’s transform reads a card it staged as not indexed, never the realm row’s computed values', async function (assert) {
