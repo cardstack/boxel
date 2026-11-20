@@ -2103,7 +2103,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 622263,
+      "bytes": 622158,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2540,6 +2540,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/security/confirmation-code.js",
+          "size": 138
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/security/keys.ts",
           "size": 9080
         },
@@ -2566,7 +2571,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/oauth-provider.ts",
-          "size": 5039
+          "size": 4958
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2586,7 +2591,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/authorize/consent.gts",
-          "size": 11876
+          "size": 11760
         },
         {
           "package": "@cardstack/secure-origin",

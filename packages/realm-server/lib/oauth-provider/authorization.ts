@@ -46,7 +46,7 @@ import {
 import {
   CONFIRMATION_CODE,
   CONFIRMATION_CODE_PARAM,
-} from './confirmation-code.ts';
+} from '@cardstack/secure-origin/security/confirmation-code.js';
 import type { PreRegisteredClients } from './pre-registered-clients.ts';
 import type { OAuthResource } from './registry.ts';
 
@@ -272,7 +272,8 @@ export function checkAuthorizationRequest(
 
   // Confirmation code: required from a pre-registered app on the user's
   // computer, which consent shows it to check against, and refused from any
-  // other client, whose consent never shows one (`confirmation-code.ts`).
+  // other client, whose consent never shows one (the secure origin's
+  // `security/confirmation-code.js`).
   let code = single(query, CONFIRMATION_CODE_PARAM);
   let codeRequired =
     preRegistered.get(client.clientId)?.place === 'this-computer';

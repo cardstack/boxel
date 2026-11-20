@@ -20,7 +20,7 @@ import {
   testOAuthSecureOriginURL,
 } from './oauth-provider.ts';
 import type { CallerLimit } from '../../lib/oauth-provider/caller-limit.ts';
-import { CONFIRMATION_CODE_PARAM } from '../../lib/oauth-provider/confirmation-code.ts';
+import { CONFIRMATION_CODE_PARAM } from '@cardstack/secure-origin/security/confirmation-code.js';
 import type { OAuthResourceDefinition } from '../../lib/oauth-provider/registry.ts';
 import type { TokenLimit } from '../../lib/oauth-provider/token-limit.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';

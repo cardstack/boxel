@@ -51,11 +51,13 @@ boxel-cli (`boxel-cli`, a native client redirecting to
 `http://127.0.0.1/callback` on any port). A pre-registered app on the user's
 computer must send `boxel_confirmation_code` (two groups of four consonants,
 such as `WDJB-MJHT`) with each flow, and consent shows it for the user to
-check against the one the app printed (`confirmation-code.ts`); a flow
-without it, or any other client's flow with one, is refused as
-`confirmation-code`. Nothing proves a request comes from the app the client
-ID names, so "Boxel CLI" on consent means a program on this computer that
-says it is Boxel CLI.
+check against the one the app printed (`security/confirmation-code.js` in
+`packages/secure-origin`, which both packages read); a flow without it, or
+any other client's flow with one, is refused as `confirmation-code`. Nothing proves a request comes from the app the client
+ID names, so "Boxel CLI" on consent means a program, on any computer, that
+says it is Boxel CLI: the loopback redirect keeps only its code on this one.
+A user who allowed Boxel CLI without starting it was most likely sent a link
+and asked to paste back the address they landed on.
 
 ## Routes
 

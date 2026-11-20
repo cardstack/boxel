@@ -39,7 +39,7 @@ import {
   BOXEL_CLI_CLIENT_ID,
   PRE_REGISTERED_CLIENTS,
 } from '../lib/oauth-provider/pre-registered-clients.ts';
-import { CONFIRMATION_CODE_PARAM } from '../lib/oauth-provider/confirmation-code.ts';
+import { CONFIRMATION_CODE_PARAM } from '@cardstack/secure-origin/security/confirmation-code.js';
 import {
   scrubRequestTelemetry,
   withOAuthProviderSecretsLabeled,

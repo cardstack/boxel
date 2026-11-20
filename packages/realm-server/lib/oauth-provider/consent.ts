@@ -33,7 +33,7 @@ import {
 import {
   CONFIRMATION_CODE,
   CONFIRMATION_CODE_PARAM,
-} from './confirmation-code.ts';
+} from '@cardstack/secure-origin/security/confirmation-code.js';
 import type { PreRegisteredClients } from './pre-registered-clients.ts';
 import type { OAuthResource, OAuthScope } from './registry.ts';
 import { respond, secureWindowUser } from './secure-window-user.ts';
@@ -76,7 +76,7 @@ export interface ConsentDetails {
   renewalOffered: boolean;
   // The code the app showed where the user started signing in, which the
   // page asks them to check. Only a pre-registered app on the user's
-  // computer sends one (`confirmation-code.ts`).
+  // computer sends one (the secure origin's `security/confirmation-code.js`).
   confirmationCode?: string;
 }
 

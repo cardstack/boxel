@@ -1,7 +1,9 @@
 // The confirmation code a pre-registered app on the user's computer sends
 // with each flow. The app shows it where the user started signing in (the
 // CLI prints it in the terminal), and consent shows it again, so the user can
-// check the two match before allowing.
+// check the two match before allowing. The realm server refuses a flow whose
+// code isn't of this form, and the authorize page shows only a code of this
+// form, so both read it from here.
 //
 // It guards against one attack: someone starts a flow as the app, sends the
 // user the link, and talks them into allowing it and pasting back the

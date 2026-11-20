@@ -2,8 +2,9 @@
 // the account, what the app will be able to do at each resource, and whether
 // to keep the connection for 30 days. It draws only the details the provider
 // answered (`ConsentDetails`): the app as the provider names it, and what the
-// access means in Boxel's own words from its registry. Nothing here comes from
-// the client's request.
+// access means in Boxel's own words from its registry. The one value taken
+// from the client's request is a confirmation code, shown only in the code's
+// own form (`readConsentDetails`).
 //
 // Focus starts on the heading each time consent is drawn, never on Allow, so
 // a user who presses Enter or Space as the page appears agrees to nothing.
@@ -157,7 +158,7 @@ export default class Consent extends Component<Signature> {
             <p class='note'>{{this.unverifiedNote}}</p>
           </div>
         {{else if this.ownApp}}
-          <p class='note' data-test-authorize-own-app>{{this.ownAppNote}}</p>
+          <p class='note' data-test-authorize-own-app>Boxel’s own app.</p>
         {{/if}}
 
         {{#if this.onThisComputer}}
@@ -453,12 +454,6 @@ export default class Consent extends Component<Signature> {
   // ask as it, so the page asks the user to check they started this.
   private get onThisComputer(): boolean {
     return this.ownApp && this.args.details.app.place === 'this-computer';
-  }
-
-  private get ownAppNote(): string {
-    return this.onThisComputer
-      ? 'Boxel’s own app, on this computer.'
-      : 'Boxel’s own app.';
   }
 
   private get confirmationWarning(): string {

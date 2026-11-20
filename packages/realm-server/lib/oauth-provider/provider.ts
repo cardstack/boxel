@@ -51,7 +51,7 @@ import {
   DEFAULT_NEW_CLIENT_LIMIT,
   type NewClientLimit,
 } from './new-client-limit.ts';
-import { CONFIRMATION_CODE_PARAM } from './confirmation-code.ts';
+import { CONFIRMATION_CODE_PARAM } from '@cardstack/secure-origin/security/confirmation-code.js';
 import {
   libraryClients,
   PRE_REGISTERED_CLIENTS,

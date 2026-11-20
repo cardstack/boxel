@@ -352,9 +352,9 @@ module('Integration | authorize', function (hooks) {
       assert
         .dom('[data-test-authorize-heading]')
         .hasText('Connect Boxel CLI to Boxel workspaces?');
-      assert
-        .dom('[data-test-authorize-own-app]')
-        .hasText('Boxel’s own app, on this computer.');
+      // The app, not where this request came from: someone else may have
+      // started it and sent the link.
+      assert.dom('[data-test-authorize-own-app]').hasText('Boxel’s own app.');
       assert.dom('[data-test-authorize-unverified]').doesNotExist();
       assert.dom('[data-test-authorize-app-icon]').doesNotExist();
       assert.dom('[data-test-authorize-terms]').doesNotExist();

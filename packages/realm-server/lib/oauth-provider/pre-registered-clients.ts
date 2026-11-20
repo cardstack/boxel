@@ -12,7 +12,8 @@
 // runs on the user's computer redirects only to loopback, so its code reaches
 // only that computer, and each flow carries a confirmation code the app shows
 // and consent repeats, so the user can tell their own sign-in from one
-// someone else started and sent them (`confirmation-code.ts`).
+// someone else started and sent them (the secure origin's
+// `security/confirmation-code.js`).
 
 import type { ClientMetadata } from 'oidc-provider';
 
@@ -62,15 +63,10 @@ function byId(clients: readonly PreRegisteredClient[]): PreRegisteredClients {
   return map;
 }
 
-// The metadata the library's `clients` setting takes. The library keeps the
-// objects it is given, so each is a copy.
+// The metadata the library's `clients` setting takes. The library stores a
+// clone of each entry, never the entry itself.
 export function libraryClients(
   clients: PreRegisteredClients,
 ): ClientMetadata[] {
-  return [...clients.values()].map(({ metadata }) => ({
-    ...metadata,
-    redirect_uris: [...(metadata.redirect_uris ?? [])],
-    response_types: [...(metadata.response_types ?? [])],
-    grant_types: [...(metadata.grant_types ?? [])],
-  }));
+  return [...clients.values()].map(({ metadata }) => metadata);
 }

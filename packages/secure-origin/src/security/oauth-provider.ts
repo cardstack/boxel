@@ -16,6 +16,7 @@
 // name another of the realm server's routes. It is never put in an error's
 // message, which telemetry records.
 
+import { CONFIRMATION_CODE } from './confirmation-code.js';
 import { SecureSessionError, timedFetch } from './session.js';
 import type { Session } from './session.js';
 
@@ -91,12 +92,6 @@ export interface ConsentDetails {
   // to check against. Only a pre-registered app on this computer sends one.
   confirmationCode?: string;
 }
-
-// A confirmation code as the provider checks it (`confirmation-code.ts` on
-// the realm server): two groups of four consonants. Only a value of this
-// form is shown.
-const CONFIRMATION_CODE =
-  /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/;
 
 // The provider's refusals, as fixed codes. Anything else is `failed`.
 const REFUSALS = new Set([
