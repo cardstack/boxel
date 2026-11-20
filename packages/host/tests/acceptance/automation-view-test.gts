@@ -1613,8 +1613,13 @@ module('Acceptance | automation view', function (hooks) {
       let skipped =
         text('[data-test-automation-skipped="2030-01-01T10:00:00.000Z"]') ?? '';
       assert.ok(skipped.includes('Skipped'), skipped);
-      assert.ok(skipped.includes('slot joined the hourly run for'), skipped);
-      assert.ok(skipped.includes('which was still waiting to start'), skipped);
+      assert.ok(skipped.includes('Boxel started no run for the'), skipped);
+      assert.ok(
+        skipped.includes(
+          'the slot joined the hourly run still waiting to start for',
+        ),
+        skipped,
+      );
     });
 
     test('a job event naming the automation reads the runs again', async function (assert) {
