@@ -57,7 +57,9 @@ export default config as {
   sqlSchema: string;
   assetsURL: string;
   stripePaymentLink: string;
-  featureFlags?: {};
+  featureFlags?: {
+    LIMIT_REQUESTS_IN_FLIGHT?: boolean;
+  };
   publishedRealmDomainOverrides: string;
   publishedRealmBoxelSpaceDomain: string;
   publishedRealmBoxelSiteDomain: string;
