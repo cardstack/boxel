@@ -40,6 +40,7 @@ import './parse-realm-imports.test.ts';
 import './catalog-reuse-delivery.test.ts';
 import './port-allocator.test.ts';
 import './find-and-hold-available-port.test.ts';
+import './compat-realm-proxy.test.ts';
 import './preflight.test.ts';
 
 QUnit.start();
