@@ -435,7 +435,16 @@ let snapshotRound = 0;
 function snapshotEvery() {
   snapshotRound++;
   for (const region of regions) {
-    region.snapshotAhead(snapshotRound);
+    try {
+      region.snapshotAhead(snapshotRound);
+    } catch {
+      // Reaching a region ahead of the render evaluates its arguments
+      // early, including those of a region this render tears down, whose
+      // arguments may no longer evaluate. A region that throws here takes
+      // its own snapshot when the render reaches it, so an error that is
+      // really its own surfaces there, and one the render never reaches
+      // doesn't break another region's render.
+    }
   }
 }
 
