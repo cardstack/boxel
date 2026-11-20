@@ -47,6 +47,9 @@ import SubmodeLayout from './submode-layout';
 import type { PublishError } from './publish-realm-modal';
 import type { ViewCardFn } from '@cardstack/base/card-api';
 
+const HOST_URLS_NEED_A_CARD =
+  'Open a card to manage the host URLs of its realm.';
+
 interface HostSubmodeSignature {
   Element: HTMLElement;
   Args: {};
@@ -100,8 +103,12 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   // With Host Mode v2 nothing is published: the dialog lists the realm's
   // host URLs.
   private get publishDialogLabel() {
-    let name = this.realm.info(this.realmURL).name;
+    let name = this.realmName;
     return this.isHostModeV2 ? `Host URLs for ${name}` : `Publish ${name}`;
+  }
+
+  private get realmName() {
+    return this.realm.info(this.realmURL).name;
   }
 
   // The publish button, which becomes a "Publishing…" button while a publish
@@ -163,6 +170,15 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
   get publishedRealmURLs() {
     return this.hostModeService.publishedRealmURLs;
+  }
+
+  // With no card open, Host mode falls back to a default realm, such as the
+  // user's personal workspace. The host URL manager would then act on a
+  // realm the user isn't looking at, so it waits for a card.
+  get needsCardForHostURLs() {
+    return (
+      this.isHostModeV2 && !this.operatorModeStateService.hostModePrimaryCard
+    );
   }
 
   get publishButtonLabel() {
@@ -298,6 +314,32 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               <Refresh width='22' height='22' class='publish-icon' />
               <span class='top-bar-button-label'>Publishing…</span>
             </BoxelButton>
+          {{else if this.needsCardForHostURLs}}
+            <Tooltip class='host-urls-tooltip'>
+              <:trigger>
+                <BoxelButton
+                  @kind='primary'
+                  @size='tall'
+                  @disabled={{true}}
+                  class='publish-realm-button'
+                  data-test-publish-realm-button
+                >
+                  <PublishSiteIcon
+                    width='22'
+                    height='22'
+                    class='publish-icon'
+                  />
+                  <span
+                    class='top-bar-button-label'
+                  >{{this.publishButtonLabel}}</span>
+                </BoxelButton>
+              </:trigger>
+              <:content>
+                <span data-test-host-urls-needs-card>
+                  {{HOST_URLS_NEED_A_CARD}}
+                </span>
+              </:content>
+            </Tooltip>
           {{else}}
             <BoxelButton
               @kind='primary'
@@ -374,6 +416,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
           @isOpen={{this.isPublishRealmModalOpen}}
           @onClose={{this.closePublishRealmModal}}
           @realmURL={{realmURL}}
+          @realmName={{this.realmName}}
           @v1SiteURLs={{this.publishedRealmURLs}}
           @removeV1Site={{this.removeV1Site}}
           aria-label={{this.publishDialogLabel}}

@@ -57,6 +57,8 @@ interface Signature {
   Args: ContentArgs & {
     isOpen: boolean;
     onClose: () => void;
+    // Shown in the dialog, so the user can see which realm it changes.
+    realmName: string;
   };
 }
 
@@ -997,9 +999,11 @@ const HostURLManager: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     <:header>
-      <p class='subtitle'>
-        The addresses this realm is served at. Each one shows the realm live: a
-        change in the realm shows on its pages at once.
+      <p class='subtitle' data-test-host-url-manager-realm>
+        The addresses
+        <strong class='realm-name'>{{@realmName}}</strong>
+        is served at. Each one shows the realm live: a change in the realm shows
+        on its pages at once.
       </p>
     </:header>
     <:content>
@@ -1012,6 +1016,10 @@ const HostURLManager: TemplateOnlyComponent<Signature> = <template>
   </ModalContainer>
 
   <style scoped>
+    .realm-name {
+      color: var(--foreground);
+      font-weight: 600;
+    }
     .subtitle {
       color: var(--muted-foreground);
       font-size: var(--boxel-font-size-sm);

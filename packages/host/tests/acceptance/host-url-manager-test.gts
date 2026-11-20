@@ -179,6 +179,12 @@ module('Acceptance | host URL manager', function (hooks) {
     assert
       .dom('[data-test-host-url-manager]')
       .hasAttribute('aria-label', 'Host URLs for Test Workspace B');
+    assert
+      .dom('[data-test-host-url-manager-realm]')
+      .containsText(
+        'Test Workspace B',
+        'the dialog shows which realm it is for',
+      );
     assert.dom('[data-test-publish-button]').doesNotExist();
     assert.dom('[data-test-last-published-at]').doesNotExist();
     assert.dom('[data-test-publish-progress-status]').doesNotExist();
@@ -188,6 +194,12 @@ module('Acceptance | host URL manager', function (hooks) {
     assert
       .dom('[data-test-visibility-note]')
       .containsText('the realm’s owner rendered it');
+  });
+
+  test('with no card open, the Host URLs button is disabled, so it can’t act on a fallback realm', async function (assert) {
+    await visitOperatorMode({ submode: 'host', trail: [] });
+    assert.dom('[data-test-publish-realm-button]').isDisabled();
+    assert.dom('[data-test-host-url-manager]').doesNotExist();
   });
 
   test('mounts the realm in the Boxel Space, and lists the host URL as canonical', async function (assert) {
