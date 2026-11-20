@@ -1013,6 +1013,19 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getInstanceSource(url, opts);
   }
 
+  // Every live instance in this realm whose adoption chain carries `typeKey`
+  // (see `IndexQueryEngine.getInstanceSourcesOfType`).
+  async instanceSourcesOfType(
+    typeKey: string,
+    opts?: QueryOptions,
+  ): Promise<IndexedInstanceSource[]> {
+    return await this.#indexQueryEngine.getInstanceSourcesOfType(
+      this.realmURL,
+      typeKey,
+      opts,
+    );
+  }
+
   // Liveness probe over `instance()`'s row match, without hydrating the row —
   // for gates that need only existence, not content. Unlike `instance()`, it
   // counts a current render error as errored, since its gates serve

@@ -2,10 +2,7 @@ import {
   getUserByMatrixUserId,
   sumUpAvailableCredits,
 } from '@cardstack/billing/billing-queries';
-import {
-  MANUAL_RUN_TRIGGER,
-  type AutomationCaps,
-} from '@cardstack/runtime-common/automation-declaration';
+import type { AutomationCaps } from '@cardstack/runtime-common/automation-declaration';
 import type {
   AdmissionRefusal,
   AutomationAdmissionChecks,
@@ -15,12 +12,16 @@ import {
   creditsHeldByRunsInFlight,
   holdAutomationRunCredits,
   dbAdapterQuerier,
-  param,
   type AutomationRun,
   type DBAdapter,
   type Querier,
 } from '@cardstack/runtime-common';
 import type { AutomationRow } from '@cardstack/runtime-common/automations';
+import {
+  automationCreditsSince,
+  utcDayStart,
+  utcMonthStart,
+} from '@cardstack/runtime-common/automation-spend';
 import { runCostCeiling } from './automation-estimate.ts';
 import { currentPricing, type Pricing } from './pricing.ts';
 
@@ -141,23 +142,18 @@ async function checkCreditCaps(
     automationId: run.automationId,
     excludeRunId: run.id,
   });
-  let today = new Date(nowSeconds * 1000);
   let caps: [SpendingRefusalReason, string, number | null, number][] = [
     [
       'daily-credit-cap-reached',
       'today (UTC)',
       dailyCredits,
-      Date.UTC(
-        today.getUTCFullYear(),
-        today.getUTCMonth(),
-        today.getUTCDate(),
-      ) / 1000,
+      utcDayStart(nowSeconds),
     ],
     [
       'monthly-credit-cap-reached',
       'this month (UTC)',
       monthlyCredits,
-      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1) / 1000,
+      utcMonthStart(nowSeconds),
     ],
   ];
   for (let [reason, period, cap, since] of caps) {
@@ -173,54 +169,6 @@ async function checkCreditCaps(
     }
   }
   return undefined;
-}
-
-// How long before a charge the usage it pays for can have started. A run's
-// own charges land within its time limit and its index pass of its end; a
-// batch is billed when it ends, at most `batchDeadlineMinutes` (1,440) after
-// its run submitted it; a day's storage is charged after the day ends. Two
-// days covers each, so the charges since a day or month began come from runs
-// created, and storage days that began, at most this long before it.
-const CHARGE_LAG_SECONDS = 2 * 24 * 60 * 60;
-
-// What the automation was charged since `since` (unix seconds), across every
-// charge kind that names it: everything its runs were charged, leaving out
-// Previews and Run nows, plus its storage. It reads only the automation's
-// recent runs and storage days, each through an index (the runs'
-// `(automation_id, created_at)` index then the ledger's `run_id` index, and
-// the ledger's charge-once index for storage), so it grows with neither the
-// automation's history nor the ledger.
-async function automationCreditsSince(
-  querier: Querier,
-  automationId: string,
-  since: number,
-): Promise<number> {
-  let earliest = since - CHARGE_LAG_SECONDS;
-  let [runs] = await querier([
-    'SELECT COALESCE(-SUM(l.credit_amount), 0) AS spent',
-    'FROM automation_runs r JOIN credits_ledger l ON l.run_id = r.id',
-    'WHERE r.automation_id =',
-    param(automationId),
-    'AND r.created_at >= to_timestamp(',
-    param(earliest),
-    ') AND r.trigger <>',
-    param(MANUAL_RUN_TRIGGER),
-    'AND l.created_at >=',
-    param(since),
-  ]);
-  // The literal kind and the null references match the charge-once index's
-  // partial predicate and leading columns, so the planner can use it.
-  let [storage] = await querier([
-    'SELECT COALESCE(-SUM(l.credit_amount), 0) AS spent FROM credits_ledger l',
-    "WHERE l.charge_kind = 'storage' AND l.run_id IS NULL AND l.batch_id IS NULL",
-    'AND l.automation_id =',
-    param(automationId),
-    'AND l.charge_day >= to_timestamp(',
-    param(earliest),
-    ')::date AND l.created_at >=',
-    param(since),
-  ]);
-  return Number(runs?.spent ?? 0) + Number(storage?.spent ?? 0);
 }
 
 function refuse(

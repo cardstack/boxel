@@ -93,6 +93,7 @@ import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 import { isLiveRender } from './render-context';
 import RealmApiKeys from './realm-api-keys';
+import RealmAutomations from './realm-automations';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -2065,6 +2066,12 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
         @realm={{this.realm}}
         @context={{@context}}
         @format='isolated'
+      />
+
+      <RealmAutomations
+        @realm={{this.realm}}
+        @context={{@context}}
+        @createCard={{@createCard}}
       />
     </article>
     <style scoped>

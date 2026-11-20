@@ -247,8 +247,9 @@ module('Acceptance | automation edit format', function (hooks) {
   // What the realm's `_automation-webhooks` route answers: the webhooks a
   // trigger may name. An in-browser test realm has no server rows for the
   // route to read, so each test that uses the picker says what it lists;
-  // undefined leaves the route to the realm, which refuses, and the trigger
-  // then takes a typed path.
+  // undefined leaves the route to the realm, which tells the viewer it isn't
+  // a direct writer and lists nothing, and the trigger then takes a typed
+  // path.
   let webhooks:
     | { webhookPath: string; owner: string; createdAt: string }[]
     | undefined;
@@ -337,7 +338,7 @@ module('Acceptance | automation edit format', function (hooks) {
                 verificationType: 'HMAC_SHA256_HEADER',
               },
             })),
-            meta: { webhookDeliveriesStartRuns: false },
+            meta: { directWriter: true, webhookDeliveriesStartRuns: false },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
