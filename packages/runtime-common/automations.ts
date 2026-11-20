@@ -475,10 +475,11 @@ export async function resumeAutomation(
   }
   let now = options.now ?? currentUnixSeconds();
   let admitted = false;
-  // A pause can commit between a read and the transaction at most once per
-  // attempt; three attempts without a settled answer means something keeps
-  // flipping the row, which is an error rather than a refusal.
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // The first attempt admits only a resume that would go ahead as read. When
+  // its transaction answers `admit-first`, the second attempt admits whatever
+  // it reads, so its transaction never answers `admit-first`: either `admit`
+  // ran, or the row is gone and the transaction answers `missing`.
+  for (let attempt = 0; attempt < 2; attempt++) {
     let current = await getAutomation(dbAdapter, automationId);
     if (
       current &&
@@ -505,7 +506,7 @@ export async function resumeAutomation(
     }
   }
   throw new Error(
-    `resuming ${automationId} found it paused after each admission check; the row keeps changing`,
+    `resuming ${automationId} asked for admission after its second attempt, which admits whatever it reads`,
   );
 }
 
