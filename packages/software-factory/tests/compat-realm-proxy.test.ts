@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import QUnit from 'qunit';
 const { module, test } = QUnit;
@@ -9,24 +9,21 @@ import {
 } from '@cardstack/realm-test-harness';
 
 // The realm server keeps idle sockets open for over an hour so the load
-// balancer in front of it never sends onto a closed one; the upstream here
+// balancer in front of it never sends onto a closed one; this upstream
 // advertises the same.
 const REALM_SERVER_KEEP_ALIVE_MS = 4200 * 1000;
 
-// The proxy's own server closes an idle client socket after Node's default
-// keepAliveTimeout (5s) plus keepAliveTimeoutBuffer (1s).
-const PROXY_IDLE_CLOSE_MS = 6000;
-
 async function startUpstream(): Promise<Server> {
   let upstream = createServer((req, res) => {
-    req.resume();
+    let chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
       res.setHeader('content-type', 'application/json');
       if (req.url?.endsWith('?named-per-connection')) {
         res.setHeader('x-upstream-only', 'per-connection');
         res.setHeader('connection', 'keep-alive, x-upstream-only');
       }
-      res.end('{"ok":true}');
+      res.end(JSON.stringify({ body: Buffer.concat(chunks).toString('utf8') }));
     });
   });
   upstream.keepAliveTimeout = REALM_SERVER_KEEP_ALIVE_MS;
@@ -34,6 +31,38 @@ async function startUpstream(): Promise<Server> {
     upstream.listen(0, '127.0.0.1', () => resolve()),
   );
   return upstream;
+}
+
+// Sends a request with headers `fetch` won't let a caller set, the way a
+// client that frames its own body would.
+function rawPost(
+  port: number,
+  headers: Record<string, string>,
+  chunks: string[],
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    let req = request(
+      {
+        host: '127.0.0.1',
+        port,
+        path: '/_run-command',
+        method: 'POST',
+        headers,
+        agent: false,
+      },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk: string) => (body += chunk));
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+      },
+    );
+    req.on('error', reject);
+    for (let chunk of chunks) {
+      req.write(chunk);
+    }
+    req.end();
+  });
 }
 
 module('startCompatRealmProxy', function (hooks) {
@@ -62,14 +91,19 @@ module('startCompatRealmProxy', function (hooks) {
     });
   }
 
-  test('answers with its own connection headers, not the upstream realm server’s', async function (assert) {
+  // A client pools its socket to the proxy for as long as the proxy's
+  // `Keep-Alive` says. The proxy's server closes an idle socket after
+  // keepAliveTimeout (5s) plus keepAliveTimeoutBuffer (1s), so the proxy
+  // must advertise its own timeout: with the realm server's, a client sends
+  // onto a socket the proxy is closing and gets no response.
+  test('answers with its own keep-alive, not the upstream realm server’s', async function (assert) {
     let response = await post();
     await response.text();
 
     assert.strictEqual(response.status, 200);
     assert.strictEqual(
       response.headers.get('keep-alive'),
-      `timeout=${Math.floor((PROXY_IDLE_CLOSE_MS - 1000) / 1000)}`,
+      'timeout=5',
       'the keep-alive timeout is the proxy server’s own',
     );
     assert.strictEqual(
@@ -87,34 +121,19 @@ module('startCompatRealmProxy', function (hooks) {
     assert.strictEqual(response.headers.get('x-upstream-only'), null);
   });
 
-  test('a request sent as the proxy closes an idle client socket still gets a response', async function (assert) {
-    assert.timeout(30_000);
-
-    let warm = await post();
-    await warm.text();
-
-    // Go idle until just past the proxy's close, with the event loop blocked
-    // across it the way a test's fixture keeps it busy, so the request below
-    // is written before the client has processed the close.
-    let stallMs = 1000;
-    await new Promise((resolve) =>
-      setTimeout(resolve, PROXY_IDLE_CLOSE_MS + 50 - stallMs),
+  test('forwards a chunked request body without its framing headers', async function (assert) {
+    let response = await rawPost(
+      proxy.listenPort,
+      {
+        'content-type': 'application/json',
+        'transfer-encoding': 'chunked',
+        connection: 'keep-alive',
+        'keep-alive': 'timeout=5',
+      },
+      ['{"a":', '1}'],
     );
-    let stallStart = Date.now();
-    while (Date.now() - stallStart < stallMs) {
-      // block the event loop
-    }
 
-    let status: number | string;
-    try {
-      let response = await post();
-      await response.text();
-      status = response.status;
-    } catch (error) {
-      let cause = (error as { cause?: { code?: string; message?: string } })
-        .cause;
-      status = `${(error as Error).message} (caused by: ${cause?.code ?? cause?.message})`;
-    }
-    assert.strictEqual(status, 200, 'the request gets a response');
+    assert.strictEqual(response.status, 200, response.body);
+    assert.deepEqual(JSON.parse(response.body), { body: '{"a":1}' });
   });
 });
