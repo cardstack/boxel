@@ -16,7 +16,7 @@ import {
 } from './helpers/index.ts';
 import { testOAuthSecureOriginURL } from './helpers/oauth-provider.ts';
 import {
-  finishOAuthFlow,
+  landOAuthFlow,
   OAUTH_TEST_ISSUER,
   OAUTH_TEST_MCP,
   OAUTH_TEST_SERVER_URL,
@@ -35,9 +35,16 @@ import { getMatrixAdminToken, registerUser } from '../synapse.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { revokeUserSessions } from '@cardstack/runtime-common/db-queries/user-queries';
 import {
+  cancelConsentDecision,
+  decideFlow,
+  endUndecidedFlow,
   findConsentDecision,
+  isFlowDecided,
   sha256Hex,
+  takeConsentDecision,
   takeConsentTicket,
+  type AuthorizationErrorRecord,
+  type ConsentDecisionRecord,
 } from '../lib/oauth-provider/objects.ts';
 import { buildRegistry } from '../lib/oauth-provider/registry.ts';
 import { BOXEL_CLI_CLIENT_ID } from '../lib/oauth-provider/pre-registered-clients.ts';
@@ -770,17 +777,57 @@ module(basename(import.meta.filename), function (hooks) {
       let session = await secureSessionAuth(db, await matrixAccount());
       let browser = supertest.agent(server!);
       let uid = await startOAuthFlow(browser, await register());
-      let { ticket } = (await decide(uid, ALLOW, { authorization: session }))
-        .body;
+      // Deny finishes without the user's row in `users`, which this
+      // module's accounts don't have.
+      let { ticket } = (
+        await decide(
+          uid,
+          { decision: 'deny', renew: false },
+          { authorization: session },
+        )
+      ).body;
       let response = await decide(uid, UNREADABLE, { authorization: session });
       assert.strictEqual(response.status, 409);
       assert.deepEqual(response.body, { error: 'decided' });
       assert.strictEqual(await errorReferenceCount(), 0, 'no error is stored');
+      let landed = await landOAuthFlow(browser, uid, ticket);
       assert.strictEqual(
-        typeof (await finishOAuthFlow(browser, uid, ticket)),
-        'string',
-        'the flow still finishes with its code',
+        landed.searchParams.get('error'),
+        'access_denied',
+        'the flow still finishes with its decision',
       );
+    });
+
+    test("an answer that can't be read leaves the flow open when its error can't be stored", async function (assert) {
+      let session = await secureSessionAuth(db, await matrixAccount());
+      let uid = await startFlow(await register());
+      await db.execute(`
+        CREATE FUNCTION refuse_error_reference() RETURNS trigger AS $$
+        BEGIN
+          IF NEW.kind = 'ErrorReference' THEN
+            RAISE EXCEPTION 'no error references in this test';
+          END IF;
+          RETURN NEW;
+        END $$ LANGUAGE plpgsql
+      `);
+      await db.execute(`
+        CREATE TRIGGER refuse_error_reference
+          BEFORE INSERT ON oauth_provider_objects
+          FOR EACH ROW EXECUTE FUNCTION refuse_error_reference()
+      `);
+      try {
+        let failed = await decide(uid, UNREADABLE, { authorization: session });
+        assert.strictEqual(failed.status, 500);
+      } finally {
+        await db.execute(
+          `DROP TRIGGER refuse_error_reference ON oauth_provider_objects`,
+        );
+        await db.execute(`DROP FUNCTION refuse_error_reference()`);
+      }
+      let read = await details(uid, { authorization: session });
+      assert.strictEqual(read.status, 200, 'the flow is not ended');
+      let decided = await decide(uid, ALLOW, { authorization: session });
+      assert.strictEqual(decided.status, 201, 'and can still be decided');
     });
 
     test("an answer that can't be read for a flow that is gone stores nothing", async function (assert) {
@@ -849,6 +896,105 @@ module(basename(import.meta.filename), function (hooks) {
            WHERE kind = 'ConsentTicket'`,
       );
       assert.strictEqual(await takeConsentTicket(db, ticket), undefined);
+    });
+  });
+
+  module('closing a flow', function () {
+    const RECORD: ConsentDecisionRecord = {
+      user: '@closing-flow:localhost',
+      allowed: true,
+      renew: false,
+      clientId: 'closing-flow-client',
+      scopes: { [MCP]: ['boxel:read'] },
+    };
+    const ERROR: AuthorizationErrorRecord = {
+      error: 'server_error',
+      reason: 'unreadable-decision',
+    };
+    const LIFETIMES = { decisionExpiresIn: 600, ticketExpiresIn: 60 };
+
+    function flowId() {
+      return randomBytes(16).toString('base64url');
+    }
+
+    test('an ended flow can never be decided, and ends once', async function (assert) {
+      let uid = flowId();
+      assert.ok(
+        await endUndecidedFlow(db, uid, 600, ERROR),
+        'an undecided flow ends, answering its error reference',
+      );
+      assert.strictEqual(
+        await decideFlow(db, uid, RECORD, LIFETIMES),
+        undefined,
+        'no decision is recorded after it',
+      );
+      assert.strictEqual(await findConsentDecision(db, uid), undefined);
+      assert.strictEqual(await takeConsentDecision(db, uid), undefined);
+      assert.true(await isFlowDecided(db, uid), 'it shows no consent');
+      assert.strictEqual(
+        await endUndecidedFlow(db, uid, 600, ERROR),
+        undefined,
+        'it ends once',
+      );
+      assert.strictEqual(await errorReferenceCount(), 1, 'with one error');
+    });
+
+    test('a decided, finishing or cancelled flow is never ended', async function (assert) {
+      let decided = flowId();
+      assert.ok(await decideFlow(db, decided, RECORD, LIFETIMES));
+      assert.strictEqual(
+        await endUndecidedFlow(db, decided, 600, ERROR),
+        undefined,
+        'a decided flow is left to the window that decided it',
+      );
+      assert.deepEqual(
+        await findConsentDecision(db, decided),
+        RECORD,
+        'whose decision stands',
+      );
+
+      let finishing = flowId();
+      await decideFlow(db, finishing, RECORD, LIFETIMES);
+      let taken = await takeConsentDecision(db, finishing);
+      assert.strictEqual(
+        taken?.clientId,
+        RECORD.clientId,
+        'the finish takes it',
+      );
+      assert.strictEqual(
+        await endUndecidedFlow(db, finishing, 600, ERROR),
+        undefined,
+        'a flow whose decision was taken is never ended',
+      );
+      assert.strictEqual(
+        await takeConsentDecision(db, finishing),
+        undefined,
+        'a decision is taken once',
+      );
+      assert.strictEqual(
+        await decideFlow(db, finishing, RECORD, LIFETIMES),
+        undefined,
+        'and the flow is never decided again',
+      );
+      assert.true(await isFlowDecided(db, finishing), 'it shows no consent');
+
+      let cancelled = flowId();
+      await cancelConsentDecision(db, cancelled, 600);
+      assert.strictEqual(
+        await endUndecidedFlow(db, cancelled, 600, ERROR),
+        undefined,
+        'a cancelled flow is never ended',
+      );
+      assert.strictEqual(
+        await decideFlow(db, cancelled, RECORD, LIFETIMES),
+        undefined,
+        'nor decided',
+      );
+      assert.strictEqual(
+        await errorReferenceCount(),
+        0,
+        'and no error is stored',
+      );
     });
   });
 

@@ -2099,7 +2099,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 620754,
+      "bytes": 620913,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2577,7 +2577,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/authorize/authorize-page.gts",
-          "size": 9040
+          "size": 9307
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2592,7 +2592,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/authorize/error-copy.ts",
-          "size": 2197
+          "size": 2162
         },
         {
           "package": "@cardstack/secure-origin",

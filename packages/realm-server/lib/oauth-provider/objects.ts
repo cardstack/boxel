@@ -337,8 +337,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // Why an authorization request didn't reach consent, or why Boxel ended a
-// flow at consent. Each is a fixed label for telemetry, and tells the error page which of its states to show. The
-// secure origin's `security/oauth-error-states.js` gives each one a state.
+// flow at consent. Each is a fixed label for telemetry, and tells the error
+// page which of its states to show. The secure origin's
+// `security/oauth-error-states.js` gives each one a state.
 export const AUTHORIZATION_REFUSAL_REASONS = Object.freeze([
   // The library's own refusals, before Boxel could check the client.
   'unknown-client',
@@ -382,7 +383,7 @@ export async function storeAuthorizationError(
   dbAdapter: DBAdapter,
   record: AuthorizationErrorRecord,
 ): Promise<string> {
-  let reference = randomBytes(32).toString('base64url');
+  let reference = newErrorReference();
   await storeObject(
     dbAdapter,
     ERROR_REFERENCE_KIND,
@@ -391,6 +392,10 @@ export async function storeAuthorizationError(
     ERROR_REFERENCE_TTL_SECONDS,
   );
   return reference;
+}
+
+function newErrorReference(): string {
+  return randomBytes(32).toString('base64url');
 }
 
 export async function findAuthorizationError(
@@ -509,7 +514,22 @@ export async function decideFlow(
   return rows.length > 0 ? ticket : undefined;
 }
 
-// A flow's decision. A flow ended undecided has none.
+// What a flow's decision row holds once the flow can't be decided again:
+// `finished` once the finish route took its decision, `cancelled` once the
+// flow was cancelled, and `ended` once Boxel ended it undecided
+// (`endUndecidedFlow`). The row stays until the flow's interaction would
+// expire, so a decision, a cancel and an end of the same flow exclude each
+// other: `decideFlow` never matches a closed row, and `endUndecidedFlow`
+// never claims one.
+interface ClosedFlowRecord {
+  closed: 'finished' | 'cancelled' | 'ended';
+}
+
+function closedFlow(how: ClosedFlowRecord['closed']): ClosedFlowRecord {
+  return { closed: how };
+}
+
+// A flow's decision, while it is there to take. A closed flow has none.
 export async function findConsentDecision(
   dbAdapter: DBAdapter,
   interactionId: string,
@@ -519,33 +539,55 @@ export async function findConsentDecision(
     CONSENT_DECISION_KIND,
     interactionId,
   );
-  return payload && payload.ended !== true
+  return payload && payload.closed === undefined
     ? (payload as unknown as ConsentDecisionRecord)
     : undefined;
 }
 
-// Finds a flow's decision and deletes it, so only one request can finish the
-// flow with it. `decidedAt` is when the decision was first stored, which a
-// second decision never moves. A flow ended undecided has no decision.
+// Whether a flow can't be decided any more: it has a decision, or is closed.
+export async function isFlowDecided(
+  dbAdapter: DBAdapter,
+  interactionId: string,
+): Promise<boolean> {
+  return (
+    (await findObject(dbAdapter, CONSENT_DECISION_KIND, interactionId)) !==
+    undefined
+  );
+}
+
+// Takes a flow's decision, closing its row as `finished` in the same
+// statement, so only one request can finish the flow with it. `decidedAt` is
+// when the decision was first stored, which a second decision never moves. A
+// closed flow has no decision to take.
 export async function takeConsentDecision(
   dbAdapter: DBAdapter,
   interactionId: string,
 ): Promise<(ConsentDecisionRecord & { decidedAt: Date }) | undefined> {
   let [row] = (await dbAdapter.execute(
-    `DELETE FROM oauth_provider_objects
-       WHERE kind = $1 AND id_hash = decode($2, 'hex')
-       RETURNING payload, created_at, expires_at > now() AS current`,
-    { bind: [CONSENT_DECISION_KIND, sha256Hex(interactionId)] },
-  )) as { payload: unknown; created_at: string | Date; current: boolean }[];
-  if (!row?.current) {
-    return undefined;
-  }
-  let payload = asRecord(row.payload);
-  if (payload.ended === true) {
+    `WITH open AS (
+       SELECT id_hash, payload, created_at FROM oauth_provider_objects
+         WHERE kind = $1 AND id_hash = decode($2, 'hex')
+           AND expires_at > now() AND payload->'closed' IS NULL
+         FOR UPDATE
+     )
+     UPDATE oauth_provider_objects AS decision
+        SET payload = $3::jsonb
+       FROM open
+      WHERE decision.kind = $1 AND decision.id_hash = open.id_hash
+      RETURNING open.payload, open.created_at`,
+    {
+      bind: [
+        CONSENT_DECISION_KIND,
+        sha256Hex(interactionId),
+        JSON.stringify(closedFlow('finished')),
+      ],
+    },
+  )) as { payload: unknown; created_at: string | Date }[];
+  if (!row) {
     return undefined;
   }
   return {
-    ...(payload as unknown as ConsentDecisionRecord),
+    ...(asRecord(row.payload) as unknown as ConsentDecisionRecord),
     decidedAt: new Date(row.created_at),
   };
 }
@@ -581,37 +623,49 @@ export async function takeConsentTickets(
     .map(({ payload }) => asRecord(payload) as unknown as ConsentTicketRecord);
 }
 
-// Deletes a flow's decision once the flow has finished or been cancelled.
-export async function destroyConsentDecision(
+// Closes a flow as cancelled, replacing any decision it has, for as long as
+// its interaction could last.
+export async function cancelConsentDecision(
   dbAdapter: DBAdapter,
   interactionId: string,
+  expiresIn: number,
 ): Promise<void> {
-  await destroyObject(dbAdapter, CONSENT_DECISION_KIND, interactionId);
+  await storeObject(
+    dbAdapter,
+    CONSENT_DECISION_KIND,
+    interactionId,
+    { ...closedFlow('cancelled') },
+    expiresIn,
+  );
 }
 
-// What a flow's decision row holds once Boxel has ended the flow undecided
-// (`endUndecidedFlow`). No ticket is ever stored with it, so it never
-// finishes a flow.
-export const ENDED_FLOW_DECISION = Object.freeze({ ended: true } as const);
-
-// Ends a flow nobody has decided, so it can never finish: in one statement,
-// claims the flow's decision row, so no decision can be recorded after it,
-// and deletes the flow's interaction, so neither the finish route nor the
-// library's resume can carry it on. Answers false, and changes nothing, when
-// the flow already has a decision: the window that made it may still be
-// finishing the flow.
+// Ends a flow nobody has decided, so it can never finish, and stores the
+// error the authorize page shows for it, in one statement:
+// - claims the flow's decision row as `ended`, so no decision can be recorded
+//   after it;
+// - deletes the flow's interaction, so neither the finish route nor the
+//   library's resume can carry it on;
+// - stores the error, answering its reference.
+// Answers undefined, and changes nothing, when the flow already has a
+// decision row: a decision the window that made it may still be finishing,
+// or a flow already finished or cancelled.
 export async function endUndecidedFlow(
   dbAdapter: DBAdapter,
   interactionId: string,
   expiresIn: number,
-): Promise<boolean> {
-  let payload = await prepareStore(
+  error: AuthorizationErrorRecord,
+): Promise<string | undefined> {
+  let reference = newErrorReference();
+  let decision = await prepareStore(
     dbAdapter,
     CONSENT_DECISION_KIND,
     interactionId,
-    { ...ENDED_FLOW_DECISION },
+    { ...closedFlow('ended') },
   );
-  let [row] = (await dbAdapter.execute(
+  let stored = await prepareStore(dbAdapter, ERROR_REFERENCE_KIND, reference, {
+    ...error,
+  });
+  let rows = await dbAdapter.execute(
     `WITH claimed AS (
        INSERT INTO oauth_provider_objects (kind, id_hash, payload, expires_at)
          VALUES ($1, decode($2, 'hex'), $3::jsonb, now() + make_interval(secs => $4))
@@ -623,15 +677,22 @@ export async function endUndecidedFlow(
          WHERE kind = 'Interaction' AND id_hash = decode($2, 'hex')
            AND EXISTS (SELECT 1 FROM claimed)
      )
-     SELECT count(*)::int AS claimed FROM claimed`,
+     INSERT INTO oauth_provider_objects (kind, id_hash, payload, expires_at)
+       SELECT $5, decode($6, 'hex'), $7::jsonb, now() + make_interval(secs => $8)
+         FROM claimed
+       RETURNING kind`,
     {
       bind: [
         CONSENT_DECISION_KIND,
         sha256Hex(interactionId),
-        payload,
+        decision,
         expiresIn,
+        ERROR_REFERENCE_KIND,
+        sha256Hex(reference),
+        stored,
+        ERROR_REFERENCE_TTL_SECONDS,
       ],
     },
-  )) as { claimed: number }[];
-  return (row?.claimed ?? 0) > 0;
+  );
+  return rows.length > 0 ? reference : undefined;
 }

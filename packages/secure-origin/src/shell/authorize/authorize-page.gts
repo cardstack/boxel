@@ -84,9 +84,12 @@ type State =
 // - 409: the flow was answered, usually in another window, which finishes it.
 //   The page sends the browser nowhere, and above all not to the cancel
 //   route, which would delete the decision the other window is finishing.
-// - 400 and 403: the flow is one the page can't answer. When the provider
-//   ended it and stored an error, the error page looks that up and offers
+// - 400: an answer the provider couldn't read. When the provider ended the
+//   flow and stored an error, the error page looks that up and offers
 //   "Return" where the provider does, which tells the app.
+// - 403: the request didn't come from the secure origin, which the provider
+//   checks before it knows who is asking, so it ends nothing and there is
+//   nothing to look up or return to.
 function endedError(e: unknown): ErrorParam | undefined {
   let status = (e as { status?: unknown } | undefined)?.status;
   switch (status) {
@@ -95,10 +98,11 @@ function endedError(e: unknown): ErrorParam | undefined {
     case 409:
       return { kind: 'fixed', state: 'answered' };
     case 400:
-    case 403:
       return e instanceof ConsentRefusal && e.reference
         ? { kind: 'ref', ref: e.reference }
         : { kind: 'fixed', state: 'cant-continue' };
+    case 403:
+      return { kind: 'fixed', state: 'cant-continue' };
     default:
       return undefined;
   }
@@ -305,9 +309,11 @@ export default class AuthorizePage extends Component {
         return;
       }
       let error = endedError(e);
-      this.page.state = error
-        ? { name: 'error', error }
-        : { name: 'unavailable' };
+      if (error) {
+        this.showError(error);
+      } else {
+        this.page.state = { name: 'unavailable' };
+      }
       this.visit.loadFailed(e);
       return;
     }
@@ -323,6 +329,17 @@ export default class AuthorizePage extends Component {
       error: undefined,
     };
     this.visit.loaded();
+  }
+
+  // Shows the error page for a flow that ended here. A stored error's
+  // reference replaces the address, so a reload looks the same error up, with
+  // its "Return", rather than asking for a flow that is gone.
+  private showError(error: ErrorParam) {
+    this.page.state = { name: 'error', error };
+    if (error.kind === 'ref') {
+      let address = new URLSearchParams({ error: error.ref });
+      history.replaceState(null, '', `${window.location.pathname}?${address}`);
+    }
   }
 
   private retry = () => {
@@ -415,7 +432,7 @@ export default class AuthorizePage extends Component {
         }
         let error = endedError(e);
         if (error) {
-          this.page.state = { name: 'error', error };
+          this.showError(error);
           return;
         }
         this.updateConsent({

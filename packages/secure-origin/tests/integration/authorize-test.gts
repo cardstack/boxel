@@ -665,6 +665,25 @@ module('Integration | authorize', function (hooks) {
         .hasText('Return to example.com')
         .hasAttribute('href', ERROR_RETURN);
       assert.deepEqual(moves, [], 'the page sends the browser nowhere itself');
+      assert.strictEqual(
+        window.location.search,
+        `?error=${REF}`,
+        "the error's reference replaces the flow in the address",
+      );
+
+      // A reload reads the error from the address, with its "Return".
+      await render(AuthorizePage);
+      await settled();
+      assert
+        .dom(
+          '[data-test-oauth-error="cant-continue"] [data-test-oauth-error-return]',
+        )
+        .hasAttribute('href', ERROR_RETURN);
+      assert.strictEqual(
+        servers.requests('realm-server', `GET ${CONSENT}`).length,
+        1,
+        'without asking for the flow again',
+      );
     });
 
     test('an ended flow whose return the provider doesn\'t offer has no "Return"', async function (assert) {
@@ -688,6 +707,24 @@ module('Integration | authorize', function (hooks) {
       await allow();
       await waitFor('[data-test-oauth-error="cant-continue"]');
       assert.dom('[data-test-oauth-error-return]').doesNotExist();
+    });
+
+    test('a reference sent with a 403 is never followed', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      servers.realmServer(`POST ${CONSENT}`, () => ({
+        status: 403,
+        body: { error: 'forbidden', reference: REF },
+      }));
+      await open();
+      await allow();
+      assert.dom('[data-test-oauth-error="cant-continue"]').exists();
+      assert.dom('[data-test-oauth-error-return]').doesNotExist();
+      assert.strictEqual(
+        servers.requests('realm-server', `GET ${ERROR_DETAILS}`).length,
+        0,
+      );
+      assert.notStrictEqual(window.location.search, `?error=${REF}`);
     });
 
     test('a reference not of the shape the provider issues is never looked up', async function (assert) {
