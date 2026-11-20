@@ -78,6 +78,9 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 //   owner its cards are indexed under.
 // - Rosters: its policy admits a teacher to a query over the classrooms whose
 //   `teacherIds` hold them, and it holds a classroom two teachers share.
+// - Listed: its policy admits the providers its `realm.json` lists to a query
+//   over every schedule, through a predicate that reads nothing of the card,
+//   and it lists provider A alone.
 //
 // Every card a provider could be admitted to in one realm has a twin in the
 // realms that must not admit it, so a filter applied to the wrong realm's
@@ -96,6 +99,7 @@ const WITHHELD = 'http://127.0.0.1:4444/withheld/';
 const BORROWED = 'http://127.0.0.1:4444/borrowed/';
 const SUBTYPES = 'http://127.0.0.1:4444/subtypes/';
 const ROSTERS = 'http://127.0.0.1:4444/rosters/';
+const LISTED = 'http://127.0.0.1:4444/listed/';
 // Holds a type of its own, which only its policy reaches a caller.
 const SEALED = 'http://127.0.0.1:4444/sealed/';
 
@@ -273,6 +277,8 @@ const POSTED = '.status == "posted"';
 // one of provider B's schedules in the Grants realm: a search that let it
 // through would return them.
 const UNFILTERABLE_WHERE = '(.title | tonumber) > 0';
+// Reads nothing of the card: who the caller is, against the realm's list.
+const LISTED_PROVIDER = 'realmConfig("providers") | any(. == actor())';
 
 type Grant = { operation: string; where?: string };
 
@@ -736,6 +742,27 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             },
             permissions: { ...owner },
           },
+          {
+            realmURL: new URL(LISTED),
+            fileSystem: {
+              'realm.json': realmConfigCardJSON({
+                name: 'Listed',
+                policy: `${LISTED}policies/policy`,
+                config: { providers: [PROVIDER_A] },
+              }),
+              'policies/policy.json': policyCard([
+                { operation: 'query', where: LISTED_PROVIDER },
+              ]),
+              ...aOpen(),
+              'schedules/b-closed.json': schedule({
+                title: 'B closed',
+                providerId: PROVIDER_B,
+                status: 'closed',
+                rank: 2,
+              }),
+            },
+            permissions: { ...owner },
+          },
         ],
         dbAdapter,
         publisher,
@@ -1061,6 +1088,47 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           `${ENUMERABLE}schedules/a-open`,
           `${ENUMERABLE}schedules/b-open`,
         ]);
+      });
+
+      test("a grant whose predicate reads only who the caller is finds every card of its type for a caller the realm's settings list, and none for one they leave out", async function (assert) {
+        let listed = await federatedSearch(
+          adHoc([LISTED], SCHEDULES),
+          PROVIDER_A,
+        );
+        assert.strictEqual(listed.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(listed).sort(),
+          [`${LISTED}schedules/a-open`, `${LISTED}schedules/b-closed`],
+          'every schedule, whoever it belongs to',
+        );
+
+        let own = await realmSearch(LISTED, { filter: SCHEDULES }, PROVIDER_A);
+        assert.deepEqual(
+          ids(own).sort(),
+          [`${LISTED}schedules/a-open`, `${LISTED}schedules/b-closed`],
+          "the realm's own search answers the same",
+        );
+
+        let composed = await federatedSearch(
+          adHoc([LISTED], { ...SCHEDULES, eq: { 'item.status': 'open' } }),
+          PROVIDER_A,
+        );
+        assert.deepEqual(
+          ids(composed),
+          [`${LISTED}schedules/a-open`],
+          "composed with the caller's own filter",
+        );
+
+        let unlisted = await federatedSearch(
+          adHoc([LISTED], SCHEDULES),
+          PROVIDER_B,
+        );
+        assert.strictEqual(unlisted.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(unlisted),
+          [],
+          'a provider the list leaves out finds nothing, not even their own',
+        );
       });
 
       test('a type whose only grant is `read` returns nothing to one, though the caller may read the card it would find', async function (assert) {

@@ -47,4 +47,24 @@ module('semaphore', () => {
     (await third)();
     assert.true(granted);
   });
+
+  test('a wait given up by its signal takes no permit, and the next in line gets it', async (assert) => {
+    let semaphore = new Semaphore(1);
+    let held = await semaphore.acquire();
+    let abort = new AbortController();
+    let abandoned = semaphore.acquire(abort.signal);
+    let next = semaphore.acquire();
+    abort.abort(new Error('stopped'));
+    await assert.rejects(abandoned, /stopped/);
+    held();
+    let release = await next;
+    release();
+    let again = await semaphore.acquire();
+    again();
+    await assert.rejects(
+      semaphore.acquire(abort.signal),
+      /stopped/,
+      'an aborted signal asks for no permit',
+    );
+  });
 });

@@ -30,8 +30,6 @@ const config = {
       `tests/index.html?liveTest=true&realmURL=${encodeURIComponent(url)}&hidepassed${filterParam}`,
   ),
   disable_watching: true,
-  browser_timeout: 120,
-  browser_no_activity_timeout: 120,
   browser_disconnect_timeout: 20,
   browser_start_timeout: 240,
   launch_in_ci: ['Chrome'],

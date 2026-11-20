@@ -71,7 +71,9 @@ import { performance } from 'node:perf_hooks';
 //   `withConnection`) is granted ahead of everything and outside the share.
 //   It cannot finish, and so cannot give back the connection it is nested in,
 //   until it gets one; holding it to a share its own tenant's outer holders
-//   have used up would deadlock that tenant.
+//   have used up would deadlock that tenant. Once every hold it runs inside
+//   has ended, work still waiting waits as what it is, by arrival in its
+//   tenant's queue: nothing is deadlocked behind it any more.
 // - Nested work may also go past the limit, but only when the pool is
 //   wedged: every connection granted belongs to a hold (an acquisition made
 //   with a `ConnectionHold`, as `withConnection` makes), and every one of those
@@ -274,6 +276,7 @@ export class ConnectionScheduler {
       let waiter: Waiter = {
         key,
         ordered,
+        capped: !shared,
         hold,
         arrival: this.#arrivals++,
         since: this.#now(),
@@ -288,14 +291,47 @@ export class ConnectionScheduler {
         // Queued, this waiter may be what blocks the last unblocked hold.
         this.#drain();
       } else {
-        let queues = this.#queues.get(key);
-        if (!queues) {
-          queues = { capped: [], shared: [] };
-          this.#queues.set(key, queues);
-        }
-        (shared ? queues.shared : queues.capped).push(waiter);
+        this.#enqueue(waiter);
       }
     });
+  }
+
+  // Queue a waiter with its tenant, in arrival order.
+  #enqueue(waiter: Waiter): void {
+    let queues = this.#queues.get(waiter.key);
+    if (!queues) {
+      queues = { capped: [], shared: [] };
+      this.#queues.set(waiter.key, queues);
+    }
+    let list = waiter.capped ? queues.capped : queues.shared;
+    let at = list.length;
+    while (at > 0 && list[at - 1].arrival > waiter.arrival) {
+      at--;
+    }
+    list.splice(at, 0, waiter);
+  }
+
+  // Nested waiters whose holds have all ended wait as the work they are, in
+  // their tenant's queues by arrival. Nothing they run inside pins a
+  // connection any more, so nothing is deadlocked behind them, and their
+  // place ahead of everything would only put them before callers that asked
+  // first.
+  #requeueUnheld(): void {
+    if (this.#nested.every((waiter) => holdsConnection(waiter.nestedIn))) {
+      return;
+    }
+    let stillNested: Waiter[] = [];
+    for (let waiter of this.#nested) {
+      if (holdsConnection(waiter.nestedIn)) {
+        stillNested.push(waiter);
+        continue;
+      }
+      this.#noteQueued(waiter.nestedIn, -1);
+      waiter.nestedIn = undefined;
+      waiter.depth = undefined;
+      this.#enqueue(waiter);
+    }
+    this.#nested = stillNested;
   }
 
   // Stop listening for scope changes. Waiters still queued stay queued; the
@@ -417,6 +453,9 @@ export class ConnectionScheduler {
   }
 
   #drain(): void {
+    // Waiters leave `#nested` only here, so checking once per drain keeps a
+    // nested waiter whose holds have ended from ever being served as nested.
+    this.#requeueUnheld();
     for (;;) {
       let next: Waiter | undefined;
       if (this.#inUse < this.#limit) {
@@ -522,8 +561,8 @@ export function isSharedWork(): boolean {
 }
 
 // A checked-out connection kept across other work. The work run through
-// `run` is marked as holding it, so the acquisitions it makes are granted as
-// nested ones, until `end` is called. Passed to `ConnectionScheduler.acquire`
+// `run` is marked as holding it, so the acquisitions it makes, including any
+// still waiting, are granted as nested ones until `end` is called. Passed to `ConnectionScheduler.acquire`
 // as the acquisition's `hold`, it also lets the scheduler tell when that work
 // is waiting on it (see the policy). For the adapter's own use around a
 // callback it hands a pinned connection to.
@@ -649,6 +688,9 @@ function holdsConnection(marker: HoldMarker | undefined): boolean {
 interface Waiter {
   key: TenantKey;
   ordered: boolean;
+  // Whether the share applies to it when it waits with its tenant: false for
+  // shared and ordered work.
+  capped: boolean;
   // The hold this acquisition is for, when it is one.
   hold?: HoldMarker;
   // For a nested waiter: the innermost hold its work runs inside, and how

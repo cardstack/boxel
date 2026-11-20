@@ -82,6 +82,41 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(answered.includes(REDACTED));
   });
 
+  test('a credential filled into a form body is form-encoded, and an echo of it comes back removed', async function (assert) {
+    let value = 'AC12 3&x=y+z';
+    let response = await sendCallApiRequest(
+      request({
+        method: 'POST',
+        url: `${vendor.url}/echo`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: `To=%2B15551234567&Key=${TOKEN}`,
+        bodyEncoding: 'form',
+      }),
+      [{ token: TOKEN, value }],
+    );
+
+    assert.strictEqual(response.status, 200);
+    let received = vendor.requests[0];
+    assert.strictEqual(
+      received.body,
+      'To=%2B15551234567&Key=AC12+3%26x%3Dy%2Bz',
+    );
+    assert.deepEqual(
+      [...new URLSearchParams(received.body)],
+      [
+        ['To', '+15551234567'],
+        ['Key', value],
+      ],
+      'the vendor reads the value back whole, adding no field',
+    );
+    let answered = JSON.stringify(response.body);
+    assert.false(
+      answered.includes('AC12+3%26x%3Dy%2Bz'),
+      'the vendor echoed the form-encoded credential and none of it reaches the caller',
+    );
+    assert.true(answered.includes(REDACTED));
+  });
+
   test('a credential in the path fills one segment, and what is recorded is the request as declared', async function (assert) {
     let lines = await logLinesDuring(['outbound'], async () => {
       let response = await sendCallApiRequest(

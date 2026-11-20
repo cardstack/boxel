@@ -257,8 +257,12 @@ class ClosureWalker {
     lane: 'document' | 'rendering',
   ): Promise<Reached[]> {
     // The rule's type is where the walk starts, however the rule spelled it,
-    // so a link back to it is not a reach.
-    let seen = new Set<string>(
+    // so it is never walked again. A link back to it is still reported once,
+    // as any reached type is: a grant limited to some paths admits cards of
+    // its own type only under them, and links hand over cards of that type
+    // from anywhere. Whether the type is granted is decided with every other
+    // reached type's, so a grant with no path limit doesn't report it.
+    let rootKeys = new Set<string>(
       keysOf(
         {
           codeRef: root,
@@ -269,6 +273,8 @@ class ClosureWalker {
         this.#env,
       ),
     );
+    let seen = new Set<string>(rootKeys);
+    let rootReached = false;
     let reached: Reached[] = [];
     let queue: { definition: Definition; via: string[]; isRoot: boolean }[] = [
       { definition, via: [], isRoot: true },
@@ -280,6 +286,20 @@ class ClosureWalker {
       });
       for (let link of links) {
         let key = keyOf(link.codeRef, this.#env);
+        if (key && rootKeys.has(key)) {
+          if (!rootReached) {
+            rootReached = true;
+            let entry = await this.#env.readType(link.codeRef);
+            if (entry) {
+              reached.push({
+                codeRef: link.codeRef,
+                types: entry.types,
+                via: [...current.via, ...link.via],
+              });
+            }
+          }
+          continue;
+        }
         if (!key || seen.has(key)) {
           continue;
         }

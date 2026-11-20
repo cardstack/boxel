@@ -15,6 +15,7 @@ import {
   localPathFor,
   newOperationScope,
   resolveGatedOperation,
+  rootLanding,
   resolvesToWrite,
   scopeCallerFor,
   servedRealmsRead,
@@ -31,6 +32,7 @@ import {
   matchingGrants,
   namesPolicyCard,
   pendingWriteAdmission,
+  settleForSearch,
   type GateDecision,
   type MatchedGrant,
 } from './gate.ts';
@@ -44,6 +46,7 @@ import {
   formatAddressRange as formatRange,
 } from '../anonymous-access.ts';
 import { AnonymousRequest } from './anonymous-request.ts';
+import { ANONYMOUS_ACTOR } from './anonymous-actor.ts';
 import { actingUserResolver } from './gate.ts';
 import {
   blocklistCloses,
@@ -772,9 +775,14 @@ async function explainSearch(
   }
   // A grant that compiled a filter and composed nothing was kept out of the
   // search by a declaration: the query is non-grantable on its type or one it
-  // descends from. Without one, nothing grants the search.
+  // descends from. A grant whose predicate the search settled, and that did
+  // not hold for the actor, composed nothing for that reason instead. Without
+  // either, nothing grants the search.
   let kept = rules.some(({ grants }) =>
-    grants.some(({ filterable }) => filterable),
+    grants.some(
+      ({ filterable, outcome }) =>
+        filterable && outcome !== 'did-not-hold' && outcome !== 'threw',
+    ),
   );
   return {
     ...base,
@@ -800,7 +808,7 @@ async function searchRules(
   if (!policy || !core.policy) {
     return [];
   }
-  let trace = new GateTrace();
+  let trace = new GateTrace({ explains: true });
   for (let on of invocation.types) {
     let resolved = core.resolveCodeRef(on, new URL(core.realmURL));
     if (!resolved) {
@@ -820,28 +828,63 @@ async function searchRules(
     }
   }
   let seen = new Set<unknown>();
-  return trace.rules
-    .filter(({ rule }) => !seen.has(rule) && Boolean(seen.add(rule)))
-    .map(({ rule, grants }) => ({
-      targetType: {
-        module: rule.targetType.module,
-        name: rule.targetType.name,
-      },
-      path: rule.path,
-      grants: grants.map((grant) => ({
+  let explained: ExplainedRule[] = [];
+  for (let { rule, grants } of trace.rules) {
+    if (seen.has(rule)) {
+      continue;
+    }
+    seen.add(rule);
+    let explainedGrants: ExplainedGrant[] = [];
+    for (let grant of grants) {
+      let filter = actor.kind === 'user' ? grant.filter : grant.anonymousFilter;
+      let settledFilter =
+        actor.kind === 'user'
+          ? grant.settledFilter
+          : grant.anonymousSettledFilter;
+      explainedGrants.push({
         path: grant.path,
+        ...explainedPaths(grant),
         ...(grant.where
           ? {
               where: grant.where.source,
               tier: grant.where.snapshot ? 'snapshot' : 'stored',
             }
           : {}),
-        outcome: grant.where ? 'not-evaluated' : 'unconditional',
-        filterable:
-          (actor.kind === 'user' ? grant.filter : grant.anonymousFilter) !==
-          undefined,
-      })),
-    }));
+        outcome: !grant.where
+          ? 'unconditional'
+          : !filter && settledFilter
+            ? settledOutcome(
+                await settleForSearch(
+                  core,
+                  { rule, grant, policy },
+                  actor.kind === 'user' ? actor.actor : ANONYMOUS_ACTOR,
+                ),
+              )
+            : 'not-evaluated',
+        filterable: filter !== undefined || settledFilter !== undefined,
+      });
+    }
+    explained.push({
+      targetType: {
+        module: rule.targetType.module,
+        name: rule.targetType.name,
+      },
+      path: rule.path,
+      grants: explainedGrants,
+    });
+  }
+  return explained;
+}
+
+// A settled predicate's answer, as an explained grant's outcome.
+function settledOutcome(
+  answer: 'holds' | 'fails' | 'threw',
+): ExplainedGrantOutcome {
+  return answer === 'holds'
+    ? 'held'
+    : answer === 'threw'
+      ? 'threw'
+      : 'did-not-hold';
 }
 
 // One page of the realm's cards, of `on` or of every type, in the order of
@@ -942,7 +985,7 @@ async function explain(
       code: 'actor-required',
     });
   }
-  let trace = new GateTrace();
+  let trace = new GateTrace({ explains: true });
   let scope = newOperationScope(core, {
     caller: actor,
     coarseDeclined,
@@ -959,6 +1002,7 @@ async function explain(
       target,
       question.operation,
       scope,
+      { landing: rootLanding(core, target) },
     ));
   } catch (e: unknown) {
     if (!isOperationFailure(e)) {
@@ -1116,6 +1160,8 @@ function refusalReason(
       return 'unmatchable-target';
     case 'no-grant':
       return 'no-grant';
+    case 'outside-paths':
+      return 'outside-paths';
     case 'reads-actor':
       return 'reads-actor';
     default:
@@ -1136,6 +1182,7 @@ function withRules(
     path: rule.path,
     grants: grants.map((grant) => ({
       path: grant.path,
+      ...explainedPaths(grant),
       ...(grant.where
         ? {
             where: grant.where.source,
@@ -1148,10 +1195,22 @@ function withRules(
   return { ...explanation, rules };
 }
 
+// A grant's paths as its author wrote them, where it has a path limit.
+function explainedPaths(
+  grant: MatchedGrant['grant'],
+): Pick<ExplainedGrant, 'paths'> {
+  return grant.paths
+    ? { paths: grant.paths.prefixes.map((prefix) => prefix.source) }
+    : {};
+}
+
 function grantOutcome(
   trace: GateTrace,
   grant: MatchedGrant['grant'],
 ): ExplainedGrantOutcome {
+  if (trace.outsideItsPaths.has(grant)) {
+    return 'outside-paths';
+  }
   if (!grant.where) {
     return 'unconditional';
   }

@@ -554,9 +554,10 @@ jobs:
     #
     # GitHub's runners cost nothing for a public repo and RunsOn's do not, so
     # only pushes to main always take RunsOn: the memory baseline and the
-    # shard timings are measured on main, and one machine type keeps them
-    # comparable from run to run. Every other run takes RunsOn only while the
-    # repo variable RUNS_ON_SPILL is `true`. The actions-queue collector
+    # shard timings are measured on main, and one processor keeps them
+    # comparable from run to run (see main's instance types below). Every
+    # other run takes RunsOn only while the repo variable RUNS_ON_SPILL is
+    # `true`. The actions-queue collector
     # (packages/observability/collectors/actions-queue.ts) sets it while
     # GitHub's pool is near full and clears it when the pool drains. GitHub
     # reads `vars` when each job is queued, so a change reaches every job
@@ -584,7 +585,22 @@ jobs:
     # build, but on main a build completed by a re-run is rejected (see the
     # finalize job), so a reclaim on main costs that commit its baseline
     # build. Pull requests stay on spot.
-    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-host-test-{1}/{2}{3}', github.run_id, matrix.shardIndex, vars.RUNS_ON_SPEC, (github.event_name == 'push' && github.ref == 'refs/heads/main') && '/spot=false' || '') || 'ubuntu-latest' }}
+    #
+    # Main's instance types: for on-demand, RunsOn picks the cheapest instance
+    # type that a list of families allows, which for RUNS_ON_SPEC is always
+    # m6a.xlarge. A shard takes about 1.6 times as long on m6a.xlarge as on
+    # m7a.xlarge: an m7a vCPU is a full core, and an m6a, m6i or m7i vCPU is
+    # one of a core's two hyperthreads. So pushes to main take the repo
+    # variable RUNS_ON_MAIN_HOST_TEST_SPEC when it is set, which names exact
+    # instance types:
+    # `family=m7a.xlarge+r7a.xlarge/image=ubuntu24-full-x64/volume=gp3:125mbs/extras=s3-cache`.
+    # For a list of exact types, RunsOn's on-demand allocation takes them in
+    # the order given. r7a.xlarge is there only for when m7a has no capacity:
+    # it has the same processor with more memory, so a run on it takes about
+    # as long, and Host Test Time does not flag it. Keep its `image`, `volume`
+    # and `extras` in step with RUNS_ON_SPEC, next to it in the repo settings.
+    # Deleting the variable puts main back on RUNS_ON_SPEC.
+    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-host-test-{1}/{2}{3}', github.run_id, matrix.shardIndex, (github.event_name == 'push' && github.ref == 'refs/heads/main') && vars.RUNS_ON_MAIN_HOST_TEST_SPEC || vars.RUNS_ON_SPEC, (github.event_name == 'push' && github.ref == 'refs/heads/main') && '/spot=false' || '') || 'ubuntu-latest' }}
     # Without this a wedged shard inherits GitHub's 360-minute default and
     # holds a runner for six hours doing nothing, which starves the pool for
     # every other PR in the repo. A healthy shard has never exceeded ~19

@@ -10,7 +10,9 @@ import { pageURL, withFragment } from './secure-sign-in';
 // review-changes mode the same for the ones whose request changed since they
 // were approved; the caller names only the one operation it is blocked on.
 // Its share-limits mode is where the owner of a share's key changes the
-// share's limits, which the app's session may not.
+// share's limits, which the app's session may not. Its connected-apps mode
+// lists the apps connected to the user's Boxel account, the other way from
+// connect, and is where the user disconnects one.
 //
 // The app tells the window which page to show and what it is for, and nothing
 // else. Everything it says names something (a realm, a card or a card type,
@@ -29,6 +31,7 @@ export const SECURE_WINDOW_MODES = [
   'connect',
   'approve',
   'review-changes',
+  'connected-apps',
 ] as const;
 export type SecureWindowMode = (typeof SECURE_WINDOW_MODES)[number];
 
@@ -77,7 +80,10 @@ export type SecureWindowRequest =
       mode: 'approve' | 'review-changes';
       target: SecureWindowTarget;
       reason?: string;
-    };
+    }
+  // The page that can disconnect apps from the account shows nothing its
+  // opener wrote, so this mode carries no reason.
+  | { mode: 'connected-apps' };
 
 // The popup's size: the page area below the address bar. The key pages are
 // laid out for at least 640 wide; the share page puts a key's name and its
@@ -124,7 +130,7 @@ export function secureWindowURL(request: SecureWindowRequest): string {
       fragment.operation = target.operation;
     }
   }
-  if (request.reason) {
+  if ('reason' in request && request.reason) {
     fragment.reason = request.reason;
   }
   return withFragment(pageURL(request.mode), fragment);

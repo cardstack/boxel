@@ -1143,6 +1143,58 @@ module('Integration | tools | check-correctness', function (hooks) {
     assert.true(result.correct, 'the check passes');
   });
 
+  test('says an instance the realm turns away for now was not checked', async function (assert) {
+    mountPrerenderEndpoints();
+    let renders = announceRendersWithIndexEvents();
+    let announcedBefore = renders.announced;
+    let cardURL = `${testRealmURL}Milestone/launch`;
+
+    let result = await checkMilestoneEdit(
+      '<h1>{{@model.title}}</h1><p>{{isoDay @model.date}}</p>',
+      async () => {
+        await waitUntil(() => renders.announced > announcedBefore, {
+          timeout: 10_000,
+        });
+        getService('network').virtualNetwork.mount(
+          async (request: Request) =>
+            request.url === cardURL &&
+            request.headers.get('Accept')?.includes('card+json')
+              ? new Response(
+                  JSON.stringify({
+                    errors: [
+                      {
+                        status: 503,
+                        title: 'Definition not ready',
+                        message: 'the definition is still being rendered',
+                        meta: { retryAfterSeconds: 5 },
+                      },
+                    ],
+                  }),
+                  {
+                    status: 503,
+                    headers: {
+                      'Content-Type': 'application/vnd.api+json',
+                      'Retry-After': '5',
+                    },
+                  },
+                )
+              : null,
+          { prepend: true },
+        );
+      },
+    );
+
+    assert.deepEqual(result.errors, [], 'the refusal is not an error');
+    assert.deepEqual(
+      result.warnings,
+      [
+        `${cardURL}: not checked, because the realm was still rendering its type's definition`,
+      ],
+      'the instance is named as not checked',
+    );
+    assert.true(result.correct, 'the check passes');
+  });
+
   test('waits for the render of an instance indexed again after the module write', async function (assert) {
     mountPrerenderEndpoints();
     let renders = announceRendersWithIndexEvents();

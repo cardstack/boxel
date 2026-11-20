@@ -216,6 +216,14 @@ export class RuntimeDependencyTracker {
     this.#setRoot(rootURL, rootKind);
   }
 
+  // The key of the session recording right now, or undefined between
+  // sessions. Tracked nodes outlive stopSession() until a session with another
+  // key begins, so a caller reading a snapshot on behalf of one render checks
+  // this first to know the nodes are that render's.
+  get activeSessionKey(): string | undefined {
+    return this.#isActive ? this.#sessionKey : undefined;
+  }
+
   stopSession(): void {
     if (!this.#isActive) {
       return;
@@ -561,6 +569,12 @@ export function beginRuntimeDependencyTrackingSession(
 
 export function endRuntimeDependencyTrackingSession(): void {
   getTracker().stopSession();
+}
+
+export function activeRuntimeDependencyTrackingSessionKey():
+  | string
+  | undefined {
+  return getTracker().activeSessionKey;
 }
 
 export function resetRuntimeDependencyTracker(): void {

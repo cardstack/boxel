@@ -7,6 +7,14 @@ import yargs from 'yargs';
 import type { Server } from 'http';
 import { createPrerenderHttpServer } from './prerender-app.ts';
 import { checkPricingAtStartup } from '../lib/pricing.ts';
+import { keepMethodAndPathOnlyForEveryRequest } from '../lib/request-telemetry.ts';
+import * as Sentry from '@sentry/node';
+
+// Every request here comes from the realm server, the workers or the manager,
+// and a render request's body carries the sessions for the realms it renders.
+// So a Sentry event keeps only the method and path of the request in flight.
+keepMethodAndPathOnlyForEveryRequest();
+Sentry.setTag('process', 'prerender');
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.

@@ -15,6 +15,7 @@ export interface SeenRequest {
   path: string;
   authorization: string | undefined;
   body: any;
+  signal: AbortSignal | undefined;
 }
 
 // A handler's answer: a JSON body for a 200, `{ status, body }` for any other
@@ -41,6 +42,27 @@ function isStatusAnswer(
   answer: Answer,
 ): answer is { status: number; body: unknown } {
   return typeof (answer as { status?: unknown }).status === 'number';
+}
+
+// An answer the page stops waiting for when it aborts its request, as a
+// browser's `fetch` does.
+function abortable(
+  answer: Answer | Promise<Answer>,
+  signal: AbortSignal | null | undefined,
+): Promise<Answer> {
+  if (!signal) {
+    return Promise.resolve(answer);
+  }
+  return new Promise((resolve, reject) => {
+    let stop = () => reject(signal.reason);
+    if (signal.aborted) {
+      return stop();
+    }
+    signal.addEventListener('abort', stop, { once: true });
+    Promise.resolve(answer)
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener('abort', stop));
+  });
 }
 
 // Installs the servers for each test of a module.
@@ -86,12 +108,13 @@ export function setupMockServers(hooks: NestedHooks): MockServers {
         path,
         authorization: headers.Authorization,
         body,
+        signal: init.signal ?? undefined,
       });
       let handler = handlers.get(`${server} ${method} ${path}`);
       if (!handler) {
         throw new Error(`no test handler for ${server} ${method} ${path}`);
       }
-      let answer = await handler(body);
+      let answer = await abortable(handler(body), init.signal);
       if ('network' in answer) {
         throw new TypeError('Failed to fetch');
       }

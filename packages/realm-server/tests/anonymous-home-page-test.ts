@@ -35,6 +35,8 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 //   its index card at its root.
 // - Governed with code: like Governed, but its policy also opens the source of
 //   the realm's modules to visitors who aren't signed in.
+// - Limited: like Governed with code, but its policy lets each address read
+//   the home card only once in ten minutes.
 const OPEN = 'http://127.0.0.1:4444/open-site/';
 const CLOSED = 'http://127.0.0.1:4444/closed-site/';
 const GOVERNED = 'http://127.0.0.1:4444/governed-site/';
@@ -43,6 +45,8 @@ const GOVERNED_WITH_CODE = 'http://127.0.0.1:4444/governed-code-site/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const GOVERNED_POLICY = `${ORG}policies/governed-site`;
 const GOVERNED_WITH_CODE_POLICY = `${ORG}policies/governed-code-site`;
+const LIMITED = 'http://127.0.0.1:4444/limited-site/';
+const LIMITED_POLICY = `${ORG}policies/limited-site`;
 const OWNER = '@owner:localhost';
 
 const REALM_POLICY = {
@@ -145,6 +149,34 @@ const GOVERNED_WITH_CODE_POLICY_CARD = JSON.stringify({
   },
 });
 
+// Opens the limited site's home card to visitors who aren't signed in, one
+// read per address in ten minutes, and the source of its modules.
+const LIMITED_POLICY_CARD = JSON.stringify({
+  data: {
+    type: 'card',
+    attributes: {
+      rules: [
+        {
+          targetType: { module: `${LIMITED}home`, name: 'Home' },
+          grants: [
+            {
+              operation: 'read',
+              where: ANONYMOUS,
+              rateLimitRequests: '1',
+              rateLimitWindowSeconds: '600',
+            },
+          ],
+        },
+        {
+          targetType: TS_FILE_DEF,
+          grants: [{ operation: 'readSource', where: ANONYMOUS }],
+        },
+      ],
+    },
+    meta: { adoptsFrom: REALM_POLICY },
+  },
+});
+
 // A realm config whose routing rule for `/` serves the landing card.
 const ROUTED_REALM_CONFIG = JSON.stringify({
   data: {
@@ -230,11 +262,20 @@ module(basename(import.meta.filename), function (hooks) {
           permissions: { ...ownerOnly },
         },
         {
+          realmURL: new URL(LIMITED),
+          fileSystem: siteFiles(
+            'Limited',
+            realmConfigCardJSON({ name: 'Limited', policy: LIMITED_POLICY }),
+          ),
+          permissions: { ...ownerOnly },
+        },
+        {
           realmURL: new URL(ORG),
           fileSystem: {
             'realm.json': realmConfigCardJSON({ name: 'Org' }),
             'policies/governed-site.json': GOVERNED_POLICY_CARD,
             'policies/governed-code-site.json': GOVERNED_WITH_CODE_POLICY_CARD,
+            'policies/limited-site.json': LIMITED_POLICY_CARD,
           },
           permissions: { ...ownerOnly },
         },
@@ -326,6 +367,28 @@ module(basename(import.meta.filename), function (hooks) {
       'only modules from the realm itself are named',
     );
     assert.false(report.anonymousCanView, 'the realm fails');
+  });
+
+  test("a check the realm's rate limit turns away says so, rather than failing the realm", async function (assert) {
+    let first = await checkAnonymousHomePage(realm(LIMITED));
+    assert.true(first.anonymousCanView, 'the first check passes');
+    assert.false(first.temporarilyRefused);
+
+    let second = await checkAnonymousHomePage(realm(LIMITED));
+    assert.strictEqual(
+      second.homeCardStatus,
+      429,
+      "the grant's rate limit turns the second read away",
+    );
+    assert.true(
+      second.temporarilyRefused,
+      'the report says it was turned away',
+    );
+    assert.true(
+      (second.retryAfterSeconds ?? 0) > 0,
+      `it carries the realm's Retry-After (${second.retryAfterSeconds})`,
+    );
+    assert.false(second.anonymousCanView);
   });
 
   test("a policy that opens the home card and its modules' source passes", async function (assert) {

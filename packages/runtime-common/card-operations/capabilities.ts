@@ -13,6 +13,7 @@ import {
   canonicalizeTarget,
   newOperationScope,
   resolveGatedOperation,
+  rootLanding,
   resolveOperation,
   resolvedTypeOf,
   resolvesToWrite,
@@ -288,6 +289,7 @@ async function decide(
         target,
         check.operation,
         trace ? pairScope.derive({ trace }) : pairScope,
+        { landing: rootLanding(core, target) },
       );
     } catch (e: unknown) {
       if (trace?.refusal !== 'query-lane') {

@@ -112,7 +112,7 @@ module(basename(import.meta.filename), function (hooks) {
         if (property === 'execute') {
           return async (...args: Parameters<PgAdapter['execute']>) => {
             let result = await target.execute(...args);
-            if (/^\s*INSERT INTO oauth_provider_grants\b/.test(args[0])) {
+            if (/\bINSERT INTO oauth_provider_grants\b/.test(args[0])) {
               await target.execute(
                 `DELETE FROM oauth_provider_objects WHERE kind = 'Interaction'`,
               );
@@ -575,6 +575,28 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  module('marking the client connected', function () {
+    test('finishing a flow does not yet mark its client connected', async function (assert) {
+      let ada = await user();
+      let clientId = await register();
+      let app = browser();
+      let uid = await startOAuthFlow(app, clientId);
+      let { landed } = await finishAndFollow(app, uid, {
+        ticket: await decide(uid, ada),
+      });
+      codeFrom(assert, landed);
+      let [row] = (await db.execute(
+        `SELECT c.last_connected_at, g.exchanged_at
+           FROM oauth_provider_dynamic_clients AS c
+           JOIN oauth_provider_grants AS g ON g.client_id = c.client_id
+          WHERE c.client_id = $1`,
+        { bind: [clientId] },
+      )) as { last_connected_at: unknown; exchanged_at: unknown }[];
+      assert.strictEqual(row.last_connected_at, null, 'the client is not');
+      assert.strictEqual(row.exchanged_at, null, 'nor is the grant exchanged');
+    });
+  });
+
   module('refusals after the ticket', function () {
     test('a decision recorded for another client finishes nothing', async function (assert) {
       let ada = await user();
@@ -627,6 +649,23 @@ module(basename(import.meta.filename), function (hooks) {
         'the expired page, not an error',
       );
       assert.deepEqual(await grants(), [], 'the grant is deleted');
+      assert.deepEqual(await codeAccounts(), [], 'no code');
+    });
+
+    test('a flow whose client the cleanup deleted before it finishes leaves no grant', async function (assert) {
+      let ada = await user();
+      let app = browser();
+      let clientId = await register();
+      let uid = await startOAuthFlow(app, clientId);
+      let ticket = await decide(uid, ada);
+      await db.execute(
+        `DELETE FROM oauth_provider_dynamic_clients WHERE client_id = $1`,
+        { bind: [clientId] },
+      );
+
+      let { landed } = await finishAndFollow(app, uid, { ticket });
+      assert.strictEqual(landed, EXPIRED_PAGE);
+      assert.deepEqual(await grants(), [], 'no grant');
       assert.deepEqual(await codeAccounts(), [], 'no code');
     });
   });

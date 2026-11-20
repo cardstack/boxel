@@ -65,6 +65,7 @@ import {
 import type { LooseSingleCardDocument } from '../index.ts';
 import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
 import type { OperationTemplate } from './types.ts';
+import type { CreateLanding } from './gate.ts';
 
 // ============================================================================
 // The `create`, `update` and `delete` executors.
@@ -2217,6 +2218,41 @@ export function createIdentity(
   return lid !== undefined && mintIds
     ? mintedIdentity(type, lid, entry.directory, paths)
     : stagedIdentity(type, lid ?? uuidV4(), entry.directory, paths);
+}
+
+// Where a create's card will be stored, for the gate to match a grant's paths
+// against before anything is written. It is the path `createIdentity` stages:
+// the same type, id and directory go into the same path math. The file is
+// named only where the id is fixed before the batch runs, which is where the
+// create names a `lid` and the batch doesn't mint ids. Otherwise the realm
+// picks the id, so only the directory the card lands in is known.
+//
+// A `lid` or directory the path math refuses places the card nowhere, and
+// undefined comes back: only a grant with no path limit can admit such a
+// create, and staging it refuses it as it refuses any such create.
+export function createLanding(
+  adoptsFrom: CodeRef | undefined,
+  lid: string | undefined,
+  directory: string | undefined,
+  paths: RealmPaths,
+  { mintIds = false }: { mintIds?: boolean } = {},
+): CreateLanding | undefined {
+  let fixedId = mintIds ? undefined : lid;
+  let path: LocalPath;
+  try {
+    ({ path } = stagedIdentity(
+      adoptsFrom,
+      fixedId ?? uuidV4(),
+      directory,
+      paths,
+    ));
+  } catch {
+    return undefined;
+  }
+  let landsIn = path.slice(0, path.lastIndexOf('/') + 1);
+  return fixedId !== undefined
+    ? { directory: landsIn, file: path }
+    : { directory: landsIn };
 }
 
 // The identity a card takes in a batch that mints its ids (see

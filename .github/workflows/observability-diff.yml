@@ -68,9 +68,8 @@ jobs:
       #   /staging/grafana/grafanactl_token        (pull-from-staging auth)
       #   /staging/boxel-grafana/realm_server_url  (placeholder substitution)
       # The apply role also grants /<env>/boxel/GRAFANA_SECRET, but diff
-      # doesn't read it — diff.sh redacts the secret on both sides before
-      # diffing rather than substituting the real value, so PR comment
-      # output can never carry the credential. See diff.sh for details.
+      # doesn't read it: no dashboard carries the secret, so there is
+      # nothing to substitute.
       AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
       DIFF_MARKER: "<!-- observability-diff -->"
       MAX_COMMENT_BYTES: 60000
@@ -117,9 +116,8 @@ jobs:
         #                   apples-to-apples.
         #
         # GRAFANA_SECRET is intentionally NOT fetched here. No dashboard
-        # carries it, and diff.sh redacts any `grafana_secret` constant
-        # template variable a live dashboard still has, so it can't
-        # appear in the PR comment output.
+        # carries it; the realm-server-operator datasource adds it to
+        # operator actions.
         run: |
           GRAFANA_TOKEN="$(aws ssm get-parameter \
             --name /staging/grafana/grafanactl_token \

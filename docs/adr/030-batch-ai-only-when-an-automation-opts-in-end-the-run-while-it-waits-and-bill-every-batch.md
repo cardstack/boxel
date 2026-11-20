@@ -12,6 +12,10 @@ scope:
   - packages/billing/ai-billing.ts
   - packages/runtime-common/**/*ai-batch*
   - packages/postgres/migrations/*ai-batch*
+  - packages/runtime-common/automation-admission.ts
+  - packages/runtime-common/automations.ts
+  - packages/runtime-common/automation-runs.ts
+  - packages/runtime-common/automation-reconcile.ts
 ---
 
 # 030. Batch AI only when an automation opts in, end the run while it waits, and bill every batch
@@ -21,7 +25,8 @@ within 24 hours. An automation may use it only when its card opts in. A run
 that submits a batch ends without waiting, and a follow-up run picks up the
 results. A batch can't be canceled, so every batch is billed, and caps and
 balances assume the worst case of paying for the batch and the same requests
-at the normal price.
+at the normal price. Pausing an automation holds its follow-up runs until
+Resume.
 
 ## 1. Decision
 
@@ -41,7 +46,7 @@ MUST NOT wait on a batch. Each batch MUST get exactly one follow-up run, with
 a `dedupeKey` for the batch. The follow-up MUST start at the deadline the
 script set, at most 24 hours after the submit, or earlier when the batch
 reaches a final state. The follow-up MUST act as, and be billed to, the
-submitting run's identity.
+submitting run's identity, except a follow-up a pause held (§1.5).
 
 OpenRouter's completion webhook MUST start the follow-up only after its
 `X-OpenRouter-Signature` checks out, and MUST drop a repeat by its
@@ -67,6 +72,24 @@ run's caps, its payer's minimum balance and its estimate), each batched
 request MUST count at twice the most it can cost at the normal price: once
 for the batch and once for its fallback. A request sent at the normal price
 counts once. That factor bounds spending and MUST NOT be charged.
+
+### 1.5. Pause holds the follow-up, remove drops it
+
+A follow-up run MUST NOT start while its automation is paused, and a pause
+MUST NOT drop a follow-up, whether it was pending or running when the pause
+came. A resume MUST start each follow-up the pause held: at once when its
+batch has reached a final state or its deadline has passed, and otherwise as
+§1.2 says. A held follow-up MUST act as, and be billed to, the person who
+resumed the automation, from the resume on, in place of the submitting run's
+identity (§1.2). The batch itself stays billed to the submitting run's
+identity (§1.4).
+
+A held follow-up that starts after its deadline MUST use the batch's results
+when the batch has completed and OpenRouter still holds them. Otherwise,
+including when OpenRouter has deleted them, it MUST send the same requests at
+the normal price, as §1.3 does for a missed deadline. Removing an automation
+MUST drop its follow-ups. A paused or removed automation's batches MUST still
+be settled and billed (§1.4).
 
 ## 2. Rationale
 
@@ -94,6 +117,20 @@ author who opts in keeps the discount. OpenRouter's docs report the cost of a
 completed batch. They don't say whether an expired one is charged. Billing it
 at the submit estimate means we never pay for work we didn't bill.
 
+A pause is how a person, or the platform for the payer (the payer losing
+access, a raised cap or `batchedAI` waiting for the payer to confirm, a run of
+failures), stops an automation. A follow-up writes to the realm and, after a
+missed deadline, makes new AI calls at the normal price, so a follow-up that
+runs while paused would spend and write after the automation was stopped.
+Holding it costs little: the batch is billed either way, and the follow-up
+falls back to the normal price only when the pause outlasts the batch's
+results, which OpenRouter keeps for 30 days. A resume starts the held
+follow-up, since nothing else would. The person who resumes takes on paying
+for the automation's runs from then on, so the follow-up runs on their
+authority too: a submitter who lost access, or whose sessions were revoked
+during the pause, can't strand the batch's results, and a normal-price
+fallback is never billed to someone who no longer administers the realm.
+
 The interactive surface has a person waiting for an answer, so a batch there
 would only be slower. Limiting batch calls to run tokens keeps them tied to a
 run that the platform will bill and follow up.
@@ -110,6 +147,12 @@ run that the platform will bill and follow up.
 - **Bill a batch at its cost times the margin metered charges use.** Plain AI calls
   carry no margin, and at a margin of 2 or more, batching would cost as much
   as not batching, or more.
+- **Keep a held follow-up acting as the submitting run's identity after a
+  resume.** A submitter who lost access during the pause would have the
+  follow-up refused, and its results would never reach the realm.
+- **Let a follow-up run while its automation is paused.** It would spend
+  and write after a person, or the platform for the payer, stopped the
+  automation, including while a raised cap waits for the payer to confirm.
 - **Bill only completed batches.** An expired or late batch we stopped
   waiting for may still cost us, and we would not recover it.
 
@@ -121,11 +164,12 @@ run that the platform will bill and follow up.
   standard rates, and `usage.cost` reports the cost of a completed batch.
 - OpenRouter, [Batch quickstart](https://openrouter.ai/docs/batch-quickstart):
   there is no cancel endpoint, and a running batch returns `409` to a delete.
-  `completion_window` accepts only `24h`. With a `callback_url`, OpenRouter
-  sends one `POST` when a batch reaches a final status (`batch.completed`,
-  `batch.failed`, `batch.expired`, `batch.cancelled`), signed with
-  `X-OpenRouter-Signature` and keyed by `X-OpenRouter-Idempotency-Key`. The
-  event holds only the batch's id.
+  `completion_window` accepts only `24h`. OpenRouter deletes a batch's
+  requests and results 30 days after submit, and a `GET` then answers `410`.
+  With a `callback_url`, OpenRouter sends one `POST` when a batch reaches a
+  final status (`batch.completed`, `batch.failed`, `batch.expired`,
+  `batch.cancelled`), signed with `X-OpenRouter-Signature` and keyed by
+  `X-OpenRouter-Idempotency-Key`. The event holds only the batch's id.
 - OpenRouter, [Batch API announcement](https://openrouter.ai/blog/announcements/batch-api):
   the median batch in the beta finished in 7 minutes.
 

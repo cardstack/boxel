@@ -230,6 +230,53 @@ module(basename(import.meta.filename), function () {
         }
       });
 
+      test("the billable call's timing line names the route and the request's correlation id", async function (assert) {
+        const mockFetch = sinon.stub(global, 'fetch');
+        mockFetch.callsFake(
+          async () =>
+            new Response(
+              JSON.stringify({
+                id: 'gen-passthrough-timing',
+                choices: [{ message: { role: 'assistant', content: 'ok' } }],
+                usage: { total_tokens: 1, cost: 0.001 },
+              }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            ),
+        );
+        try {
+          const jwt = createRealmServerJWT(
+            { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+            realmSecretSeed,
+          );
+          let correlationId = 'corr-openrouter-passthrough-0123';
+          let lines = await logLinesDuring(['billable-call'], async () => {
+            let response = await request
+              .post('/_openrouter/chat/completions')
+              .set('Accept', 'application/json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt}`)
+              .set('X-Boxel-Logging-Correlation-Id', correlationId)
+              .send({
+                model: 'anthropic/claude-opus-4-7',
+                messages: [{ role: 'user', content: 'Hi' }],
+              });
+            assert.strictEqual(response.status, 200);
+          });
+          let line = lines.find((l) => l.message.startsWith('billable call '));
+          assert.ok(line, 'the call has a timing line');
+          assert.true(
+            line!.message.includes(' route=_openrouter '),
+            line!.message,
+          );
+          assert.true(
+            line!.message.endsWith(` corr=${correlationId}`),
+            line!.message,
+          );
+        } finally {
+          mockFetch.restore();
+        }
+      });
+
       test('an OpenRouter error echoing the key reaches the caller without it', async function (assert) {
         const originalFetch = global.fetch;
         const mockFetch = sinon.stub(global, 'fetch');

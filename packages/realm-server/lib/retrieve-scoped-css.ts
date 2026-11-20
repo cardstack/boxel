@@ -138,6 +138,13 @@ export async function resolveScopedCSSFromDeps(
 // Interned stylesheets are content-addressed, so the lookup is by hash alone:
 // any realm's copy of the same bytes qualifies, which keeps deps on modules
 // from other realms (base-realm components) servable.
+//
+// Each realm interns its own copy, so a stylesheet many realms share (a base
+// component's, say) has a row per realm. The lookup reads one copy per hash
+// rather than every copy: matching the hashes with `IN` returns all of them,
+// which on a deployed database is tens of thousands of rows and tens of
+// megabytes of CSS for a page that uses a few hundred kilobytes, and grows with
+// every realm created.
 export async function lookupScopedCSSByHash(
   dbAdapter: DBAdapter,
   hashes: string[],
@@ -145,10 +152,15 @@ export async function lookupScopedCSSByHash(
   if (hashes.length === 0) {
     return new Map();
   }
-  let placeholders = hashes.map((_, i) => `$${i + 1}`).join(', ');
   let rows = (await dbAdapter.execute(
-    `SELECT hash, css FROM scoped_css WHERE hash IN (${placeholders})`,
-    { bind: hashes },
-  )) as { hash: string; css: string }[];
-  return new Map(rows.map(({ hash, css }) => [hash, css]));
+    `SELECT h.hash,
+            (SELECT s.css FROM scoped_css AS s WHERE s.hash = h.hash LIMIT 1) AS css
+     FROM unnest($1::varchar[]) AS h(hash)`,
+    { bind: [hashes] },
+  )) as { hash: string; css: string | null }[];
+  return new Map(
+    rows
+      .filter((row): row is { hash: string; css: string } => row.css != null)
+      .map(({ hash, css }) => [hash, css]),
+  );
 }

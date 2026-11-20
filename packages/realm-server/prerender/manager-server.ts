@@ -12,6 +12,14 @@ import {
   isEnvironmentMode,
   registerService,
 } from '../lib/dev-service-registry.ts';
+import { keepMethodAndPathOnlyForEveryRequest } from '../lib/request-telemetry.ts';
+import * as Sentry from '@sentry/node';
+
+// The manager passes render requests on to the prerender servers, and a render
+// request's body carries the sessions for the realms it renders. So a Sentry
+// event keeps only the method and path of the request in flight.
+keepMethodAndPathOnlyForEveryRequest();
+Sentry.setTag('process', 'prerender-manager');
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.

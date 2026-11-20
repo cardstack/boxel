@@ -225,6 +225,9 @@ module.exports = function (environment) {
       // On in the staging build only (`config/staging.env`). Set
       // HOST_MODE_V2=true to turn it on in a local build.
       hostModeV2: process.env.HOST_MODE_V2 === 'true',
+      // Holds a tab's requests to one origin to a fixed number in flight, and
+      // sends writes and auth ahead of reads (lib/request-limiter.ts).
+      LIMIT_REQUESTS_IN_FLIGHT: process.env.LIMIT_REQUESTS_IN_FLIGHT === 'true',
     },
   };
 

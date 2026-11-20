@@ -61,6 +61,7 @@ export default config as {
     // Host Mode v2: the publish dialog manages the realm's host URLs, in
     // place of v1 publishing.
     hostModeV2?: boolean;
+    LIMIT_REQUESTS_IN_FLIGHT?: boolean;
   };
   publishedRealmDomainOverrides: string;
   publishedRealmBoxelSpaceDomain: string;

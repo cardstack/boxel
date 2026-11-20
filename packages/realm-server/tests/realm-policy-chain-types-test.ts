@@ -386,7 +386,11 @@ module(basename(import.meta.filename), function (hooks) {
   test('compiling records what the gate refuses, and keeps what it admits', async function (assert) {
     let compiled = await testRealm.getCompiledPolicy();
     assert.deepEqual(
-      compiled?.issues.map(({ code, path }) => ({ code, path })),
+      compiled?.issues
+        // The realm defines the types it grants and grants no one its code,
+        // which `realm-policy-module-access-test` covers.
+        .filter(({ code }) => code !== 'module-not-granted')
+        .map(({ code, path }) => ({ code, path })),
       [
         {
           code: 'grants-authorization-infrastructure',
