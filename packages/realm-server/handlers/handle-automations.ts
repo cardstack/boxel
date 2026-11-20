@@ -513,7 +513,7 @@ async function estimateFor(
   let recent = await recentPreviewCredits(args.dbAdapter, automationId, caller);
   return estimateAutomationCost({
     triggers: declaration.triggers,
-    caps: declaration.caps,
+    caps: { ...declaration.caps, batchedAI: declaration.batchedAI },
     pricing,
     now: Math.floor(now() / 1000),
     ...(row ? { since: row.scheduledSince, runState: row.triggerRuns } : {}),

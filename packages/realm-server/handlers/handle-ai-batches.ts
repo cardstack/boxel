@@ -159,7 +159,7 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
     if (!reserved) {
       return;
     }
-    let reservationId = reserved;
+    let { reservationId, reservedCredits } = reserved;
     let release = () =>
       settleAutomationRunAIRequest(dbAdapter, {
         runId: run.id,
@@ -243,6 +243,7 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
         requestCount: requests.length,
         estimatedUsd: estimated.estimate.usd,
         runAIReservation: reservationId,
+        reservedCredits,
         deadline,
         expiresAt: batch.expiresAt,
         state: batch.status,
@@ -419,9 +420,9 @@ async function batchCaller(
 // Reserves the batch on the run's AI spending cap, in one statement, at twice
 // its requests' worst case at the model's listed price: once for the batch,
 // and once for the normal-price requests it falls back to when it misses its
-// deadline. Returns the reservation's id, or answers the refusal itself and
-// returns undefined when the batch would pass the cap or the run can no
-// longer make AI requests.
+// deadline. Returns the reservation's id and the credits it holds, or answers
+// the refusal itself and returns undefined when the batch would pass the cap
+// or the run can no longer make AI requests.
 async function reserveBatch(
   ctxt: Koa.Context,
   dbAdapter: DBAdapter,
@@ -436,7 +437,7 @@ async function reserveBatch(
     listedCredits: number;
     requestCount: number;
   },
-): Promise<string | undefined> {
+): Promise<{ reservationId: string; reservedCredits: number } | undefined> {
   let credits = listedCredits * BATCHED_AI_RESERVE_FACTOR;
   let reservation = await reserveAutomationRunAICredits(
     dbAdapter,
@@ -446,7 +447,10 @@ async function reserveBatch(
   );
   switch (reservation.kind) {
     case 'reserved':
-      return reservation.reservationId;
+      return {
+        reservationId: reservation.reservationId,
+        reservedCredits: credits,
+      };
     case 'over-cap': {
       let { aiCreditsSpent, aiCreditsReserved } = reservation.run;
       await sendResponseForForbiddenRequest(

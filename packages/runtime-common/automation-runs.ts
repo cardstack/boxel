@@ -453,7 +453,8 @@ export async function creditsHeldByRunsInFlight(
     'FROM automation_runs r LEFT JOIN LATERAL (',
     "SELECT -SUM(l.credit_amount) AS charged FROM credits_ledger l WHERE l.run_id = r.id AND l.charge_kind = 'ai'",
     ') ai ON true',
-    'WHERE r.cost_ceiling_credits IS NOT NULL AND r.credit_hold_released_at IS NULL',
+    'WHERE',
+    ...runCreditHoldCounts('r'),
     ...((filter.actsAs !== undefined
       ? ['AND r.acts_as =', param(filter.actsAs)]
       : [
@@ -462,12 +463,22 @@ export async function creditsHeldByRunsInFlight(
           'AND r.trigger <>',
           param(MANUAL_RUN_TRIGGER),
         ]) as Expression),
-    'AND (r.finished_at IS NULL OR r.finished_at > now() - make_interval(secs =>',
-    param(UNRELEASED_RUN_HOLD_SECONDS),
-    ')) AND r.id <>',
+    'AND r.id <>',
     param(filter.excludeRunId),
   ] as Expression);
   return Number(row?.held ?? 0);
+}
+
+// The condition under which the run aliased `alias` holds its cost ceiling
+// (`creditsHeldByRunsInFlight`): admitted, its hold not released, and either
+// not finished or finished within `UNRELEASED_RUN_HOLD_SECONDS`.
+export function runCreditHoldCounts(alias: string): Expression {
+  return [
+    `(${alias}.cost_ceiling_credits IS NOT NULL AND ${alias}.credit_hold_released_at IS NULL`,
+    `AND (${alias}.finished_at IS NULL OR ${alias}.finished_at > now() - make_interval(secs =>`,
+    param(UNRELEASED_RUN_HOLD_SECONDS),
+    ')))',
+  ] as Expression;
 }
 
 // Claims the run's one commit for `attempt`. The claim is refused unless the
