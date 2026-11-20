@@ -44,8 +44,8 @@ import { currentPricing, type Pricing } from './pricing.ts';
 //    charged to whoever clicked), what the automation was charged this UTC
 //    day and this UTC month, plus what its other runs in flight and its
 //    unsettled batches hold, must be under the daily and monthly caps its
-//    payer agreed to (the caps
-//    snapshot). Each cap covers every charge kind that names the automation:
+//    payer agreed to (the caps snapshot). Each cap covers every charge kind
+//    that names the automation:
 //    its runs' compute, network, indexing and AI, its batches and its
 //    storage. A run admitted under a cap can take the automation past it by
 //    at most what that run costs.
