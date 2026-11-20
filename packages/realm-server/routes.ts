@@ -9,6 +9,7 @@ import type {
   Prerenderer,
   LinkShapePolicy,
 } from '@cardstack/runtime-common';
+import type { AccountStanding } from '@cardstack/runtime-common/automation-admission';
 import { DBRateLimitStore } from '@cardstack/runtime-common';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -30,6 +31,12 @@ import {
   handleSetSystemKeyResponseCap,
   handleShowSystemKey,
 } from './handlers/handle-system-keys.ts';
+import {
+  handleDeletePlatformSecret,
+  handleListPlatformSecrets,
+  handleSetPlatformSecret,
+  handleShowPlatformSecret,
+} from './handlers/handle-platform-secrets.ts';
 import { handleDiagnosticRenderToken } from './handlers/handle-diagnostic-render-token.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
 import handlePrefixRealmsRequest from './handlers/handle-prefix-realms.ts';
@@ -137,6 +144,7 @@ import {
   OAUTH_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
   PLATFORM_OAUTH_CLIENTS_PATH,
+  PLATFORM_SECRETS_PATH,
   REQUEST_FORWARD_PATH,
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
@@ -199,19 +207,27 @@ import {
   handleAutomationEstimate,
   handleAutomationPause,
   handleAutomationPreview,
+  handleAutomationPreviewFile,
   handleAutomationRemove,
   handleAutomationResume,
   handleAutomationRunCancel,
+  handleAutomationRunLog,
   handleAutomationRunNow,
+  handleAutomationRunReport,
+  handleAutomationStorage,
   handleAutomationSwitchOn,
 } from './handlers/handle-automations.ts';
 import {
   AUTOMATION_PAUSE_PATH,
+  AUTOMATION_PREVIEW_FILE_PATH,
   AUTOMATION_PREVIEW_PATH,
   AUTOMATION_REMOVE_PATH,
   AUTOMATION_RESUME_PATH,
   AUTOMATION_RUN_CANCEL_PATH,
+  AUTOMATION_RUN_LOG_PATH,
   AUTOMATION_RUN_NOW_PATH,
+  AUTOMATION_RUN_REPORT_PATH,
+  AUTOMATION_STORAGE_PATH,
   AUTOMATION_SWITCH_ON_PATH,
 } from '@cardstack/runtime-common/automation-routes';
 import {
@@ -288,6 +304,10 @@ export type CreateRoutesArgs = {
   // are used as-is for any environment (staging, prod).
   matrixAdminUsername?: string;
   matrixAdminPassword?: string;
+  // Asks the Matrix server about an account, for the resume route's
+  // admission of its new payer. Absent, every resume is refused as
+  // `account-unverifiable`.
+  automationAccountStanding?: (user: string) => Promise<AccountStanding>;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
@@ -684,6 +704,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       definitionLookup: args.definitionLookup,
       virtualNetwork: args.virtualNetwork,
       realmSecretSeed: args.realmSecretSeed,
+      matrixServerName: args.matrixClient.serverName,
       reportRunChange: realmServerRunChangeReporter({
         ...args,
         background: true,
@@ -699,6 +720,11 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
       realmSecretSeed: args.realmSecretSeed,
       virtualNetwork: args.virtualNetwork,
+      matrixServerName: args.matrixClient.serverName,
+      reportRunChange: realmServerRunChangeReporter({
+        ...args,
+        background: true,
+      }),
     }),
   );
   router.get(
@@ -707,6 +733,11 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
       realmSecretSeed: args.realmSecretSeed,
       virtualNetwork: args.virtualNetwork,
+      matrixServerName: args.matrixClient.serverName,
+      reportRunChange: realmServerRunChangeReporter({
+        ...args,
+        background: true,
+      }),
     }),
   );
   // Batched client performance beacons. The host sends its server session
@@ -843,14 +874,23 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
 
   // A direct writer switching an automation on, running it by hand, pausing,
-  // resuming or removing it, and canceling one of its runs. Each answers only
-  // a direct writer of the realm the request names, acting as the session's
-  // own user (see `handlers/handle-automations.ts`).
-  router.get(
-    AUTOMATION_SWITCH_ON_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleAutomationEstimate(args),
-  );
+  // resuming or removing it, canceling one of its runs, and reading a run's
+  // log and what the console shows. Each answers only a direct writer of the realm the request
+  // names, acting as the session's own user (see
+  // `handlers/handle-automations.ts`).
+  for (let [path, handler] of [
+    [AUTOMATION_SWITCH_ON_PATH, handleAutomationEstimate],
+    [AUTOMATION_RUN_LOG_PATH, handleAutomationRunLog],
+    [AUTOMATION_RUN_REPORT_PATH, handleAutomationRunReport],
+    [AUTOMATION_PREVIEW_FILE_PATH, handleAutomationPreviewFile],
+    [AUTOMATION_STORAGE_PATH, handleAutomationStorage],
+  ] as const) {
+    router.get(
+      path,
+      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+      handler(args),
+    );
+  }
   for (let [path, handler] of [
     [AUTOMATION_SWITCH_ON_PATH, handleAutomationSwitchOn],
     [AUTOMATION_PREVIEW_PATH, handleAutomationPreview],
@@ -944,6 +984,36 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,
     systemKeysAuthorization,
     handleDeletePlatformClient(args),
+  );
+
+  // Platform secrets: secrets the platform keeps and only reads, such as the
+  // secret that verifies a vendor's signed webhook. Only an operator token
+  // for `platform-secrets` reaches these, and none of them answers with a
+  // value.
+  let platformSecretsAuthorization = operatorAuthorization(
+    args.realmSecretSeed,
+    'platform-secrets',
+    args.serverURL,
+  );
+  router.get(
+    PLATFORM_SECRETS_PATH,
+    platformSecretsAuthorization,
+    handleListPlatformSecrets(args),
+  );
+  router.get(
+    `${PLATFORM_SECRETS_PATH}/:name`,
+    platformSecretsAuthorization,
+    handleShowPlatformSecret(args),
+  );
+  router.put(
+    `${PLATFORM_SECRETS_PATH}/:name`,
+    platformSecretsAuthorization,
+    handleSetPlatformSecret(args),
+  );
+  router.delete(
+    `${PLATFORM_SECRETS_PATH}/:name`,
+    platformSecretsAuthorization,
+    handleDeletePlatformSecret(args),
   );
 
   // Diagnostic sessions: what an operator renders a live card under to see it

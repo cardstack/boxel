@@ -388,6 +388,11 @@ export async function startCompatRealmProxy({
         );
 
         let responseHeaders = new Headers(response.headers);
+        // `fetch` asks for a compressed response and decodes it, so the bytes
+        // sent on are the decoded body. The upstream's coding and its
+        // compressed length don't describe them; `res.end` sets the length.
+        responseHeaders.delete('content-encoding');
+        responseHeaders.delete('content-length');
         let location = responseHeaders.get('location');
         if (location) {
           responseHeaders.set(

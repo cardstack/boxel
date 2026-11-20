@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+#MISE description="Start realm-historian, which records the history of the dev realms"
+#MISE depends=["infra:ensure-pg"]
+#MISE dir="packages/realm-server"
+
+# realm-historian runs from the realm server's directory so that the realms
+# root resolves exactly as the realm server's `--realmsRootPath` does: a
+# source realm's directory is its `disk_id` under that root. The history
+# root (REALM_HISTORY_ROOT, from lib/env-vars.sh) pairs with the database
+# rather than the checkout, and no realm is recorded until its recording is
+# turned on with `packages/realm-historian/scripts/enable.ts`.
+#
+# The dev stacks start this in their second phase, once the realm server
+# answers: realm-historian exits on its first failed query, and on a fresh
+# database its tables exist only after the realm server's `--migrateDB`.
+
+# Propagate the exit status through the trailing `| dev-log-tee.sh`, as
+# services/worker does; bash, because dash rejects `pipefail`.
+set -o pipefail
+
+# A SIGTERM/SIGINT from the stack's shutdown is a clean exit, not a failure.
+# See services/worker.
+trap 'exit 0' INT TERM
+
+LOG_TEE="../observability/scripts/dev-log-tee.sh"
+
+# realm-historian exits on any failed query and leaves restarting it to its
+# supervisor, which is ECS when deployed and this loop here. Without it, an
+# exit would take the rest of the stack's second phase down too (the test
+# realm server and the test worker), since run-p stops its group when one
+# task fails. Restarting stops on:
+# - a clean exit, after SIGTERM or SIGINT;
+# - a usage error (exit 2), which a restart can't fix;
+# - the 12th failure in a row while no run has yet lasted a minute, so a
+#   historian that can't start fails the stack instead of retrying until the
+#   stack's wait on its health check gives up. Once a run has lasted a
+#   minute, realm-historian has started, and an exit would stop a stack
+#   that still looks ready, so from then on every failure is retried,
+#   however long the database is away;
+# - the exit of the process that started this one.
+STARTED_SECONDS=60
+MAX_START_FAILURES=12
+has_started=
+start_failures=0
+while true; do
+  started=$SECONDS
+  NODE_NO_WARNINGS=1 \
+    PGPORT="${PGPORT}" \
+    PGDATABASE="${PGDATABASE}" \
+    LOG_LEVELS="${LOG_LEVELS:-*=info}" \
+    node ../realm-historian/main.ts \
+    --historyRoot="${REALM_HISTORY_ROOT}" \
+    --realmsRoot="${REALMS_ROOT}" \
+    --port="${REALM_HISTORIAN_PORT}" \
+    2>&1 | "$LOG_TEE" realm-historian && exit 0
+  status=$?
+  if [ "$status" -eq 2 ] || ! kill -0 "$PPID" 2>/dev/null; then
+    exit "$status"
+  fi
+  if [ $((SECONDS - started)) -ge "$STARTED_SECONDS" ]; then
+    has_started=1
+  fi
+  if [ -z "$has_started" ]; then
+    start_failures=$((start_failures + 1))
+    if [ "$start_failures" -ge "$MAX_START_FAILURES" ]; then
+      echo "realm-historian failed ${start_failures} times in a row without starting; not restarting it" |
+        "$LOG_TEE" realm-historian
+      exit "$status"
+    fi
+  fi
+  echo "realm-historian exited with status ${status}; restarting it in 5 s" |
+    "$LOG_TEE" realm-historian
+  sleep 5
+done

@@ -2689,6 +2689,73 @@ module('Unit | operation lowering', function (hooks) {
     });
   });
 
+  test('a form body lowers to its fields, values still markers, and makes the request a POST', async function (assert) {
+    let result = await lowerRequest(
+      {
+        url: 'https://api.example.com/v1/messages',
+        form: {
+          To: ownerParam,
+          From: { $ref: 'actor' },
+          metadata: { order: ownerParam },
+          'expand[]': ['line_items'],
+          Key: '{{apiKey}}',
+        },
+      },
+      { params: { owner: StringField } },
+    );
+    assert.deepEqual(codes(result), []);
+    let { callApi, readsActor } = result.operations.fetch;
+    assert.strictEqual(callApi?.method, 'POST');
+    assert.deepEqual(callApi?.body, {
+      kind: 'form',
+      fields: {
+        To: ownerParam,
+        From: { $ref: 'actor' },
+        metadata: { order: ownerParam },
+        'expand[]': ['line_items'],
+        Key: '{{apiKey}}',
+      },
+    });
+    assert.deepEqual(callApi?.slots, [
+      { name: 'apiKey', key: 'apiKey', placement: 'body', at: 'form.Key' },
+    ]);
+    assert.true(readsActor, 'a form value reading the caller counts');
+  });
+
+  test('a request carries one body: a form beside a JSON body or a GraphQL request is refused, as is one on a GET', async function (assert) {
+    for (let other of [
+      { json: { a: 1 } },
+      { graphql: { document: 'query { viewer { id } }' } },
+      { method: 'GET' },
+    ]) {
+      let result = await lowerRequest({
+        url: 'https://api.example.com/v1/messages',
+        form: { To: 'x' },
+        ...other,
+      });
+      assert.deepEqual(
+        codes(result),
+        ['invalid-request'],
+        JSON.stringify(other),
+      );
+      assert.strictEqual(result.operations.fetch.callApi, undefined);
+    }
+  });
+
+  test('a form that is not an object of named fields is refused', async function (assert) {
+    for (let form of [['To', 'x'], 'To=x', { '': 'x' }, ownerParam]) {
+      let result = await lowerRequest(
+        { url: 'https://api.example.com/v1/messages', form },
+        { params: { owner: StringField } },
+      );
+      assert.deepEqual(
+        codes(result),
+        ['invalid-request'],
+        JSON.stringify(form),
+      );
+    }
+  });
+
   test('each slot is indexed with its key, its name, its transform and where it is sent', async function (assert) {
     let result = await lowerRequest({
       url: 'https://api.example.com/hooks/{secret}',

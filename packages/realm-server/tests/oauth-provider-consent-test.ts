@@ -394,6 +394,7 @@ module(basename(import.meta.filename), function (hooks) {
         shown: 'an app on this computer',
         verified: false,
         claimedName: 'Test App',
+        standIn: 'loopback',
       });
     });
 
@@ -539,6 +540,39 @@ module(basename(import.meta.filename), function (hooks) {
         byAnother.status,
         409,
         'another user cannot decide it either',
+      );
+    });
+
+    test('the same decision sent again by the same user answers a new ticket', async function (assert) {
+      let user = await matrixAccount();
+      let session = await secureSessionAuth(db, user);
+      let uid = await startFlow(await register());
+      let body = { decision: 'allow', renew: true };
+      let first = await decide(uid, body, { authorization: session });
+      assert.strictEqual(first.status, 201, first.text);
+      let again = await decide(uid, body, { authorization: session });
+      assert.strictEqual(again.status, 201, again.text);
+      assert.strictEqual(typeof again.body.ticket, 'string');
+      assert.notStrictEqual(
+        again.body.ticket,
+        first.body.ticket,
+        'each ticket is a new value',
+      );
+      assert.deepEqual(
+        await takeConsentTicket(db, again.body.ticket),
+        { interaction: sha256Hex(uid) },
+        'the new ticket names the same flow',
+      );
+
+      let changed = await decide(
+        uid,
+        { decision: 'allow', renew: false },
+        { authorization: session },
+      );
+      assert.strictEqual(changed.status, 409, 'a changed decision is refused');
+      assert.true(
+        (await findConsentDecision(db, uid))!.renew,
+        'the first decision stands',
       );
     });
 

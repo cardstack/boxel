@@ -69,12 +69,33 @@ Labels are sorted alphabetically inside the brackets. With `--json`, you get the
 
 ## Patterns by task family
 
-| You want to...                                  | Suggested invocation                                                                                                                                                               |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Find the last 100 errors in any staging service | `--env staging --service <each one> --regex '(?i)error\|exception\|fatal' --since 1h --limit 100 --no-follow` (run per service; LogQL doesn't take an OR over labels in one query) |
-| Watch a slow indexer batch                      | `--env staging --service realm-server --regex 'duration_ms=[0-9]{4,}'`                                                                                                             |
-| See what one Fargate worker is doing            | `--env staging --service worker --worker-id <id> --since 30m --no-follow`                                                                                                          |
-| Tail synapse                                    | `--env staging --service synapse --since 15m --no-follow`                                                                                                                          |
+| You want to...                                     | Suggested invocation                                                                          |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Find the last 100 errors in any staging service    | the first command below, once per service (LogQL doesn't take an OR over labels in one query) |
+| Watch a slow indexer batch                         | `--env staging --service realm-server --regex 'duration_ms=[0-9]{4,}'`                        |
+| See what one Fargate worker is doing               | `--env staging --service worker --worker-id <id> --since 30m --no-follow`                     |
+| Tail synapse                                       | `--env staging --service synapse --since 15m --no-follow`                                     |
+| Follow the OAuth provider (`boxel:oauth-provider`) | the second command below                                                                      |
+| Follow one outside app's OAuth connections         | the third command below                                                                       |
+
+The patterns with alternation are written out here rather than in the table, where `|` has to be escaped as `\|` and the escape would be copied into the LogQL string, which rejects it:
+
+```bash
+# errors in one service
+packages/observability/scripts/tail-logs.sh --env staging --service <service> \
+  --regex '(?i)error|exception|fatal' --since 1h --limit 100 --no-follow
+
+# every line on the OAuth provider's channel, its warnings and errors included
+packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+  --regex 'OAuth|client metadata document|authorization (started|given|refused|error)|resume refused|consent (shown|allowed|denied|details)|flow (finished|not finished|cancelled)|token (issued|refreshed|refused|not stored|accepted)|grants? ended|reused|revocation refused|request refused|grant exchanged' \
+  --since 30m --no-follow
+
+# one outside app's lines that name it
+packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+  --filter 'client <client id>' --since 1h --no-follow
+```
+
+A plain-text log line doesn't carry its channel name, so a channel such as `boxel:oauth-provider` is found by the text of its lines, as above; the `oauth-provider` skill lists every line on it and what each means. JSON channels such as `boxel:operations` name themselves in a `channel` field (the `operations-diagnosis` skill). The client filter finds only lines that name the client, and an app identified by a client ID metadata document is named two ways (its full client ID URL, or `metadata document on <host>`); the `oauth-provider` skill says which lines use which, and which name no client.
 
 ## Limits and caveats
 

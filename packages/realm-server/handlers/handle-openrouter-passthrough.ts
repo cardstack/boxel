@@ -1,6 +1,10 @@
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { logger } from '@cardstack/runtime-common';
+import {
+  logger,
+  sanitizeLoggingCorrelationId,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
+} from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 
 import {
@@ -64,6 +68,8 @@ export default function handleOpenRouterPassthrough({
   dbAdapter: DBAdapter;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    // The billable call's timing line counts the handler's own work from here.
+    let requestStartedAt = Date.now();
     // Shares the user's in-flight slots with `_request-forward`, so an
     // abandoned call here keeps one of them from that user's calls on either
     // endpoint until the upstream one finishes. Cancelling it is what gives
@@ -141,6 +147,12 @@ export default function handleOpenRouterPassthrough({
           creditStrategy: destinationConfig.creditStrategy,
           signal: clientGone,
           destination: destinationConfig.url,
+          route: '_openrouter',
+          requestStartedAt,
+          correlationId:
+            sanitizeLoggingCorrelationId(
+              ctxt.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+            ) ?? undefined,
         },
         (errorMessage) => sendResponseForForbiddenRequest(ctxt, errorMessage),
         async () => {

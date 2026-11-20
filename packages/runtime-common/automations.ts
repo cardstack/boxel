@@ -21,8 +21,9 @@
 // inside the change's transaction, so a change to the person's permission row
 // waits for the change to commit. Whoever switches it on or resumes it becomes its
 // payer, and their caps are snapshotted. Two changes pause it without a
-// person asking: a card edit that raises a cap above the snapshot or turns on
-// `batchedAI` (`checkAutomationCaps`), and the payer no longer being a direct
+// person asking: a card edit that raises a cap above the snapshot, turns on
+// `batchedAI` (`checkAutomationCaps`) or names an incoming webhook the
+// snapshot doesn't (`webhooksChangedFrom`), and the payer no longer being a direct
 // writer (`checkAutomationPayer`). Archiving the automation's realm pauses it
 // too, and so does a streak of its own runs failing
 // (`pauseAfterRepeatedFailures`). Each ends only through a resume, which makes
@@ -53,8 +54,10 @@ import {
   type AutomationCaps,
   type AutomationDeclaration,
   type AutomationIndexEntry,
+  type AutomationProblem,
   type AutomationTriggerDeclaration,
 } from './automation-declaration.ts';
+import type { AdmissionRefusal } from './automation-admission.ts';
 import {
   reportAutomationChanges,
   type ChangedAutomation,
@@ -76,8 +79,15 @@ import {
   type AutomationSchedule,
   type TriggerRunState,
 } from './automation-schedule.ts';
+import {
+  declaredWebhookPaths,
+  unusableWebhookProblems,
+} from './automation-webhooks.ts';
 import type { DBAdapter } from './db.ts';
-import { isDirectWriterLocked } from './db-queries/realm-permission-queries.ts';
+import {
+  isDirectWriter,
+  isDirectWriterLocked,
+} from './db-queries/realm-permission-queries.ts';
 import {
   dbAdapterQuerier,
   param,
@@ -107,16 +117,26 @@ export type AutomationState =
 // - `caps-raised`: its card raised a cap above the snapshot.
 // - `batched-ai-enabled`: its card turned on `batchedAI`, which the snapshot
 //   had off.
+// - `webhook-changed`: its card names an incoming webhook the snapshot
+//   doesn't, either a trigger pointed at another webhook or a new webhook
+//   trigger. Deliveries to that webhook would start runs the payer pays for.
 // - `realm-archived`: its realm was archived.
 // - `repeated-failures`: its own runs failed `AUTOMATION_FAILURES_BEFORE_PAUSE`
 //   times in a row (see `pauseAfterRepeatedFailures`).
+// - `invalid-declaration`: a run came due while its card didn't read as a
+//   declaration, such as a cron trigger that fires more often than the
+//   minimum allows (see `pauseForInvalidDeclaration`). The row's
+//   `pauseProblems` names what the declaration reader found. Unlike the other
+//   reasons, the index hook lifts this one once the card reads again.
 export type AutomationPauseReason =
   | 'requested'
   | 'payer-lost-access'
   | 'caps-raised'
   | 'batched-ai-enabled'
+  | 'webhook-changed'
   | 'realm-archived'
-  | 'repeated-failures';
+  | 'repeated-failures'
+  | 'invalid-declaration';
 
 // How many of an automation's own runs fail in a row before it pauses itself
 // with `repeated-failures`, unless the caller of `pauseAfterRepeatedFailures`
@@ -137,11 +157,13 @@ export type SpendingRefusalReason = (typeof SPENDING_REFUSAL_REASONS)[number];
 
 // The error reasons of runs the platform failed, rather than the automation:
 // the worker couldn't ask Matrix or the realm whether the run may start, the
-// run's tab or its runner failed or never answered, the commit couldn't be
-// sent or its outcome is unknown, the run's job was lost, or its job and row
-// disagreed. A Matrix, prerender or worker outage fails every automation's
-// runs this way, and counting them would pause every automation that runs
-// during it, each waiting on a person to resume it.
+// run's tab or its runner failed or never answered, a realm call failed while
+// the platform was failing the run's requests, the commit couldn't be sent or
+// its outcome is unknown, the run's job was lost, or its job and row
+// disagreed. A Matrix, prerender, realm or worker outage fails every
+// automation's runs this way, and counting them would pause every automation
+// that runs during it, each waiting on a person to resume it. A realm call
+// that fails on its own terms ends its run as `call-failed`, which counts.
 export const PLATFORM_FAILURE_REASONS = [
   'account-unverifiable',
   'run-admission-failed',
@@ -159,8 +181,13 @@ const UNCOUNTED_FAILURE_REASONS: readonly string[] = [
 ];
 
 // The caps the payer agreed to pay for when they switched the automation on
-// or resumed it, and whether it used batched AI then.
-export type AutomationCapsSnapshot = AutomationCaps & { batchedAI: boolean };
+// or resumed it, whether it used batched AI then, and the incoming webhooks
+// its triggers named (`declaredWebhookPaths`). A snapshot taken before the
+// webhooks were recorded has no `webhookPaths`, and limits no webhook.
+export type AutomationCapsSnapshot = AutomationCaps & {
+  batchedAI: boolean;
+  webhookPaths?: string[];
+};
 
 // A trigger's run state as the row keeps it: what the schedule reads, plus
 // what the index hook compares to tell when a trigger starts afresh and its
@@ -197,6 +224,9 @@ export interface AutomationRow {
   pauseReason: AutomationPauseReason | null;
   // Who paused it, when a person did.
   pausedBy: string | null;
+  // What the declaration reader found wrong with the card, when `pauseReason`
+  // is `invalid-declaration`; null otherwise.
+  pauseProblems: AutomationProblem[] | null;
   capsSnapshot: AutomationCapsSnapshot;
   // Each trigger's run state, keyed by its label, in the shape
   // `computeAutomationSchedule` reads as `runState`, with each trigger's
@@ -247,6 +277,12 @@ export interface AutomationActorOptions extends AutomationReporters {
 // - `not-pausable`: pause found an automation that is already paused.
 // - `realm-archived`: switch-on or resume found the automation's realm
 //   archived. Its automations stay off until the realm is restored.
+// - `unusable-webhook`: switch-on or resume found a webhook trigger naming a
+//   webhook the realm can't use (see `automation-webhooks.ts`). `problems`
+//   says which trigger and why.
+// - `not-admitted`: resume's admission of the caller as the payer refused
+//   them (see `admitPayer`). `refusal` holds the code their first run would
+//   end with, and why.
 export type AutomationRefusal =
   | {
       ok: false;
@@ -261,6 +297,16 @@ export type AutomationRefusal =
       ok: false;
       reason: 'already-switched-on' | 'not-paused' | 'not-pausable';
       automation: AutomationRow;
+    }
+  | {
+      ok: false;
+      reason: 'unusable-webhook';
+      problems: AutomationProblem[];
+    }
+  | {
+      ok: false;
+      reason: 'not-admitted';
+      refusal: AdmissionRefusal;
     };
 
 export type AutomationChange =
@@ -313,6 +359,10 @@ export async function switchOnAutomation(
     }
     if (await isArchived(txQuery, realm, options)) {
       return { ok: false, reason: 'realm-archived' };
+    }
+    let problems = await webhookProblems(txQuery, realm, declaration, options);
+    if (problems.length) {
+      return { ok: false, reason: 'unusable-webhook', problems };
     }
     let [inserted] = await txQuery([
       'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since, next_run) VALUES (',
@@ -377,13 +427,9 @@ export async function pauseAutomation(
     }
     return {
       ok: true,
-      automation: await pause(
-        txQuery,
-        changes,
-        automationId,
-        'requested',
-        user,
-      ),
+      automation: await pause(txQuery, changes, automationId, 'requested', {
+        pausedBy: user,
+      }),
     };
   });
 }
@@ -394,16 +440,33 @@ export async function pauseAutomation(
 // while it was paused don't run. Each trigger keeps its run count. Its
 // failure streak starts afresh: runs created before the resume no longer
 // count toward a pause for repeated failures.
+//
+// `admit` admits `user` as the payer the way a run of the automation's
+// triggers would be admitted (`admitPayer`), told when the automation's
+// first run after the resume could start (`firstRunAfterResume`), and its
+// refusal leaves the automation paused (`not-admitted`). It asks the Matrix
+// server and the realm, so it is asked before the change's transaction, of a
+// resume that would otherwise go ahead: the automation is paused, `user`
+// directly writes its realm and the realm isn't archived. Any other resume
+// gets the refusal that says why, from the checks the transaction makes
+// again under its locks. A transaction that finds the automation paused
+// though `admit` wasn't asked (a pause committed after the first read) asks
+// it then and starts again, so a resume never makes a payer it didn't admit.
 export async function resumeAutomation(
   dbAdapter: DBAdapter,
   {
     automationId,
     user,
     declaration,
+    admit,
   }: {
     automationId: RealmResourceIdentifier;
     user: string;
     declaration: AutomationDeclaration;
+    admit: (
+      payer: string,
+      firstRun: { at: number | null },
+    ) => Promise<AdmissionRefusal | undefined>;
   },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
@@ -411,6 +474,99 @@ export async function resumeAutomation(
     return { ok: false, reason: 'other-card' };
   }
   let now = options.now ?? currentUnixSeconds();
+  let admitted = false;
+  // The first attempt admits only a resume that would go ahead as read. When
+  // its transaction answers `admit-first`, the second attempt admits whatever
+  // it reads, so its transaction never answers `admit-first`: either `admit`
+  // ran, or the row is gone and the transaction answers `missing`.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let current = await getAutomation(dbAdapter, automationId);
+    if (
+      current &&
+      (attempt > 0 || (await wouldResume(dbAdapter, current, user, options)))
+    ) {
+      let refusal = await admit(user, {
+        at: firstRunAfterResume(declaration, current.triggerRuns, now),
+      });
+      if (refusal) {
+        return { ok: false, reason: 'not-admitted', refusal };
+      }
+      admitted = true;
+    }
+    let change = await resumeInTransaction(dbAdapter, {
+      automationId,
+      user,
+      declaration,
+      admitted,
+      now,
+      options,
+    });
+    if (change !== 'admit-first') {
+      return change;
+    }
+  }
+  throw new Error(
+    `resuming ${automationId} asked for admission after its second attempt, which admits whatever it reads`,
+  );
+}
+
+// Whether a resume of `current` by `user` would go ahead, read outside any
+// transaction: it is paused, `user` directly writes its realm, and the realm
+// isn't archived.
+async function wouldResume(
+  dbAdapter: DBAdapter,
+  current: AutomationRow,
+  user: string,
+  options: AutomationActorOptions,
+): Promise<boolean> {
+  return (
+    current.state === 'paused' &&
+    (await isDirectWriter(
+      dbAdapter,
+      options.virtualNetwork.toURL(current.realm),
+      user,
+      options.matrixServerName,
+    )) &&
+    !(await isArchived(dbAdapterQuerier(dbAdapter), current.realm, options))
+  );
+}
+
+// When the first run after resuming at `now` could start, in unix seconds:
+// `now` for an automation with a webhook trigger, which a delivery can fire
+// at any time; otherwise the schedule's next run; null when nothing would
+// run.
+export function firstRunAfterResume(
+  declaration: AutomationDeclaration,
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+  now: number,
+): number | null {
+  if (declaration.triggers.some((trigger) => trigger.kind === 'webhook')) {
+    return now;
+  }
+  let { nextRun } = startSchedule(declaration, now, triggerRuns);
+  return nextRun === null ? null : Math.floor(Date.parse(nextRun) / 1000);
+}
+
+// The resume's transaction. Answers `admit-first` when it finds the
+// automation ready to resume but its payer wasn't admitted.
+async function resumeInTransaction(
+  dbAdapter: DBAdapter,
+  {
+    automationId,
+    user,
+    declaration,
+    admitted,
+    now,
+    options,
+  }: {
+    automationId: RealmResourceIdentifier;
+    user: string;
+    declaration: AutomationDeclaration;
+    admitted: boolean;
+    now: number;
+    options: AutomationActorOptions;
+  },
+): Promise<AutomationChange | 'admit-first'> {
   return await withChanges(dbAdapter, options, async (txQuery, changes) => {
     // The realm's automation lock comes before the permission and automation
     // rows, the order archiving's pause takes it in (see
@@ -423,6 +579,17 @@ export async function resumeAutomation(
         'shared',
       );
     }
+    // The webhooks' owners' permission rows lock before the automation's row,
+    // the order every change takes a permission row and an automation row in.
+    // The problems are reported only to a direct writer, below.
+    let problems = seen
+      ? await webhookProblems(
+          txQuery,
+          automationFromRow(seen).realm,
+          declaration,
+          options,
+        )
+      : [];
     let found = await lockForDirectWriter(txQuery, automationId, user, options);
     if (!found.ok) {
       return found;
@@ -432,6 +599,12 @@ export async function resumeAutomation(
     }
     if (await isArchived(txQuery, found.automation.realm, options)) {
       return { ok: false, reason: 'realm-archived' };
+    }
+    if (problems.length) {
+      return { ok: false, reason: 'unusable-webhook', problems };
+    }
+    if (!admitted) {
+      return 'admit-first';
     }
     let schedule = startSchedule(
       declaration,
@@ -443,7 +616,7 @@ export async function resumeAutomation(
       param(user),
       ', state =',
       param(schedule.state),
-      ', pause_reason = NULL, paused_by = NULL, caps_snapshot =',
+      ', pause_reason = NULL, paused_by = NULL, pause_problems = NULL, caps_snapshot =',
       param(JSON.stringify(snapshotCaps(declaration))),
       '::jsonb, trigger_runs =',
       param(JSON.stringify(schedule.triggerRuns)),
@@ -577,15 +750,53 @@ export function capsRaisedAbove(
   return undefined;
 }
 
+// Whether the card names an incoming webhook the snapshot doesn't, and so
+// pauses with `webhook-changed`. Removing a webhook trigger asks for nothing
+// more. A snapshot without `webhookPaths` predates the record, and limits no
+// webhook. Such an automation's webhooks were never checked against the
+// ownership rule at switch-on, so whatever starts a run from a delivery checks
+// the delivery's webhook against `unusableWebhookProblems` itself rather than
+// trusting the snapshot.
+export function webhooksChangedFrom(
+  snapshot: AutomationCapsSnapshot,
+  card: Pick<AutomationDeclaration, 'triggers'>,
+): boolean {
+  if (!snapshot.webhookPaths) {
+    return false;
+  }
+  let agreed = new Set(snapshot.webhookPaths);
+  return declaredWebhookPaths(card).some((path) => !agreed.has(path));
+}
+
+// The reason a switched-on automation pauses for a card that asks for more
+// than its payer agreed to (`capsRaisedAbove`, `webhooksChangedFrom`), or
+// undefined when the card asks for no more.
+function agreementExceededBy(
+  snapshot: AutomationCapsSnapshot,
+  declaration: Pick<AutomationDeclaration, 'caps' | 'batchedAI' | 'triggers'>,
+):
+  | Extract<
+      AutomationPauseReason,
+      'caps-raised' | 'batched-ai-enabled' | 'webhook-changed'
+    >
+  | undefined {
+  return (
+    capsRaisedAbove(snapshot, declaration) ??
+    (webhooksChangedFrom(snapshot, declaration) ? 'webhook-changed' : undefined)
+  );
+}
+
 // Checks the automation's card, as just indexed, against its caps snapshot,
-// and pauses it when the card asks for more (`capsRaisedAbove`). An
+// and pauses it when the card asks for more (`capsRaisedAbove`, and
+// `webhooksChangedFrom` when `card` carries its triggers). An
 // automation already paused keeps the reason it has: a resume takes a new
 // snapshot whatever paused it. Returns the row, or undefined when the
 // automation isn't switched on.
 export async function checkAutomationCaps(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
-  card: Pick<AutomationDeclaration, 'caps' | 'batchedAI'>,
+  card: Pick<AutomationDeclaration, 'caps' | 'batchedAI'> &
+    Partial<Pick<AutomationDeclaration, 'triggers'>>,
   reporters: AutomationReporters = {},
 ): Promise<AutomationRow | undefined> {
   return await withChanges(dbAdapter, reporters, async (txQuery, changes) => {
@@ -597,7 +808,10 @@ export async function checkAutomationCaps(
     if (automation.state === 'paused') {
       return automation;
     }
-    let reason = capsRaisedAbove(automation.capsSnapshot, card);
+    let reason = agreementExceededBy(automation.capsSnapshot, {
+      ...card,
+      triggers: card.triggers ?? [],
+    });
     if (!reason) {
       return automation;
     }
@@ -843,8 +1057,11 @@ export async function setAutomationWaitingForCredits(
 //   the catalog `Automation` type (`not-an-automation`), so the row is gone
 //   and its pending and running runs are canceled.
 // - `paused`: the card raised a cap or turned on `batchedAI`.
+// - `resumed`: the automation was paused with `invalid-declaration` and the
+//   card reads again, so its schedule restarts.
 // - `recomputed`: the next run, *done* and the trigger cursors follow the
-//   card as indexed.
+//   card as indexed, or, for an automation paused with
+//   `invalid-declaration`, its problems follow the card.
 // - `unchanged`: the row stays as it was. It is paused, or the card failed to
 //   index or doesn't read as a declaration, so there is nothing to schedule
 //   from until a later index reads it.
@@ -855,7 +1072,7 @@ export type AutomationSync =
       automation: AutomationRow;
     }
   | {
-      kind: 'paused' | 'recomputed' | 'unchanged';
+      kind: 'paused' | 'resumed' | 'recomputed' | 'unchanged';
       automation: AutomationRow;
     };
 
@@ -882,8 +1099,21 @@ export interface AutomationSyncOptions extends AutomationReporters {
 // comes back after being removed or spent has its cursor moved up to now, so
 // a slot that passed before the edit never comes due. An automation whose triggers are all spent becomes *done*, and a *done*
 // one with a trigger left becomes active again. Like `checkAutomationCaps`, a
-// card that asks for more than the caps snapshot pauses the automation, and a
+// card that asks for more than the caps snapshot pauses the automation, as
+// does a card that names an incoming webhook the snapshot doesn't
+// (`webhooksChangedFrom`), and a
 // paused one keeps its reason and its schedule until a resume restarts it.
+//
+// A card that doesn't read as a declaration leaves the row as it is: the card
+// saves itself while someone edits it, so a trigger just added and not yet
+// filled in, or an expression half typed, is an ordinary state to pass
+// through, never a reason to stop the automation. The tick pauses the
+// automation only when a run comes due while the card is in that state
+// (`pauseForInvalidDeclaration`). An automation paused that way follows the
+// card: its problems are replaced by the card's current ones, and once the
+// card reads again it resumes, as `resumeAutomation` would with the same
+// payer and caps snapshot, unless the card now raises a cap, which pauses it
+// with that reason instead.
 export async function syncAutomationWithCard(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
@@ -926,13 +1156,54 @@ export async function syncAutomationWithCard(
           'not-an-automation',
         );
       }
-      return { kind: 'unchanged', automation };
+      if (
+        automation.pauseReason !== 'invalid-declaration' ||
+        sameProblems(automation.pauseProblems, read.problems)
+      ) {
+        return { kind: 'unchanged', automation };
+      }
+      let [updated] = await txQuery([
+        'UPDATE automations SET pause_problems =',
+        param(JSON.stringify(read.problems)),
+        '::jsonb, updated_at = now() WHERE automation_id =',
+        param(automationId),
+        'RETURNING *',
+      ]);
+      let followed = automationFromRow(updated);
+      changes.automations.push(followed);
+      return { kind: 'recomputed', automation: followed };
     }
     let { declaration } = read;
+    if (automation.pauseReason === 'invalid-declaration') {
+      let raised = agreementExceededBy(automation.capsSnapshot, declaration);
+      if (raised) {
+        return {
+          kind: 'paused',
+          automation: await pause(txQuery, changes, automationId, raised),
+        };
+      }
+      let schedule = startSchedule(declaration, now, automation.triggerRuns);
+      let [row] = await txQuery([
+        'UPDATE automations SET state =',
+        param(schedule.state),
+        ', pause_reason = NULL, paused_by = NULL, pause_problems = NULL, trigger_runs =',
+        param(JSON.stringify(schedule.triggerRuns)),
+        '::jsonb, scheduled_since =',
+        param(unixSecondsToISO(now)),
+        '::timestamptz, next_run =',
+        param(schedule.nextRun),
+        '::timestamptz, updated_at = now() WHERE automation_id =',
+        param(automationId),
+        'RETURNING *',
+      ]);
+      let resumed = automationFromRow(row);
+      changes.automations.push(resumed);
+      return { kind: 'resumed', automation: resumed };
+    }
     if (automation.state === 'paused') {
       return { kind: 'unchanged', automation };
     }
-    let reason = capsRaisedAbove(automation.capsSnapshot, declaration);
+    let reason = agreementExceededBy(automation.capsSnapshot, declaration);
     if (reason) {
       return {
         kind: 'paused',
@@ -977,6 +1248,60 @@ export async function syncAutomationWithCard(
     }
     return { kind: 'recomputed', automation: recomputed };
   });
+}
+
+// Pauses the automation with `invalid-declaration` when its card, read once
+// the automation's row is locked, still doesn't read as a declaration. The
+// tick asks when a run comes due and the card fails to read, so the
+// automation says why instead of silently skipping its runs. `readProblems`
+// reads the card's problems, or undefined when the card reads, or carries
+// nothing to read (not indexed, failed to index), which is no reason to
+// pause. The pause cancels pending runs and leaves a running run to finish.
+// An automation already paused keeps its reason. The index hook lifts this
+// pause once the card reads again (`syncAutomationWithCard`). Returns the row,
+// or undefined when the automation isn't switched on.
+export async function pauseForInvalidDeclaration(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+  readProblems: () => Promise<AutomationProblem[] | undefined>,
+  reporters: AutomationReporters = {},
+): Promise<AutomationRow | undefined> {
+  return await withChanges(dbAdapter, reporters, async (txQuery, changes) => {
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    if (automation.state === 'paused') {
+      return automation;
+    }
+    let problems = await readProblems();
+    if (!problems?.length) {
+      return automation;
+    }
+    return await pause(txQuery, changes, automationId, 'invalid-declaration', {
+      problems,
+      keepRunning: true,
+    });
+  });
+}
+
+// Whether two lists of declaration problems say the same things in the same
+// order.
+function sameProblems(
+  a: AutomationProblem[] | null,
+  b: AutomationProblem[],
+): boolean {
+  return (
+    a !== null &&
+    a.length === b.length &&
+    a.every(
+      (p, i) =>
+        p.code === b[i].code &&
+        p.path === b[i].path &&
+        p.message === b[i].message,
+    )
+  );
 }
 
 // Every switched-on automation in `realm`, as the index hook looks them up
@@ -1120,14 +1445,25 @@ async function pause(
   changes: AutomationChanges,
   automationId: RealmResourceIdentifier,
   reason: AutomationPauseReason,
-  pausedBy?: string,
+  {
+    pausedBy,
+    problems,
+    keepRunning = false,
+  }: {
+    pausedBy?: string;
+    problems?: AutomationProblem[];
+    // Leave a running run to finish, and cancel only pending ones.
+    keepRunning?: boolean;
+  } = {},
 ): Promise<AutomationRow> {
   let [row] = await txQuery([
     "UPDATE automations SET state = 'paused', pause_reason =",
     param(reason),
     ', paused_by =',
     param(pausedBy ?? null),
-    ', updated_at = now() WHERE automation_id =',
+    ', pause_problems =',
+    param(problems ? JSON.stringify(problems) : null),
+    '::jsonb, updated_at = now() WHERE automation_id =',
     param(automationId),
     'RETURNING *',
   ]);
@@ -1136,6 +1472,7 @@ async function pause(
       txQuery,
       automationId,
       pausedBy ? { canceledBy: pausedBy } : { reason },
+      { pendingOnly: keepRunning },
     )),
   );
   let paused = automationFromRow(row);
@@ -1313,17 +1650,37 @@ function startSchedule(
   };
 }
 
-// The card's caps, keyed by name, and its `batchedAI`. Only the caps the
-// declaration names are kept.
+// The card's caps, keyed by name, its `batchedAI`, and the incoming webhooks
+// its triggers name. Only the caps the declaration names are kept.
 function snapshotCaps(
-  declaration: Pick<AutomationDeclaration, 'caps' | 'batchedAI'>,
+  declaration: Pick<AutomationDeclaration, 'caps' | 'batchedAI' | 'triggers'>,
 ): AutomationCapsSnapshot {
   return {
     ...Object.fromEntries(
       AUTOMATION_CAP_NAMES.map((name) => [name, declaration.caps[name]]),
     ),
     batchedAI: declaration.batchedAI,
+    webhookPaths: declaredWebhookPaths(declaration),
   } as AutomationCapsSnapshot;
+}
+
+// `unusableWebhookProblems` for the automation's realm, asked of the served
+// URL its permission rows are keyed by.
+async function webhookProblems(
+  txQuery: Querier,
+  realm: RealmIdentifier,
+  declaration: AutomationDeclaration,
+  {
+    matrixServerName,
+    virtualNetwork,
+  }: Pick<AutomationActorOptions, 'matrixServerName' | 'virtualNetwork'>,
+): Promise<AutomationProblem[]> {
+  return await unusableWebhookProblems(
+    txQuery,
+    virtualNetwork.toURL(realm),
+    declaration,
+    matrixServerName,
+  );
 }
 
 export function automationFromRow(
@@ -1336,6 +1693,10 @@ export function automationFromRow(
     state: row.state as AutomationState,
     pauseReason: (row.pause_reason as AutomationPauseReason | null) ?? null,
     pausedBy: (row.paused_by as string | null) ?? null,
+    pauseProblems:
+      row.pause_reason === 'invalid-declaration' && row.pause_problems != null
+        ? (json(row.pause_problems) as AutomationProblem[])
+        : null,
     capsSnapshot: json(row.caps_snapshot) as AutomationCapsSnapshot,
     triggerRuns: json(row.trigger_runs) as Record<
       string,

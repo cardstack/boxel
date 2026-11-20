@@ -655,13 +655,6 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  // `key_uses_refusal_window_idx` keys every collapsed refusal without its
-  // run; these drop it, as its removal migration does, to show that each kind
-  // of refusal collapses on an index of its own.
-  async function dropRefusalWindowIndexOverRunRows() {
-    await dbAdapter.execute(`DROP INDEX IF EXISTS key_uses_refusal_window_idx`);
-  }
-
   async function refusalCounts(keyId: string) {
     let rows = (await dbAdapter.execute(
       `SELECT run_id, count FROM key_uses WHERE key_id = $1 AND outcome = 'refused' ORDER BY id`,
@@ -686,7 +679,6 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('identical refusals from two runs in one minute are two rows', async function (assert) {
     let { id: keyId } = await addKey();
-    await dropRefusalWindowIndexOverRunRows();
     let [first, second] = [randomUUID(), randomUUID()];
     await recordKeyUses(dbAdapter, refusalBy(keyId, first));
     await recordKeyUses(dbAdapter, refusalBy(keyId, second));
@@ -703,7 +695,6 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('identical interactive refusals in one minute collapse on the interactive index', async function (assert) {
     let { id: keyId } = await addKey();
-    await dropRefusalWindowIndexOverRunRows();
     let run = randomUUID();
     await recordKeyUses(dbAdapter, refusalBy(keyId));
     await recordKeyUses(dbAdapter, refusalBy(keyId, run));
@@ -740,6 +731,22 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       rows.map((row) => [row.run_id, Number(row.count)]),
       [[refusal.runId, 2]],
+    );
+  });
+
+  test('concurrent identical refusals of one run all count on one row', async function (assert) {
+    let { id: keyId } = await addKey();
+    let run = randomUUID();
+    let refusals = 20;
+    await Promise.all(
+      Array.from({ length: refusals }, () =>
+        recordKeyUses(dbAdapter, refusalBy(keyId, run)),
+      ),
+    );
+    assert.deepEqual(
+      await refusalCounts(keyId),
+      [[run, refusals]],
+      'the refusals that race on the first row add to its count',
     );
   });
 

@@ -155,7 +155,8 @@ export async function startOAuthFlow(
     resources = [OAUTH_TEST_MCP],
     codeChallenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
   }: {
-    redirectUri?: string;
+    // null leaves `redirect_uri` out, as a client with one registered may.
+    redirectUri?: string | null;
     scope?: string;
     resources?: string[];
     codeChallenge?: string;
@@ -164,7 +165,7 @@ export async function startOAuthFlow(
   let query = new URLSearchParams({
     client_id: clientId,
     response_type: 'code',
-    redirect_uri: redirectUri,
+    ...(redirectUri === null ? {} : { redirect_uri: redirectUri }),
     scope,
     state: OAUTH_TEST_STATE,
     code_challenge: codeChallenge,
@@ -274,7 +275,8 @@ export async function codeForOAuthClient(
     renew?: boolean;
     scope?: string;
     resources?: string[];
-    redirectUri?: string;
+    // null leaves `redirect_uri` out of the authorization request.
+    redirectUri?: string | null;
   } = {},
 ): Promise<string> {
   let browser = supertest.agent(server);
@@ -282,7 +284,7 @@ export async function codeForOAuthClient(
     scope,
     codeChallenge: OAUTH_TEST_CODE_CHALLENGE,
     ...(resources ? { resources } : {}),
-    ...(redirectUri ? { redirectUri } : {}),
+    ...(redirectUri !== undefined ? { redirectUri } : {}),
   });
   let ticket = await decideOAuthFlow(server, uid, session, { renew });
   return await finishOAuthFlow(browser, uid, ticket);
@@ -344,6 +346,35 @@ export function refreshOAuthTokens(
     client_id: clientId,
     refresh_token: refreshToken,
   });
+}
+
+// A request to the revocation endpoint (RFC 7009), as an app sends one when
+// it gives up a token. Each param left undefined is left out.
+export function revokeOAuthToken(
+  server: Server,
+  params: { client_id?: string; token?: string; token_type_hint?: string },
+  {
+    origin,
+    path = '/_oauth-provider/token/revocation',
+  }: {
+    origin?: string;
+    path?: string;
+  } = {},
+): supertest.Test {
+  let body = new URLSearchParams();
+  for (let [name, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      body.set(name, value);
+    }
+  }
+  let request = supertest(server)
+    .post(path)
+    .set('Host', OAUTH_TEST_SERVER_URL.host)
+    .set('Content-Type', 'application/x-www-form-urlencoded');
+  if (origin) {
+    request = request.set('Origin', origin);
+  }
+  return request.send(body.toString());
 }
 
 // A user with a row in `users` and a secure window session, for a flow's

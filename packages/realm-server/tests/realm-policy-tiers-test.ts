@@ -236,13 +236,15 @@ async function compile(grants: Grant[]): Promise<CompiledRealmPolicy> {
 }
 
 // What one `read` grant with `where` compiles to.
-// The fixtures link to types no rule here grants, and the reach that records
-// against each grant is a warning that keeps it, so these tests set it aside.
+// The fixtures link to types no rule here grants, and grant no one the code
+// that defines them. The warnings each records against a grant keep it, so
+// these tests set them aside.
 function tierIssues(policy: { issues: CompiledRealmPolicy['issues'] }) {
   return policy.issues.filter(
     ({ code }) =>
       code !== 'grant-reaches-ungranted-type' &&
-      code !== 'render-reaches-ungranted-type',
+      code !== 'render-reaches-ungranted-type' &&
+      code !== 'module-not-granted',
   );
 }
 
@@ -282,6 +284,8 @@ const STORED = [
   '.status | ascii_downcase == "open"',
   'has("status")',
   '.teacherIds[0] == realmConfig("approver")',
+  '.teacherIds[0] == policy("approver")',
+  'policy().approvers | any(. == actor())',
   '.status | IN("open", "closed")',
   '.flags.note',
 ];

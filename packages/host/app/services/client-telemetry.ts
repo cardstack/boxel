@@ -31,6 +31,7 @@ import {
   normalizeEndpoint,
   codeRefURL,
 } from '@cardstack/host/lib/client-telemetry-labels';
+import { queueTimeOf } from '@cardstack/host/lib/request-limiter';
 
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
@@ -62,6 +63,10 @@ export interface ServerRequestEvent extends BaseEvent {
   correlation_id: string | null;
   retried: boolean;
   realm: TelemetryRealm;
+  // How long the request waited in the tab's request limiter before it was
+  // sent, included in `duration_ms`. Absent when the limiter is off or the
+  // request did not pass through it.
+  queue_ms?: number;
   // How the realm-server's live-search cache served this response — `hit`,
   // `join` or `miss`. Only the federated-search endpoint publishes it, so it is
   // absent from every other event rather than carried as an empty value on
@@ -487,6 +492,7 @@ export default class ClientTelemetryService
       let contentLength = response.headers.get('content-length');
       let respBytes = contentLength ? Number(contentLength) : 0;
       let endpoint = normalizeEndpoint(req.url, req.method);
+      let queueMs = queueTimeOf(response);
       // A retried attempt means the auth stack reauthenticated past a transient
       // 401 on the previous attempt. Drop that buffered 401 so it doesn't count
       // as an error rate. Best-effort: it may already have flushed, and a
@@ -515,6 +521,7 @@ export default class ClientTelemetryService
           req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER) || null,
         retried,
         realm,
+        ...(queueMs !== undefined ? { queue_ms: Math.round(queueMs) } : {}),
         ...(searchCache ? { search_cache: searchCache } : {}),
       });
     } catch (e) {

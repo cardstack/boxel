@@ -103,6 +103,12 @@ export const FITTED_FORMATS = [
         width: 400,
         height: 105,
       },
+      {
+        id: 'triple-extra-wide-strip',
+        title: 'Triple Extra Wide Strip',
+        width: 720,
+        height: 105,
+      },
     ],
   },
   {
@@ -160,6 +166,12 @@ export const FITTED_FORMATS = [
         title: 'Expanded Card',
         width: 400,
         height: 445,
+      },
+      {
+        id: 'extra-wide-card',
+        title: 'Extra Wide Card',
+        width: 720,
+        height: 240,
       },
     ],
   },

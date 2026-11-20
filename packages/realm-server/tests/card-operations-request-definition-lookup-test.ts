@@ -91,9 +91,12 @@ module(basename(import.meta.filename), function () {
         assert.true(isOperationFailure(err), 'an operation refusal');
         if (isOperationFailure(err)) {
           assert.strictEqual(err.error.status, 503);
-          assert.strictEqual(err.error.code, 'target-not-indexed');
+          assert.strictEqual(err.error.code, 'definition-not-ready');
+          assert.true(
+            /is still being rendered after 20 ms/.test(err.error.detail),
+            `the detail says the definition is still rendering: ${err.error.detail}`,
+          );
           assert.deepEqual(err.error.meta, {
-            awaitingIndex: true,
             retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
           });
         }

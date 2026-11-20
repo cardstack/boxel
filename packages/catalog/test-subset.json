@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "fd1238f207e1ade0ea3bab0f4ef11e1b1ba211f3",
+  "revision": "091f5acb61e62c26e25bf7402b023b8e3c2228ee",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -31,7 +31,8 @@
       "Integration | realm policy",
       "Integration | realm config policy standing",
       "Integration | policy-scoped search",
-      "Integration | a realm that checks permissions"
+      "Integration | a realm that checks permissions",
+      "Acceptance | realm config | Automations"
     ],
     "realmServer": [
       "anonymous-home-page-test",
@@ -81,6 +82,7 @@
       "realm-policy-html-sharing-test",
       "realm-policy-index-read-test",
       "realm-policy-non-grantable-test",
+      "realm-policy-paths-test",
       "realm-policy-publish-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",
@@ -93,7 +95,6 @@
       "realm-policy-source-read-test",
       "realm-policy-validate-test",
       "realm-policy-write-lock-test",
-      "run-overlay-policy-test",
       "server-endpoints/delegated-session-federated-endpoints-test",
       "server-endpoints/policy-scoped-search-test"
     ]

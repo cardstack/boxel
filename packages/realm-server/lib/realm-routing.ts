@@ -7,6 +7,7 @@ import type {
   HostRouteLoad,
   HostRouteResolution,
   HostRouteSearch,
+  HostRoutesValidation,
   HostRoutingRule,
   Realm,
   ServedRealm,
@@ -17,6 +18,7 @@ import {
   fetchRealmPermissions,
   hasExtension,
   logger,
+  matchRoutePathPattern,
   param,
   query,
   RealmPaths,
@@ -250,16 +252,11 @@ export async function resolveDynamicHostRoute(
   routes: readonly HostRoute[],
   lookups: { load: HostRouteLoad; search: HostRouteSearch },
 ): Promise<ResolvedHostRoute | undefined> {
-  // Only the pathname is compared, so a request under another protocol
-  // than the realm's still matches. Card ids are filled under the realm's
-  // own URL, the form the realm and its index key cards by.
-  let mountPathname = new URL(realm.url).pathname;
-  let pathname = requestURL.pathname;
-  let realmRoot = mountPathname.replace(/\/$/, '');
-  if (pathname !== realmRoot && !pathname.startsWith(mountPathname)) {
+  let path = pathInRealm(requestURL, realm);
+  if (path === undefined) {
     return undefined;
   }
-  let path = '/' + pathname.slice(mountPathname.length);
+  let mountPathname = new URL(realm.url).pathname;
   let resolution = await resolveHostRoute({
     path,
     routes,
@@ -273,6 +270,41 @@ export async function resolveDynamicHostRoute(
     resolution,
     canonicalPathname: mountPathname + stripped.slice(1),
   };
+}
+
+// The request's path relative to the realm's root, still percent-encoded, or
+// undefined when the request is not within the realm. Only the pathname is
+// compared, so a request under another protocol than the realm's still
+// matches. Card ids are filled under the realm's own URL, the form the realm
+// and its index key cards by.
+function pathInRealm(requestURL: URL, realm: Realm): string | undefined {
+  let mountPathname = new URL(realm.url).pathname;
+  let pathname = requestURL.pathname;
+  let realmRoot = mountPathname.replace(/\/$/, '');
+  if (pathname !== realmRoot && !pathname.startsWith(mountPathname)) {
+    return undefined;
+  }
+  return '/' + pathname.slice(mountPathname.length);
+}
+
+// Whether a route dropped for now, because its type's definition couldn't
+// be read, matches the request path, or a route under it does. The next
+// validation may keep that route, so the path isn't known to be not found.
+export function droppedRouteMayAnswer(
+  requestURL: URL,
+  realm: Realm,
+  validation: HostRoutesValidation,
+): boolean {
+  if (validation.unavailableRoutePatterns.length === 0) {
+    return false;
+  }
+  let path = pathInRealm(requestURL, realm);
+  return (
+    path !== undefined &&
+    validation.unavailableRoutePatterns.some(
+      (pattern) => matchRoutePathPattern(pattern, path) !== undefined,
+    )
+  );
 }
 
 export async function getPublishedRealmInfo(

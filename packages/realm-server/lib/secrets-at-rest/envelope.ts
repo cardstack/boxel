@@ -22,9 +22,10 @@ const TAG_BYTES = 16;
 
 // Changing what goes into the additional authenticated data changes this
 // label, so a value sealed under one layout can never open under another. A
-// binding that names a parent is laid out under its own label.
+// binding that names a parent, or a name, is laid out under its own label.
 const AAD_LABEL = 'boxel-secret/v1';
 const AAD_LABEL_WITH_PARENT = 'boxel-secret/v2-parent';
+const AAD_LABEL_WITH_NAME = 'boxel-secret/v3-name';
 
 export interface DataKey {
   keyId: string;
@@ -39,12 +40,15 @@ export interface DataKey {
 // owner and id only. `parentId` names the row a copy was made from when the
 // secret is held in two rows: a grant's copy of a user's key names the key, so
 // it is bound to both the grant (`id`) and the key, and opens only on that
-// grant of that key.
+// grant of that key. `name` is the name a secret is looked up by, for a
+// secret read by name rather than by its row, such as a platform secret: a
+// value moved to another name doesn't open, even with its row id.
 export interface SecretBinding {
   field: string;
   owner: string;
   id: string;
   parentId?: string;
+  name?: string;
   destination?: string;
 }
 
@@ -70,6 +74,7 @@ export interface SecretEncryptionContext {
   owner: string;
   id: string;
   parent_id?: string;
+  name?: string;
   destination_sha256?: string;
 }
 
@@ -83,6 +88,9 @@ export function secretEncryptionContext(
   };
   if (binding.parentId !== undefined) {
     context.parent_id = binding.parentId;
+  }
+  if (binding.name !== undefined) {
+    context.name = binding.name;
   }
   if (binding.destination !== undefined) {
     context.destination_sha256 = createHash('sha256')
@@ -250,7 +258,7 @@ export class SecretsKeyring {
         sealed,
         binding,
         'not-authentic',
-        'The secret could not be decrypted: it was altered, or it is bound to a different field, owner, row, parent or destination',
+        'The secret could not be decrypted: it was altered, or it is bound to a different field, owner, row, parent, name or destination',
       );
     }
   }
@@ -269,6 +277,21 @@ export class SecretsKeyring {
 
 function additionalData(keyId: string, binding: SecretBinding): Buffer {
   let context = secretEncryptionContext(binding);
+  if (context.name !== undefined) {
+    return Buffer.from(
+      JSON.stringify([
+        AAD_LABEL_WITH_NAME,
+        keyId,
+        context.field,
+        context.owner,
+        context.id,
+        context.parent_id ?? null,
+        context.name,
+        context.destination_sha256 ?? null,
+      ]),
+      'utf8',
+    );
+  }
   return Buffer.from(
     JSON.stringify(
       context.parent_id === undefined

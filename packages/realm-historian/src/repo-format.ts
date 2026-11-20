@@ -10,7 +10,12 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { SYSTEM_AUTHOR, TRAILERS } from '@cardstack/runtime-common';
-import { BLOB_MODE, type Identity, type ObjectStore } from './git-objects.ts';
+import {
+  BLOB_MODE,
+  isDotGitName,
+  type Identity,
+  type ObjectStore,
+} from './git-objects.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -341,7 +346,9 @@ export function parseJournalSeq(value: string): JournalSeqRange | undefined {
 // `Boxel-Includes-Superseded`: a path whose diff in this revision also
 // contains a superseded write's change, and the revision that recorded that
 // write, as `<revision> <path>`. The revision comes first because a path may
-// hold a space.
+// hold a space. A path superseded more than once since the last write to it
+// that wasn't superseded has one value per superseding revision, newest
+// first.
 export interface IncludedSuperseded {
   revision: string;
   path: string;
@@ -506,6 +513,24 @@ export function parseSizeOnlyMarker(
     return undefined;
   }
   return { size, fingerprint };
+}
+
+// Why history can't hold a realm path, or undefined when it can: a segment
+// git reads as `.git`, a segment size-only entries reserve, or a line break,
+// which would split the message lines the path appears in.
+export function unrecordableReason(path: string): string | undefined {
+  if (path.includes('\n')) {
+    return 'it has a line break';
+  }
+  for (let segment of path.split('/')) {
+    if (isDotGitName(segment)) {
+      return `git refuses the name ${JSON.stringify(segment)}`;
+    }
+    if (segment === SIZE_ONLY_MARKER_NAME) {
+      return `size-only entries reserve the name ${SIZE_ONLY_MARKER_NAME}`;
+    }
+  }
+  return undefined;
 }
 
 // Writes the marker blob and its tree, and returns the tree's id, which goes

@@ -339,7 +339,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "p95 card-to-interactive latency (card-load settle_ms) alongside p95 server-request duration_ms. The headline responsiveness signals.",
+        "description": "p95 card-to-interactive latency (card-load settle_ms) alongside p95 server-request duration_ms. The headline responsiveness signals. The server-request series leaves out _request-forward: an AI model call takes tens of seconds by design and would swamp the requests a person waits on to use the app; the _request-forward row charts those calls.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -428,7 +428,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | endpoint!=\"_request-forward\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
             "queryType": "range",
             "refId": "B",
             "legendFormat": "server-request p95"
@@ -1326,7 +1326,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "p50/p95/p99 of duration_ms across all server-request events in each interval.",
+            "description": "p50/p95/p99 of duration_ms across all server-request events in each interval, except _request-forward: AI model calls take tens of seconds by design and would swamp the rest. The _request-forward row charts those calls.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -1404,7 +1404,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | endpoint!=\"_request-forward\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "A",
                 "legendFormat": "p50"
@@ -1415,7 +1415,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | endpoint!=\"_request-forward\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "p95"
@@ -1426,7 +1426,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+                "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | endpoint!=\"_request-forward\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
                 "queryType": "range",
                 "refId": "C",
                 "legendFormat": "p99"
@@ -1669,6 +1669,98 @@
             ],
             "title": "server-request log lines (correlation_id)",
             "type": "logs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "p95 of queue_ms grouped by endpoint: how long a request waited in the tab's request limiter before it was sent. It is part of duration_ms. Empty unless the host was built with the LIMIT_REQUESTS_IN_FLIGHT flag on.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 62
+            },
+            "id": 112,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | queue_ms!=\"\" | unwrap queue_ms [$__interval]) by (endpoint)",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "{{endpoint}}"
+              }
+            ],
+            "title": "server-request queue_ms p95 by endpoint",
+            "type": "timeseries"
           }
         ],
         "title": "server-request",
@@ -4767,6 +4859,634 @@
           }
         ],
         "title": "catalog-search (AI assistant catalog searches)",
+        "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 70
+        },
+        "id": 118,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "How long the browser waited on each AI proxy call, from its start until the response headers arrived, from the client's server-request events. A forwarded response sends its headers with the model's first bytes, so this is close to time to first byte, not to the whole answer. It counts every completed call, including ones the realm server refused before admitting them; a call the browser gave up on records no event. So it and the server stage panels cover different sets of calls and are not to be subtracted from each other: to find how long one call waited before the realm server started on it, compare its client start (ts less duration_ms) with the realm:requests arrival line for the same correlation id, in the arrival lines panel below. That gap also holds the browser clock's offset from the server's (ts is the browser's Date.now()), which the same session's fast requests to other endpoints measure the same way.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 71
+            },
+            "id": 112,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" |= \"_request-forward\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | endpoint=\"_request-forward\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "p50"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" |= \"_request-forward\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | endpoint=\"_request-forward\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "p95"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" |= \"_request-forward\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | endpoint=\"_request-forward\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "C",
+                "legendFormat": "max"
+              }
+            ],
+            "title": "_request-forward client duration (p50 / p95 / max)",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "The realm server's billable calls through _request-forward, by how each ended. client-gone is a call the client stopped waiting for, such as a card's generation budget running out.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "short",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 71
+            },
+            "id": 113,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" [$__interval]))",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "{{outcome}}"
+              }
+            ],
+            "title": "_request-forward calls by outcome",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Median time per stage of the realm server's admitted _request-forward calls, from its billable call lines, whatever their outcome: waiting for the user's cost lock, waiting for one of the user's in-flight slots, the upstream call (including relaying its response to the client), looking up its cost, the server's own work (local overhead), and the whole request since the handler started.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 79
+            },
+            "id": 114,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap lockWaitMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "cost lock wait"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap capacityWaitMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "in-flight slot wait"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap upstreamMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "C",
+                "legendFormat": "upstream call"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap costMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "D",
+                "legendFormat": "cost lookup"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap localMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "E",
+                "legendFormat": "local overhead"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap requestMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "F",
+                "legendFormat": "whole request"
+              }
+            ],
+            "title": "_request-forward server stages p50 (ms)",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "p95 time per stage of the realm server's admitted _request-forward calls, from its billable call lines. A slow model, or a client slow to read the answer it is relayed, shows in the upstream call; a user's calls queued behind each other show in the cost lock and in-flight slot waits; a saturated realm server shows in local overhead.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "ms",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "ms"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 79
+            },
+            "id": 115,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap lockWaitMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "cost lock wait"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap capacityWaitMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "in-flight slot wait"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap upstreamMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "C",
+                "legendFormat": "upstream call"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap costMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "D",
+                "legendFormat": "cost lookup"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap localMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "E",
+                "legendFormat": "local overhead"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\" | unwrap requestMs | __error__=\"\" [$__interval]) by ()",
+                "queryType": "range",
+                "refId": "F",
+                "legendFormat": "whole request"
+              }
+            ],
+            "title": "_request-forward server stages p95 (ms)",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "The client's server-request events for _request-forward, newest first. Search the server timing lines below for the event's correlation_id as corr=<id> to see where the server spent that call's time.",
+            "gridPos": {
+              "h": 10,
+              "w": 24,
+              "x": 0,
+              "y": 87
+            },
+            "id": 116,
+            "options": {
+              "dedupStrategy": "none",
+              "enableLogDetails": true,
+              "prettifyLogMessage": false,
+              "showCommonLabels": false,
+              "showLabels": false,
+              "showTime": true,
+              "sortOrder": "Descending",
+              "wrapLogMessage": true
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" |= \"_request-forward\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"server-request\" | endpoint=\"_request-forward\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
+                "queryType": "range",
+                "refId": "A"
+              }
+            ],
+            "title": "_request-forward client events (correlation_id)",
+            "type": "logs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "The realm server's billable call lines for _request-forward, newest first, with the user, outcome and each stage's time. corr=<id> joins a line to the client event with that correlation_id and to the realm:requests lines for the same request.",
+            "gridPos": {
+              "h": 10,
+              "w": 24,
+              "x": 0,
+              "y": 97
+            },
+            "id": 117,
+            "options": {
+              "dedupStrategy": "none",
+              "enableLogDetails": true,
+              "prettifyLogMessage": false,
+              "showCommonLabels": false,
+              "showLabels": false,
+              "showTime": true,
+              "sortOrder": "Descending",
+              "wrapLogMessage": true
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"billable call\" |= \"route=_request-forward\" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | logfmt | user=~\"$matrix_user_id\"",
+                "queryType": "range",
+                "refId": "A"
+              }
+            ],
+            "title": "_request-forward server timing lines (corr)",
+            "type": "logs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "The realm server's realm:requests lines for _request-forward, newest first: <-- when a request arrived and --> when its response ended, with dur. corr=<id> joins them to the client event and the billable call line with that correlation id. A request's arrival time against its client start is how long it waited before the realm server started on it. These lines name no user, so the user variable does not filter them; search for the correlation id instead.",
+            "gridPos": {
+              "h": 10,
+              "w": 24,
+              "x": 0,
+              "y": 107
+            },
+            "id": 119,
+            "options": {
+              "dedupStrategy": "none",
+              "enableLogDetails": true,
+              "prettifyLogMessage": false,
+              "showCommonLabels": false,
+              "showLabels": false,
+              "showTime": true,
+              "sortOrder": "Descending",
+              "wrapLogMessage": true
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"_request-forward\" |~ \"(<--|-->) \" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\"",
+                "queryType": "range",
+                "refId": "A"
+              }
+            ],
+            "title": "_request-forward arrival lines (realm:requests)",
+            "type": "logs"
+          }
+        ],
+        "title": "_request-forward (AI proxy calls)",
         "type": "row"
       }
     ],

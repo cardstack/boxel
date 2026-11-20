@@ -11,10 +11,14 @@ description: >-
   boundary a run crosses: enqueued, claimed, admitted, script, commit,
   finished, index-pass, charged, and the prerender server's run `capacity`),
   the ids every line of a run carries (automation, run, job, attempt), and
-  queue wait and prerender capacity for automation runs. Use when an operator
+  queue wait and prerender capacity for automation runs, and the four
+  scheduler alerts (tick stopped, runs made up by reconcile, pricing check
+  failed, runs waiting for a worker): what each means and the first steps for
+  it. Use when an operator
   or a person asks why an automation didn't run, ran twice, ran late, failed,
   was slow, paused itself or charged what it did, or when automation runs'
-  queue wait or prerender capacity is in question.
+  queue wait or prerender capacity is in question, or when one of those
+  alerts fires.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -103,7 +107,8 @@ SELECT id, status, created_at, finished_at
 ```
 
 No recent tick jobs means the scheduler stopped enqueueing them (look for
-`automation-tick cron failed to enqueue job` on the realm-server). Recent tick
+`automation-tick cron failed to enqueue job` in the worker logs; the worker
+manager runs the cron). Recent tick
 jobs that are `rejected`, or never `resolved`, point at the worker. The tick
 records what it did on the row: `last_enqueued_at` moves each time it enqueues
 a run.
@@ -130,9 +135,9 @@ that is:
   pass closes it. The `automations` skill's _Diagnosing a run_ covers it.
 - **`error`**: `error_reason` says why. A run admission refused ends before
   its script runs, and its log has an `admission` line naming the code (the
-  `automations` skill's _Admission_ lists them). `timed-out`, `run-failed` and
-  `script-error` after the script started are the script's own. Read the run
-  log (step 5).
+  `automations` skill's _Admission_ lists them). `timed-out`, `call-failed` and
+  `script-error` after the script started are the script's own; `run-failed`
+  is the runner or the platform failing it. Read the run log (step 5).
 - **`canceled`**: `canceled_by` names the person; empty means an automatic
   pause or a remove, and `error_reason` names which.
 - **`complete`**: it ran. The question is what it did: steps 5 and 6.
@@ -326,6 +331,45 @@ absent when the tab didn't answer the read within 200 ms. The prerender server's
 own memory lines (`prerender-heap`, `prerender-chrome-memory`) cover the
 whole task.
 
+## The Automations dashboard
+
+The **Automations** dashboard in Grafana (folder Boxel Status, `/d/boxelautomations`,
+defined in `packages/observability/grafanactl/resources/dashboards/boxel-status/automations.json`)
+answers most of the questions above at a glance, across every automation, and
+the dashboard's Realm, Automation, Payer and Trigger filters narrow every run
+panel. Payer names the person a run acts as and charges
+(`automation_runs.acts_as`): the automation's payer for a scheduled run,
+whoever clicked for a Preview or Run now. Every panel reads Postgres except
+_Prerender run capacity_, which reads Loki.
+
+| Question                                                             | Where on the dashboard                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Is the automation on, paused or waiting for credits? (step 1)        | _Now_: Active automations, Paused, Waiting for credits; the _Automations_ table shows each automation's state, pause reason, next run and last result                                                                                                                                                                                                             |
+| Did the automation's runs happen, and how did each run end? (step 3) | _Runs by state_ (by each run's current state); the _Runs_ table, one row per run with the run id                                                                                                                                                                                                                                                                  |
+| Why did runs fail? (step 3)                                          | _Errors by reason_ (`error_reason`); the _Runs_ table's error reason and error message                                                                                                                                                                                                                                                                            |
+| Did a slot start nothing because a run still waited to start?        | _Skipped slots_ (stat and panel, by trigger): the tick's `trigger` log lines with `skipped`                                                                                                                                                                                                                                                                       |
+| Does the tick run late? (step 2)                                     | _Queue wait and schedule lag_: schedule lag p95 measures a scheduled run's slot to the tick enqueuing the run                                                                                                                                                                                                                                                     |
+| Do runs wait for a worker? (step 4)                                  | _Runs pending_, and _Oldest unclaimed automation run_, which runs the same query as the "Automation runs waiting for a worker" alert; _Queue wait and schedule lag_ for runs a worker claimed (enqueue → first claim)                                                                                                                                             |
+| Do runs take long? (step 6)                                          | _Run time_: started → finished p50, p95 and max, and enqueue → end p95                                                                                                                                                                                                                                                                                            |
+| How many runs hold prerender tabs, and does any server queue runs?   | _Runs in flight_ (Postgres, every server together): runs claimed and not yet ended, an upper bound on tabs in use, since a claimed run also counts during admission, while waiting for a tab and while committing; the collapsed _Prerender capacity (Loki)_ row shows each server's running and queued runs from the `capacity` events, over the last 15 minutes |
+| What did runs write, call and download?                              | _Writes and calls_ (writes, callApi calls, resolve calls); _Downloaded and prerender time_, the two quantities a run's own charge prices                                                                                                                                                                                                                          |
+| What did an automation or a run cost? (step 7)                       | _Credits charged_ and _AWS cost_ stats; _Credits charged by kind_ and _AWS cost by kind_; credits charged and AWS cost per automation (_Automations_) and per run with the run's pricing version (_Runs_)                                                                                                                                                         |
+| Which pricing version priced the charges?                            | _Pricing versions_ stat and table: each version's margin, the time a process first recorded the version, and the charges, credits charged and cost at the version                                                                                                                                                                                                 |
+| Does the margin cover our cost, and which kind charges too little?   | _Cost coverage_: the pricing skill's cost coverage report over the dashboard's time range, with the margin in credits beside coverage                                                                                                                                                                                                                             |
+
+The cost panels attribute charges the way step 7 does: `run`, `run_indexing`
+and `batched_ai` by the run each charge names, `ai` when a run made the
+request, and `storage` by the automation. The last index pass of a run writes
+the run's indexing charge, so a recently finished run can still gain credits.
+AWS cost prices each charge's usage at the unit rates of the charge's own
+pricing version (the `credit_charge_costs` view), so a charge with no usage
+rows or at an unrecorded version adds credits and no cost; _Cost coverage_
+counts such charges as unpriced. _Cost coverage_ covers every consumption
+charge, not only automation charges, and the filters do not narrow the report.
+
+Use the dashboard to find a run, then follow the steps above: copy the run id
+from the _Runs_ table into step 4's query.
+
 ## Locally
 
 The same tables are in the dev database (`psql` against the local stack), and
@@ -333,3 +377,123 @@ The same tables are in the dev database (`psql` against the local stack), and
 is up. `packages/realm-server/scripts/run-automation.ts` starts one run by
 hand; the `automations` skill's _Running one automation by hand in
 development_ covers it.
+
+## Alerts
+
+Four Grafana alert rules watch the scheduler. They live in
+`packages/observability/provisioning/alerting/automations-group.json`, carry
+the label `area=automations`, evaluate every minute, and go through Grafana's
+default notification policy. Each one's summary repeats the first steps below.
+A notification named `DatasourceError` with one of these rule names means
+Grafana couldn't run the query; the fault is the data source (Postgres or
+Loki), not the scheduler.
+
+| Alert                                  | Fires when                                                                                                      | Reads                                                  |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `Automation tick stopped`              | no `automation-tick` job has resolved for more than 300 s                                                       | Postgres `jobs`, `automations`                         |
+| `Automation runs made up by reconcile` | a reconcile pass made up a run in the last 10 minutes                                                           | Loki, worker lines tagged `automation-reconcile:`      |
+| `Pricing check failed`                 | a realm-server or worker process logged `pricing check failed in` in the last 10 minutes; one alert per service | Loki                                                   |
+| `Automation runs waiting for a worker` | the oldest automation run a worker could claim has waited more than 60 s, held for 5 minutes                    | Postgres `jobs`, `job_reservations`, `job_claim_holds` |
+
+### Automation tick stopped
+
+The tick resolves several times a minute (every worker manager enqueues one;
+a waiting tick absorbs the rest), so five minutes with none resolved is the
+tick down, not a slow minute. The rule looks for the newest resolved tick
+among the newest 5,000 jobs. When none is there:
+
+- **An automation is switched on** (a row in `automations`): the value counts
+  from the oldest of those jobs, or the oldest tick waiting if that is older.
+  It is then a lower bound on the outage, and the rule keeps firing however
+  long the tick stays down.
+- **None is switched on**: a stopped tick delays nothing, so only a tick that
+  is enqueued but never succeeds fires it, counted from the oldest tick
+  waiting. With no waiting tick the rule stays quiet, which is also how it
+  reads in an environment that doesn't run the scheduler.
+
+While the tick is down no scheduled run starts. Run step 2's query:
+
+- **No recent `automation-tick` rows**: no worker manager's cron is
+  enqueueing them. Look for `automation-tick cron failed to enqueue job` in
+  the worker logs, and check the worker managers are up.
+- **Recent rows left `unfulfilled`**: no worker claims them. The tick is
+  priority 5, claimed by the same two pools as automation runs (see _Automation
+  runs waiting for a worker_), so check what those workers are busy with on the
+  Job Queue dashboard.
+- **Recent rows `rejected`**: the tick fails as it runs. Its error is in the
+  worker logs (`--filter 'automation-tick'`).
+- **A tick `unfulfilled` with a live reservation for minutes**: one tick is
+  taking that long. The worker's `automation-tick:` lines name the
+  automations it handled.
+
+When the tick resumes, reconcile makes up one late run per trigger that
+missed its time, so expect the reconcile alert to follow.
+
+### Automation runs made up by reconcile
+
+Reconcile makes up a run when an outage cost one, so this alert means some
+run didn't happen when it should have. Read the make-up lines; each names the
+automation, trigger, slot and run:
+
+```bash
+packages/observability/scripts/tail-logs.sh --env staging --service worker \
+  --filter 'automation-reconcile: ' --since 30m --no-follow
+```
+
+- **`was overdue; made up run`**: a due time passed with nothing enqueued.
+  The tick was down or late: check the tick alert and step 2. A burst of these
+  right after a deploy means the tick missed minutes while the worker
+  managers restarted.
+- **`had no live job; enqueued it again`**: a pending run's queue job was
+  lost (it ran out of reservations or finished without ending the run). Read
+  the run's job and reservations (step 4); reservations closed `killed` or
+  `interrupted` mean workers died under the run.
+- **`<step> made up <n> run(s)`**: a registered reconcile step (such as a
+  batch's follow-up whose deadline passed) made up its own runs.
+
+Lines saying `had no live job and ended` are runs reconcile ended rather than
+made up; they don't fire this alert, but they come from the same lost jobs.
+
+### Pricing check failed
+
+A process whose startup pricing check fails has no prices: it admits no new
+automation run (admission `pricing-unavailable`), submits no batch, and
+writes no charge (`charged` with `result: "no-prices"`) until its `PRICING_*`
+variables are fixed and it restarts. The failing line names every bad
+variable and its problem. The alert resolves 10 minutes after the line while
+the process has no prices, so a resolved alert says nothing about
+recovery: confirm that each restarted process logged `pricing check passed in`
+with the expected pricing version. The prerender server checks its prices too,
+but nothing it does reads them, so its failing check reaches Sentry only; the
+rule leaves out its log stream, which is the busiest on Loki. The `pricing`
+skill covers the variables and how to change one.
+
+### Automation runs waiting for a worker
+
+The rule takes the oldest unfulfilled automation `run-command` job with no
+live reservation, and measures its wait from the job's creation or from the
+end of its last attempt. A run behind its own automation's running run (its
+concurrency group) or under a claim hold is waiting for that, not for a
+worker, and is left out while it waits. Once released it counts from its
+creation, so it reads over a minute at once, and the 5-minute hold is its
+whole bar. So the alert means claimable runs have gone unclaimed for minutes:
+the workers serving automation runs are not keeping up.
+
+Two worker pools claim automation runs (priority 5), each strictly oldest
+first:
+
+- **All-priority workers** serve every tier, so an older system backlog (a
+  deploy's reindex, a big catalog sync) holds runs behind it.
+- **Automation workers** (`WORKER_AUTOMATION_PRIORITY_COUNT`; 0 by default,
+  and then the all-priority workers are the only ones) also take
+  user-initiated jobs at priority 10, so a burst of saves fills them.
+
+First steps:
+
+- Check the Job Queue dashboard for what both pools are busy with: pending
+  jobs by priority and type, in-flight work, and how many workers each pool
+  has.
+- Long-running runs fill the lane: the `finished` events' `runMs` show which
+  automations hold workers longest.
+- Once runs are claimed, the `claimed` events' `queueWaitMs` (the _Capacity_
+  query above) show the waits they had.

@@ -1,5 +1,7 @@
+import { closeSync, openSync } from 'fs';
 import * as readline from 'readline';
 import { Writable } from 'stream';
+import * as tty from 'tty';
 
 // A question whose input ended before it was answered. The CLI's entry point
 // prints its message without a stack, since it describes how the command was
@@ -208,20 +210,65 @@ export function promptPassword(
   });
 }
 
+/** A terminal to prompt on, apart from stdin and stdout. */
+export interface PromptTerminal {
+  input: NodeJS.ReadStream;
+  output: NodeJS.WritableStream;
+  close(): void;
+}
+
+/**
+ * Opens the process's controlling terminal (`/dev/tty`), or answers undefined
+ * when the process has none (CI, a detached job, Windows). Reading and writing
+ * each get their own descriptor, so closing one stream never closes the
+ * other's.
+ */
+export function openControllingTerminal(): PromptTerminal | undefined {
+  let readFd: number | undefined;
+  try {
+    readFd = openSync('/dev/tty', 'r');
+    let writeFd = openSync('/dev/tty', 'w');
+    let input = new tty.ReadStream(readFd);
+    let output = new tty.WriteStream(writeFd);
+    return {
+      input,
+      output,
+      close() {
+        input.destroy();
+        output.destroy();
+      },
+    };
+  } catch {
+    if (readFd !== undefined) {
+      closeSync(readFd);
+    }
+    return undefined;
+  }
+}
+
+export interface ResolveRealmSecretSeedOptions {
+  /** @internal Opens the terminal to prompt on; tests pass their own. */
+  openTerminal?: () => PromptTerminal | undefined;
+}
+
 /**
  * Resolve a realm secret seed for administrative CLI operations.
  *
  * Precedence:
  *   1. `BOXEL_REALM_SECRET_SEED` env var — used silently if set.
- *   2. If `flagPresent` is true, prompt the user (no echo).
+ *   2. If `flagPresent` is true, prompt the user (no echo): on stdin when
+ *      stdin is a terminal, and otherwise on the controlling terminal, so a
+ *      command whose stdin carries other input (`secrets set --stdin` fed by
+ *      a pipe) still asks for the seed at the keyboard.
  *   3. Otherwise return undefined — caller falls back to profile auth.
  *
- * Throws when `--realm-secret-seed` is requested but stdin is not a TTY
- * (e.g. CI, piped shells) — otherwise `promptPassword` would hang
- * indefinitely waiting for keypress input it can never receive.
+ * Throws when the seed is requested and there is no terminal to prompt on
+ * (CI, a detached job): `promptPassword` would otherwise wait forever for
+ * keypresses that can never arrive.
  */
 export async function resolveRealmSecretSeed(
   flagPresent: boolean,
+  options: ResolveRealmSecretSeedOptions = {},
 ): Promise<string | undefined> {
   const fromEnv = process.env.BOXEL_REALM_SECRET_SEED;
   if (fromEnv) {
@@ -230,11 +277,22 @@ export async function resolveRealmSecretSeed(
   if (!flagPresent) {
     return undefined;
   }
-  if (!process.stdin.isTTY) {
+  if (process.stdin.isTTY) {
+    return promptPassword('Realm secret seed: ');
+  }
+  let terminal = (options.openTerminal ?? openControllingTerminal)();
+  if (!terminal) {
     throw new Error(
-      'Cannot prompt for realm secret seed: stdin is not a TTY. ' +
+      'Cannot prompt for realm secret seed: there is no terminal to prompt on. ' +
         'Set BOXEL_REALM_SECRET_SEED in the environment instead.',
     );
   }
-  return promptPassword('Realm secret seed: ');
+  try {
+    return await promptPassword('Realm secret seed: ', {
+      input: terminal.input,
+      output: terminal.output,
+    });
+  } finally {
+    terminal.close();
+  }
 }

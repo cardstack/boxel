@@ -95,6 +95,16 @@ export type CardJsonAssembly =
   // rather than a card that does not exist, and the caller says so — letting a
   // client hold a placeholder until the realm broadcasts the index event.
   | { kind: 'not-indexed' }
+  // The card's type definition is still being rendered and did not finish
+  // within the read's deadline. The card itself may be indexed and healthy,
+  // so this is neither of the two above: the caller answers a 503 that says
+  // when to retry, carrying the refusal's title and detail.
+  | {
+      kind: 'definition-not-ready';
+      title: string;
+      detail: string;
+      retryAfterSeconds: number | undefined;
+    }
   // `paths.fileURL(localPath)` normalized to a different local path.
   | { kind: 'redirect'; foundPath: string }
   // The index has a row but it can't be served cleanly; the caller renders

@@ -3149,6 +3149,110 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('an index visit of a card whose module fails to compile fails fast on a page left at another card’s meta route, and the next card on that page indexes cleanly', async function (assert) {
+        // Indexing renders a realm's cards under realm authority.
+        let indexAuth = () => {
+          let sessions = JSON.parse(
+            testCreatePrerenderAuth(testUserId, permissions, {
+              realmAuthority: true,
+            }),
+          ) as Record<string, string>;
+          let token = sessions[realmURL];
+          if (token) {
+            sessions[new URL(realmURL).origin + '/'] = token;
+          }
+          return JSON.stringify(sessions);
+        };
+        let jobId = 'compile-error-on-stale-meta-route.1';
+        let indexVisit = (fileName: string, opts?: { timeoutMs: number }) =>
+          prerenderer.prerenderVisit({
+            affinityType: 'realm',
+            affinityValue: realmURL,
+            realm: realmURL,
+            url: `${realmURL}${fileName}`,
+            auth: indexAuth(),
+            visitType: 'index',
+            jobId,
+            renderOptions: {
+              cardRender: true,
+              fileExtract: true,
+              fileRender: true,
+              fileDefCodeRef: {
+                module: baseRRI('json-file-def'),
+                name: 'JsonFileDef',
+              },
+            },
+            ...(opts ? { opts } : {}),
+          });
+
+        // The second visit of the same card takes both icons from the job's
+        // memo, so it makes no transition after its meta route, and the page
+        // stays at that card's meta URL. That is how the pages of an indexing
+        // job are left between visits.
+        await indexVisit('1.json');
+        let warm = await indexVisit('1.json');
+        assert.notOk(warm.response.card?.error, 'the good card indexes');
+        let memo = prerenderer.getIconMemo(
+          toAffinityKey({
+            affinityType: 'realm',
+            affinityValue: realmURL,
+            auth: indexAuth(),
+          }),
+          jobId,
+        );
+        assert.strictEqual(
+          memo?.hits,
+          2,
+          'the second visit reused both icons, so it ended on the meta route',
+        );
+
+        let timeoutMs = 20_000;
+        let started = Date.now();
+        let { response, pool } = await indexVisit('broken.json', {
+          timeoutMs,
+        });
+        let elapsedMs = Date.now() - started;
+
+        assert.strictEqual(
+          pool.pageId,
+          warm.pool.pageId,
+          'the broken card renders on the page the good card left',
+        );
+        assert.false(pool.timedOut, 'the visit does not time out');
+        assert.strictEqual(
+          response.card?.error?.error.status,
+          406,
+          `the compile error is reported: ${JSON.stringify(
+            response.card?.error?.error.message ?? null,
+          )}`,
+        );
+        assert.ok(
+          response.card?.error?.error.message?.startsWith('Parse Error'),
+          `the error is the parse error, not a render timeout: ${response.card?.error?.error.message}`,
+        );
+        assert.ok(
+          elapsedMs < timeoutMs,
+          `the visit fails before its render timeout; observed ${elapsedMs}ms`,
+        );
+
+        // The page now shows the broken card's error, still at the good
+        // card's meta URL. The next visit must wait for its own render and
+        // not end on that error.
+        let next = await indexVisit('1.json');
+        assert.strictEqual(
+          next.pool.pageId,
+          warm.pool.pageId,
+          'the good card renders on the page the broken card left',
+        );
+        assert.false(next.pool.timedOut, 'the next visit does not time out');
+        assert.notOk(
+          next.response.card?.error,
+          `the good card indexes without an error: ${JSON.stringify(
+            next.response.card?.error?.error.message ?? null,
+          )}`,
+        );
+      });
+
       test('card prerender succeeds for a card with a broken linksTo target — the broken slot is captured in deps for invalidation, the entry indexes cleanly', async function (assert) {
         let cardURL = `${realmURL}owner-with-broken-pet.json`;
 

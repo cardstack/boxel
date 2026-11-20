@@ -81,6 +81,7 @@ module('Unit | Service | realm | token refresh', function (hooks) {
     this.owner.register(
       'service:matrix-service',
       class extends Service {
+        isLoggedIn = true;
         async createRealmSession(realmURL: URL) {
           mints.push(realmURL.href);
           return nextMint();

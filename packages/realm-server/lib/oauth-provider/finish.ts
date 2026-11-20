@@ -54,7 +54,10 @@ type FinishRefusal =
   | 'ticket-mismatch'
   | 'undecided'
   | 'client-mismatch'
-  | 'unknown-user';
+  | 'unknown-user'
+  // A client registered by dynamic client registration that the daily
+  // cleanup deleted while the flow was open.
+  | 'deleted-client';
 
 // `GET /_oauth-provider/interaction/:uid/finish?ticket=…`, or `?cancel=1`.
 export function finishHandler({
@@ -142,7 +145,14 @@ export function finishHandler({
       resources: decision.scopes,
       renewing: decision.renew,
       consentedAt: decision.decidedAt,
+      redirectUri:
+        typeof interaction.params.redirect_uri === 'string'
+          ? interaction.params.redirect_uri
+          : undefined,
     });
+    if (!grantId) {
+      return refuse('deleted-client');
+    }
     // A grant the flow didn't finish with is deleted: no code names it, so
     // it never connected the app. The interaction can expire, or another
     // request finish it, between the check above and this one.

@@ -9,6 +9,7 @@ import {
   uploadV8ProfLog,
   V8_PROF_LOG_DIR,
   V8_PROF_LOG_PREFIX,
+  V8_PROF_MTIME_SLACK_MS,
 } from '../prerender/v8-prof.ts';
 
 // The V8 `--prof` capture is gated by env and reads/writes the OS temp dir.
@@ -124,12 +125,12 @@ module(path.basename(import.meta.filename), function (hooks) {
     let s = status ?? '';
 
     assert.true(
-      s.includes(path.basename(big)),
-      `picks the largest (pegged-isolate) log, got: ${status}`,
+      s.includes(`kept local ${path.basename(big)}`),
+      `picks the largest (pegged-isolate) log and keeps it locally, got: ${status}`,
     );
     assert.true(
       s.includes('kept local'),
-      'sink disabled → reports the local copy was retained',
+      `sink disabled → reports the local copy was retained, got: ${status}`,
     );
     // The safety property: a capture that never reached S3 is not destroyed.
     assert.true(
@@ -138,6 +139,23 @@ module(path.basename(import.meta.filename), function (hooks) {
         .then(() => true)
         .catch(() => false),
       'the only copy of the log is still on disk',
+    );
+  });
+
+  test('counts a log whose mtime trails the launch stamp by less than the slack', async function (assert) {
+    // Linux stamps mtimes from a coarse clock that trails `Date.now()`, so a
+    // log written just after launch can carry an mtime a little before the
+    // launch stamp. Backdating by a fraction of the slack reproduces that
+    // without depending on the kernel's timing.
+    let fresh = await writeLog(`${V8_PROF_LOG_PREFIX}920.log`, 4096);
+    await backdate(fresh, V8_PROF_MTIME_SLACK_MS / 4);
+    created.push(fresh);
+
+    let status = await uploadV8ProfLog({ realm: 'r', card: 'c', step: 's' });
+
+    assert.true(
+      (status ?? '').includes('kept local'),
+      `the log is treated as this run's, got: ${status}`,
     );
   });
 
@@ -152,7 +170,7 @@ module(path.basename(import.meta.filename), function (hooks) {
     let status = await uploadV8ProfLog({ realm: 'r', card: 'c', step: 's' });
 
     assert.true(
-      (status ?? '').includes(path.basename(freshSmall)),
+      (status ?? '').includes(`kept local ${path.basename(freshSmall)}`),
       `picks the fresh log over the larger stale one, got: ${status}`,
     );
   });

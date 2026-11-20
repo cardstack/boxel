@@ -73,7 +73,7 @@ loki.source.docker "containers" {
 }
 
 // Local-dev native processes (realm-server, worker, prerender,
-// prerender-manager) run on the host via mise tasks, not in Docker, so the
+// prerender-manager, realm-historian) run on the host via mise tasks, not in Docker, so the
 // Docker discovery above can't see them. The mise dev tasks tee their
 // stdout+stderr through packages/observability/scripts/dev-log-tee.sh into
 // BOXEL_LOG_DIR (default /tmp/boxel-logs/<service>.log on the host), and
@@ -85,6 +85,7 @@ local.file_match "host_processes" {
 		{__path__ = "/var/log/boxel-host/worker.log", service = "worker", env = "local"},
 		{__path__ = "/var/log/boxel-host/prerender.log", service = "prerender", env = "local"},
 		{__path__ = "/var/log/boxel-host/prerender-manager.log", service = "prerender-manager", env = "local"},
+		{__path__ = "/var/log/boxel-host/realm-historian.log", service = "realm-historian", env = "local"},
 	]
 }
 
