@@ -165,6 +165,8 @@ function run(id: string, attributes: Record<string, unknown> = {}): Run {
     startedAt: '2030-01-01T08:30:05.000Z',
     finishedAt: '2030-01-01T08:31:00.000Z',
     joined: [],
+    milestones: null,
+    waitingFor: null,
     ...attributes,
   };
 }
@@ -1370,6 +1372,35 @@ module('Acceptance | automation view', function (hooks) {
 
     test('each run shows its state and what started the run, newest first', async function (assert) {
       list([
+        run('queued', {
+          state: 'pending',
+          step: null,
+          trigger: 'hourly',
+          slot: '2030-01-01T10:00:00.000Z',
+          startedAt: null,
+          finishedAt: null,
+          waitingFor: {
+            kind: 'run',
+            runId: 'hourly',
+            startedBy: 'trigger',
+            trigger: 'hourly',
+            slot: '2030-01-01T09:00:00.000Z',
+            state: 'running',
+          },
+        }),
+        run('idle', {
+          state: 'pending',
+          step: null,
+          trigger: 'nightly',
+          startedAt: null,
+          finishedAt: null,
+          waitingFor: { kind: 'worker' },
+        }),
+        run('admitting', {
+          state: 'running',
+          step: 'admission',
+          finishedAt: null,
+        }),
         run('hourly', { state: 'running', trigger: 'hourly' }),
         run('running', {
           state: 'running',
@@ -1394,6 +1425,9 @@ module('Acceptance | automation view', function (hooks) {
           ],
         ),
         [
+          ['queued', 'Waiting'],
+          ['idle', 'Waiting'],
+          ['admitting', 'Running'],
           ['hourly', 'Running'],
           ['running', 'Running'],
           ['preview', 'Complete'],
@@ -1402,13 +1436,32 @@ module('Acceptance | automation view', function (hooks) {
           ['done', 'Complete'],
         ],
       );
+      assert.ok(
+        runText('queued').includes('Waiting for the hourly run for'),
+        'a waiting run names the run ahead of it',
+      );
+      assert.ok(
+        runText('queued').includes(
+          'to finish first: Boxel runs one run of an automation at a time.',
+        ),
+      );
+      assert
+        .dom(
+          '[data-test-automation-run="idle"] [data-test-automation-run-waiting]',
+        )
+        .hasText('Waiting for a Boxel worker.');
+      assert
+        .dom(
+          '[data-test-automation-run="admitting"] [data-test-automation-run-admitting]',
+        )
+        .includesText('Checking that the run may start');
       assert.ok(runText('hourly').includes('hourly'), 'the trigger by label');
       assert.ok(
-        runText('hourly').includes('The schedule started the run for'),
+        runText('hourly').includes('The schedule fired the run for'),
         'a schedule names the slot the run is for',
       );
       assert.ok(
-        runText('running').includes('A webhook delivery started the run.'),
+        runText('running').includes('A webhook delivery fired the run.'),
         "a webhook's run names the delivery, not the delivery's id",
       );
       assert.notOk(runText('running').includes('delivery-7'));
@@ -1419,7 +1472,7 @@ module('Acceptance | automation view', function (hooks) {
       );
       assert.ok(runText('by-hand').includes('Run now'));
       assert.ok(
-        runText('kickoff').includes('The one-time trigger started the run for'),
+        runText('kickoff').includes('The one-time trigger fired the run for'),
       );
       assert
         .dom(
@@ -1770,7 +1823,7 @@ module('Acceptance | automation view', function (hooks) {
         .dom(
           '[data-test-automation-run="running"] [data-test-automation-run-progress]',
         )
-        .hasText('Milestone 2 of 3: Group by label (40 of 120)');
+        .hasText('Milestone 2 of 3: Group by label');
       assert
         .dom(
           '[data-test-automation-run="failed"] [data-test-automation-run-progress]',

@@ -1,7 +1,8 @@
-// An automation's runs that have started, newest first, a page at a time,
-// for the realm's direct writers: what the Automation card's isolated view
-// lists under Runs. A run still waiting in the queue for its first attempt
-// isn't listed until an attempt starts the run. Each run says what
+// An automation's runs, newest first, a page at a time, for the realm's
+// direct writers: what the Automation card's isolated view lists under Runs.
+// A run is listed from the moment a trigger, a Preview or a Run now makes
+// the run, while the run waits in the queue, runs, and once the run has
+// ended. Each run says what
 // started it (one of the card's triggers, a Preview or a Run now), where it
 // is, how it ended and why, who canceled it, and which of its trigger's later
 // slots joined it while it waited (the slots the tick reports as skipped).
@@ -24,6 +25,7 @@ import {
   type RunMilestones,
 } from './automation-run-milestones.ts';
 import {
+  listActiveRuns,
   listAutomationRuns,
   type AutomationRun,
   type AutomationRunState,
@@ -73,11 +75,11 @@ export interface AutomationRunItemAttributes {
   // instant as an ISO time, or a webhook delivery's id. Null for a Preview or
   // Run now.
   slot: string | null;
-  // `running`, or how the run ended. A listed run has started, so it is
-  // never `pending`.
   state: AutomationRunState;
   // The step the run is in, or for an ended run the step it got to: an error
-  // at `admission` is a run that never started its script.
+  // at `admission` is a run that never started its script. Null for a run
+  // no attempt has started: one still waiting, or one that ended before any
+  // attempt started it, such as one a pause canceled.
   step: AutomationRunStep | null;
   // For an error, its code (`script-error`, `timed-out`, `hit-a-cap`, an
   // admission refusal such as `insufficient-credits`, …). For a run a pause
@@ -108,7 +110,24 @@ export interface AutomationRunItemAttributes {
   // run is in, and the one a failed run failed in (see
   // `automation-run-milestones.ts`).
   milestones: RunMilestones | null;
+  // For a run still waiting for its first attempt, what the run waits for:
+  // the automation's run directly ahead of it, since an automation's runs go
+  // one at a time, or, with none ahead, a worker to start the run. Null for
+  // a run that isn't waiting.
+  waitingFor: AutomationRunWaitingFor | null;
 }
+
+export type AutomationRunWaitingFor =
+  | {
+      kind: 'run';
+      // The run ahead, as the list names a run.
+      runId: string;
+      startedBy: AutomationRunItemAttributes['startedBy'];
+      trigger: string | null;
+      slot: string | null;
+      state: 'pending' | 'running';
+    }
+  | { kind: 'worker' };
 
 export interface AutomationRunItem {
   type: typeof AUTOMATION_RUN_LIST_ITEM_TYPE;
@@ -230,6 +249,9 @@ export async function answerAutomationRunList({
     querier,
     runs.map((run) => run.id),
   );
+  let waiting = runs.some((run) => run.state === 'pending')
+    ? await listActiveRuns(querier, runs[0].automationId)
+    : [];
   // Each person a page names is looked up once, however many runs name them.
   let shown = new Map<string, Promise<string | null>>();
   let show = (person: string | null) => {
@@ -264,6 +286,7 @@ export async function answerAutomationRunList({
           finishedAt: run.finishedAt,
           joined: joined.get(run.id) ?? [],
           milestones: (await readRunMilestones(dbAdapter, run.id)) ?? null,
+          waitingFor: waitingFor(run, waiting),
         },
       }),
     ),
@@ -349,4 +372,32 @@ async function readJoinedSlots(
     joined.set(row.run_id, list);
   }
   return joined;
+}
+
+// What a waiting run waits for: the automation's active run made directly
+// before the run, or, with none, a worker.
+function waitingFor(
+  run: AutomationRun,
+  active: AutomationRun[],
+): AutomationRunWaitingFor | null {
+  if (run.state !== 'pending') {
+    return null;
+  }
+  let ahead = active
+    .filter(
+      (other) =>
+        other.id !== run.id &&
+        (other.createdAt < run.createdAt ||
+          (other.createdAt === run.createdAt && other.id < run.id)),
+    )
+    .at(-1);
+  if (!ahead || (ahead.state !== 'pending' && ahead.state !== 'running')) {
+    return { kind: 'worker' };
+  }
+  return {
+    kind: 'run',
+    runId: ahead.id,
+    ...startedBy(ahead),
+    state: ahead.state,
+  };
 }

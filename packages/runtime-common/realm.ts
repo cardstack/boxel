@@ -4024,8 +4024,8 @@ export class Realm {
         this.automationList.bind(this),
         ACL_ONLY,
       )
-      // An automation's runs that have started, newest first, a page at a
-      // time, for the Automation card's isolated view. Answered on the realm ACL; a caller
+      // An automation's runs, newest first, a page at a time, for the
+      // Automation card's isolated view. Answered on the realm ACL; a caller
       // who isn't a direct writer is listed nothing (see
       // `automation-run-list.ts`).
       .get(

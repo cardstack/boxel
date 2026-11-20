@@ -248,10 +248,11 @@ export async function getAutomationRun(
   return row ? runFromRow(row) : undefined;
 }
 
-// One page of an automation's runs that have started, newest first by when
-// they were made, Previews and Run nows included: a run still waiting in the
-// queue for its first attempt isn't one of them. `page` counts from 1, and
-// `total` is how many such runs the automation has, so a reader can tell how
+// One page of an automation's runs, newest first by when they were made:
+// every run a trigger, a Preview or a Run now made, from the moment the run
+// is made, whether it still waits in the queue, runs or has ended. `page`
+// counts from 1, and
+// `total` is how many runs the automation has, so a reader can tell how
 // many pages there are. Both reads walk the runs' `(automation_id,
 // created_at)` index.
 export async function listAutomationRuns(
@@ -262,12 +263,10 @@ export async function listAutomationRuns(
   let [counted] = (await querier([
     'SELECT count(*) AS total FROM automation_runs WHERE automation_id =',
     param(automationId),
-    'AND started_at IS NOT NULL',
   ] as Expression)) as { total: PgPrimitive }[];
   let rows = (await querier([
     'SELECT * FROM automation_runs WHERE automation_id =',
     param(automationId),
-    'AND started_at IS NOT NULL',
     'ORDER BY created_at DESC, id DESC LIMIT',
     param(limit),
     'OFFSET',
@@ -277,6 +276,22 @@ export async function listAutomationRuns(
     runs: rows.map(runFromRow),
     total: Number(counted?.total ?? 0),
   };
+}
+
+// An automation's runs waiting for their first attempt or running, oldest
+// first by when they were made: the runs the automation's queue holds, which
+// it runs one at a time.
+export async function listActiveRuns(
+  querier: Querier,
+  automationId: RealmResourceIdentifier,
+): Promise<AutomationRun[]> {
+  let rows = (await querier([
+    'SELECT * FROM automation_runs WHERE automation_id =',
+    param(automationId),
+    "AND state IN ('pending', 'running')",
+    'ORDER BY created_at, id',
+  ] as Expression)) as Record<string, PgPrimitive>[];
+  return rows.map(runFromRow);
 }
 
 // Whether `id` can name a run: a run's id is a UUID, so anything else names

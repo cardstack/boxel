@@ -944,8 +944,7 @@ module(basename(import.meta.filename), function (hooks) {
 
       // A run of the automation, made `minutesAgo` minutes before the others
       // so the list's order is the order the test made them in, and started
-      // by its first attempt unless `waiting`, since the list holds only runs
-      // that have started.
+      // by its first attempt unless it is `waiting`.
       async function made(
         trigger: string,
         slot: string,
@@ -997,7 +996,7 @@ module(basename(import.meta.filename), function (hooks) {
         });
       });
 
-      test('each run that has started lists what started it, its state and step, newest first', async function (assert) {
+      test('each run lists what started it, its state and step, newest first, from the moment the run is made', async function (assert) {
         await writeAutomation();
         let scheduled = await made('nightly', '2026-11-10T08:30:00.000Z', 40);
         await ended(scheduled.id, { state: 'complete' });
@@ -1005,7 +1004,9 @@ module(basename(import.meta.filename), function (hooks) {
         await ended(preview.id, { state: 'complete' });
         let runNow = await made('manual', randomUUID(), 20);
         await recordAutomationRunAdmitted(dbAdapter, runNow.id, 1);
-        await made('hourly', '2026-11-10T18:00:00.000Z', 10, { waiting: true });
+        let waiting = await made('hourly', '2026-11-10T18:00:00.000Z', 10, {
+          waiting: true,
+        });
 
         let { data, meta } = await listed();
         assert.deepEqual(
@@ -1018,6 +1019,14 @@ module(basename(import.meta.filename), function (hooks) {
             a.step,
           ]),
           [
+            [
+              waiting.id,
+              'trigger',
+              'hourly',
+              '2026-11-10T18:00:00.000Z',
+              'pending',
+              null,
+            ],
             [runNow.id, 'run-now', null, null, 'running', 'script'],
             [preview.id, 'preview', null, null, 'complete', 'script'],
             [
@@ -1029,14 +1038,31 @@ module(basename(import.meta.filename), function (hooks) {
               'script',
             ],
           ],
-          "a run waiting for its first attempt isn't listed, and a click's slot means nothing to a person, so a Preview and a Run now list none",
+          "a run still waiting for its first attempt is listed, and a click's slot means nothing to a person, so a Preview and a Run now list none",
         );
         assert.deepEqual(
           [meta.page, meta.pages, meta.total],
-          [1, 1, 3],
+          [1, 1, 4],
           'one page holds them all',
         );
-        let complete = data[2].attributes;
+        assert.deepEqual(
+          data.map(({ attributes: a }) => a.waitingFor),
+          [
+            {
+              kind: 'run',
+              runId: runNow.id,
+              startedBy: 'run-now',
+              trigger: null,
+              slot: null,
+              state: 'running',
+            },
+            null,
+            null,
+            null,
+          ],
+          'a waiting run names the run ahead of it in the automation’s queue',
+        );
+        let complete = data[3].attributes;
         assert.ok(complete.startedAt, 'with when it started');
         assert.ok(complete.finishedAt, 'and when it ended');
         assert.strictEqual(complete.errorReason, null);
@@ -1249,7 +1275,7 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
-      test('a slot that joined a run still waiting to start lists under that run once the run starts', async function (assert) {
+      test('a slot that joined a run still waiting to start lists under that run', async function (assert) {
         await writeAutomation();
         await switchOn();
         let declaration = await indexedDeclaration();
@@ -1273,23 +1299,17 @@ module(basename(import.meta.filename), function (hooks) {
         } finally {
           await publisher.destroy();
         }
-        assert.deepEqual(
-          (await listed()).data,
-          [],
-          'the run still waits for its first attempt, so the list holds nothing yet',
-        );
-        let [waiting] = await query(dbAdapter, [
-          'SELECT id FROM automation_runs WHERE automation_id =',
-          param(automationURL()),
-        ]);
-        await startAutomationRunAttempt(dbAdapter, String(waiting.id), 1);
-
         let { data } = await listed();
         assert.strictEqual(data.length, 1, 'the joined slot started no run');
         let [run] = data;
         assert.deepEqual(
           [run.attributes.trigger, run.attributes.slot, run.attributes.state],
-          ['hourly', '2026-11-10T19:00:00.000Z', 'running'],
+          ['hourly', '2026-11-10T19:00:00.000Z', 'pending'],
+        );
+        assert.deepEqual(
+          run.attributes.waitingFor,
+          { kind: 'worker' },
+          'with no run ahead of it, the run waits for a worker',
         );
         assert.deepEqual(
           run.attributes.joined.map(({ trigger, slot }) => ({ trigger, slot })),
