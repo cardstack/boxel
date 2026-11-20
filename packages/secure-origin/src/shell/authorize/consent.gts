@@ -157,7 +157,22 @@ export default class Consent extends Component<Signature> {
             <p class='note'>{{this.unverifiedNote}}</p>
           </div>
         {{else if this.ownApp}}
-          <p class='note' data-test-authorize-own-app>Boxel’s own app.</p>
+          <p class='note' data-test-authorize-own-app>{{this.ownAppNote}}</p>
+        {{/if}}
+
+        {{#if this.onThisComputer}}
+          <section class='confirm' data-test-authorize-confirmation>
+            {{#if @details.confirmationCode}}
+              <p class='lead'>Check that {{this.name}} shows this code:</p>
+              <p
+                class='code'
+                data-test-authorize-confirmation-code
+              >{{@details.confirmationCode}}</p>
+            {{/if}}
+            <Alert @tone='warning' data-test-authorize-confirmation-warning>
+              {{this.confirmationWarning}}
+            </Alert>
+          </section>
         {{/if}}
 
         {{#if this.oneResource}}
@@ -332,6 +347,25 @@ export default class Consent extends Component<Signature> {
       .expiry {
         color: var(--muted-foreground);
       }
+      .confirm {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .code {
+        margin: 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--muted);
+        color: var(--foreground);
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-font-size-lg);
+        font-weight: 600;
+        line-height: var(--boxel-line-height-lg);
+        letter-spacing: var(--boxel-lsp-xl);
+        text-align: center;
+      }
       .resource {
         display: flex;
         flex-direction: column;
@@ -413,6 +447,25 @@ export default class Consent extends Component<Signature> {
 
   private get ownApp(): boolean {
     return this.args.details.app.kind === 'pre-registered';
+  }
+
+  // A pre-registered app on the user's own computer: any program there can
+  // ask as it, so the page asks the user to check they started this.
+  private get onThisComputer(): boolean {
+    return this.ownApp && this.args.details.app.place === 'this-computer';
+  }
+
+  private get ownAppNote(): string {
+    return this.onThisComputer
+      ? 'Boxel’s own app, on this computer.'
+      : 'Boxel’s own app.';
+  }
+
+  private get confirmationWarning(): string {
+    let matches = this.args.details.confirmationCode
+      ? ' and it shows this code'
+      : '';
+    return `Only allow this if you just started signing in from ${this.name}${matches}. If someone sent you this link, or asks you to copy the address you land on, choose Deny.`;
   }
 
   private get oneResource() {

@@ -41,6 +41,22 @@ The issuer is the realm server's own origin. Every route answers only on the
 issuer's host; the same path on a published site's host goes on to realm
 routing.
 
+## Clients
+
+An app is known to the provider in one of three ways: pre-registered in code,
+by a client ID metadata document, or by dynamic registration. Boxel's own
+apps are pre-registered in `pre-registered-clients.ts`: a fixed client ID, no
+row anywhere, and consent names them by the name listed there. The first is
+boxel-cli (`boxel-cli`, a native client redirecting to
+`http://127.0.0.1/callback` on any port). A pre-registered app on the user's
+computer must send `boxel_confirmation_code` (two groups of four consonants,
+such as `WDJB-MJHT`) with each flow, and consent shows it for the user to
+check against the one the app printed (`confirmation-code.ts`); a flow
+without it, or any other client's flow with one, is refused as
+`confirmation-code`. Nothing proves a request comes from the app the client
+ID names, so "Boxel CLI" on consent means a program on this computer that
+says it is Boxel CLI.
+
 ## Routes
 
 | Route                                                  | Who calls it                   | What it does                                                                                                                     |
@@ -198,7 +214,8 @@ for a token or the URL they were sent to.
 
 1. **Is the provider on?** `OAuth provider on:` at the last start, and
    `GET /.well-known/oauth-authorization-server` answers 200.
-2. **Did the app register?** For a self-registered client, its row in
+2. **Did the app register?** A pre-registered client (boxel-cli) always is;
+   skip to step 3. For a self-registered client, its row in
    `oauth_provider_dynamic_clients` (by `metadata->>'client_name'` and
    `created_at`). A client deleted by the cleanup is refused as unknown until
    it registers again. For a metadata-document client, the

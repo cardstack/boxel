@@ -30,6 +30,11 @@ import {
   decideFlow,
   findConsentDecision,
 } from './objects.ts';
+import {
+  CONFIRMATION_CODE,
+  CONFIRMATION_CODE_PARAM,
+} from './confirmation-code.ts';
+import type { PreRegisteredClients } from './pre-registered-clients.ts';
 import type { OAuthResource, OAuthScope } from './registry.ts';
 import { respond, secureWindowUser } from './secure-window-user.ts';
 
@@ -69,6 +74,10 @@ export interface ConsentDetails {
   // Whether the page offers to keep the connection for 30 days: only when
   // the client may use the refresh grant.
   renewalOffered: boolean;
+  // The code the app showed where the user started signing in, which the
+  // page asks them to check. Only a pre-registered app on the user's
+  // computer sends one (`confirmation-code.ts`).
+  confirmationCode?: string;
 }
 
 // The body of `POST /_oauth-provider/consent/:uid`.
@@ -82,6 +91,7 @@ interface Flow {
   client: LibraryClient;
   redirectUri: string | undefined;
   resources: { resource: OAuthResource; scopes: OAuthScope[] }[];
+  confirmationCode: string | undefined;
   // Seconds until the interaction expires.
   remainingSeconds: number;
 }
@@ -89,7 +99,7 @@ interface Flow {
 export interface ConsentDeps {
   provider: Provider;
   registry: readonly OAuthResource[];
-  preRegistered: ReadonlySet<string>;
+  preRegistered: PreRegisteredClients;
   dbAdapter: DBAdapter;
   secureOriginURL: URL;
   realmSecretSeed: string;
@@ -141,6 +151,9 @@ export function consentDetailsHandler(deps: ConsentDeps): Koa.Middleware {
       })),
       account,
       renewalOffered: renewalOffered(flow.client),
+      ...(flow.confirmationCode
+        ? { confirmationCode: flow.confirmationCode }
+        : {}),
     };
     log.info(`consent shown: ${describe(flow, app)}`);
     respond(ctxt, 200, details);
@@ -247,16 +260,23 @@ async function findFlow(
   if (resources.length === 0) {
     return undefined;
   }
+  let code = params[CONFIRMATION_CODE_PARAM];
   return {
     client,
     redirectUri:
       typeof params.redirect_uri === 'string' ? params.redirect_uri : undefined,
     resources,
+    // Checked when the flow started, and checked again here, so the page
+    // only ever shows a value of the code's form.
+    confirmationCode:
+      typeof code === 'string' && CONFIRMATION_CODE.test(code)
+        ? code
+        : undefined,
     remainingSeconds,
   };
 }
 
-function nameOf(flow: Flow, preRegistered: ReadonlySet<string>): AppName {
+function nameOf(flow: Flow, preRegistered: PreRegisteredClients): AppName {
   return appName({
     clientId: flow.client.clientId,
     clientName: flow.client.clientName,

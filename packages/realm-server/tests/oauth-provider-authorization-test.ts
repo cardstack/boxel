@@ -36,6 +36,11 @@ import {
 import { asTheIssuerServes } from '../lib/oauth-provider/serve.ts';
 import { appName } from '../lib/oauth-provider/app-name.ts';
 import {
+  BOXEL_CLI_CLIENT_ID,
+  PRE_REGISTERED_CLIENTS,
+} from '../lib/oauth-provider/pre-registered-clients.ts';
+import { CONFIRMATION_CODE_PARAM } from '../lib/oauth-provider/confirmation-code.ts';
+import {
   scrubRequestTelemetry,
   withOAuthProviderSecretsLabeled,
 } from '../lib/request-telemetry.ts';
@@ -65,6 +70,8 @@ const ISSUER = 'http://127.0.0.1:0';
 const MCP = `${ISSUER}/mcp`;
 const AUTHORIZE_PAGE = `${testOAuthSecureOriginURL.href}/authorize`;
 const REDIRECT_URI = 'http://127.0.0.1/callback';
+const CONFIRMATION_CODE = 'WDJB-MJHT';
+const OWN_APPS = `${ISSUER}/test-own-apps`;
 
 function scope(name: string): OAuthScope {
   return {
@@ -195,7 +202,10 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
       return supertest(server!).options(path).set('Host', serverURL.host);
     },
     db: () => db!,
-    async register(redirectUris: string[] = [REDIRECT_URI]): Promise<string> {
+    async register(
+      redirectUris: string[] = [REDIRECT_URI],
+      extra: Record<string, unknown> = {},
+    ): Promise<string> {
       let response = await supertest(server!)
         .post('/_oauth-provider/reg')
         .set('Host', serverURL.host)
@@ -206,6 +216,7 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
           JSON.stringify({
             client_name: 'Test App',
             redirect_uris: redirectUris,
+            ...extra,
           }),
         );
       if (response.status !== 201) {
@@ -302,6 +313,16 @@ function interactionUid(location: string): string {
   return location.slice(prefix.length);
 }
 
+// A request every check passes from boxel-cli, which redirects to a loopback
+// port of its choosing and sends a confirmation code.
+function boxelCLIParams(overrides: Params = {}): Params {
+  return validParams(BOXEL_CLI_CLIENT_ID, {
+    redirect_uri: 'http://127.0.0.1:51234/callback',
+    [CONFIRMATION_CODE_PARAM]: CONFIRMATION_CODE,
+    ...overrides,
+  });
+}
+
 // The reference of an error the browser was sent to the error page with.
 function errorReference(assert: Assert, location: string | undefined): string {
   assert.ok(location, 'the browser is sent on');
@@ -364,14 +385,20 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a pre-registered client is named by its own name', function (assert) {
+    test('a pre-registered client is named by its entry in code, with where it runs', function (assert) {
       assert.deepEqual(
         appName({
           clientId: 'boxel-cli',
-          clientName: 'Boxel CLI',
-          preRegistered: new Set(['boxel-cli']),
+          clientName: 'Something else',
+          redirectUri: 'http://127.0.0.1:51234/callback',
+          preRegistered: PRE_REGISTERED_CLIENTS,
         }),
-        { kind: 'pre-registered', shown: 'Boxel CLI', verified: true },
+        {
+          kind: 'pre-registered',
+          shown: 'Boxel CLI',
+          verified: true,
+          place: 'this-computer',
+        },
       );
     });
   });
@@ -667,6 +694,136 @@ module(basename(import.meta.filename), function () {
         `${AUTHORIZE_PAGE}?error=expired`,
         'its "Return" leads to the expired page, never the redirect URI',
       );
+    });
+
+    test('boxel-cli starts a flow from a loopback redirect on any port, at a resource for any client or for own apps only', async function (assert) {
+      let cases: [string, Params][] = [
+        ['the MCP resource', {}],
+        [
+          'a resource for own apps only, on another port',
+          {
+            resource: OWN_APPS,
+            scope: 'test:own',
+            redirect_uri: 'http://127.0.0.1:60001/callback',
+          },
+        ],
+        ['the loopback port left out', { redirect_uri: REDIRECT_URI }],
+      ];
+      for (let [name, overrides] of cases) {
+        let response = await server.authorize(boxelCLIParams(overrides));
+        assert.strictEqual(response.status, 303, `${name}: ${response.text}`);
+        let interaction = await server.interaction(
+          interactionUid(response.headers.location),
+        );
+        let params = interaction!.params as Record<string, unknown>;
+        assert.strictEqual(params.client_id, BOXEL_CLI_CLIENT_ID, name);
+        assert.strictEqual(
+          params[CONFIRMATION_CODE_PARAM],
+          CONFIRMATION_CODE,
+          `${name}: the confirmation code is kept with the flow`,
+        );
+      }
+    });
+
+    test('boxel-cli is refused without a confirmation code of its form, or at a redirect it did not register', async function (assert) {
+      let cases: [string, Params, string, string][] = [
+        [
+          'no confirmation code',
+          { [CONFIRMATION_CODE_PARAM]: undefined },
+          'invalid_request',
+          'confirmation-code',
+        ],
+        [
+          'an empty confirmation code',
+          { [CONFIRMATION_CODE_PARAM]: '' },
+          'invalid_request',
+          'confirmation-code',
+        ],
+        [
+          'a confirmation code in lower case',
+          { [CONFIRMATION_CODE_PARAM]: 'wdjb-mjht' },
+          'invalid_request',
+          'confirmation-code',
+        ],
+        [
+          'a confirmation code with a vowel',
+          { [CONFIRMATION_CODE_PARAM]: 'WDJB-MJHA' },
+          'invalid_request',
+          'confirmation-code',
+        ],
+        [
+          'a confirmation code twice',
+          { [CONFIRMATION_CODE_PARAM]: [CONFIRMATION_CODE, CONFIRMATION_CODE] },
+          'invalid_request',
+          'malformed',
+        ],
+        [
+          'a redirect to another path on loopback',
+          { redirect_uri: 'http://127.0.0.1:51234/other' },
+          'invalid_redirect_uri',
+          'bad-redirect-uri',
+        ],
+        [
+          'a redirect off this computer',
+          { redirect_uri: 'https://attacker.test/callback' },
+          'invalid_redirect_uri',
+          'bad-redirect-uri',
+        ],
+      ];
+      for (let [name, overrides, error, reason] of cases) {
+        let response = await server.authorize(boxelCLIParams(overrides));
+        assert.strictEqual(response.status, 303, `${name}: ${response.text}`);
+        let found = await details(
+          errorReference(assert, response.headers.location),
+        );
+        assert.strictEqual(found.body.error, error, `${name}: error`);
+        assert.strictEqual(found.body.reason, reason, `${name}: reason`);
+      }
+    });
+
+    test('a client other than a pre-registered one on this computer is refused with a confirmation code', async function (assert) {
+      let clientId = await server.register();
+      let response = await server.authorize(
+        validParams(clientId, { [CONFIRMATION_CODE_PARAM]: CONFIRMATION_CODE }),
+      );
+      let found = await details(
+        errorReference(assert, response.headers.location),
+      );
+      assert.strictEqual(found.body.error, 'invalid_request');
+      assert.strictEqual(found.body.reason, 'confirmation-code');
+      assert.true(found.body.returnOffered, '"Return" is offered');
+    });
+
+    test("no openly registered client can take boxel-cli's client ID", async function (assert) {
+      // Registration gives an ID of its own, whatever the client asks for.
+      let clientId = await server.register([REDIRECT_URI], {
+        client_id: BOXEL_CLI_CLIENT_ID,
+      });
+      assert.notStrictEqual(clientId, BOXEL_CLI_CLIENT_ID);
+
+      // A stored client under the ID is never read: the one in code is found.
+      await server.db().execute(
+        `INSERT INTO oauth_provider_dynamic_clients (client_id, metadata)
+             VALUES ($1, $2::jsonb)`,
+        {
+          bind: [
+            BOXEL_CLI_CLIENT_ID,
+            JSON.stringify({
+              client_id: BOXEL_CLI_CLIENT_ID,
+              client_name: 'Boxel CLI',
+              redirect_uris: ['https://attacker.test/callback'],
+              token_endpoint_auth_method: 'none',
+            }),
+          ],
+        },
+      );
+      let response = await server.authorize(
+        boxelCLIParams({ redirect_uri: 'https://attacker.test/callback' }),
+      );
+      let found = await details(
+        errorReference(assert, response.headers.location),
+      );
+      assert.strictEqual(found.body.reason, 'bad-redirect-uri');
     });
 
     test('the error page names the app and offers "Return", which goes to the client with the error once', async function (assert) {
