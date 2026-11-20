@@ -8,6 +8,7 @@ scope:
   - packages/realm-server/handlers/handle-publish-realm.ts
   - packages/realm-server/handlers/handle-*boxel*domain*.ts
   - packages/realm-server/handlers/handle-delete-realm.ts
+  - packages/realm-server/handlers/serve-index.ts
   - packages/realm-server/middleware/*.ts
   - packages/realm-server/server.ts
   - packages/postgres/migrations/*_add-realm-host-urls.js
@@ -102,6 +103,23 @@ load. Mounting at a site name MUST bind its claim to the realm, and removing
 that host URL, or deleting the realm, MUST free the site name for anyone to
 claim.
 
+### 1.7. A page on a host URL is server-rendered only where a visitor may read its card
+
+A page on a host URL MUST serve a card's stored markup only when the realm
+admits a read of that card by a visitor who isn't signed in, from the
+visitor's address, and the card's type doesn't declare that markup
+unshareable. The realm MUST decide that read, through its permissions and its
+policy. The server MUST NOT evaluate a permission or a policy grant of its own
+for it. Where the read is refused, the page MUST be served without the card's
+markup and scoped CSS, and renders in the browser as the visitor. The realm's
+routing rules MUST apply on a host URL whatever the realm's permissions, since
+they are the site's addresses. A page on a host URL MUST name its address on
+the canonical host URL in a canonical link and an `og:url` where its head
+names none. Whether the realm's default index card is server-rendered MUST be
+decided when the page is served, and MUST NOT be written into the realm. A
+placeholder the prerenderer stores in place of that card's render MUST NOT be
+served on a host URL.
+
 ## 2. Rationale
 
 Publishing a copy gave every site its own registry row, files, index and
@@ -122,6 +140,13 @@ can be both a published copy's registry URL and a host URL for the copy's
 source. Resolving the registry first would keep serving the copy. For the same
 reason, removing such a host URL also removes the copy, or the lookup by URL
 would serve the copy again instead of a 404.
+
+Stored markup is rendered with the realm owner's authority, and a host URL
+serves it to every visitor. Asking the realm for the visitor's own read keeps
+one place where access is decided, so a realm opened by its policy is
+server-rendered exactly where its visitors could read the cards anyway. A
+host URL is the realm's site, so its routes are published addresses, not
+something the realm's permissions hide.
 
 Direct `write` already lets a user change the realm's `realm.json` and its
 policy, so a user who holds it administers the realm (ADR 024 §1.3). Giving
@@ -152,6 +177,14 @@ and names what is closed.
 - **Warn, but mount a realm whose home page anonymous visitors can't read.**
   Without sign-in on a host URL's origin, such a site shows its visitors
   nothing.
+- **Server-render a page on a host URL only when the realm has public read,
+  as on the realm's own URL.** A realm opened only by its policy would never
+  be server-rendered, though its visitors may read its cards.
+- **Decide a page's readability in the server from the policy card.** That
+  is a second evaluator of the policy, which can disagree with the realm's.
+- **Write `includePrerenderedDefaultRealmIndex` into `realm.json` when a host
+  URL is added, as v1 publishing does.** That changes a file in the realm
+  (§1.1).
 
 ## 4. Remediation
 
