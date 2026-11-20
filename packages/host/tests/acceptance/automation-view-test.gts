@@ -1454,7 +1454,7 @@ module('Acceptance | automation view', function (hooks) {
         .dom(
           '[data-test-automation-run="admitting"] [data-test-automation-run-admitting]',
         )
-        .includesText('Checking that the run may start');
+        .includesText('Boxel is checking that the run may start');
       assert.ok(runText('hourly').includes('hourly'), 'the trigger by label');
       assert.ok(
         runText('hourly').includes('The schedule fired the run for'),
@@ -1743,7 +1743,9 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-runs-section]')
         .includesText('2 runs', 'the count shows while the section is closed');
-      assert.dom('[data-test-automation-run]').doesNotExist();
+      assert
+        .dom('[data-test-automation-runs]')
+        .isNotVisible('a closed section keeps its rows out of sight');
     });
 
     test('runs come a page at a time, and the pager shows another page', async function (assert) {
