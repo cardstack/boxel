@@ -222,6 +222,26 @@ module(basename(import.meta.filename), function () {
         ]);
       });
 
+      test("a breadcrumb loses the realm sessions in the prerender server's reproduce line", function (assert) {
+        let event = scrubRequestTelemetry({
+          breadcrumbs: [
+            {
+              message:
+                'manually visit prerendered url https://realm.telemetry.test/card at: https://host.telemetry.test/render/x/1/%7B%7D/html/isolated/0 with boxel-session = {"https://realm.telemetry.test/":"realm-session-e83d"}',
+            },
+          ],
+        });
+        let message = event.breadcrumbs?.[0].message ?? '';
+        assert.false(
+          message.includes('realm-session-e83d'),
+          'the session is gone',
+        );
+        assert.true(
+          message.endsWith('with boxel-session = REDACTED'),
+          'the line says where the session was',
+        );
+      });
+
       test('applies to every route until it is turned off', function (assert) {
         let request = {
           method: 'POST',
