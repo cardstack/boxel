@@ -77,9 +77,11 @@ const NO_MONTHLY_CAP = 'automation/no-monthly-cap';
 const HOOKED = 'automation/hooked';
 const HOOK_PATH = 'whk_routes';
 const OUTSIDER = '@automation-routes-outsider:localhost';
-// Automations whose daily credit cap the tests reach: one whose next run is
-// due within the minute, and one whose next run is next new year's day.
+// Automations whose daily credit cap the tests reach: one with a webhook
+// trigger, whose first run after a resume can start at once, and one whose
+// next run is next new year's day.
 const CAPPED = 'automation/capped';
+const CAPPED_HOOK_PATH = 'whk_routes_capped';
 const CAPPED_LATER = 'automation/capped-later';
 const DAILY_CAP = 600;
 // An automation whose script doesn't parse.
@@ -187,10 +189,9 @@ module(basename(import.meta.filename), function (hooks) {
         caps: { dailyCredits: DAILY_CAP },
         triggers: [
           {
-            kind: 'cron',
-            label: 'minutely',
-            expression: '* * * * *',
-            timeZone: 'UTC',
+            kind: 'webhook',
+            label: 'deliveries',
+            webhookPath: CAPPED_HOOK_PATH,
           },
         ],
       }),
@@ -837,6 +838,11 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('a resume whose first run falls on a day the automation has spent its daily cap is refused, and the automation stays paused', async function (assert) {
       await fund(WRITER);
+      await insertIncomingWebhookRow(dbAdapter, {
+        username: OWNER,
+        webhookPath: CAPPED_HOOK_PATH,
+        signingSecret: 'capped-secret',
+      });
       await switchOn(OWNER, CAPPED);
       assert.strictEqual(
         (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(CAPPED) }))
