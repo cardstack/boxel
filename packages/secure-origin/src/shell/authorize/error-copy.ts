@@ -65,6 +65,11 @@ export function errorCopy(
         heading: 'This request can’t continue',
         info: `Nothing was shared. Start connecting again from ${from}.`,
       };
+    case 'answered':
+      return {
+        heading: 'This request was already answered',
+        info: 'It was answered in another window. There’s nothing more to do here.',
+      };
     case 'rate-limited':
       return {
         heading: 'Too many attempts',

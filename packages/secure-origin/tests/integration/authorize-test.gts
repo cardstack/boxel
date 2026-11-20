@@ -30,6 +30,18 @@ const INTERACTION = 'flow-interaction-1';
 const CONSENT = `_oauth-provider/consent/${INTERACTION}`;
 const FINISH = `${REALM_SERVER_URL}_oauth-provider/interaction/${INTERACTION}/finish`;
 const TICKET = 'single-use-consent-ticket';
+// An error reference as the realm server issues one: 43 base64url characters.
+const REF = 'Rf0-ended-flow-reference' + 'x'.repeat(19);
+const ERROR_DETAILS = `_oauth-provider/error/${REF}`;
+const ERROR_RETURN = `${REALM_SERVER_URL}${ERROR_DETAILS}/return`;
+// What the error page shows for each refusal that ends a flow at consent,
+// when the provider stored no error for it.
+const ENDED_STATES: [number, string, string][] = [
+  [400, 'bad-request', 'cant-continue'],
+  [403, 'forbidden', 'cant-continue'],
+  [404, 'expired', 'expired'],
+  [409, 'decided', 'answered'],
+];
 const SESSION = {
   token: 'window-session-token',
   user: '@person:example.test',
@@ -122,6 +134,7 @@ module('Integration | authorize', function (hooks) {
     ),
     INTERACTION,
     TICKET,
+    REF,
     SESSION.token,
     'another-window-session',
     'renewed-window-session',
@@ -544,7 +557,7 @@ module('Integration | authorize', function (hooks) {
       ]);
     });
 
-    test('a flow answered meanwhile ends without finishing', async function (assert) {
+    test('a flow answered meanwhile ends without finishing or cancelling', async function (assert) {
       signedIn();
       shows(cimdDetails());
       servers.realmServer(`POST ${CONSENT}`, () => ({
@@ -553,11 +566,110 @@ module('Integration | authorize', function (hooks) {
       }));
       await open();
       await allow();
-      assert.dom('[data-test-authorize-ended]').exists();
       assert
-        .dom('[data-test-authorize-ended] [data-test-secure-title]')
+        .dom('[data-test-oauth-error="answered"] [data-test-secure-title]')
+        .hasText('This request was already answered')
         .isFocused('what replaced consent takes focus, so it is read');
-      assert.deepEqual(moves, []);
+      assert.dom('[data-test-oauth-error-return]').doesNotExist();
+      assert.deepEqual(moves, [], 'never sent to the cancel route');
+    });
+
+    test('each refusal that ends the flow shows its error page state, from Allow and from Deny', async function (assert) {
+      for (let button of ['allow', 'deny']) {
+        for (let [status, error, state] of ENDED_STATES) {
+          let label = `${button}: ${status}`;
+          signedIn();
+          shows(cimdDetails());
+          servers.realmServer(`POST ${CONSENT}`, () => ({
+            status,
+            body: { error },
+          }));
+          await open();
+          if (button === 'allow') {
+            await allow();
+          } else {
+            await click('[data-test-authorize-deny]');
+          }
+          assert.dom(`[data-test-oauth-error="${state}"]`).exists(label);
+          assert.dom('[data-test-authorize-consent]').doesNotExist(label);
+          assert.dom('[data-test-oauth-error-return]').doesNotExist(label);
+          assert.deepEqual(moves, [], label);
+        }
+      }
+      assert.strictEqual(
+        servers.requests('realm-server', `GET ${ERROR_DETAILS}`).length,
+        0,
+        'with no reference, nothing is looked up',
+      );
+    });
+
+    test('an answer the provider ended the flow for offers "Return" where the provider does', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      servers.realmServer(`POST ${CONSENT}`, () => ({
+        status: 400,
+        body: { error: 'bad-request', reference: REF },
+      }));
+      servers.realmServer(`GET ${ERROR_DETAILS}`, () => ({
+        error: 'server_error',
+        reason: 'unreadable-decision',
+        app: {
+          kind: 'metadata-document',
+          shown: 'example.com',
+          verified: true,
+        },
+        returnOffered: true,
+      }));
+      await open();
+      await allow();
+      await waitFor('[data-test-oauth-error="cant-continue"]');
+      assert
+        .dom('[data-test-oauth-error-return]')
+        .hasText('Return to example.com')
+        .hasAttribute('href', ERROR_RETURN);
+      assert.deepEqual(moves, [], 'the page sends the browser nowhere itself');
+    });
+
+    test('an ended flow whose return the provider doesn\'t offer has no "Return"', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      servers.realmServer(`POST ${CONSENT}`, () => ({
+        status: 400,
+        body: { error: 'bad-request', reference: REF },
+      }));
+      servers.realmServer(`GET ${ERROR_DETAILS}`, () => ({
+        error: 'server_error',
+        reason: 'unreadable-decision',
+        app: {
+          kind: 'metadata-document',
+          shown: 'example.com',
+          verified: true,
+        },
+        returnOffered: false,
+      }));
+      await open();
+      await allow();
+      await waitFor('[data-test-oauth-error="cant-continue"]');
+      assert.dom('[data-test-oauth-error-return]').doesNotExist();
+    });
+
+    test('a reference not of the shape the provider issues is never looked up', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      servers.realmServer(`POST ${CONSENT}`, () => ({
+        status: 400,
+        body: { error: 'bad-request', reference: '../_secure-session' },
+      }));
+      await open();
+      await allow();
+      assert.dom('[data-test-oauth-error="cant-continue"]').exists();
+      assert.dom('[data-test-oauth-error-return]').doesNotExist();
+      assert.deepEqual(
+        servers
+          .requests('realm-server')
+          .filter((r) => r.path.startsWith('_oauth-provider/error')),
+        [],
+      );
     });
 
     test('the answer is given under the session that loaded consent, even when another is stored since', async function (assert) {
@@ -716,20 +828,25 @@ module('Integration | authorize', function (hooks) {
     test("an interaction ID that isn't one asks nothing", async function (assert) {
       signedIn();
       await open('?interaction=..%2F_secure-session');
-      assert.dom('[data-test-authorize-ended]').exists();
+      assert
+        .dom('[data-test-oauth-error="cant-continue"] [data-test-secure-title]')
+        .hasText('This request can’t continue');
       assert.strictEqual(servers.requests('realm-server').length, 0);
     });
 
-    test('an expired or answered flow ends', async function (assert) {
-      signedIn();
-      servers.realmServer(`GET ${CONSENT}`, () => ({
-        status: 409,
-        body: { error: 'decided' },
-      }));
-      await open();
-      assert
-        .dom('[data-test-authorize-ended]')
-        .includesText('This request can’t continue');
+    test('each refusal that ends the flow shows its error page state, without consent', async function (assert) {
+      for (let [status, error, state] of ENDED_STATES) {
+        signedIn();
+        servers.realmServer(`GET ${CONSENT}`, () => ({
+          status,
+          body: { error },
+        }));
+        await open();
+        assert.dom(`[data-test-oauth-error="${state}"]`).exists(`${status}`);
+        assert.dom('[data-test-authorize-consent]').doesNotExist(`${status}`);
+        assert.dom('[data-test-oauth-error-return]').doesNotExist(`${status}`);
+        assert.deepEqual(moves, [], `${status} sends the browser nowhere`);
+      }
     });
 
     test('Boxel not answering offers to try again', async function (assert) {
@@ -814,10 +931,10 @@ module('Integration | authorize', function (hooks) {
       await waitFor('[data-test-authorize-loading]');
       await new Promise((resolve) => setTimeout(resolve, 0));
       restore();
-      await waitFor('[data-test-authorize-ended]');
+      await waitFor('[data-test-oauth-error="answered"]');
       slow(cimdDetails());
       await settled();
-      assert.dom('[data-test-authorize-ended]').exists();
+      assert.dom('[data-test-oauth-error="answered"]').exists();
       assert.dom('[data-test-authorize-consent]').doesNotExist();
     });
 
@@ -834,7 +951,7 @@ module('Integration | authorize', function (hooks) {
         new PageTransitionEvent('pageshow', { persisted: true }),
       );
       await settled();
-      assert.dom('[data-test-authorize-ended]').exists();
+      assert.dom('[data-test-oauth-error="answered"]').exists();
     });
   });
 });
