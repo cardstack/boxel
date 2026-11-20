@@ -32,6 +32,7 @@ import type {
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { realmServerAutomationChangeReporter } from '../lib/run-change-reporter.ts';
 import {
+  admitAnyPayer,
   ensureTestUser,
   setupPermissionedRealmCached,
   waitUntil,
@@ -216,7 +217,12 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(paused.ok, 'paused, with no run to cancel');
     let resumed = await resumeAutomation(
       dbAdapter,
-      { automationId: id, user: ADMIN, declaration: declaration() },
+      {
+        automationId: id,
+        user: ADMIN,
+        declaration: declaration(),
+        admit: admitAnyPayer,
+      },
       options(fromRealm),
     );
     assert.true(resumed.ok, 'resumed');

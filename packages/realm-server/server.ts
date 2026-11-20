@@ -77,6 +77,8 @@ import {
 } from './lib/realm-host-urls-domains.ts';
 import { translateAtHostURLs } from './lib/realm-host-urls-boundary.ts';
 import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
+import { matrixAccountStanding } from './lib/automation-admission-checks.ts';
+import type { AccountStanding } from '@cardstack/runtime-common/automation-admission';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
 const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
@@ -732,6 +734,7 @@ export class RealmServer {
   private matrixRegistrationSecret: string | undefined;
   private matrixAdminUsername: string | undefined;
   private matrixAdminPassword: string | undefined;
+  private automationAccountStanding: (user: string) => Promise<AccountStanding>;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
@@ -784,6 +787,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     matrixAdminUsername,
     matrixAdminPassword,
+    automationAccountStanding,
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
@@ -835,6 +839,10 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     matrixAdminUsername?: string;
     matrixAdminPassword?: string;
+    // What the Matrix server says of an account, for the admission a resume
+    // makes of its new payer. Defaults to asking the Matrix server's admin
+    // API with `matrixAdminUsername` and `matrixAdminPassword`.
+    automationAccountStanding?: (user: string) => Promise<AccountStanding>;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
     domainsForPublishedRealms?: {
@@ -941,6 +949,17 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixAdminUsername = matrixAdminUsername;
     this.matrixAdminPassword = matrixAdminPassword;
+    this.automationAccountStanding =
+      automationAccountStanding ??
+      ((user) =>
+        matrixAccountStanding(
+          {
+            matrixURL: matrixClient.matrixURL,
+            matrixAdminUsername,
+            matrixAdminPassword,
+          },
+          user,
+        ));
     this.getRegistrationSecret = getRegistrationSecret;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
     this.hostURLDomains = HostURLDomains.fromDeployment(
@@ -1170,6 +1189,7 @@ export class RealmServer {
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           matrixAdminUsername: this.matrixAdminUsername,
           matrixAdminPassword: this.matrixAdminPassword,
+          automationAccountStanding: this.automationAccountStanding,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
           reportHostShell: this.reportHostShell,

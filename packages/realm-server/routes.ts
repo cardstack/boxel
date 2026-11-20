@@ -9,6 +9,7 @@ import type {
   Prerenderer,
   LinkShapePolicy,
 } from '@cardstack/runtime-common';
+import type { AccountStanding } from '@cardstack/runtime-common/automation-admission';
 import { DBRateLimitStore } from '@cardstack/runtime-common';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -294,6 +295,10 @@ export type CreateRoutesArgs = {
   // are used as-is for any environment (staging, prod).
   matrixAdminUsername?: string;
   matrixAdminPassword?: string;
+  // Asks the Matrix server about an account, for the resume route's
+  // admission of its new payer. Absent, every resume is refused as
+  // `account-unverifiable`.
+  automationAccountStanding?: (user: string) => Promise<AccountStanding>;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;

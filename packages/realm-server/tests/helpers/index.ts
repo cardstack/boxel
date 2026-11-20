@@ -1998,6 +1998,7 @@ export async function runTestRealmServer({
     reconciler,
     virtualNetwork,
     matrixClient,
+    automationAccountStanding: testAutomationAdmissionChecks.accountStanding,
     realmServerSecretSeed,
     realmSecretSeed,
     matrixRegistrationSecret,
@@ -2221,6 +2222,7 @@ export async function runTestRealmServerWithRealms({
     reconciler,
     virtualNetwork,
     matrixClient,
+    automationAccountStanding: testAutomationAdmissionChecks.accountStanding,
     realmServerSecretSeed,
     realmSecretSeed,
     matrixRegistrationSecret,
@@ -3573,6 +3575,7 @@ async function buildBaseRealmTemplate(
       reconciler: makeTestReconciler(dbAdapter, [base]),
       virtualNetwork,
       matrixClient,
+      automationAccountStanding: testAutomationAdmissionChecks.accountStanding,
       realmServerSecretSeed,
       realmSecretSeed,
       grafanaSecret,
@@ -4160,3 +4163,12 @@ export const testAccountStandings = new Map<string, AccountStanding>();
 export const testAutomationAdmissionChecks: AutomationAdmissionChecks = {
   accountStanding: async (user) => testAccountStandings.get(user) ?? 'usable',
 };
+
+// A resume's admission that admits every payer, for a test of what resuming
+// does once its payer is admitted.
+export async function admitAnyPayer(
+  _payer: string,
+  _firstRun: { at: number | null },
+): Promise<undefined> {
+  return undefined;
+}
