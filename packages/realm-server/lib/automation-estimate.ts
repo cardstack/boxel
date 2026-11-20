@@ -63,12 +63,15 @@ export interface RunCostCaps {
 // can't drift apart.
 //
 // For an automation that batches AI requests, the AI part is
-// `BATCHED_AI_RESERVE_FACTOR` times the AI spending cap, so each batched
-// request counts at twice the most it can cost at the normal price (ADR 030
-// §1.4): once for the batch, and once for the same requests its follow-up
-// run sends at the normal price when the batch misses its deadline. The
-// follow-up spends that fallback under an AI spending cap of its own, which
-// the submitting run's cap doesn't bound. The factor bounds spending and is
+// `BATCHED_AI_RESERVE_FACTOR` times the AI spending cap (ADR 030 §1.4). The
+// first `aiCredits` bounds the run's own AI, its batches included: each batch
+// reserves twice its worst case at the normal price against that cap. The
+// second covers the AI of the follow-up run a batch starts, which sends the
+// same requests at the normal price when the batch misses its deadline. That
+// follow-up reserves its fallback against its own `aiCredits` cap, and the
+// estimate counts only the runs triggers start, not their follow-ups. In the
+// minimum balance the second `aiCredits` is headroom, since a follow-up is
+// also admitted against its own minimum. The factor bounds spending and is
 // never charged.
 //
 // The ceiling leaves out the indexing the run's writes cause (ADR 029 §1.5).

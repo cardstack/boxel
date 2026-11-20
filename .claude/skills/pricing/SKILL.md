@@ -474,7 +474,9 @@ their other runs' checks, and in order:
    automation (the caps). While its run's own hold still counts, that hold
    covers the batch, since the run's ceiling includes its AI cap, so the
    batch holds nothing then. A row with no `reserved_credits` holds
-   `estimated_usd` in credits. A batch whose charge is written but whose
+   the reservation its run's row names (`ai_reservations`), or failing that
+   twice `estimated_usd` in credits (the batch price is typically half the
+   normal price). A batch whose charge is written but whose
    `settled_at` isn't yet set (a settle pass that stopped partway) is still
    held, so the caps never miss it, and the balance counts it twice until
    the next pass sets `settled_at`.
@@ -518,7 +520,9 @@ WHERE r.acts_as = '<matrix user id>'
 -- What a person's unsettled batches hold against their balance, as admission
 -- counts it: those whose run no longer holds its ceiling.
 SELECT b.batch_id, b.run_id, b.automation_id, b.state, b.submitted_at,
-       COALESCE(b.reserved_credits, b.estimated_usd * 1000) AS held
+       COALESCE(b.reserved_credits,
+                (r.ai_reservations ->> b.run_ai_reservation)::numeric,
+                b.estimated_usd * 2000) AS held
 FROM ai_batches b LEFT JOIN automation_runs r ON r.id = b.run_id
 WHERE b.acts_as = '<matrix user id>' AND b.settled_at IS NULL
   AND NOT (r.cost_ceiling_credits IS NOT NULL AND r.credit_hold_released_at IS NULL

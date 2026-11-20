@@ -60,10 +60,13 @@ const log = logger('ai-batches');
 // Only a run token reaches it, from a running run that its token's attempt
 // still owns, whose identity's sessions haven't been revoked since the token
 // was minted. An interactive session is refused: someone waiting for an
-// answer gains nothing from a batch. A submit also needs the automation's
-// payer to have turned on `batchedAI` when they switched it on or last
-// resumed it (the automation row's caps snapshot); a status read doesn't, so
-// a follow-up run can always read a batch that is already paid for.
+// answer gains nothing from a batch. A Preview's submit is refused too: a
+// Preview sends batched requests at the normal price (ADR 030 §1.1), and its
+// minimum balance counts its AI once on that basis. A submit also needs the
+// automation's payer to have turned on `batchedAI` when they switched it on
+// or last resumed it (the automation row's caps snapshot); a status read
+// doesn't, so a follow-up run can always read a batch that is already paid
+// for.
 //
 // A submit charges nothing. OpenRouter reports a batch's cost only once it
 // ends, so the submit records the batch (its run, the person that run acts
@@ -105,6 +108,13 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       return;
     }
     let { run, automation } = caller;
+    if (run.dryRun) {
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        'A Preview sends its batched requests at the normal price, so it submits no batches',
+      );
+      return;
+    }
     if (!automation.capsSnapshot.batchedAI) {
       await sendResponseForForbiddenRequest(
         ctxt,

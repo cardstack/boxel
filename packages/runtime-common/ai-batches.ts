@@ -49,8 +49,8 @@ export interface AIBatch {
   // at twice its requests' worst case at the normal price, for the settle job
   // to settle when the batch ends.
   runAIReservation: string;
-  // The credits that reservation holds. Null on a row recorded without them,
-  // which the spending check holds at `estimatedUsd`.
+  // The credits that reservation holds. Null on a row recorded without them
+  // (see `creditsHeldByUnsettledAIBatches` for what such a row holds).
   reservedCredits: number | null;
   // How long the submitting script waits for the results.
   deadline: string;
@@ -152,7 +152,13 @@ export interface AIBatchSettlementResult {
 // reserved on its submitting run's AI spending cap: twice its requests' worst
 // case at the normal price, once for the batch and once for the requests its
 // follow-up sends at the normal price when it misses its deadline (ADR 030
-// §1.4). A row with no reservation recorded holds its estimate.
+// §1.4).
+//
+// A row recorded without `reserved_credits` holds the reservation its run's
+// row still names (`ai_reservations`). A row whose reservation is gone too
+// holds twice its estimate: the estimate is at the batch price, which is
+// typically half the normal price, so twice it approximates the most the
+// batch can be billed.
 //
 // While the submitting run's own credit hold counts
 // (`creditsHeldByRunsInFlight`), that hold already covers the batch: the
@@ -166,8 +172,8 @@ export async function creditsHeldByUnsettledAIBatches(
     | { automationId: RealmResourceIdentifier; actsAs?: undefined },
 ): Promise<number> {
   let [row] = await querier([
-    'SELECT COALESCE(SUM(COALESCE(b.reserved_credits, b.estimated_usd *',
-    param(CREDITS_PER_USD),
+    'SELECT COALESCE(SUM(COALESCE(b.reserved_credits, CAST(r.ai_reservations ->> b.run_ai_reservation AS numeric), b.estimated_usd *',
+    param(2 * CREDITS_PER_USD),
     ')), 0) AS held FROM ai_batches b LEFT JOIN automation_runs r ON r.id = b.run_id',
     'WHERE b.settled_at IS NULL AND',
     ...((filter.actsAs !== undefined

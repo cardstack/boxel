@@ -1397,20 +1397,33 @@ module(basename(import.meta.filename), function (hooks) {
       result = await attempt(run, { checks: spending() });
       assert.strictEqual(result.state, 'complete');
 
-      let gone = await newRun(BATCHED, { trigger: 'nightly' });
-      await submittedBatch(gone, 400, 0.25);
+      // Rows with no `reserved_credits`, as code that doesn't set it writes
+      // them.
+      let unrecorded = await newRun(BATCHED, { trigger: 'nightly' });
+      let unrecordedBatch = await submittedBatch(unrecorded, 400, 0.25);
       await query(dbAdapter, [
-        'UPDATE ai_batches SET reserved_credits = NULL WHERE run_id =',
-        param(gone.id),
+        'UPDATE automation_runs SET ai_reservations = jsonb_build_object(CAST(',
+        param(unrecordedBatch.runAIReservation),
+        'AS text), 400) WHERE id =',
+        param(unrecorded.id),
       ]);
       await query(dbAdapter, [
-        'DELETE FROM automation_runs WHERE id =',
-        param(gone.id),
+        'UPDATE ai_batches SET reserved_credits = NULL WHERE run_id =',
+        param(unrecorded.id),
       ]);
       assert.strictEqual(
         await held(),
-        250,
-        'a batch with no reservation recorded, whose run is gone, holds its estimate',
+        400,
+        'a batch with no reservation recorded holds the one its run’s row names',
+      );
+      await query(dbAdapter, [
+        'DELETE FROM automation_runs WHERE id =',
+        param(unrecorded.id),
+      ]);
+      assert.strictEqual(
+        await held(),
+        500,
+        'one whose run is gone holds twice its estimate',
       );
     });
 

@@ -7,7 +7,9 @@
 // requests it falls back to when it misses its deadline. Once the submitting
 // run's own credit hold stops counting, an unsettled batch holds this many
 // credits in the spending check until the settle job bills it. A row with
-// no value is held at its `estimated_usd`.
+// no value (one written by code that doesn't set the column) is held at the
+// reservation its run's row names, or failing that at twice its
+// `estimated_usd`.
 //
 // `ai_batches_payer_unsettled_idx` serves the balance check's search for a
 // person's unsettled batches. `ai_batches_automation_settled_idx` serves the
