@@ -129,4 +129,22 @@ module('Acceptance | cards grid | pages', function (hooks) {
       .dom(`${PAGINATION} [aria-current="page"]`)
       .hasText('1', 'returning to the filter starts at page 1 too');
   });
+
+  test('returning to a filter through Highlights starts again at page 1', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+    });
+    await click('[data-test-boxel-filter-list-button="Pet"]');
+    await waitUntil(() => gridItemIds().length === PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitUntil(() => gridItemIds().length === PET_COUNT - PAGE_SIZE);
+
+    // Highlights shows no paged list, so the grid never reads a page under it.
+    await click('[data-test-boxel-filter-list-button="Highlights"]');
+    await click('[data-test-boxel-filter-list-button="Pet"]');
+    await waitUntil(() => gridItemIds().length === PAGE_SIZE);
+    assert
+      .dom(`${PAGINATION} [aria-current="page"]`)
+      .hasText('1', 'the filter opens on its first page');
+  });
 });

@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
+  applyFederatedRowBudget,
   applySearchPageBound,
   applyServerSearchPageBound,
   assertRealmsBound,
@@ -15,6 +16,7 @@ import {
   MAX_REALMS_PER_SEARCH_REQUEST,
   type Query,
 } from '@cardstack/runtime-common';
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -276,6 +278,38 @@ module(basename(import.meta.filename), function (hooks) {
         assert.true(e instanceof SearchBoundError);
         assert.strictEqual((e as SearchBoundError).status, 400);
       }
+    });
+  });
+
+  module('applyFederatedRowBudget', function () {
+    test('a single realm keeps its page', function (assert) {
+      setSearchBoundsForTests({ serverAbsoluteMaxPageSize: 10 });
+      let query = { page: { size: 10 } } as Query;
+      assert.strictEqual(applyFederatedRowBudget(query, 1), query);
+    });
+
+    test('realms whose pages fit the maximum together keep them', function (assert) {
+      setSearchBoundsForTests({ serverAbsoluteMaxPageSize: 10 });
+      let query = { page: { size: 5 } } as Query;
+      assert.strictEqual(applyFederatedRowBudget(query, 2), query);
+    });
+
+    test('realms whose pages would pass the maximum share it', function (assert) {
+      setSearchBoundsForTests({ serverAbsoluteMaxPageSize: 10 });
+      assert.deepEqual(
+        applyFederatedRowBudget({ page: { size: 10, number: 2 } } as Query, 3)
+          .page,
+        { size: 3, number: 2 },
+        'each realm gets its share, and the page number is carried through',
+      );
+    });
+
+    test('a realm always gets at least one row', function (assert) {
+      setSearchBoundsForTests({ serverAbsoluteMaxPageSize: 2 });
+      assert.deepEqual(
+        applyFederatedRowBudget({ page: { size: 2 } } as Query, 5).page,
+        { size: 1 },
+      );
     });
   });
 

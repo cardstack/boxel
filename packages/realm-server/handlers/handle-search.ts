@@ -1,5 +1,6 @@
 import type Koa from 'koa';
 import {
+  applyFederatedRowBudget,
   applyServerSearchPageBound,
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
@@ -676,6 +677,18 @@ export default function handleSearch(opts: {
     // set by the caller, so an exemption keyed on them is one anyone can
     // claim. Clamping never rejects, so a render still draws the first page.
     parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
+    // Each realm answers its own page and the merge concatenates them, so the
+    // realms that contribute rows share the absolute maximum: naming more
+    // realms — and a caller may name every public one — doesn't buy a larger
+    // response.
+    parsed.itemQuery = applyFederatedRowBudget(
+      parsed.itemQuery,
+      new Set(
+        realmList.filter(
+          (realm) => access.readable.has(realm) || access.scoped.has(realm),
+        ),
+      ).size,
+    );
 
     // The query each policy-scoped realm runs. Composed here, off the bounded
     // query, so the page the engine fills is a page of rows the policy admits:

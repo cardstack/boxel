@@ -18456,10 +18456,10 @@ export class Realm {
       resolveLinksOnly:
         this.#decideLinkShape(request, 'single-row')?.mode === 'links-only',
       // The assembled-resource budget bounds live reads. This branch exempts a
-      // read carrying the during-prerender marker, for the same reason the
-      // prerendered-HTML leg is exempt from the page and time bounds: what a
-      // render assembles is baked into cached HTML, so a ceiling that clipped
-      // it would serve a short closure from cache long after the pressure that
+      // read carrying the during-prerender marker, for the same reason a
+      // render's search is exempt from the time budget: what a render
+      // assembles is baked into cached HTML, so a ceiling that clipped it
+      // would serve a short closure from cache long after the pressure that
       // justified it had passed.
       //
       // It is defensive rather than load-bearing. No caller attaches that

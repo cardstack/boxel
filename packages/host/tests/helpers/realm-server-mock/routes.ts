@@ -1,4 +1,5 @@
 import {
+  applyFederatedRowBudget,
   applyServerSearchPageBound,
   buildSearchErrorResponse,
   baseRealm,
@@ -319,6 +320,14 @@ function registerSearchRoutes() {
       // absolute maximum is clamped to it — on either leg, and during a render
       // too, as it is there.
       parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
+      // The realms then share the absolute maximum, as there. The server
+      // counts the realms that contribute rows; whether a permission-checking
+      // realm contributes is known here only once it answers, so this counts
+      // every realm the request names.
+      parsed.itemQuery = applyFederatedRowBudget(
+        parsed.itemQuery,
+        new Set(realmList).size,
+      );
 
       // Mirror the realm-server's `handle-search`: read the client's
       // correlation id off the request and thread it into searchEntryRealms,

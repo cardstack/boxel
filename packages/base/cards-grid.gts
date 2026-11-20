@@ -157,16 +157,13 @@ class Isolated extends Component<typeof CardsGrid> {
     return (this.args.model.constructor as typeof CardsGrid).gridPageSize;
   }
 
-  // The page (1-based) belongs to the filter + sort it was chosen under: once
-  // either changes, the grid starts again at page 1, and going back to that
-  // filter later starts at page 1 too. A live re-run keeps the key, so it
-  // stays on the page. It lives only in this component, so a reload also
-  // starts at page 1.
+  // The page (1-based) belongs to the filter + sort it was chosen under:
+  // choosing a filter or a sort, even the same one again, starts the grid at
+  // page 1. A live re-run keeps the filter and sort, so it stays on the page;
+  // so does a realm event that rebuilds the filter list, since the rebuilt
+  // filter carries the same query and the key still matches. It lives only in
+  // this component, so a reload also starts at page 1.
   @tracked private chosenPage: { key: string; page: number } | undefined;
-  // Pages chosen under a key the grid has since moved away from. Kept out of
-  // tracking so the getter below can record it while rendering; the key change
-  // that fills it already invalidated the getter.
-  #abandonedPages = new WeakSet<{ key: string; page: number }>();
 
   private get pageKey(): string {
     return JSON.stringify({
@@ -177,14 +174,7 @@ class Isolated extends Component<typeof CardsGrid> {
 
   private get currentPage(): number {
     let chosen = this.chosenPage;
-    if (!chosen) {
-      return 1;
-    }
-    if (chosen.key !== this.pageKey) {
-      this.#abandonedPages.add(chosen);
-      return 1;
-    }
-    return this.#abandonedPages.has(chosen) ? 1 : chosen.page;
+    return chosen && chosen.key === this.pageKey ? chosen.page : 1;
   }
 
   @action private onChangePage(page: number) {
@@ -315,10 +305,12 @@ class Isolated extends Component<typeof CardsGrid> {
 
   @action private onChangeFilter(filter: FilterOption) {
     this.activeFilter = filter;
+    this.chosenPage = undefined;
   }
 
   @action private onChangeSort(option: SortOption) {
     this.activeSort = option;
+    this.chosenPage = undefined;
   }
 
   @action private onChangeView(viewId: ViewOption['id']) {

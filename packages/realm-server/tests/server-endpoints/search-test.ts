@@ -786,6 +786,45 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       }
     });
 
+    test('the realms of a federated search share the maximum page', async function (assert) {
+      // Two realms of two Persons, and a default and maximum page of two:
+      // alone, each realm would answer both of its rows, but together they
+      // share two rows.
+      setSearchBoundsForTests({
+        serverMaxPageSize: 2,
+        serverAbsoluteMaxPageSize: 2,
+      });
+      try {
+        let federated = await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url, secondaryRealm.url],
+        });
+        assert.strictEqual(federated.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          federated.body.data.length,
+          2,
+          'the merged response holds no more than the maximum',
+        );
+        assert.strictEqual(
+          federated.body.meta.page.total,
+          4,
+          'the true match count is reported beside the short page',
+        );
+
+        let single = await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url],
+        });
+        assert.strictEqual(
+          single.body.data.length,
+          2,
+          'a single realm keeps the whole default page',
+        );
+      } finally {
+        resetSearchBoundsForTests();
+      }
+    });
+
     test('the time budget cuts off an HTML-leg search, but not a render', async function (assert) {
       setSearchBoundsForTests({ timeBudgetMs: 0 });
       try {

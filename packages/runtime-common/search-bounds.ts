@@ -14,7 +14,9 @@ const log = logger('search-bounds');
 //     realm would otherwise assemble a response of tens of MB for an anonymous
 //     caller. A render's own searches are clamped as well: the headers that
 //     mark one are set by the caller, so an exemption keyed on them is an
-//     exemption anyone can claim.
+//     exemption anyone can claim. A federated search's realms share the
+//     absolute maximum (`applyFederatedRowBudget`), so naming more realms
+//     doesn't buy a larger response.
 //   - The time budget holds on every live search, on either leg, and not on a
 //     render's search, which the render's own timeout governs.
 //   - The card `@context` caps (page size, realms fan-out, concurrency) hold on
@@ -720,6 +722,38 @@ export function applyServerSearchPageBound(query: Query): Query {
     serverAbsoluteMaxPageSize,
     'clamp',
   );
+}
+
+// The merged-response bound on a federated search. Each realm a federated
+// search fans out to answers its own page, and the merge concatenates them, so
+// the page bound alone lets a response grow with the number of realms named —
+// and a caller may name every public realm. The realms share
+// SERVER_ABSOLUTE_MAX_PAGE_SIZE instead: when the clamped page times the realm
+// count would pass it, each realm's page shrinks to its share (at least one
+// row). As with the page clamp, nothing is rejected, `page.number` is carried
+// through unchanged, and the true match count still rides `meta.page.total`
+// and each realm's own `meta.realmTotals` entry, so a caller can see it got a
+// short page and page a realm on its own.
+//
+// `realmCount` is the number of realms that will contribute rows. Apply this
+// after `applyServerSearchPageBound`, which guarantees the page has a size.
+export function applyFederatedRowBudget(
+  query: Query,
+  realmCount: number,
+): Query {
+  if (realmCount <= 1) {
+    return query;
+  }
+  let share = Math.max(
+    MIN_PAGE_SIZE,
+    Math.floor(serverAbsoluteMaxPageSize / realmCount),
+  );
+  let page = query.page;
+  let size = Number((page as { size?: unknown } | undefined)?.size);
+  if (!Number.isFinite(size) || size <= share) {
+    return query;
+  }
+  return { ...query, page: { ...page, size: share } } as Query;
 }
 
 // Run a live search under the wall-clock budget. The runner receives an
