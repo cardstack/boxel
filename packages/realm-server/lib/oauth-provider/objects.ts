@@ -336,8 +336,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// Why an authorization request didn't reach consent. Each is a fixed label
-// for telemetry, and tells the error page which of its states to show. The
+// Why an authorization request didn't reach consent, or why Boxel ended a
+// flow at consent. Each is a fixed label for telemetry, and tells the error page which of its states to show. The
 // secure origin's `security/oauth-error-states.js` gives each one a state.
 export const AUTHORIZATION_REFUSAL_REASONS = Object.freeze([
   // The library's own refusals, before Boxel could check the client.
@@ -356,6 +356,9 @@ export const AUTHORIZATION_REFUSAL_REASONS = Object.freeze([
   'unknown-scope',
   'missing-scope',
   'openid',
+  // The consent route, for a flow it ended because the authorize page's
+  // answer couldn't be read (`consent.ts`).
+  'unreadable-decision',
 ] as const);
 
 export type AuthorizationRefusalReason =
@@ -506,18 +509,24 @@ export async function decideFlow(
   return rows.length > 0 ? ticket : undefined;
 }
 
+// A flow's decision. A flow ended undecided has none.
 export async function findConsentDecision(
   dbAdapter: DBAdapter,
   interactionId: string,
 ): Promise<ConsentDecisionRecord | undefined> {
-  return (await findObject(dbAdapter, CONSENT_DECISION_KIND, interactionId)) as
-    | ConsentDecisionRecord
-    | undefined;
+  let payload = await findObject(
+    dbAdapter,
+    CONSENT_DECISION_KIND,
+    interactionId,
+  );
+  return payload && payload.ended !== true
+    ? (payload as unknown as ConsentDecisionRecord)
+    : undefined;
 }
 
 // Finds a flow's decision and deletes it, so only one request can finish the
 // flow with it. `decidedAt` is when the decision was first stored, which a
-// second decision never moves.
+// second decision never moves. A flow ended undecided has no decision.
 export async function takeConsentDecision(
   dbAdapter: DBAdapter,
   interactionId: string,
@@ -531,8 +540,12 @@ export async function takeConsentDecision(
   if (!row?.current) {
     return undefined;
   }
+  let payload = asRecord(row.payload);
+  if (payload.ended === true) {
+    return undefined;
+  }
   return {
-    ...(asRecord(row.payload) as unknown as ConsentDecisionRecord),
+    ...(payload as unknown as ConsentDecisionRecord),
     decidedAt: new Date(row.created_at),
   };
 }
@@ -574,4 +587,51 @@ export async function destroyConsentDecision(
   interactionId: string,
 ): Promise<void> {
   await destroyObject(dbAdapter, CONSENT_DECISION_KIND, interactionId);
+}
+
+// What a flow's decision row holds once Boxel has ended the flow undecided
+// (`endUndecidedFlow`). No ticket is ever stored with it, so it never
+// finishes a flow.
+export const ENDED_FLOW_DECISION = Object.freeze({ ended: true } as const);
+
+// Ends a flow nobody has decided, so it can never finish: in one statement,
+// claims the flow's decision row, so no decision can be recorded after it,
+// and deletes the flow's interaction, so neither the finish route nor the
+// library's resume can carry it on. Answers false, and changes nothing, when
+// the flow already has a decision: the window that made it may still be
+// finishing the flow.
+export async function endUndecidedFlow(
+  dbAdapter: DBAdapter,
+  interactionId: string,
+  expiresIn: number,
+): Promise<boolean> {
+  let payload = await prepareStore(
+    dbAdapter,
+    CONSENT_DECISION_KIND,
+    interactionId,
+    { ...ENDED_FLOW_DECISION },
+  );
+  let [row] = (await dbAdapter.execute(
+    `WITH claimed AS (
+       INSERT INTO oauth_provider_objects (kind, id_hash, payload, expires_at)
+         VALUES ($1, decode($2, 'hex'), $3::jsonb, now() + make_interval(secs => $4))
+         ON CONFLICT (kind, id_hash) DO NOTHING
+         RETURNING kind
+     ),
+     ended AS (
+       DELETE FROM oauth_provider_objects
+         WHERE kind = 'Interaction' AND id_hash = decode($2, 'hex')
+           AND EXISTS (SELECT 1 FROM claimed)
+     )
+     SELECT count(*)::int AS claimed FROM claimed`,
+    {
+      bind: [
+        CONSENT_DECISION_KIND,
+        sha256Hex(interactionId),
+        payload,
+        expiresIn,
+      ],
+    },
+  )) as { claimed: number }[];
+  return (row?.claimed ?? 0) > 0;
 }
