@@ -38,7 +38,7 @@ import {
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { startExampleAIApp } from './support/mock-oauth-client/server.ts';
 import type { RunningExampleAIApp } from './support/mock-oauth-client/server.ts';
-import { MCP_SERVER_NAME } from '../handlers/handle-mcp.ts';
+import { MCP_MAX_BODY_BYTES, MCP_SERVER_NAME } from '../handlers/handle-mcp.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
 const METADATA = `${OAUTH_TEST_ISSUER}/.well-known/oauth-protected-resource/mcp`;
@@ -161,11 +161,10 @@ module(basename(import.meta.filename), function (hooks) {
     return client;
   }
 
-  // One JSON-RPC request to `/mcp`, as an MCP client sends it.
-  function rpc(
+  // A POST to `/mcp` with the headers an MCP client sends.
+  function post(
     token: string | undefined,
-    method: string,
-    params: Record<string, unknown> = {},
+    body: string,
     { host = OAUTH_TEST_SERVER_URL.host }: { host?: string } = {},
   ) {
     let request = supertest(server!)
@@ -177,8 +176,20 @@ module(basename(import.meta.filename), function (hooks) {
     if (token) {
       request = request.set('Authorization', `Bearer ${token}`);
     }
-    return request.send(
+    return request.send(body);
+  }
+
+  // One JSON-RPC request to `/mcp`, as an MCP client sends it.
+  function rpc(
+    token: string | undefined,
+    method: string,
+    params: Record<string, unknown> = {},
+    options: { host?: string } = {},
+  ) {
+    return post(
+      token,
       JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      options,
     );
   }
 
@@ -266,6 +277,34 @@ module(basename(import.meta.filename), function (hooks) {
         `${scope}: no tools`,
       );
     }
+  });
+
+  test('a notification is answered 202 with no body', async function (assert) {
+    let { token } = await accessToken();
+    let response = await post(
+      token,
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
+    );
+    assert.strictEqual(response.status, 202);
+    assert.strictEqual(response.text, '');
+    assert.strictEqual(response.headers['content-type'], undefined);
+  });
+
+  test('a body over the limit is answered 413', async function (assert) {
+    let { token } = await accessToken();
+    let request = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'ping',
+      params: { padding: 'a'.repeat(MCP_MAX_BODY_BYTES) },
+    });
+    let response = await post(token, request);
+    assert.strictEqual(response.status, 413);
+    assert.strictEqual(response.body.jsonrpc, '2.0');
+    assert.strictEqual(response.body.id, null);
+
+    let small = await rpc(token, 'ping');
+    assert.strictEqual(small.status, 200, 'a body under it is served');
   });
 
   test('a call to /mcp logs the token nowhere and sends it nowhere', async function (assert) {

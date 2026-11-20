@@ -4,13 +4,16 @@
 //
 // It answers the MCP basics and nothing more: `initialize`, `ping` and
 // `tools/list`, which lists no tools. It is stateless, with plain JSON
-// responses: no session, and no event stream. The resource's controller runs
-// first (`lib/oauth-provider/resource.ts`), so only a request with a valid
-// token for `/mcp` gets here, as `ctxt.state.oauthCaller`.
+// responses: no session, and no event stream. A body over
+// `MCP_MAX_BODY_BYTES` is answered `413` unread. The resource's controller
+// runs first (`lib/oauth-provider/resource.ts`), so only a request with a
+// valid token for `/mcp` gets here. Its caller, with the scopes the token
+// holds, is `ctxt.state.oauthCaller`; the token itself never gets here
+// (ADR 021 §1.5).
 //
 // Each tool names the scope it needs where it is defined, and a tool call is
-// admitted only when the token holds that scope (ADR 021 §1.3). There are no
-// tools, so every tool call is refused.
+// admitted only when the caller's scopes include it (ADR 021 §1.3). There are
+// no tools, so every tool call is refused.
 
 import type Koa from 'koa';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -21,9 +24,19 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { fetchRequestFromContext } from '../middleware/index.ts';
+import {
+  fetchRequestFromContext,
+  setRequestText,
+} from '../middleware/index.ts';
 
 export const MCP_SERVER_NAME = 'boxel-mcp-placeholder';
+
+// The largest body `/mcp` reads. Any account can get a token, so a body is
+// refused as soon as its declared length or the bytes received pass this,
+// and is never held whole. The placeholder's requests are a few hundred bytes.
+export const MCP_MAX_BODY_BYTES = 64 * 1024;
+
+class BodyTooLarge extends Error {}
 
 function placeholderServer(): Server {
   let server = new Server(
@@ -43,6 +56,18 @@ function placeholderServer(): Server {
 // `POST /mcp`. A new server and transport answer each request, since nothing
 // is kept between requests.
 export async function handleMCP(ctxt: Koa.Context): Promise<void> {
+  try {
+    setRequestText(ctxt, await readBody(ctxt));
+  } catch (error) {
+    if (error instanceof BodyTooLarge) {
+      return jsonRPCError(
+        ctxt,
+        413,
+        `The request body is larger than ${MCP_MAX_BODY_BYTES} bytes.`,
+      );
+    }
+    throw error;
+  }
   let server = placeholderServer();
   let transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -53,6 +78,11 @@ export async function handleMCP(ctxt: Koa.Context): Promise<void> {
     let response = await transport.handleRequest(
       await fetchRequestFromContext(ctxt),
     );
+    // The body is set before the status, and an empty one as `null`: Koa
+    // would otherwise write its status message as the body of a response
+    // that has none, such as the `202` that answers notifications.
+    let body = await response.text();
+    ctxt.body = body || null;
     ctxt.status = response.status;
     // Koa sets the length from the body it writes.
     response.headers.forEach((value, name) => {
@@ -60,10 +90,6 @@ export async function handleMCP(ctxt: Koa.Context): Promise<void> {
         ctxt.set(name, value);
       }
     });
-    let body = await response.text();
-    if (body) {
-      ctxt.body = body;
-    }
   } finally {
     await transport.close();
     await server.close();
@@ -76,11 +102,31 @@ export async function handleMCP(ctxt: Koa.Context): Promise<void> {
 export async function handleMCPMethodNotAllowed(
   ctxt: Koa.Context,
 ): Promise<void> {
-  ctxt.status = 405;
   ctxt.set('Allow', 'POST');
-  ctxt.body = {
-    jsonrpc: '2.0',
-    error: { code: -32000, message: 'Method not allowed.' },
-    id: null,
-  };
+  jsonRPCError(ctxt, 405, 'Method not allowed.');
+}
+
+async function readBody(ctxt: Koa.Context): Promise<string> {
+  let declared = Number(ctxt.get('Content-Length'));
+  if (Number.isFinite(declared) && declared > MCP_MAX_BODY_BYTES) {
+    throw new BodyTooLarge();
+  }
+  let chunks: Buffer[] = [];
+  let received = 0;
+  for await (let chunk of ctxt.req) {
+    let buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    received += buffer.length;
+    if (received > MCP_MAX_BODY_BYTES) {
+      throw new BodyTooLarge();
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+// An error answered over HTTP before any JSON-RPC request is read, shaped as
+// the MCP SDK's transport shapes its own.
+function jsonRPCError(ctxt: Koa.Context, status: number, message: string) {
+  ctxt.status = status;
+  ctxt.body = { jsonrpc: '2.0', error: { code: -32000, message }, id: null };
 }

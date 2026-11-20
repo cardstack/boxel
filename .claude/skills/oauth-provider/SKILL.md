@@ -307,7 +307,8 @@ private JWK with `kid`, `use: "sig"`, `alg: "RS256"`, as
 All in `packages/realm-server/tests/`, named `oauth-provider-*-test.ts`, one
 per endpoint or concern (registration, authorization, consent, finish,
 token, token-lookup, revocation, connections, cleanup, discovery, client
-checks, client metadata, mock client). `oauth-provider-secrecy-test.ts` is
+checks, client metadata, mock client, mcp). `oauth-provider-mcp-test.ts`
+covers the placeholder `/mcp` end to end, with the MCP SDK's own client. `oauth-provider-secrecy-test.ts` is
 the whole-connection secrecy check: every table at each step, the
 request log and the provider's channel at info level, and Sentry. `tests/helpers/oauth-provider-flow.ts`
 drives each step; `tests/helpers/oauth-provider-secrets.ts` captures logs and
