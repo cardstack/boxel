@@ -47,9 +47,6 @@ import SubmodeLayout from './submode-layout';
 import type { PublishError } from './publish-realm-modal';
 import type { ViewCardFn } from '@cardstack/base/card-api';
 
-const HOST_URLS_NEED_A_CARD =
-  'Open a card to manage the host URLs of its realm.';
-
 interface HostSubmodeSignature {
   Element: HTMLElement;
   Args: {};
@@ -336,7 +333,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               </:trigger>
               <:content>
                 <span data-test-host-urls-needs-card>
-                  {{HOST_URLS_NEED_A_CARD}}
+                  Open a card to manage the host URLs of its realm.
                 </span>
               </:content>
             </Tooltip>
