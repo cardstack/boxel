@@ -421,9 +421,12 @@ module(basename(import.meta.filename), function () {
               },
             },
             // Holds its tab's main thread for longer than the reset's budget
-            // as its component is torn down, so the reset can't land: the
-            // shape of a card whose teardown, or whatever it left running,
-            // keeps the tab busy after its render.
+            // as its isolated component is torn down, so the reset can't
+            // land: the shape of a card whose teardown, or whatever it left
+            // running, keeps the tab busy after its render. Only a capture of
+            // the isolated format leaves that component mounted until the
+            // reset; a visit tears it down itself as it moves on to the next
+            // format.
             'stall.gts': `
               import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               import { registerDestructor } from '@ember/destroyable';
@@ -452,26 +455,17 @@ module(basename(import.meta.filename), function () {
                 },
               },
             },
-            // Throws from its isolated template, so its render ends in a
-            // render error rather than a captured card.
-            'broken.gts': `
-              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
-              export class Broken extends CardDef {
-                static displayName = "Broken";
-                @field name = contains(StringField);
-                static isolated = class extends Component<typeof this> {
-                  get boom() {
-                    throw new Error('the broken card cannot render');
-                  }
-                  <template>{{this.boom}}</template>
-                }
-              }
-            `,
+            // Adopts from a module the realm doesn't have, so its render
+            // ends in a not-found error. Unlike a template that throws, a
+            // not-found error doesn't evict the tab.
             'broken-card.json': {
               data: {
                 attributes: { name: 'Broken' },
                 meta: {
-                  adoptsFrom: { module: rri('./broken'), name: 'Broken' },
+                  adoptsFrom: {
+                    module: rri('./missing-module'),
+                    name: 'Missing',
+                  },
                 },
               },
             },
@@ -594,18 +588,21 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a tab whose reset runs out its budget is retired, and the next render gets another', async function (assert) {
-      let first = await prerenderCard(prerenderer, {
-        affinityType: 'realm',
-        affinityValue: realmURL,
+      let first = await prerenderer.prerenderCapture({
         realm: realmURL,
         url: `${realmURL}stall-card`,
         auth: auth(),
+        format: 'isolated',
       });
-      assert.notOk(first.response.error, 'the card itself rendered');
+      assert.strictEqual(
+        first.response.status,
+        'ready',
+        'the card itself rendered',
+      );
       assert.false(first.pool.evicted, 'the render did not evict its tab');
       assert.true(
         (first.timings.resetMs ?? 0) >= DEFAULT_POST_RENDER_RESET_MS,
-        `the visit waited out the whole budget (${first.timings.resetMs}ms)`,
+        `the capture waited out the whole budget (${first.timings.resetMs}ms)`,
       );
       assert.deepEqual(
         retired,
@@ -641,7 +638,10 @@ module(basename(import.meta.filename), function () {
         auth: auth(),
       });
       assert.ok(response.error, 'the render ended in an error');
-      assert.false(pool.evicted, 'the error did not evict the tab');
+      assert.false(
+        pool.evicted,
+        `the error did not evict the tab (${response.error?.error.status}: ${response.error?.error.message})`,
+      );
       assert.strictEqual(
         typeof timings.resetMs,
         'number',
