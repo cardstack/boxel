@@ -4,8 +4,8 @@
 // the run, while the run waits in the queue, runs, and once the run has
 // ended. Each run says what
 // started it (one of the card's triggers, a Preview or a Run now), where it
-// is, how it ended and why, who canceled it, and which of its trigger's later
-// slots joined it while it waited (the slots the tick reports as skipped).
+// is, how it ended and why, who canceled it, and which later trigger slots
+// joined it while it waited (the slots the tick reports as skipped).
 //
 // Who a run acts as and who canceled it are Matrix ids, so they follow ADR 011
 // §1.2 like the payer on `_automation-status` (see `automation-identities.ts`).
@@ -21,7 +21,7 @@ import {
   type AutomationRunStep,
 } from './automation-run-events.ts';
 import {
-  readRunMilestones,
+  readRunMilestonesFor,
   type RunMilestones,
 } from './automation-run-milestones.ts';
 import {
@@ -54,8 +54,10 @@ export const AUTOMATION_RUN_LIST_ITEM_TYPE = 'automation-run-item';
 export const AUTOMATION_RUN_LIST_DEFAULT_LIMIT = 20;
 export const AUTOMATION_RUN_LIST_MAX_LIMIT = 100;
 
-// A later slot of a run's trigger that joined the run while the run was
-// still pending, rather than starting a run of its own.
+// A later slot of one of the card's schedules that joined a pending
+// scheduled run, rather than starting a run of its own. The tick joins any
+// due trigger's slot to the automation's latest pending scheduled run from an
+// earlier instant, so the slot's trigger can differ from the run's.
 export interface AutomationRunJoinedSlot {
   trigger: string;
   // The slot's scheduled instant, as an ISO time.
@@ -104,28 +106,29 @@ export interface AutomationRunItemAttributes {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
-  // The trigger's later slots that joined the run, in the order they joined.
+  // The later slots that joined the run, in the order they joined, each
+  // naming its own trigger.
   joined: AutomationRunJoinedSlot[];
   // The milestones the run's script planned and reached: the one a running
   // run is in, and the one a failed run failed in (see
   // `automation-run-milestones.ts`).
   milestones: RunMilestones | null;
   // For a run still waiting for its first attempt, what the run waits for:
-  // the automation's run directly ahead of it, since an automation's runs go
-  // one at a time, or, with none ahead, a worker to start the run. Null for
-  // a run that isn't waiting.
+  // the automation's running run, since an automation's runs go one at a
+  // time, or, with none running, a worker to start the run. Null for a run
+  // that isn't waiting.
   waitingFor: AutomationRunWaitingFor | null;
 }
 
 export type AutomationRunWaitingFor =
   | {
       kind: 'run';
-      // The run ahead, as the list names a run.
+      // The automation's running run, as the list names a run.
       runId: string;
       startedBy: AutomationRunItemAttributes['startedBy'];
       trigger: string | null;
       slot: string | null;
-      state: 'pending' | 'running';
+      state: 'running';
     }
   | { kind: 'worker' };
 
@@ -231,7 +234,11 @@ export async function answerAutomationRunList({
   let pageNumber = 1;
   if (page !== null) {
     pageNumber = Number(page);
-    if (!/^\d+$/.test(page) || pageNumber < 1) {
+    if (
+      !/^\d+$/.test(page) ||
+      pageNumber < 1 ||
+      !Number.isSafeInteger((pageNumber - 1) * pageSize)
+    ) {
       return {
         status: 400,
         message: `"${AUTOMATION_RUN_LIST_PAGE_PARAM}" must be a whole number from 1`,
@@ -249,9 +256,15 @@ export async function answerAutomationRunList({
     querier,
     runs.map((run) => run.id),
   );
-  let waiting = runs.some((run) => run.state === 'pending')
-    ? await listActiveRuns(querier, runs[0].automationId)
-    : [];
+  let milestones = await readRunMilestonesFor(
+    dbAdapter,
+    runs.map((run) => run.id),
+  );
+  let running = runs.some((run) => run.state === 'pending')
+    ? (await listActiveRuns(querier, runs[0].automationId)).find(
+        (run) => run.state === 'running',
+      )
+    : undefined;
   // Each person a page names is looked up once, however many runs name them.
   let shown = new Map<string, Promise<string | null>>();
   let show = (person: string | null) => {
@@ -285,8 +298,8 @@ export async function answerAutomationRunList({
           startedAt: run.startedAt,
           finishedAt: run.finishedAt,
           joined: joined.get(run.id) ?? [],
-          milestones: (await readRunMilestones(dbAdapter, run.id)) ?? null,
-          waitingFor: waitingFor(run, waiting),
+          milestones: milestones.get(run.id) ?? null,
+          waitingFor: waitingFor(run, running),
         },
       }),
     ),
@@ -339,7 +352,7 @@ function iso(value: unknown): string {
 }
 
 // The slots that joined each run, from the `trigger` lines the tick writes on
-// a pending run when a later slot of its trigger joins it (`data.skipped`).
+// a pending run when a later slot of any trigger joins it (`data.skipped`).
 // A line the log's cap refused leaves its slot out.
 async function readJoinedSlots(
   querier: Querier,
@@ -374,30 +387,24 @@ async function readJoinedSlots(
   return joined;
 }
 
-// What a waiting run waits for: the automation's active run made directly
-// before the run, or, with none, a worker.
+// What a waiting run waits for: the automation's running run, since an
+// automation's runs go one at a time, or, with none running, a Boxel worker.
+// The queue orders an automation's waiting runs by their jobs, which a
+// re-queued job can put behind newer runs, so only the running run is named.
 function waitingFor(
   run: AutomationRun,
-  active: AutomationRun[],
+  running: AutomationRun | undefined,
 ): AutomationRunWaitingFor | null {
   if (run.state !== 'pending') {
     return null;
   }
-  let ahead = active
-    .filter(
-      (other) =>
-        other.id !== run.id &&
-        (other.createdAt < run.createdAt ||
-          (other.createdAt === run.createdAt && other.id < run.id)),
-    )
-    .at(-1);
-  if (!ahead || (ahead.state !== 'pending' && ahead.state !== 'running')) {
+  if (!running) {
     return { kind: 'worker' };
   }
   return {
     kind: 'run',
-    runId: ahead.id,
-    ...startedBy(ahead),
-    state: ahead.state,
+    runId: running.id,
+    ...startedBy(running),
+    state: 'running',
   };
 }

@@ -1197,6 +1197,46 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
+      test('every waiting run names the running run as what the run waits for, or waits for a worker when none runs', async function (assert) {
+        await writeAutomation();
+        let earlier = await made('nightly', '2026-11-10T08:30:00.000Z', 40, {
+          waiting: true,
+        });
+        let later = await made('hourly', '2026-11-10T18:00:00.000Z', 30, {
+          waiting: true,
+        });
+        let byWaiting = async () =>
+          new Map(
+            (await listed()).data.map(({ id, attributes }) => [
+              id,
+              attributes.waitingFor,
+            ]),
+          );
+        let waiting = await byWaiting();
+        assert.deepEqual(
+          [waiting.get(earlier.id), waiting.get(later.id)],
+          [{ kind: 'worker' }, { kind: 'worker' }],
+          'with nothing running, every waiting run waits for a worker',
+        );
+
+        let running = await made('manual', randomUUID(), 20);
+        await recordAutomationRunAdmitted(dbAdapter, running.id, 1);
+        waiting = await byWaiting();
+        let ahead = {
+          kind: 'run',
+          runId: running.id,
+          startedBy: 'run-now',
+          trigger: null,
+          slot: null,
+          state: 'running',
+        };
+        assert.deepEqual(
+          [waiting.get(earlier.id), waiting.get(later.id)],
+          [ahead, ahead],
+          'each waiting run names the running run, not the waiting run made just before it',
+        );
+      });
+
       test('a canceled run lists who canceled it, and a pause no person asked for lists its reason', async function (assert) {
         await writeAutomation();
         await switchOn();
@@ -1346,6 +1386,7 @@ module(basename(import.meta.filename), function (hooks) {
           ['limit', 'ten'],
           ['page', '0'],
           ['page', 'two'],
+          ['page', '1000000000000000000'],
         ]) {
           let response = await runsOf(ADMIN, ['read', 'write'], {
             automation: automationURL(),

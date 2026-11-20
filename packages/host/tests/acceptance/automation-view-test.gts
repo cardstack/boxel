@@ -1597,7 +1597,7 @@ module('Acceptance | automation view', function (hooks) {
       );
       assert.ok(
         runText('lookup').includes(
-          'Boxel didn’t start the run because Boxel refused an outside service the automation calls.',
+          'Boxel didn’t start the run because Boxel couldn’t use an outside service the automation calls.',
         ),
         'any other refusal is a refused outside service',
       );
@@ -1716,6 +1716,15 @@ module('Acceptance | automation view', function (hooks) {
       );
       await waitFor('[data-test-automation-run="second"]', { timeout: 10000 });
       assert.ok(runsAsked.length > askedBefore, 'the view asked again');
+      let askedAfter = runsAsked.length;
+      await settled();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await settled();
+      assert.strictEqual(
+        runsAsked.length,
+        askedAfter,
+        'an answer sets off no further read: the view reads once per event',
+      );
       assert
         .dom('[data-test-automation-run="second"]')
         .hasAttribute('data-test-automation-run-state', 'Running');
@@ -1836,7 +1845,9 @@ module('Acceptance | automation view', function (hooks) {
         .doesNotExist('a run whose script reported no milestones says nothing');
 
       assert.dom('[data-test-automation-run-milestones]').doesNotExist();
-      await click('[aria-label="Expand nightly run, Running"]');
+      await click(
+        '[data-test-automation-runs] button[aria-label^="Expand nightly run for"][aria-label$=", Running"]',
+      );
       await waitFor('[data-test-automation-run-milestones]', {
         timeout: 10000,
       });
