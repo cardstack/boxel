@@ -130,7 +130,10 @@ module('Acceptance | cards grid | pages', function (hooks) {
       .hasText('1', 'returning to the filter starts at page 1 too');
   });
 
-  test('returning to a filter through Highlights starts again at page 1', async function (assert) {
+  test('choosing a filter again starts it at page 1', async function (assert) {
+    // The page resets when a filter is chosen, not when the grid next reads a
+    // page under another key: a filter that shows no paged list (Highlights)
+    // never reads one, so a reset that waited for that read would never come.
     await visitOperatorMode({
       stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
     });
@@ -139,8 +142,6 @@ module('Acceptance | cards grid | pages', function (hooks) {
     await click(`${PAGINATION} [aria-label="Next"]`);
     await waitUntil(() => gridItemIds().length === PET_COUNT - PAGE_SIZE);
 
-    // Highlights shows no paged list, so the grid never reads a page under it.
-    await click('[data-test-boxel-filter-list-button="Highlights"]');
     await click('[data-test-boxel-filter-list-button="Pet"]');
     await waitUntil(() => gridItemIds().length === PAGE_SIZE);
     assert
