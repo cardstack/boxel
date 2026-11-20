@@ -113,7 +113,10 @@ description: >-
   `createCard`, and the realm's `_automations` list route
   (`automation-list.ts`) it reads, with each automation's state, triggers,
   next run, payer, monthly cap, spend this month, last result and current
-  run milestone.
+  run milestone. Also covers the run list, the Automation card's Runs section
+  and the realm's `_automation-runs` route (`automation-run-list.ts`) it
+  reads: each run's trigger, state and step, error reason and script line,
+  who canceled it, and the slots that joined it.
 ---
 
 # Automations
@@ -1596,6 +1599,43 @@ The section renders only once the route answers, and only when it answers that t
 | `currentRun`                         | the run in progress, leaving out a Preview: `runId`, `startedAt`, `milestone` (the run milestone the script last reported, or null before the first) and `done` / `total` when the script counts inside the milestone; null when nothing runs        |
 
 Host tests mount a virtual-network handler that answers the route (`tests/acceptance/realm-automations-test.gts`), since an in-browser test realm has no `automations` table.
+
+## The run list
+
+The Automation card's isolated view lists the automation's runs in a **Runs** section, for the realm's direct writers alone: one row per run, newest first, with what started the run, the run's state, and why a run that didn't complete ended as it did. A slot of a schedule that joined a run still waiting to start (_skipped_, _The tick_) shows as its own row above the run it joined, naming that run. The section reads `GET <realm>/_automation-runs` through the host's `authed-fetch` tool, reads it again on every `job` and `automation` realm event naming the automation (as many runs as the viewer has paged through, up to the route's limit), and pages back with **Show older runs**.
+
+### The run list route
+
+```
+GET <realm>/_automation-runs?automation=<card URL>&before=<run id>&limit=<n>
+```
+
+`answerAutomationRunList` in `packages/runtime-common/automation-run-list.ts`, loaded on first use like `automation-status.ts`, answers on the realm ACL, then lists runs only to a direct writer, the same way `_automations` does: anyone else the ACL lets read gets HTTP 200 with `{ data: [], meta: { directWriter: false } }`, and an anonymous caller on a realm only signed-in users read gets 401. Only a direct writer's request is checked: a missing `automation`, one outside the realm, or a `limit` that isn't a whole number from 1 to `AUTOMATION_RUN_LIST_MAX_LIMIT` (100) is 400. A page holds `AUTOMATION_RUN_LIST_DEFAULT_LIMIT` (20) runs when `limit` is absent.
+
+A direct writer gets `no-store` `{ data: [<automation-run-item>], meta: { directWriter: true, next } }`. The runs are the automation's `automation_runs` rows, Previews and Run nows included, ordered by `created_at` then `id`, newest first (`listAutomationRuns` in `automation-runs.ts`, through the `(automation_id, created_at)` index). `next` is the `before` for the page of older runs, the last run on this page, or null on the oldest page. A `before` that names no run of this automation reads from the newest. Each resource's `id` is the run's id, and its attributes are:
+
+| Attribute                                           | Holds                                                                                                                                                                                               |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `startedBy`                                         | `trigger`, `preview` or `run-now` (a `manual` run, told apart by `dry_run`)                                                                                                                         |
+| `trigger`, `slot`                                   | the trigger's label and the slot it fired for (a scheduled instant, or a webhook delivery's id); both null for a Preview or Run now, whose slot is a click's id                                     |
+| `state`, `step`                                     | the run's state, and the step it is in or got to (`automationRunStep`): an `error` at `admission` is a run admission refused, whose script never started; null before any attempt starts            |
+| `errorReason`, `errorMessage`                       | the row's error code and detail, any Matrix id the viewer may not see replaced by "someone". A run a pause canceled without a person asking carries the pause's reason                              |
+| `scriptLine`                                        | for a `script-error`, the line the error points at; `errorMessage` then holds the script's message alone (`scriptErrorText` writes the two together on the row, `scriptErrorLine` reads them apart) |
+| `canceledBy`, `canceledByAPerson`, `viewerCanceled` | who canceled the run under ADR 011 §1.2 (`shownIdentity` in `automation-identities.ts`), and the booleans that say as much as the viewer may know when the id is hidden                             |
+| `actsAs`, `viewerIsActsAs`                          | who the run acts as, under the same rule                                                                                                                                                            |
+| `createdAt`, `startedAt`, `finishedAt`              | ISO times                                                                                                                                                                                           |
+| `joined`                                            | the slots that joined the run, each `{ trigger, slot, at }`, read from the run's `trigger` log lines with `data.skipped` (_The tick_). A line the log's cap refused leaves its slot out             |
+
+How the card words each ending: `script-error` names the line; `timed-out` and `hit-a-cap` say Boxel stopped the run at the limit (the cap's name comes from the message, `The run hit its <cap> cap`); a spending or access refusal at admission (_Admission_'s table) says Boxel didn't start the run and what fixes it; any other admission refusal is an outside service Boxel refused; a cancel names who canceled it, or the pause that canceled it.
+
+By hand in development, with a realm token for a direct writer:
+
+```bash
+curl -s -H "Authorization: Bearer $REALM_TOKEN" -H 'Accept: application/json' \
+  'http://localhost:4201/example-user/example-realm/_automation-runs?automation=http://localhost:4201/example-user/example-realm/automations/nightly&limit=5'
+```
+
+Host tests mount a virtual-network handler that answers the route (`tests/acceptance/automation-view-test.gts`), since an in-browser test realm has no `automation_runs` table.
 
 ## The automation command
 

@@ -18,6 +18,7 @@ import {
   MAX_AUTOMATION_SCRIPT_CHARS,
   automationRunDedupeKey,
   isAutomationScriptOutcome,
+  scriptErrorText,
 } from '../automation-run-command.ts';
 import type { ReportAutomationChange } from '../automation-change-events.ts';
 import type { ReportRunChange } from '../automation-run-events.ts';
@@ -509,11 +510,10 @@ async function attemptRun(
   );
   if (outcome.state === 'error') {
     // The finish discards the overlay, so nothing the script staged lands.
-    let message =
-      outcome.line !== undefined
-        ? `line ${outcome.line}: ${outcome.message}`
-        : outcome.message;
-    return await fail(outcome.reason, message);
+    return await fail(
+      outcome.reason,
+      scriptErrorText(outcome.message, outcome.line),
+    );
   }
   if (dryRun) {
     // A Preview stops before the commit. Its finish keeps a copy of what it

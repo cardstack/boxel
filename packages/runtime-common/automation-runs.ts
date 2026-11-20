@@ -248,6 +248,58 @@ export async function getAutomationRun(
   return row ? runFromRow(row) : undefined;
 }
 
+// One page of an automation's runs, newest first: the order they were made
+// in, Previews and Run nows included. `before` names the run the page starts
+// after, the last run of the page before; a run that isn't the automation's
+// starts the list from the newest. `more` says older runs follow the page.
+// The read walks the runs' `(automation_id, created_at)` index, so a page
+// costs the same however long the automation's history.
+export async function listAutomationRuns(
+  querier: Querier,
+  automationId: RealmResourceIdentifier,
+  { before, limit }: { before?: string; limit: number },
+): Promise<{ runs: AutomationRun[]; more: boolean }> {
+  let after: Expression = [];
+  if (before && isAutomationRunId(before)) {
+    let [cursor] = (await querier([
+      'SELECT created_at FROM automation_runs WHERE id =',
+      param(before),
+      'AND automation_id =',
+      param(automationId),
+    ] as Expression)) as { created_at: PgPrimitive }[];
+    if (cursor) {
+      after = [
+        'AND (created_at, id) < (',
+        param(cursor.created_at),
+        ',',
+        param(before),
+        ')',
+      ] as Expression;
+    }
+  }
+  let rows = (await querier([
+    'SELECT * FROM automation_runs WHERE automation_id =',
+    param(automationId),
+    ...after,
+    'ORDER BY created_at DESC, id DESC LIMIT',
+    param(limit + 1),
+  ] as Expression)) as Record<string, PgPrimitive>[];
+  return {
+    runs: rows.slice(0, limit).map(runFromRow),
+    more: rows.length > limit,
+  };
+}
+
+// Whether `id` can name a run: a run's id is a UUID, so anything else names
+// no run, and a read can answer so without asking the database, which would
+// refuse to compare it with the column.
+export function isAutomationRunId(id: string): boolean {
+  return RUN_ID.test(id);
+}
+
+const RUN_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Why a run-token call was refused by the run's row: there is no such run,
 // it isn't running (it finished, was canceled or hasn't started), or another
 // attempt owns it.

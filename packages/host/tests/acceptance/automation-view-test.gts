@@ -142,6 +142,33 @@ const NOTE_MODULE = `
   }
 `;
 
+// A run as the realm's `_automation-runs` route lists it.
+type Run = { id: string } & Record<string, unknown>;
+
+function run(id: string, attributes: Record<string, unknown> = {}): Run {
+  return {
+    id,
+    startedBy: 'trigger',
+    trigger: 'nightly',
+    slot: '2030-01-01T08:30:00.000Z',
+    state: 'complete',
+    step: 'script',
+    errorReason: null,
+    errorMessage: null,
+    scriptLine: null,
+    canceledBy: null,
+    canceledByAPerson: false,
+    viewerCanceled: false,
+    actsAs: '@testuser:localhost',
+    viewerIsActsAs: true,
+    createdAt: '2030-01-01T08:30:00.000Z',
+    startedAt: '2030-01-01T08:30:05.000Z',
+    finishedAt: '2030-01-01T08:31:00.000Z',
+    joined: [],
+    ...attributes,
+  };
+}
+
 // What the status route answers: a direct writer the automation's
 // attributes, and any other viewer the realm lets read that it isn't a
 // direct writer.
@@ -1246,5 +1273,393 @@ module('Acceptance | automation view', function (hooks) {
       timeout: 10000,
     });
     assert.dom('[data-test-automation-fitted-next]').doesNotExist();
+  });
+
+  // The Runs section, read from the realm's `_automation-runs` route, which
+  // an in-browser test realm can't answer: each test says what the route
+  // lists.
+  module('runs', function (hooks) {
+    let pages: Map<string, { runs: Run[]; next: string | null }>;
+    let directWriter: boolean;
+    let runsAsked: URL[];
+
+    hooks.beforeEach(function () {
+      directWriter = true;
+      pages = new Map([['', { runs: [], next: null }]]);
+      runsAsked = [];
+      getService('network').virtualNetwork.mount(
+        async (request: Request) => {
+          let url = new URL(request.url);
+          if (!url.pathname.endsWith('/_automation-runs')) {
+            return null;
+          }
+          runsAsked.push(url);
+          let page = pages.get(url.searchParams.get('before') ?? '') ?? {
+            runs: [],
+            next: null,
+          };
+          return new Response(
+            JSON.stringify(
+              directWriter
+                ? {
+                    data: page.runs.map(({ id, ...attributes }) => ({
+                      type: 'automation-run-item',
+                      id,
+                      attributes,
+                    })),
+                    meta: { directWriter: true, next: page.next },
+                  }
+                : { data: [], meta: { directWriter: false } },
+            ),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        },
+        { prepend: true },
+      );
+    });
+
+    function list(runs: Run[], next: string | null = null) {
+      pages.set('', { runs, next });
+    }
+
+    async function openRuns() {
+      await openIsolated();
+      await waitFor('[data-test-automation-runs-section]', { timeout: 10000 });
+      await settled();
+    }
+
+    function runText(id: string) {
+      return text(`[data-test-automation-run="${id}"]`) ?? '';
+    }
+
+    test("a viewer who isn't a direct writer sees no runs", async function (assert) {
+      directWriter = false;
+      await openIsolated();
+      await waitUntil(() => runsAsked.length > 0, { timeout: 10000 });
+      await settled();
+      assert.dom('[data-test-automation-runs-section]').doesNotExist();
+    });
+
+    test('an automation with no runs says when runs show', async function (assert) {
+      await openRuns();
+      assert
+        .dom('[data-test-automation-runs-empty]')
+        .includesText('No runs yet');
+      assert.strictEqual(
+        runsAsked[0]?.searchParams.get('automation'),
+        AUTOMATION,
+        'the view names the automation by its card URL',
+      );
+    });
+
+    test('each run shows its state and what started the run, newest first', async function (assert) {
+      list([
+        run('waiting', { state: 'pending', step: null, trigger: 'hourly' }),
+        run('running', {
+          state: 'running',
+          step: 'script',
+          trigger: 'push',
+          slot: 'delivery-7',
+        }),
+        run('preview', { startedBy: 'preview', trigger: null, slot: null }),
+        run('by-hand', { startedBy: 'run-now', trigger: null, slot: null }),
+        run('kickoff', {
+          trigger: 'kickoff',
+          slot: '2030-06-10T14:00:00.000Z',
+        }),
+        run('done'),
+      ]);
+      await openRuns();
+      assert.deepEqual(
+        [...document.querySelectorAll('[data-test-automation-run]')].map(
+          (el) => [
+            el.getAttribute('data-test-automation-run'),
+            el.getAttribute('data-test-automation-run-state'),
+          ],
+        ),
+        [
+          ['waiting', 'Waiting'],
+          ['running', 'Running'],
+          ['preview', 'Complete'],
+          ['by-hand', 'Complete'],
+          ['kickoff', 'Complete'],
+          ['done', 'Complete'],
+        ],
+      );
+      assert.ok(runText('waiting').includes('hourly'), 'the trigger by label');
+      assert.ok(
+        runText('waiting').includes('The schedule started the run for'),
+        'a schedule names the slot the run is for',
+      );
+      assert.ok(
+        runText('running').includes('A webhook delivery started the run.'),
+        "a webhook's run names the delivery, not the delivery's id",
+      );
+      assert.notOk(runText('running').includes('delivery-7'));
+      assert.ok(runText('preview').includes('Preview'));
+      assert.ok(
+        runText('preview').includes('a Preview saves nothing'),
+        'a Preview says the Preview saves nothing',
+      );
+      assert.ok(runText('by-hand').includes('Run now'));
+      assert.ok(
+        runText('kickoff').includes('The one-time trigger started the run for'),
+      );
+      assert
+        .dom(
+          '[data-test-automation-run="done"] [data-test-automation-run-reason]',
+        )
+        .doesNotExist('a complete run needs no reason');
+    });
+
+    test('a failed run says why, and a script error names the line', async function (assert) {
+      list([
+        run('threw', {
+          state: 'error',
+          errorReason: 'script-error',
+          errorMessage: 'TypeError: feed.items is undefined',
+          scriptLine: 7,
+        }),
+        run('timed-out', {
+          state: 'error',
+          errorReason: 'timed-out',
+          errorMessage: 'The run reached its 300-second time limit',
+        }),
+        run('capped', {
+          state: 'error',
+          errorReason: 'hit-a-cap',
+          errorMessage: 'The run hit its writes cap',
+        }),
+        run('call', {
+          state: 'error',
+          errorReason: 'call-failed',
+          errorMessage: 'realm.fs.read: 404 notes/missing.md',
+        }),
+        run('platform', {
+          state: 'error',
+          errorReason: 'commit-interrupted',
+          errorMessage: 'The commit was interrupted',
+        }),
+      ]);
+      await openRuns();
+      assert
+        .dom('[data-test-automation-run="threw"]')
+        .hasAttribute('data-test-automation-run-state', 'Failed');
+      assert.ok(
+        runText('threw').includes('The script threw an error on line 7'),
+        runText('threw'),
+      );
+      assert.ok(
+        runText('threw').includes('TypeError: feed.items is undefined'),
+      );
+      assert.ok(
+        runText('timed-out').includes(
+          'Boxel stopped the run when the run reached the time limit.',
+        ),
+      );
+      assert.ok(
+        runText('capped').includes(
+          'Boxel stopped the run when the run reached the limit on saves.',
+        ),
+      );
+      assert.ok(
+        runText('call').includes(
+          'A call the script made failed, and the script didn’t catch the error.',
+        ),
+      );
+      assert.ok(
+        runText('call').includes('realm.fs.read: 404 notes/missing.md'),
+      );
+      assert.ok(runText('platform').includes('Boxel couldn’t finish the run.'));
+      assert.ok(runText('platform').includes('The commit was interrupted'));
+    });
+
+    test("a run Boxel didn't start says why and what fixes it", async function (assert) {
+      let refused = (id: string, errorReason: string, errorMessage: string) =>
+        run(id, {
+          state: 'error',
+          step: 'admission',
+          errorReason,
+          errorMessage,
+        });
+      list([
+        refused('balance', 'insufficient-credits', 'balance 2 below 5'),
+        refused('month', 'monthly-credit-cap-reached', 'cap 500 reached'),
+        refused('access', 'not-a-direct-writer', 'not a direct writer'),
+        refused(
+          'operation',
+          'binding-not-approved',
+          'GitHub: issues not approved',
+        ),
+        refused('lookup', 'target-not-found', 'no such operation'),
+      ]);
+      await openRuns();
+      assert.deepEqual(
+        [...document.querySelectorAll('[data-test-automation-run]')].map((el) =>
+          el.getAttribute('data-test-automation-run-state'),
+        ),
+        [
+          'Didn’t start',
+          'Didn’t start',
+          'Didn’t start',
+          'Didn’t start',
+          'Didn’t start',
+        ],
+      );
+      assert.ok(
+        runText('balance').includes(
+          'Boxel didn’t start the run because the payer’s credit balance was too low.',
+        ),
+      );
+      assert.ok(
+        runText('month').includes(
+          'Boxel didn’t start the run because the automation reached the monthly credit limit.',
+        ),
+      );
+      assert.ok(
+        runText('access').includes(
+          'Boxel didn’t start the run because the person the run acts as can no longer edit this workspace.',
+        ),
+      );
+      assert.ok(
+        runText('operation').includes(
+          'Boxel didn’t start the run because nobody approved an outside service the automation calls.',
+        ),
+      );
+      assert.ok(
+        runText('lookup').includes(
+          'Boxel didn’t start the run because Boxel refused an outside service the automation calls.',
+        ),
+        'any other refusal is a refused outside service',
+      );
+      assert.ok(
+        runText('lookup').includes('no such operation'),
+        'with the server’s detail',
+      );
+    });
+
+    test('a canceled run says who canceled the run, or which pause did', async function (assert) {
+      list([
+        run('mine', {
+          state: 'canceled',
+          canceledBy: '@testuser:localhost',
+          canceledByAPerson: true,
+          viewerCanceled: true,
+        }),
+        run('named', {
+          state: 'canceled',
+          canceledBy: '@colleague:localhost',
+          canceledByAPerson: true,
+        }),
+        run('hidden', { state: 'canceled', canceledByAPerson: true }),
+        run('raised', { state: 'canceled', errorReason: 'caps-raised' }),
+      ]);
+      await openRuns();
+      assert
+        .dom('[data-test-automation-run="mine"]')
+        .hasAttribute('data-test-automation-run-state', 'Canceled');
+      assert.ok(runText('mine').includes('You canceled the run.'));
+      assert.ok(
+        runText('named').includes('@colleague:localhost canceled the run.'),
+      );
+      assert.ok(
+        runText('hidden').includes(
+          'A person who shares no workspace with you canceled the run.',
+        ),
+      );
+      assert.ok(
+        runText('raised').includes(
+          'Boxel canceled the run when Boxel paused the automation: someone raised a limit above what the payer agreed to pay for.',
+        ),
+      );
+    });
+
+    test('a slot that joined a waiting run shows as skipped, naming the run the slot joined', async function (assert) {
+      list([
+        run('waiting', {
+          state: 'pending',
+          step: null,
+          trigger: 'hourly',
+          slot: '2030-01-01T09:00:00.000Z',
+          joined: [
+            {
+              trigger: 'hourly',
+              slot: '2030-01-01T10:00:00.000Z',
+              at: '2030-01-01T10:00:30.000Z',
+            },
+            {
+              trigger: 'hourly',
+              slot: '2030-01-01T11:00:00.000Z',
+              at: '2030-01-01T11:00:30.000Z',
+            },
+          ],
+        }),
+      ]);
+      await openRuns();
+      let rows = [
+        ...document.querySelectorAll(
+          '[data-test-automation-skipped], [data-test-automation-run]',
+        ),
+      ].map(
+        (el) =>
+          el.getAttribute('data-test-automation-skipped') ??
+          el.getAttribute('data-test-automation-run'),
+      );
+      assert.deepEqual(
+        rows,
+        ['2030-01-01T11:00:00.000Z', '2030-01-01T10:00:00.000Z', 'waiting'],
+        'each skipped slot sits above the run the slot joined, newest first',
+      );
+      let skipped =
+        text('[data-test-automation-skipped="2030-01-01T10:00:00.000Z"]') ?? '';
+      assert.ok(skipped.includes('Skipped'), skipped);
+      assert.ok(skipped.includes('slot joined the hourly run for'), skipped);
+      assert.ok(skipped.includes('which was still waiting to start'), skipped);
+    });
+
+    test('a job event naming the automation reads the runs again', async function (assert) {
+      list([run('first')]);
+      await openRuns();
+      let askedBefore = runsAsked.length;
+      list([run('second', { state: 'running', step: 'script' }), run('first')]);
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(
+          testRealmURL,
+          '@testuser:localhost',
+        ),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'job',
+          runId: 'second',
+          automation: AUTOMATION,
+          state: 'running',
+          step: 'script',
+          milestone: null,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+      await waitFor('[data-test-automation-run="second"]', { timeout: 10000 });
+      assert.ok(runsAsked.length > askedBefore, 'the view asked again');
+      assert
+        .dom('[data-test-automation-run="second"]')
+        .hasAttribute('data-test-automation-run-state', 'Running');
+    });
+
+    test('older runs load a page at a time', async function (assert) {
+      list([run('newer')], 'newer');
+      pages.set('newer', { runs: [run('older')], next: null });
+      await openRuns();
+      assert.dom('[data-test-automation-run="older"]').doesNotExist();
+      await click('[data-test-automation-runs-older]');
+      await waitFor('[data-test-automation-run="older"]', { timeout: 10000 });
+      assert
+        .dom('[data-test-automation-runs-older]')
+        .doesNotExist('the oldest page offers no more');
+      assert.strictEqual(
+        runsAsked[runsAsked.length - 1].searchParams.get('before'),
+        'newer',
+      );
+    });
   });
 });
