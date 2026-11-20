@@ -1018,7 +1018,12 @@ const HostURLManager: TemplateOnlyComponent<Signature> = <template>
 
   <style scoped>
     /* The dialog is as tall as its content, and scrolls its content when
-       that is taller than the window. */
+       that is taller than the window. Operator mode makes the modal's inner
+       wrapper a block, so the wrapper is made a flex box again to centre the
+       dialog, as the other dialogs sized to their content do. */
+    .host-url-manager > :deep(.boxel-modal__inner) {
+      display: flex;
+    }
     :deep(.host-url-manager-box) {
       height: auto;
       max-height: 100%;
