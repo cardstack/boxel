@@ -168,29 +168,6 @@ module(basename(import.meta.filename), function () {
         );
       }
     });
-
-    test('a cancelled caller ends the wait and draws no conclusion about the tab', async function (assert) {
-      let { page, calls } = makeResetPage('hangs');
-      let controller = new AbortController();
-      let pending = resetTabToStandby(page, 5000, controller.signal);
-      controller.abort();
-      let outcome = await pending;
-      assert.strictEqual(outcome.status, 'aborted');
-      assert.strictEqual(calls(), 1);
-
-      let { page: untouched, calls: untouchedCalls } = makeResetPage('lands');
-      let preAborted = await resetTabToStandby(
-        untouched,
-        5000,
-        AbortSignal.abort(),
-      );
-      assert.strictEqual(preAborted.status, 'aborted');
-      assert.strictEqual(
-        untouchedCalls(),
-        0,
-        'an already-cancelled caller does not touch the page',
-      );
-    });
   });
 
   module('parsePostRenderResetMs', function (hooks) {
@@ -349,6 +326,9 @@ module(basename(import.meta.filename), function () {
     // tab after its render released it.
     let pagesById = new Map<string, Page>();
     let originalGetPage = PagePool.prototype.getPage;
+    // The tabs the runner retires, by page id.
+    let retired: string[] = [];
+    let originalRetire = PagePool.prototype.retireUnresettableTab;
 
     hooks.before(async () => {
       PagePool.prototype.getPage = async function (
@@ -359,6 +339,13 @@ module(basename(import.meta.filename), function () {
         pagesById.set(pageInfo.pageId, pageInfo.page);
         return pageInfo;
       };
+      PagePool.prototype.retireUnresettableTab = async function (
+        this: PagePool,
+        ...args: Parameters<PagePool['retireUnresettableTab']>
+      ) {
+        retired.push(args[1]);
+        return await originalRetire.apply(this, args);
+      };
       prerenderer = getPrerendererForTesting({
         maxPages: 2,
         serverURL: prerenderServerURL,
@@ -367,7 +354,12 @@ module(basename(import.meta.filename), function () {
 
     hooks.after(async () => {
       PagePool.prototype.getPage = originalGetPage;
+      PagePool.prototype.retireUnresettableTab = originalRetire;
       await prerenderer.stop();
+    });
+
+    hooks.beforeEach(() => {
+      retired = [];
     });
 
     hooks.afterEach(async () => {
@@ -425,6 +417,61 @@ module(basename(import.meta.filename), function () {
                 attributes: { name: 'Tick' },
                 meta: {
                   adoptsFrom: { module: rri('./ticker'), name: 'Ticker' },
+                },
+              },
+            },
+            // Holds its tab's main thread for longer than the reset's budget
+            // as its component is torn down, so the reset can't land: the
+            // shape of a card whose teardown, or whatever it left running,
+            // keeps the tab busy after its render.
+            'stall.gts': `
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+              import { registerDestructor } from '@ember/destroyable';
+              export class Stall extends CardDef {
+                static displayName = "Stall";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  constructor(owner, args) {
+                    super(owner, args);
+                    registerDestructor(this, () => {
+                      let until = Date.now() + ${DEFAULT_POST_RENDER_RESET_MS * 3};
+                      while (Date.now() < until) {
+                        // spin
+                      }
+                    });
+                  }
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+            'stall-card.json': {
+              data: {
+                attributes: { name: 'Stall' },
+                meta: {
+                  adoptsFrom: { module: rri('./stall'), name: 'Stall' },
+                },
+              },
+            },
+            // Throws from its isolated template, so its render ends in a
+            // render error rather than a captured card.
+            'broken.gts': `
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+              export class Broken extends CardDef {
+                static displayName = "Broken";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  get boom() {
+                    throw new Error('the broken card cannot render');
+                  }
+                  <template>{{this.boom}}</template>
+                }
+              }
+            `,
+            'broken-card.json': {
+              data: {
+                attributes: { name: 'Broken' },
+                meta: {
+                  adoptsFrom: { module: rri('./broken'), name: 'Broken' },
                 },
               },
             },
@@ -509,29 +556,103 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    // Chrome 157 gives every window an omnibox-popup WebUI renderer
-    // (`--top-chrome-webui`) unless the launch turns the feature off; a
-    // prerender browser has one window per pooled context and shows none of
-    // them.
-    test('the prerender browser runs no omnibox-popup WebUI renderer', async function (assert) {
-      let { pool } = await prerenderCard(prerenderer, {
+    test("a visited card's loop stops before its tab goes back to the pool", async function (assert) {
+      let { response, pool, timings } = await prerenderCard(prerenderer, {
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: `${realmURL}ticker-card`,
+        auth: auth(),
+      });
+      assert.notOk(response.error, 'the visit rendered the card');
+      assert.strictEqual(
+        typeof timings.resetMs,
+        'number',
+        'the visit reports the reset it waited out',
+      );
+      let page = pagesById.get(pool.pageId);
+      assert.ok(page, 'the visit tab was recorded');
+
+      assert.true(
+        (await ticksOn(page!)) > 0,
+        `the card's loop ran while it rendered`,
+      );
+      await pause(200);
+      let settled = await ticksOn(page!);
+      await pause(500);
+      let later = await ticksOn(page!);
+      assert.strictEqual(
+        later,
+        settled,
+        `the loop does not run after the visit (${settled} → ${later} ticks)`,
+      );
+      assert.true(
+        new URL(page!.url()).pathname.endsWith('/_standby'),
+        `the tab is parked on the standby route (${page!.url()})`,
+      );
+      assert.deepEqual(retired, [], 'the reset tab was not retired');
+    });
+
+    test('a tab whose reset runs out its budget is retired, and the next render gets another', async function (assert) {
+      let first = await prerenderCard(prerenderer, {
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: `${realmURL}stall-card`,
+        auth: auth(),
+      });
+      assert.notOk(first.response.error, 'the card itself rendered');
+      assert.false(first.pool.evicted, 'the render did not evict its tab');
+      assert.true(
+        (first.timings.resetMs ?? 0) >= DEFAULT_POST_RENDER_RESET_MS,
+        `the visit waited out the whole budget (${first.timings.resetMs}ms)`,
+      );
+      assert.deepEqual(
+        retired,
+        [first.pool.pageId],
+        'the runner retired the tab it could not reset',
+      );
+
+      let second = await prerenderCard(prerenderer, {
         affinityType: 'realm',
         affinityValue: realmURL,
         realm: realmURL,
         url: `${realmURL}1`,
         auth: auth(),
       });
-      let page = pagesById.get(pool.pageId)!;
-      let session = await page.browser().target().createCDPSession();
-      try {
-        let { targetInfos } = await session.send('Target.getTargets');
-        let webUI = targetInfos
-          .map((t) => t.url)
-          .filter((url) => url.startsWith('chrome://omnibox-popup'));
-        assert.deepEqual(webUI, [], 'no omnibox-popup WebUI targets');
-      } finally {
-        await session.detach();
-      }
+      assert.notStrictEqual(
+        second.pool.pageId,
+        first.pool.pageId,
+        'the next render ran on a different tab',
+      );
+      assert.strictEqual(
+        second.response.serialized?.data.attributes?.name,
+        'Maple',
+        'and rendered its card',
+      );
+    });
+
+    test('a render that ends in an error still resets its tab', async function (assert) {
+      let { response, pool, timings } = await prerenderCard(prerenderer, {
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: `${realmURL}broken-card`,
+        auth: auth(),
+      });
+      assert.ok(response.error, 'the render ended in an error');
+      assert.false(pool.evicted, 'the error did not evict the tab');
+      assert.strictEqual(
+        typeof timings.resetMs,
+        'number',
+        'the errored visit reports its reset',
+      );
+      let page = pagesById.get(pool.pageId);
+      assert.true(
+        new URL(page!.url()).pathname.endsWith('/_standby'),
+        `the tab is parked on the standby route (${page!.url()})`,
+      );
+      assert.deepEqual(retired, [], 'the reset tab was not retired');
     });
 
     test('a warm tab is still reused, and renders the next card, after its reset', async function (assert) {

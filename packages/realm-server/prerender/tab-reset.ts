@@ -32,6 +32,11 @@ const log = logger('prerenderer');
 // timer: the render route replaces `setTimeout` while it is active, and a
 // timer-polled wait on a page whose stub is still installed would never poll.
 //
+// The reset takes no abort signal. A caller that leaves once its render is
+// done has nothing left to wait for, but the tab still goes back to the pool,
+// and it must not go back with its card mounted or a transition half run.
+// The budget bounds what the reset costs either way.
+//
 // A reset that does not land inside its budget means the page could not run
 // one route transition — its main thread is pinned, or the host would not
 // leave the render route. Either way the tab is not fit to be handed to the
@@ -54,8 +59,6 @@ const MIN_POST_RENDER_RESET_MS = 250;
 
 export type TabResetOutcome =
   | { status: 'reset'; elapsedMs: number }
-  // The caller went away while the reset ran. Says nothing about the tab.
-  | { status: 'aborted'; elapsedMs: number }
   // The page has no transition helper, or the transition threw. Says the host
   // couldn't leave the render route, not that the thread is busy.
   | { status: 'failed'; elapsedMs: number; error?: string }
@@ -95,15 +98,10 @@ export function parsePostRenderResetMs(): number {
 export async function resetTabToStandby(
   page: Page,
   budgetMs: number,
-  signal?: AbortSignal,
 ): Promise<TabResetOutcome> {
   let startedAt = Date.now();
   let elapsed = () => Date.now() - startedAt;
-  if (signal?.aborted) {
-    return { status: 'aborted', elapsedMs: 0 };
-  }
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let onAbort: (() => void) | undefined;
   try {
     let reset: Promise<TabResetOutcome> = page
       .evaluate(
@@ -158,14 +156,8 @@ export async function resetTabToStandby(
           budgetMs,
         );
       }),
-      new Promise<TabResetOutcome>((resolve) => {
-        if (!signal) return;
-        onAbort = () => resolve({ status: 'aborted', elapsedMs: elapsed() });
-        signal.addEventListener('abort', onAbort, { once: true });
-      }),
     ]);
   } finally {
     if (timer) clearTimeout(timer);
-    if (onAbort) signal?.removeEventListener('abort', onAbort);
   }
 }
