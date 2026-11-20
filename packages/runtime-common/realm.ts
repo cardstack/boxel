@@ -262,6 +262,15 @@ import {
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
 } from './automation-admission-route.ts';
+import {
+  operationRefusalMessage,
+  scriptRefusal,
+  type AdmissionRefusal,
+} from './automation-admission.ts';
+import type {
+  AutomationDeclaration,
+  AutomationOperationDeclaration,
+} from './automation-declaration.ts';
 import { RUN_STATE_PATH } from './automation-run-command.ts';
 import {
   RUN_LOG_MAX_REQUEST_BYTES,
@@ -14861,15 +14870,11 @@ export class Realm {
         refusal: { code: 'not-an-automation', detail: limits.message },
       });
     }
-    for (let declared of limits.operations) {
-      let refused = await admit({
-        core: this.operationCore,
-        realmURL: new URL(this.url),
-        codeRef: declared.targetType,
-        operation: declared.operation,
-        payer: call.actsAs,
-      });
-      if (refused) {
+    let refusal = await this.#declaredOperationRefusal(
+      admit,
+      limits.operations,
+      call.actsAs,
+      async (refused) => {
         // A credential only a person can fix is recorded on the run, with
         // the share or key the refused slot is filled from, before the
         // worker ends it: the run's notices are read against it.
@@ -14882,20 +14887,89 @@ export class Realm {
             credentialRefusalOf(refused.error, subject),
           );
         }
-        return answer({
-          refusal: {
-            code: refused.error.code,
-            detail: refused.error.detail,
-            operation: declared.operation,
-            targetType: {
-              module: String(declared.targetType.module),
-              name: declared.targetType.name,
-            },
+      },
+    );
+    return answer(
+      refusal
+        ? { refusal }
+        : { refusal: null, operations: limits.operations.length },
+    );
+  }
+
+  // Checks, before a resume makes `payer` the payer of the automation
+  // `declaration` reads from, what its first run's admission would check in
+  // this realm: the script reads and parses, and every declared operation
+  // passes as `payer`, so each `{{userKey}}` slot fills from their own key
+  // bindings. Answers the first refusal, with the code a run would end with,
+  // or undefined. Nothing is recorded, since there is no run.
+  async admitAutomationPayer({
+    declaration,
+    payer,
+  }: {
+    declaration: AutomationDeclaration;
+    payer: string;
+  }): Promise<AdmissionRefusal | undefined> {
+    let scriptURL = this.#virtualNetwork.toURLHref(declaration.script);
+    let script = this.paths.inRealm(new URL(scriptURL))
+      ? await this.readFileAsText(this.paths.local(new URL(scriptURL)))
+      : undefined;
+    if (!script) {
+      return {
+        reason: 'missing-script',
+        message: `The script ${scriptURL} could not be read`,
+      };
+    }
+    let unrunnable = scriptRefusal(script.content, scriptURL);
+    if (unrunnable) {
+      return unrunnable;
+    }
+    let admit = this.#callApi?.admitAutomation;
+    if (!admit) {
+      return {
+        reason: 'run-admission-unavailable',
+        message: "This realm can't check an automation's operations",
+      };
+    }
+    let refusal = await this.#declaredOperationRefusal(
+      admit,
+      declaration.operations,
+      payer,
+    );
+    return refusal
+      ? { reason: refusal.code, message: operationRefusalMessage(refusal) }
+      : undefined;
+  }
+
+  // The first of `operations` that `payer` may not invoke as an automation
+  // call, as `admit` answers, told to `onRefused` before it is answered.
+  async #declaredOperationRefusal(
+    admit: NonNullable<CallApiSender['admitAutomation']>,
+    operations: AutomationOperationDeclaration[],
+    payer: string,
+    onRefused?: (refused: OperationFailure) => Promise<void>,
+  ): Promise<RunAdmissionAnswer['refusal']> {
+    for (let declared of operations) {
+      let refused = await admit({
+        core: this.operationCore,
+        realmURL: new URL(this.url),
+        codeRef: declared.targetType,
+        operation: declared.operation,
+        payer,
+      });
+      if (refused) {
+        await onRefused?.(refused);
+        return {
+          code: refused.error.code,
+          detail: refused.error.detail,
+          operation: declared.operation,
+          targetType: {
+            module: String(declared.targetType.module),
+            name: declared.targetType.name,
           },
-        });
+        };
       }
     }
-    return answer({ refusal: null, operations: limits.operations.length });
+    return null;
   }
 
   // Answers a run's own call that the run is running: the admission in

@@ -61,6 +61,7 @@ import type { DefinitionLookup } from '@cardstack/runtime-common';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
 import type { ChangedAutomation } from '@cardstack/runtime-common/automation-change-events';
 import {
+  admitAnyPayer,
   createVirtualNetwork,
   insertIncomingWebhookRow,
   setupDB,
@@ -436,7 +437,12 @@ module(basename(import.meta.filename), function () {
         );
         let resumed = await resumeAutomation(
           dbAdapter,
-          { automationId: AUTOMATION, user: ADMIN, declaration: declaration() },
+          {
+            automationId: AUTOMATION,
+            user: ADMIN,
+            declaration: declaration(),
+            admit: admitAnyPayer,
+          },
           options,
         );
         assert.true(resumed.ok);
@@ -770,6 +776,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: OWNER,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -1023,7 +1030,12 @@ module(basename(import.meta.filename), function () {
         );
         let resumed = await resumeAutomation(
           dbAdapter,
-          { automationId: AUTOMATION, user: ADMIN, declaration: other },
+          {
+            automationId: AUTOMATION,
+            user: ADMIN,
+            declaration: other,
+            admit: admitAnyPayer,
+          },
           options,
         );
         assert.deepEqual(resumed, { ok: false, reason: 'other-card' });
@@ -1056,6 +1068,7 @@ module(basename(import.meta.filename), function () {
               automationId: AUTOMATION,
               user: OUTSIDER,
               declaration: declaration(),
+              admit: admitAnyPayer,
             },
             options,
           ),
@@ -1229,6 +1242,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: ADMIN,
             declaration: declaration({ caps: lowered, batchedAI: true }),
+            admit: admitAnyPayer,
           },
           { ...options, now: later },
         );
@@ -1268,6 +1282,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: ADMIN,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -1291,6 +1306,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: READER,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -1480,6 +1496,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: OWNER,
             declaration: declaration({ caps: raised }),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -1555,6 +1572,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: ADMIN,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -1577,6 +1595,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: OWNER,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -2271,6 +2290,7 @@ module(basename(import.meta.filename), function () {
               automationId: AUTOMATION,
               user: OWNER,
               declaration: webhookDeclaration(OUTSIDER_WEBHOOK),
+              admit: admitAnyPayer,
             },
             options,
           );
@@ -2286,6 +2306,7 @@ module(basename(import.meta.filename), function () {
               automationId: AUTOMATION,
               user: ADMIN,
               declaration: webhookDeclaration(ADMIN_WEBHOOK),
+              admit: admitAnyPayer,
             },
             options,
           );
@@ -2479,6 +2500,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: ADMIN,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -2570,6 +2592,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: ADMIN,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -2620,6 +2643,7 @@ module(basename(import.meta.filename), function () {
               automationId: AUTOMATION,
               user: OWNER,
               declaration: declaration(),
+              admit: admitAnyPayer,
             },
             options,
           ),

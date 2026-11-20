@@ -57,6 +57,7 @@ import {
   type AutomationProblem,
   type AutomationTriggerDeclaration,
 } from './automation-declaration.ts';
+import type { AdmissionRefusal } from './automation-admission.ts';
 import {
   reportAutomationChanges,
   type ChangedAutomation,
@@ -83,7 +84,10 @@ import {
   unusableWebhookProblems,
 } from './automation-webhooks.ts';
 import type { DBAdapter } from './db.ts';
-import { isDirectWriterLocked } from './db-queries/realm-permission-queries.ts';
+import {
+  isDirectWriter,
+  isDirectWriterLocked,
+} from './db-queries/realm-permission-queries.ts';
 import {
   dbAdapterQuerier,
   param,
@@ -276,6 +280,9 @@ export interface AutomationActorOptions extends AutomationReporters {
 // - `unusable-webhook`: switch-on or resume found a webhook trigger naming a
 //   webhook the realm can't use (see `automation-webhooks.ts`). `problems`
 //   says which trigger and why.
+// - `not-admitted`: resume's admission of the caller as the payer refused
+//   them (see `admitPayer`). `refusal` holds the code their first run would
+//   end with, and why.
 export type AutomationRefusal =
   | {
       ok: false;
@@ -295,6 +302,11 @@ export type AutomationRefusal =
       ok: false;
       reason: 'unusable-webhook';
       problems: AutomationProblem[];
+    }
+  | {
+      ok: false;
+      reason: 'not-admitted';
+      refusal: AdmissionRefusal;
     };
 
 export type AutomationChange =
@@ -428,21 +440,48 @@ export async function pauseAutomation(
 // while it was paused don't run. Each trigger keeps its run count. Its
 // failure streak starts afresh: runs created before the resume no longer
 // count toward a pause for repeated failures.
+//
+// `admit` admits `user` as the payer the way a run of the automation's
+// triggers would be admitted (`admitPayer`), and its refusal leaves the
+// automation paused (`not-admitted`). It asks the Matrix server and the
+// realm, so it is asked before the change's transaction, and only of a
+// resume that would otherwise go ahead: the automation is paused, `user`
+// directly writes its realm and the realm isn't archived. Any other resume
+// gets the refusal that says why, from the checks the transaction makes
+// again under its locks.
 export async function resumeAutomation(
   dbAdapter: DBAdapter,
   {
     automationId,
     user,
     declaration,
+    admit,
   }: {
     automationId: RealmResourceIdentifier;
     user: string;
     declaration: AutomationDeclaration;
+    admit: (payer: string) => Promise<AdmissionRefusal | undefined>;
   },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
   if (!isDeclarationOf(declaration, automationId, options)) {
     return { ok: false, reason: 'other-card' };
+  }
+  let current = await getAutomation(dbAdapter, automationId);
+  if (
+    current?.state === 'paused' &&
+    (await isDirectWriter(
+      dbAdapter,
+      options.virtualNetwork.toURL(current.realm),
+      user,
+      options.matrixServerName,
+    )) &&
+    !(await isArchived(dbAdapterQuerier(dbAdapter), current.realm, options))
+  ) {
+    let refusal = await admit(user);
+    if (refusal) {
+      return { ok: false, reason: 'not-admitted', refusal };
+    }
   }
   let now = options.now ?? currentUnixSeconds();
   return await withChanges(dbAdapter, options, async (txQuery, changes) => {
