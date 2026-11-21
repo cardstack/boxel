@@ -177,14 +177,47 @@ type Config = ReturnType<typeof config>;
 // further via the env var for fleets with bigger pg instances; lower
 // it to throttle a noisy realm.
 const DEFAULT_POOL_MAX = 40;
-function configuredPoolMax(): number {
-  let rawValue = process.env.PG_POOL_MAX;
-  if (!rawValue) {
-    return DEFAULT_POOL_MAX;
-  }
 
+// Which kind of process a pool belongs to, for sizing it. The realm server
+// (the default) serves searches and needs the 40 above. The worker manager
+// only hands out jobs and records their progress, and each indexing worker it
+// spawns runs one job at a time, so neither needs a realm server's pool;
+// without their own sizes every one of them opened up to 40 connections,
+// because the spawned workers inherit the manager's environment.
+export type PgPoolRole = 'realm-server' | 'worker-manager' | 'worker';
+
+const ROLE_POOL_MAX: Record<PgPoolRole, { env?: string; default: number }> = {
+  'realm-server': { default: DEFAULT_POOL_MAX },
+  'worker-manager': { env: 'PG_POOL_MAX_WORKER_MANAGER', default: 4 },
+  worker: { env: 'PG_POOL_MAX_WORKER', default: 10 },
+};
+
+// The pool max for a process of `role`, first of:
+//   1. its role's own variable (`PG_POOL_MAX_WORKER_MANAGER`,
+//      `PG_POOL_MAX_WORKER`), when set to a positive integer;
+//   2. `PG_POOL_MAX`, when set to a positive integer — so a deployment that
+//      sets it today keeps sizing every process with it;
+//   3. the role's default: 40 for the realm server, 4 for the worker
+//      manager, 10 for a worker.
+// An unset or invalid value falls through to the next.
+export function resolvePoolMax(
+  role: PgPoolRole = 'realm-server',
+  env: Record<string, string | undefined> = process.env,
+): number {
+  let { env: roleEnv, default: roleDefault } = ROLE_POOL_MAX[role];
+  return (
+    (roleEnv ? positivePoolSize(env[roleEnv]) : undefined) ??
+    positivePoolSize(env.PG_POOL_MAX) ??
+    roleDefault
+  );
+}
+
+function positivePoolSize(rawValue: string | undefined): number | undefined {
+  if (!rawValue) {
+    return undefined;
+  }
   let value = Number(rawValue);
-  return Number.isInteger(value) && value > 0 ? value : DEFAULT_POOL_MAX;
+  return Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 // How many of the pool's connections one tenant may hold while the pool is
@@ -367,6 +400,8 @@ export class PgAdapter implements DBAdapter {
     // for tests that stand in for Postgres. It gets the same wiring, and must
     // allow the scheduler's ceiling of connections like the one it replaces.
     testOnlyPool?: Pool;
+    // Sizes the pool for this kind of process; see resolvePoolMax.
+    poolRole?: PgPoolRole;
   }) {
     this.#writeLockWaitMs =
       opts?.writeLockWaitMs ?? configuredWriteLockWaitMs();
@@ -377,7 +412,7 @@ export class PgAdapter implements DBAdapter {
     }
     this.config = config();
     let { user, host, database, password, port } = this.config;
-    let max = configuredPoolMax();
+    let max = resolvePoolMax(opts?.poolRole);
     this.#scheduler = new ConnectionScheduler({
       limit: max,
       tenantShare: configuredPoolTenantShare(),
