@@ -1,5 +1,7 @@
 import { logger } from './log.ts';
+import { setSignalDeadline } from './db.ts';
 import type { Query } from './query.ts';
+import type { SearchEntryFieldset } from './search-entry.ts';
 
 const log = logger('search-bounds');
 
@@ -89,11 +91,14 @@ const DEFAULT_SERVER_MAX_SEARCH_PAGE_SIZE = 500;
 const DEFAULT_SERVER_ABSOLUTE_MAX_PAGE_SIZE = 2_000;
 const DEFAULT_MAX_REALMS_PER_SEARCH_REQUEST = 2;
 const DEFAULT_SEARCH_TIME_BUDGET_MS = 30_000;
+const DEFAULT_SEARCH_DEFINITION_WAIT_MS = 10_000;
 const DEFAULT_SEARCH_CONCURRENCY_CAP = 2;
 const DEFAULT_QUERY_FIELD_SEARCH_CONCURRENCY_CAP = 2;
 const DEFAULT_SERVER_MAX_IN_FLIGHT_SEARCHES = 30;
 const DEFAULT_SEARCH_ADMISSION_WAIT_MS = 1_000;
 const DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES = 1_000;
+const DEFAULT_PRERENDER_MAX_LINK_RESOURCES = 2_000;
+const DEFAULT_PRERENDER_LINK_HOPS = 2;
 
 const MIN_PAGE_SIZE = 1;
 const MIN_REALMS = 1;
@@ -118,6 +123,16 @@ function parsePositiveInt(
 let env: Record<string, string | undefined> =
   typeof process !== 'undefined' ? (process.env ?? {}) : {};
 
+// The page a query-backed `linksToMany` field resolves to when its query names
+// none. Larger than a card search's default because a field is read as the set it
+// declares, and its rollups count it; `totalMatchCount` still reports what the
+// page left out. Applied where the field's query is normalized, which the
+// indexer's expansion and the client's live refresh share, so every leg sends
+// the same explicit page and the seed URL matches the client's rebuild. Fixed
+// rather than env-tunable, because the host bundle has no env to read and
+// both sides must agree on it.
+export const QUERY_FIELD_DEFAULT_PAGE_SIZE = 500;
+
 // The card `@context` page cap: max results a card-initiated item-leg search
 // requests. Enforced client-side (see host StoreService). An explicit page.size
 // above this is rejected; an absent page is clamped to it (mandatory
@@ -127,6 +142,10 @@ export const MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
   DEFAULT_MAX_SEARCH_PAGE_SIZE,
   MIN_PAGE_SIZE,
 );
+
+// The page a card search gets when it names none: the cap itself, as it has
+// always been, so a card written without a page keeps the rows it shows.
+export const DEFAULT_SEARCH_PAGE_SIZE = MAX_SEARCH_PAGE_SIZE;
 
 // The default page a server-side search gets when it asks for no particular
 // one, on either leg, enforced regardless of caller (the trusted host and any
@@ -180,6 +199,43 @@ export const SEARCH_TIME_BUDGET_MS = parsePositiveInt(
   env.SEARCH_TIME_BUDGET_MS,
   DEFAULT_SEARCH_TIME_BUDGET_MS,
   MIN_TIME_BUDGET_MS,
+);
+
+// The most matches a `page.total: 'capped'` search counts. Past it the
+// search reports this many with the `total-estimated` warning, so a page over a
+// large realm never counts every row to say "more than this".
+// How long a search under a time budget waits on one definition lookup (a
+// module's prerender, possibly coalesced with another process's) before it
+// is refused as `definitions-unavailable` (503, Retry-After). Well inside the
+// time budget, so a cold module answers as retryable rather than as a 408
+// after the whole budget; never past the budget's own deadline. A search with
+// no budget (the indexer's) waits as long as the lookup does.
+export const SEARCH_DEFINITION_WAIT_MS = parsePositiveInt(
+  env.SEARCH_DEFINITION_WAIT_MS,
+  DEFAULT_SEARCH_DEFINITION_WAIT_MS,
+  1,
+);
+
+export const SEARCH_TOTAL_CAP = parsePositiveInt(
+  env.SEARCH_TOTAL_CAP,
+  1_000,
+  1,
+);
+
+// The most columns a `select` names: an entry search's, a log query's.
+export const MAX_COLUMNS = 64;
+
+// The most cards a broad `matches` term ranks in one realm. A term that
+// matches more (a word nearly every card holds, like "card") ranks a capped
+// candidate set instead: its best field matches by rank, and that many of the
+// cards that hold it only on their rendered page. The search reports a lower
+// bound for its total with the `total-estimated` warning; an exact total
+// (`page.total: 'exact'`, or `page.exactTotal`) counts every match instead.
+// See docs/search.md, "Bounds every query runs under".
+export const SEARCH_MATCH_CANDIDATE_CAP = parsePositiveInt(
+  env.SEARCH_MATCH_CANDIDATE_CAP,
+  1_000,
+  1,
 );
 
 // Max card `@context` item-leg searches one store service may have in flight at
@@ -503,11 +559,14 @@ export const LINK_SHAPE_HEARTBEAT_MS = parsePositiveInt(
 // `setSearchBoundsForTests` to exercise a bound without adding realms or
 // waiting out the real time budget. Mirrors `setSearchTimingSinkForTests`.
 let maxPageSize = MAX_SEARCH_PAGE_SIZE;
+let queryFieldPageSize = QUERY_FIELD_DEFAULT_PAGE_SIZE;
 let serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
 let serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
 let maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
 let timeBudgetMs = SEARCH_TIME_BUDGET_MS;
+let definitionWaitMsValue = SEARCH_DEFINITION_WAIT_MS;
 let maxAssembledLinkResources = SERVER_MAX_ASSEMBLED_LINK_RESOURCES;
+let matchCandidateCapValue = SEARCH_MATCH_CANDIDATE_CAP;
 
 // The (size, max) pairs already reported by `warnOncePerClamp`. In practice a
 // clamp is driven by an authored page size — a constant in a card definition —
@@ -521,14 +580,26 @@ const MAX_REPORTED_CLAMPS = 32;
 
 export function setSearchBoundsForTests(overrides: {
   maxPageSize?: number;
+  queryFieldPageSize?: number;
   serverMaxPageSize?: number;
   serverAbsoluteMaxPageSize?: number;
   maxRealmsPerRequest?: number;
   timeBudgetMs?: number;
+  definitionWaitMs?: number;
   maxAssembledLinkResources?: number;
+  matchCandidateCap?: number;
 }): void {
+  if (overrides.definitionWaitMs !== undefined) {
+    definitionWaitMsValue = overrides.definitionWaitMs;
+  }
+  if (overrides.matchCandidateCap !== undefined) {
+    matchCandidateCapValue = overrides.matchCandidateCap;
+  }
   if (overrides.maxPageSize !== undefined) {
     maxPageSize = overrides.maxPageSize;
+  }
+  if (overrides.queryFieldPageSize !== undefined) {
+    queryFieldPageSize = overrides.queryFieldPageSize;
   }
   if (overrides.serverMaxPageSize !== undefined) {
     serverMaxPageSize = overrides.serverMaxPageSize;
@@ -550,11 +621,47 @@ export function setSearchBoundsForTests(overrides: {
 export function resetSearchBoundsForTests(): void {
   reportedClamps = new Set();
   maxPageSize = MAX_SEARCH_PAGE_SIZE;
+  queryFieldPageSize = QUERY_FIELD_DEFAULT_PAGE_SIZE;
   serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
   serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
   maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
   timeBudgetMs = SEARCH_TIME_BUDGET_MS;
+  definitionWaitMsValue = SEARCH_DEFINITION_WAIT_MS;
   maxAssembledLinkResources = SERVER_MAX_ASSEMBLED_LINK_RESOURCES;
+  matchCandidateCapValue = SEARCH_MATCH_CANDIDATE_CAP;
+}
+
+// The margin a definition wait leaves before its search's deadline, so the
+// wait's own refusal (503) arrives ahead of the time budget's (408).
+const DEFINITION_WAIT_DEADLINE_MARGIN_MS = 250;
+
+// How long a search whose time budget ends at `deadline` may wait on one
+// definition lookup (SEARCH_DEFINITION_WAIT_MS, ending before the deadline).
+export function definitionWaitMs(
+  deadline?: number,
+  now: number = Date.now(),
+): number {
+  if (deadline === undefined || !Number.isFinite(deadline)) {
+    return definitionWaitMsValue;
+  }
+  return Math.max(
+    1,
+    Math.min(
+      definitionWaitMsValue,
+      deadline - now - DEFINITION_WAIT_DEADLINE_MARGIN_MS,
+    ),
+  );
+}
+
+// The effective candidate cap for a broad `matches` term (see
+// SEARCH_MATCH_CANDIDATE_CAP), read through a function so the test seam
+// above reaches it.
+export function matchCandidateCap(): number {
+  return matchCandidateCapValue;
+}
+
+export function queryFieldDefaultPageSize(): number {
+  return queryFieldPageSize;
 }
 
 // The effective assembled-resource budget. Read through a function rather than
@@ -565,25 +672,77 @@ export function assembledLinkResourceBudget(): number {
   return maxAssembledLinkResources;
 }
 
+// The link-assembly bounds for a render's own reads (during prerender). A
+// render was once exempt from every bound, so a card in a densely linked graph
+// (concepts that link concepts, videos and domains, which link back)
+// assembled the realm's whole connected closure for one render: ~8k resources
+// and several megabytes per card, which drove the indexing worker to its heap
+// ceiling and the machine into swap, and with it the realm server. A render
+// reads its card's own fields and, in a template that shows linked cards,
+// those cards' fields and their links: two hops. Past either bound the closure
+// is clipped and the clip logged; a clipped link is a not-loaded value that a
+// template fetches on demand, so the cost of a clip is a lazier render, never
+// a wrong one.
+export const PRERENDER_MAX_LINK_RESOURCES = parsePositiveInt(
+  env.PRERENDER_MAX_LINK_RESOURCES,
+  DEFAULT_PRERENDER_MAX_LINK_RESOURCES,
+  MIN_ASSEMBLED_LINK_RESOURCES,
+);
+export const PRERENDER_LINK_HOPS = parsePositiveInt(
+  env.PRERENDER_LINK_HOPS,
+  DEFAULT_PRERENDER_LINK_HOPS,
+  1,
+);
+let prerenderMaxLinkResources = PRERENDER_MAX_LINK_RESOURCES;
+let prerenderLinkHops = PRERENDER_LINK_HOPS;
+
+export function prerenderLinkResourceBudget(): number {
+  return prerenderMaxLinkResources;
+}
+
+export function prerenderLinkHopLimit(): number {
+  return prerenderLinkHops;
+}
+
+// For tests: lower the render bounds to a handful, or restore them.
+export function setPrerenderLinkBoundsForTests(
+  bounds: { maxResources?: number; hops?: number } | undefined,
+) {
+  prerenderMaxLinkResources =
+    bounds?.maxResources ?? PRERENDER_MAX_LINK_RESOURCES;
+  prerenderLinkHops = bounds?.hops ?? PRERENDER_LINK_HOPS;
+}
+
+// The item leg (`fields[entry]` includes "item" / "item.<field>") is the live
+// serialization + `loadLinks` path — the one whose cost the bounds contain. The
+// default/prerendered fieldset resolves to `kind: 'none'` (html-preferred, item
+// only as a per-row fallback) and is exempt.
+export function isItemLegSearch(fieldset: SearchEntryFieldset): boolean {
+  return fieldset.item.kind !== 'none';
+}
+
 // The HTTP statuses a bound violation maps to. 408 for the time budget so a
 // client reads it as "took too long — narrow the query / retry".
 export type SearchBoundStatus = 400 | 408 | 503;
 
 export class SearchBoundError extends Error {
   status: SearchBoundStatus;
-  code: string | undefined;
+  // the grammar's code for a refused page or fan-out (`limit-exceeded`);
+  // a search cut off by the time budget (408) has none
+  code?: string;
   constructor(status: SearchBoundStatus, message: string, code?: string) {
     super(message);
     this.status = status;
-    this.code = code;
     this.name = 'SearchBoundError';
+    let c = code ?? (status === 400 ? 'limit-exceeded' : undefined);
+    if (c) this.code = c;
   }
 }
 
 // A search that needs a type's definition and could not read it: its module's
-// prerender timed out or its server was unavailable, or a cached row records
-// that it did. Nothing about the type's cards follows from that, so the search
-// is refused as retryable (503, `definitions-unavailable`, with `Retry-After`)
+// prerender failed, timed out or was aborted, or a cached row records that it
+// did. Nothing about the type's cards follows from that, so the search is
+// refused as retryable (503, `definitions-unavailable`, with `Retry-After`)
 // rather than answered `ok, 0`, and — being a rejection — is never cached.
 // The time budget keeps its own 408.
 export const DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS = 5;
@@ -639,6 +798,8 @@ function warnOncePerClamp(size: number, max: number): void {
 // Reject a federated item-leg request that fans out to more realms than the
 // cap. It can't be clamped (we can't choose which realms to drop), so the
 // author must narrow the `realms` list.
+// Called by the host store on a card-initiated search (`@context`), never on
+// the host's own (search-test.ts pins both).
 export function assertRealmsBound(realms: string[]): void {
   if (realms.length > maxRealmsPerRequest) {
     throw new SearchBoundError(
@@ -786,6 +947,202 @@ export function applyFederatedRowBudget(
   return { ...query, page: { ...page, size: share } } as Query;
 }
 
+// The notice a response carries when the server clamped its page: a caller
+// that asked for more rows than a page holds learns it from the answer, not
+// only from a server log. `asked` is the query as the request wrote it and
+// `bounded` what `applyServerSearchPageBound` made of it; an absent or
+// unreadable size took the default and is no clamp.
+export const PAGE_SIZE_CLAMPED = 'page-size-clamped';
+export function pageSizeClampWarning(
+  asked: Query,
+  bounded: Query,
+): { code: string; message: string } | undefined {
+  let written = (asked.page as { size?: unknown } | undefined)?.size;
+  let askedSize = Number(written);
+  let size = Number((bounded.page as { size?: unknown } | undefined)?.size);
+  if (
+    (typeof written !== 'number' && typeof written !== 'string') ||
+    written === '' ||
+    !Number.isFinite(askedSize) ||
+    !Number.isFinite(size) ||
+    askedSize <= size
+  ) {
+    return undefined;
+  }
+  return {
+    code: PAGE_SIZE_CLAMPED,
+    message: `page.size ${askedSize} is more than a page holds, so this page holds at most ${size.toLocaleString('en-US')} rows: page through the rest with page.number`,
+  };
+}
+
+// The caveats a search answer carries in `meta.warnings`, beside the page
+// notices above: each says the answer is usable but not exactly what was
+// asked. `meta` itself holds facts only (the page, totals, the zone, the
+// realms asked); a caveat is never a flag there. docs/search.md lists them
+// under "Warnings".
+//
+// The total is a lower bound, not the match count: a `capped` page stopped
+// counting at SEARCH_TOTAL_CAP, or a broad `matches` term ranked and counted
+// a capped candidate set (SEARCH_MATCH_CANDIDATE_CAP). Show it as "1,000+".
+export const TOTAL_ESTIMATED = 'total-estimated';
+// A merged federated search ordered rows by scores each realm computed over
+// its own matches, so the order across realms is approximate.
+export const APPROXIMATE_ORDER = 'approximate-order';
+// An expression sort's comparison set (`compare`) held more rows than it
+// reads, so `stats.` and `peers.` describe only the first of them.
+export const COMPARE_TRUNCATED = 'compare-truncated';
+// A realm a federated search asked did not answer, so the rows and the total
+// cover only the realms that did. Beside main's `meta.incomplete`, which
+// stays (see docs/search.md, "Warnings").
+export const INCOMPLETE = 'incomplete';
+
+// The `total-estimated` message for each reason the total is a bound.
+export function totalEstimatedMessage(
+  reason: 'capped' | 'candidates' | 'uncounted',
+): string {
+  let fmt = (n: number) => n.toLocaleString('en-US');
+  switch (reason) {
+    case 'capped':
+      return `the total stopped counting at ${fmt(SEARCH_TOTAL_CAP)} matches, so it is a lower bound; page.total: 'exact' counts every match`;
+    case 'candidates':
+      return `a broad matches term matched more than ${fmt(matchCandidateCap())} cards, so only that many candidates were ranked and counted and the total is a lower bound; page.total: 'exact' counts every match`;
+    case 'uncounted':
+      return `page.total: 'none' counts nothing, so the total is the rows through this page; page.hasMore says whether more follow`;
+  }
+}
+
+export function incompleteWarning(): { code: string; message: string } {
+  return {
+    code: INCOMPLETE,
+    message:
+      'a realm the search asked did not answer, so the rows and the total cover only the realms that did; meta.realms says which',
+  };
+}
+
+export function hasWarning(
+  meta: { warnings?: readonly { code: string }[] } | undefined | null,
+  code: string,
+): boolean {
+  return Boolean(meta?.warnings?.some((w) => w.code === code));
+}
+
+// `warnings` with `warning` added, unless one with its code is there.
+export function withWarningOnce<W extends { code: string; message: string }>(
+  warnings: readonly W[] | undefined,
+  warning: W,
+): W[] {
+  let list = [...(warnings ?? [])];
+  if (!list.some((w) => w.code === warning.code)) list.push(warning);
+  return list;
+}
+
+// `doc` with `warning` added to its `meta.warnings`, when there is one.
+export function withPageSizeClampWarning<
+  D extends { meta?: { warnings?: { code: string; message: string }[] } },
+>(doc: D, warning: { code: string; message: string } | undefined): D {
+  if (!warning) return doc;
+  return {
+    ...doc,
+    meta: { ...doc.meta, warnings: [...(doc.meta?.warnings ?? []), warning] },
+  };
+}
+
+// Whether a query takes a default page: it names none, or names one whose size
+// cannot bound a result set (missing, non-numeric, below one) — the cases the
+// page bounds fill with their default. A counts-only `size: 0` names its page.
+export function takesDefaultPage(query: Query): boolean {
+  let page = query.page as { size?: unknown } | undefined | null;
+  if (page == null) return true;
+  if (page.size === 0) return false;
+  let size = Number(page.size);
+  return !Number.isFinite(size) || size < 1;
+}
+
+// The notice a response carries when a page the caller never asked for left
+// matches out: the query named no page, a default one applied, and more rows
+// match than it holds. Distinct from `page-size-clamped`, which answers a size
+// the caller did name. A caller that names a page has said how many rows it
+// wants, so a short page there is the page it asked for and says nothing.
+export const DEFAULT_PAGE_TRUNCATED = 'default-page-truncated';
+
+type PageMeta = {
+  total?: number;
+  hasMore?: boolean;
+};
+
+// `defaultPage` is the page the default gave the query (`{ size, number }`),
+// passed only when the default applied; `rows` is how many rows came back.
+// Undefined when every match is on this page or an earlier one.
+export function defaultPageTruncationWarning(
+  defaultPage: { size?: unknown; number?: unknown } | undefined,
+  rows: number,
+  page: PageMeta | undefined,
+  warnings?: readonly { code: string }[],
+): { code: string; message: string } | undefined {
+  if (!defaultPage) return undefined;
+  let size = Number(defaultPage.size);
+  let number = Number(defaultPage.number ?? 0) || 0;
+  if (!Number.isFinite(size) || size < 1) return undefined;
+  let total = page?.total;
+  let shown = number * size + rows;
+  let more =
+    page?.hasMore === true || (typeof total === 'number' && total > shown);
+  if (!more) return undefined;
+  let fmt = (n: number) => n.toLocaleString('en-US');
+  let of =
+    typeof total === 'number' && total > shown
+      ? hasWarning({ warnings }, TOTAL_ESTIMATED)
+        ? `>= ${fmt(total)}`
+        : fmt(total)
+      : `more than ${fmt(shown)}`;
+  return {
+    code: DEFAULT_PAGE_TRUNCATED,
+    message:
+      number === 0
+        ? `Returned the first ${fmt(rows)} of ${of} matches; pass page.size or page through the results`
+        : `Returned rows ${fmt(number * size + 1)}-${fmt(shown)} of ${of} matches on a default page of ${fmt(size)}; pass page.size or page through the results`,
+  };
+}
+
+// `doc` with the default-page notice added, and `meta.page.hasMore` set, when
+// the default page left matches out (see `defaultPageTruncationWarning`).
+export function withDefaultPageTruncation<
+  D extends {
+    data?: unknown[];
+    meta?: {
+      page?: PageMeta;
+      warnings?: { code: string; message: string }[];
+    };
+  },
+>(doc: D, defaultPage: { size?: unknown; number?: unknown } | undefined): D {
+  let warning = defaultPageTruncationWarning(
+    defaultPage,
+    doc.data?.length ?? 0,
+    doc.meta?.page,
+    doc.meta?.warnings,
+  );
+  if (!warning) return doc;
+  let withWarning = withPageSizeClampWarning(doc, warning);
+  return {
+    ...withWarning,
+    meta: {
+      ...withWarning.meta,
+      page: { ...withWarning.meta?.page, hasMore: true },
+    },
+  };
+}
+
+// When each realm of a federated search must have answered, so one slow
+// realm is reported as a timeout (`meta.realms[url].status`) while the rest
+// answer, inside the request's own budget: the budget less a reserve for
+// merging and serializing the answer (a tenth of it, at most 2 s).
+export function realmDeadlineWithin(
+  budgetMs: number = timeBudgetMs,
+  now: number = Date.now(),
+): number {
+  return now + budgetMs - Math.min(2_000, Math.floor(budgetMs / 10));
+}
+
 // Run a live search under the wall-clock budget. The runner receives an
 // AbortSignal it threads into `loadLinks` so the expensive async work stops
 // promptly on timeout; the Promise.race guarantees the 408 return even though
@@ -797,6 +1154,7 @@ export async function runWithSearchTimeBudget<T>(
   budgetMs: number = timeBudgetMs,
 ): Promise<T> {
   let controller = new AbortController();
+  setSignalDeadline(controller.signal, Date.now() + budgetMs);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timedOut = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
