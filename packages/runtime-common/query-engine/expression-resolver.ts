@@ -440,6 +440,17 @@ export abstract class ExpressionResolver extends IndexRows {
                 test.range!,
               )
             : undefined;
+        if (narrowed && test.storeBound) {
+          // A conjunct of the whole filter: the search narrows its
+          // candidates by every such range at once (`storedRangesCandidates`).
+          test.storeBound.narrowed = true;
+          test.storeBound.ranges.push({
+            realm: test.valueStoreRealm!,
+            path: removeBrackets(field.traveled),
+            range: test.range!,
+          });
+          return tested;
+        }
         return narrowed ? ['(', ...tested, 'AND', ...narrowed, ')'] : tested;
       }
       case 'eq': {

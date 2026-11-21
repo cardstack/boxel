@@ -26,6 +26,7 @@ import type {
 import type { CaptureManifest } from '../capture-spec.ts';
 import type { CardResource, CodeRef } from '../index.ts';
 import type { DBAdapter } from '../db.ts';
+import type { StoreBound } from '../expression.ts';
 import type { Definition } from '../definitions.ts';
 import type { FileMetaResource } from '../resource-types.ts';
 import type { LogFileReader } from '../log-line-index.ts';
@@ -446,6 +447,8 @@ export const EXPLAIN_KEY = '_explain';
 // read).
 export interface FilterContext {
   inAny: boolean;
+  // Inside the operand of a `not`.
+  inNot?: boolean;
   prerenderedTable: string;
   indexTable: string;
   // The realm the search runs over, where a signal needs it (the spaces a
@@ -464,6 +467,10 @@ export interface FilterContext {
   // a positive range test on a number field may then read its candidates
   // from that realm's value store (value-store-filter.ts).
   valueStoreRealm?: string;
+  // Set by the search's own condition: marked when one of the filter's
+  // top-level conjuncts reads its candidates from the value store, so every
+  // row the condition admits is a card the store holds.
+  storeBound?: StoreBound;
 }
 
 export const DEFAULT_FILTER_CONTEXT: FilterContext = {
