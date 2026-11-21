@@ -391,6 +391,9 @@ function absolutizeInstanceURL(
   setURL(virtualNetwork.resolveURL(url, resourceId).href);
 }
 
+// A search's rows and meta, before its entries are made (`entriesFromRows`).
+type SearchRows = Awaited<ReturnType<AnyIndexQueryEngine['search']>>;
+
 export class RealmIndexQueryEngine {
   #realm: Realm;
   #realmURL: URL | undefined;
@@ -471,9 +474,26 @@ export class RealmIndexQueryEngine {
     // 'instance', 'files' -> 'file', 'all'/absent -> 'all'.
     entryTypeScopeOverride?: 'instance' | 'file' | 'all',
   ): Promise<EntryCollectionDocument> {
+    let { results, meta } = await this.searchEntryRows(
+      searchEntryQuery,
+      opts,
+      entryTypeScopeOverride,
+    );
+    return await this.entriesFromRows(searchEntryQuery, results, meta, opts);
+  }
+
+  // The SQL half of `searchEntries`: the query's rows and meta. `over` is the
+  // realm the search reads: this realm, unless the search reads a union of
+  // realms on this realm's database (realm-union.ts), whose rows each realm
+  // then makes its own entries of (`entriesFromRows`).
+  async searchEntryRows(
+    searchEntryQuery: SearchEntryQuery,
+    opts?: Options,
+    entryTypeScopeOverride?: 'instance' | 'file' | 'all',
+    over?: URL,
+  ): Promise<SearchRows> {
     let {
       itemQuery: query,
-      htmlQuery,
       fieldset,
       cardUrls,
       scope,
@@ -513,7 +533,6 @@ export class RealmIndexQueryEngine {
       entryTypeScopeOverride ??
       (scope === 'cards' ? 'instance' : scope === 'files' ? 'file' : 'all');
 
-    let itemOnEveryRow = fieldset.item.kind !== 'none';
     let projection: SearchProjection = fieldset.html
       ? { kind: 'renderSet' }
       : { kind: 'dataOnly' };
@@ -534,7 +553,7 @@ export class RealmIndexQueryEngine {
     }
     let runSql = () =>
       this.#indexQueryEngine.search(
-        new URL(this.#realm.url),
+        over ?? new URL(this.#realm.url),
         // A query in Query V2's grammar reaches Query V2's engine alone: the
         // federated route reads with main's grammar wherever this realm reads
         // through main's engine (`engine-choice.ts`).
@@ -543,9 +562,22 @@ export class RealmIndexQueryEngine {
         projection,
         entryTypeScope,
       );
-    let { results, meta } = opts?.timings
+    return opts?.timings
       ? await opts.timings.time('sql', runSql)
       : await runSql();
+  }
+
+  // The entries of a search's rows, each row being one of this realm's cards
+  // or files: its renderings, item and links, and the document they make
+  // with `meta`.
+  async entriesFromRows(
+    searchEntryQuery: SearchEntryQuery,
+    results: SearchRows['results'],
+    meta: SearchRows['meta'],
+    opts?: Options,
+  ): Promise<EntryCollectionDocument> {
+    let { htmlQuery, fieldset } = searchEntryQuery;
+    let itemOnEveryRow = fieldset.item.kind !== 'none';
 
     // Resolve the htmlQuery's renderType CodeRefs to their `<module>/<name>`
     // keys once; the pure evaluator then runs per candidate rendering.

@@ -686,6 +686,7 @@ import { AliasCache } from './cache/alias-cache.ts';
 import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
+import type { RealmUnion } from './realm-union.ts';
 import type { SearchResultDoc } from './realm-index-query-engine.ts';
 import type { InstanceOrError } from './index-query-engine.ts';
 import {
@@ -20150,7 +20151,54 @@ export class Realm {
     searchEntryQuery: SearchEntryQuery | V2SearchEntryQuery,
     opts?: SearchOpts & { timeZone?: string },
   ): Promise<EntryCollectionDocument> {
-    let engineOpts = {
+    return await this.#realmIndexQueryEngine.searchEntries(
+      searchEntryQuery,
+      this.#searchEntryEngineOpts(opts),
+    );
+  }
+
+  // Whether a search over this realm and `other` can run as one statement:
+  // both read one index database (realm-union.ts).
+  public sharesIndexWith(other: Realm): boolean {
+    return this.#dbAdapter === other.#dbAdapter;
+  }
+
+  // The SQL half of a search over a union of realms that share this realm's
+  // index database, run on this realm's engine: the union's rows, in its
+  // order, and its meta. Each row's realm makes its entry (`entriesFromRows`).
+  // The caller reads every realm of the union outright (`unionPathRefusal`).
+  public async searchEntryUnionRows(
+    union: RealmUnion,
+    searchEntryQuery: SearchEntryQuery | V2SearchEntryQuery,
+    opts?: SearchOpts & { timeZone?: string },
+  ) {
+    return await this.#realmIndexQueryEngine.searchEntryRows(
+      searchEntryQuery,
+      this.#searchEntryEngineOpts(opts),
+      undefined,
+      union,
+    );
+  }
+
+  // The entries of rows a union search read that are this realm's cards and
+  // files, assembled as this realm's own search assembles them.
+  public async entriesFromRows(
+    searchEntryQuery: SearchEntryQuery | V2SearchEntryQuery,
+    results: Parameters<RealmIndexQueryEngine['entriesFromRows']>[1],
+    meta: Parameters<RealmIndexQueryEngine['entriesFromRows']>[2],
+    opts?: SearchOpts & { timeZone?: string },
+  ): Promise<EntryCollectionDocument> {
+    return await this.#realmIndexQueryEngine.entriesFromRows(
+      searchEntryQuery,
+      results,
+      meta,
+      this.#searchEntryEngineOpts(opts),
+    );
+  }
+
+  // The engine options of an entry search, from the caller's search options.
+  #searchEntryEngineOpts(opts?: SearchOpts & { timeZone?: string }) {
+    return {
       loadLinks: true as const,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
@@ -20180,10 +20228,6 @@ export class Realm {
       ...(opts?.signal ? { signal: opts.signal } : {}),
       ...(opts?.timeZone !== undefined ? { timeZone: opts.timeZone } : {}),
     };
-    return await this.#realmIndexQueryEngine.searchEntries(
-      searchEntryQuery,
-      engineOpts,
-    );
   }
 
   // Whether a search would answer with at least one row, asked of the index
