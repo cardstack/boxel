@@ -22,6 +22,10 @@
     "url": "https://github.com/cardstack/boxel/issues"
   },
   "type": "module",
+  "sideEffects": [
+    "./src/bxl/formatter/index.ts",
+    "./dist/bxl/formatter/index.js"
+  ],
   "engines": {
     "node": ">=24"
   },
@@ -35,6 +39,7 @@
     "./mutation": "./src/mutation/index.ts",
     "./runtime": "./src/runtime.ts",
     "./runtime-bare": "./src/runtime-bare.ts",
+    "./sql": "./src/sql.ts",
     "./syntax/textmate": "./src/bxl/syntax/bxl.tmLanguage.json",
     "./transform": "./src/transform.ts",
     "./*": "./src/*.ts"
@@ -61,6 +66,7 @@
       "./mutation": "./dist/mutation/index.js",
       "./runtime": "./dist/runtime.js",
       "./runtime-bare": "./dist/runtime-bare.js",
+      "./sql": "./dist/sql.js",
       "./syntax/textmate": "./dist/bxl/syntax/bxl.tmLanguage.json",
       "./transform": "./dist/transform.js",
       "./*": "./dist/*.js"

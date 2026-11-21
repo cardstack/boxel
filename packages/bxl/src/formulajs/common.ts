@@ -1,5 +1,36 @@
 import { EXCEL_ERROR, throwExcelError } from './errors.ts';
 
+// Text that is a number throughout: an optional sign, digits with an optional
+// decimal point (or a leading one) and an optional exponent, with whitespace
+// around it allowed. `"12"` and `" 1.5e3 "` are numbers; `"12abc"`, `""` and
+// `"0x10"` are not. The score profile's SQL and the spreadsheet interpreter
+// (bxl/sql/formula-eval.ts) read numeric text by the same rule.
+export const EXCEL_NUMERIC_TEXT =
+  /^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/;
+// The same rule as a Postgres regular expression, for SQL that reads text as
+// a number (the score profile's aggregates, a comparison set's statistics).
+export const EXCEL_NUMERIC_TEXT_SQL =
+  '^\\s*[-+]?([0-9]+\\.?[0-9]*|\\.[0-9]+)([eE][-+]?[0-9]+)?\\s*$';
+
+// The numbers an aggregate reads from a range: every number in it, nested
+// lists flattened, and every text that is a number throughout (`"12"`, not
+// `"12abc"` or `""`), since JSON often holds a number as text. Booleans,
+// blanks and other text are skipped, as Excel skips them in a range. The
+// score profile's SQL and the spreadsheet interpreter read a field the same
+// way.
+export function excelRangeNumbers(value: unknown): number[] {
+  const numbers: number[] = [];
+  for (const entry of flattenExcelArgs(value)) {
+    if (typeof entry === 'number') {
+      if (Number.isFinite(entry)) numbers.push(entry);
+    } else if (typeof entry === 'string' && EXCEL_NUMERIC_TEXT.test(entry)) {
+      const number = Number(entry);
+      if (Number.isFinite(number)) numbers.push(number);
+    }
+  }
+  return numbers;
+}
+
 export function isDefined(value: unknown) {
   return value !== undefined && value !== null;
 }
@@ -98,9 +129,12 @@ export function sumExcelRange(value: unknown) {
       continue;
     }
     if (typeof entry === 'string') {
-      const parsed = parseFloat(entry);
-      if (!Number.isNaN(parsed)) {
-        result += parsed;
+      // JSON often holds a number as text, so text that is a number counts;
+      // any other text adds nothing, a partial number such as "12abc"
+      // included (upstream formulajs 2f7af6c9 made the same correction to
+      // SUMIFS)
+      if (EXCEL_NUMERIC_TEXT.test(entry)) {
+        result += Number(entry);
       }
       continue;
     }
@@ -113,9 +147,7 @@ export function sumExcelRange(value: unknown) {
 }
 
 export function countExcelNumbers(value: unknown) {
-  return flattenExcelArgs(value).filter(
-    (entry) => typeof entry === 'number' && Number.isFinite(entry),
-  ).length;
+  return excelRangeNumbers(value).length;
 }
 
 export function countExcelValues(value: unknown) {
@@ -124,32 +156,26 @@ export function countExcelValues(value: unknown) {
   ).length;
 }
 
+// The average of a range's numbers (`excelRangeNumbers`); #DIV/0! when it
+// holds none, as in Excel.
 export function averageExcelRange(value: unknown) {
-  const flat = flattenExcelArgs(value).filter(isDefined);
-  if (flat.length === 0) {
+  const numbers = excelRangeNumbers(value);
+  if (numbers.length === 0) {
     throwExcelError(EXCEL_ERROR.div0);
   }
-
-  const numbers = flat.filter(
-    (entry): entry is number =>
-      typeof entry === 'number' && Number.isFinite(entry),
-  );
-
-  if (numbers.length === 0) {
-    throwExcelError(EXCEL_ERROR.num);
-  }
-
   return numbers.reduce((sum, entry) => sum + entry, 0) / numbers.length;
 }
 
+// The least and greatest of a range's numbers (`excelRangeNumbers`); 0 when
+// it holds none, as in Excel.
 export function minExcelRange(value: unknown) {
-  const numbers = parseExcelNumberArray(value);
-  return Math.min(...numbers);
+  const numbers = excelRangeNumbers(value);
+  return numbers.length ? Math.min(...numbers) : 0;
 }
 
 export function maxExcelRange(value: unknown) {
-  const numbers = parseExcelNumberArray(value);
-  return Math.max(...numbers);
+  const numbers = excelRangeNumbers(value);
+  return numbers.length ? Math.max(...numbers) : 0;
 }
 
 export function sampleStdDev(value: unknown) {

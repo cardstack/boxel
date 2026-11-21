@@ -165,6 +165,108 @@ export const formulaLogicCases: CoverageCase[] = [
   { covers: 'ISNUMBER/1', source: 'ISNUMBER(5)', expected: true },
   { covers: 'ISTEXT/1', source: 'ISTEXT("")', expected: true },
   { covers: 'ISTEXT/1', source: 'ISTEXT(5)', expected: false },
+  // An Excel error value in the argument is an answer, not a failure: a
+  // SEARCH that finds nothing is #VALUE!, and the value tests read it as
+  // Excel does, so IF(ISNUMBER(SEARCH(…)), …) branches instead of failing.
+  {
+    covers: 'ISNUMBER/1',
+    source: 'ISNUMBER(SEARCH("loop", "GOTO"))',
+    expected: false,
+  },
+  {
+    covers: 'ISNUMBER/1',
+    source: 'IF(ISNUMBER(SEARCH("loop", "Strange Loop")), 1, 0)',
+    expected: 1,
+  },
+  { covers: 'ISTEXT/1', source: 'ISTEXT(SEARCH("x", "abc"))', expected: false },
+  {
+    covers: 'ISNONTEXT/1',
+    source: 'ISNONTEXT(SEARCH("x", "abc"))',
+    expected: true,
+  },
+  {
+    covers: 'ISLOGICAL/1',
+    source: 'ISLOGICAL(SEARCH("x", "abc"))',
+    expected: false,
+  },
+  {
+    covers: 'ISBLANK/1',
+    source: 'ISBLANK(SEARCH("x", "abc"))',
+    expected: false,
+  },
+  // The value tests' workers, called directly, in both polarities.
+  {
+    covers: '_XL_ISNUMBER/1',
+    source: '_XL_ISNUMBER(5)',
+    readableSyntax: false,
+    expected: true,
+  },
+  {
+    covers: '_XL_ISNUMBER/1',
+    source: '_XL_ISNUMBER("5")',
+    readableSyntax: false,
+    expected: false,
+  },
+  {
+    covers: '_XL_ISTEXT/1',
+    source: '_XL_ISTEXT("a")',
+    readableSyntax: false,
+    expected: true,
+  },
+  {
+    covers: '_XL_ISTEXT/1',
+    source: '_XL_ISTEXT(5)',
+    readableSyntax: false,
+    expected: false,
+  },
+  {
+    covers: '_XL_ISNONTEXT/1',
+    source: '_XL_ISNONTEXT(5)',
+    readableSyntax: false,
+    expected: true,
+  },
+  {
+    covers: '_XL_ISNONTEXT/1',
+    source: '_XL_ISNONTEXT("a")',
+    readableSyntax: false,
+    expected: false,
+  },
+  {
+    covers: '_XL_ISLOGICAL/1',
+    source: '_XL_ISLOGICAL(true)',
+    readableSyntax: false,
+    expected: true,
+  },
+  {
+    covers: '_XL_ISLOGICAL/1',
+    source: '_XL_ISLOGICAL(1)',
+    readableSyntax: false,
+    expected: false,
+  },
+  {
+    covers: '_XL_ISBLANK/1',
+    source: '_XL_ISBLANK(null)',
+    readableSyntax: false,
+    expected: true,
+  },
+  {
+    covers: '_XL_ISBLANK/1',
+    source: '_XL_ISBLANK(0)',
+    readableSyntax: false,
+    expected: false,
+  },
+  {
+    covers: '_XL_IS_ERROR_CODE/0',
+    source: '"#VALUE!" | _XL_IS_ERROR_CODE',
+    readableSyntax: false,
+    expected: true,
+  },
+  {
+    covers: '_XL_IS_ERROR_CODE/0',
+    source: '"oops" | _XL_IS_ERROR_CODE',
+    readableSyntax: false,
+    expected: false,
+  },
   { covers: 'ISNONTEXT/1', source: 'ISNONTEXT(null)', expected: true },
   { covers: 'ISNONTEXT/1', source: 'ISNONTEXT("x")', expected: false },
   { covers: 'N/1', source: 'N(TRUE())', expected: 1 },

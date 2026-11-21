@@ -1,6 +1,7 @@
 import {
   averageExcelRange,
   countExcelNumbers,
+  excelRangeNumbers,
   countExcelValues,
   flattenExcelArgs,
   isExcelBlank,
@@ -18,7 +19,9 @@ import {
   createCriteriaMatcher,
   matchesCriteria,
 } from '../../formulajs/criteria.ts';
+import { parseExcelDate } from '../../formulajs/dateSerial.ts';
 import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.ts';
+import { linest, rsq } from '../../formulajs/linest.ts';
 import { isoWeekNumber } from '../../formulajs/isoWeek.ts';
 import { excelWildcardSearch } from '../../formulajs/wildcard.ts';
 import { compare } from '../../jqtools/evaluate/compare.ts';
@@ -227,10 +230,26 @@ function serialToUtcDate(serial: number): Date {
   );
 }
 
+// A stored date or date-time where a serial number is expected, as in
+// `HOUR(updatedAt)`: text that is not a number is read as a date, the way
+// YEAR, MONTH and DAY read it. An ISO value with a zone (`...Z`) is that
+// instant and its parts are read in UTC; a value that names no zone
+// (`yyyy-MM-dd`, or the serializer's local `yyyy-MM-ddTHH:mm`) is read as UTC,
+// whatever zone the host runs in.
+function storedDate(value: unknown): Date | undefined {
+  return typeof value === 'string' &&
+    value.trim() !== '' &&
+    Number.isNaN(Number(value))
+    ? parseExcelDate(value)
+    : undefined;
+}
+
 function weekdayValue(serialDateLike: unknown, returnTypeLike: unknown = 1) {
-  const serial = Math.floor(parseExcelNumber(serialDateLike));
+  const date =
+    storedDate(serialDateLike) ??
+    serialToUtcDate(Math.floor(parseExcelNumber(serialDateLike)));
   const type = Math.floor(parseExcelNumber(returnTypeLike));
-  const dayOfWeek = serialToUtcDate(serial).getUTCDay(); // 0 = Sunday
+  const dayOfWeek = date.getUTCDay(); // 0 = Sunday
   // Every return type says which weekday counts as the first: type 1 starts
   // the week on Sunday, types 2 and 3 and 11 on Monday, and 12 through 17 walk
   // the start forward a day at a time, back around to Sunday. Type 3 is the
@@ -1548,15 +1567,21 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'INT/1'(_input, value) {
     yield Math.floor(parseExcelNumber(value));
   },
-  *'ISBLANK/1'(_input, value) {
+  // The value tests behind ISBLANK (see formula-contrib-jq.ts), which
+  // answers for an Excel error value in its argument as Excel does.
+  *'_XL_ISBLANK/1'(_input, value) {
     yield value === null || value === undefined;
   },
-  *'ISNUMBER/1'(_input, value) {
+  // The value tests behind ISNUMBER (see formula-contrib-jq.ts), which
+  // answers for an Excel error value in its argument as Excel does.
+  *'_XL_ISNUMBER/1'(_input, value) {
     yield typeof value === 'number' &&
       !Number.isNaN(value) &&
       Number.isFinite(value);
   },
-  *'ISTEXT/1'(_input, value) {
+  // The value tests behind ISTEXT (see formula-contrib-jq.ts), which
+  // answers for an Excel error value in its argument as Excel does.
+  *'_XL_ISTEXT/1'(_input, value) {
     yield typeof value === 'string';
   },
   *'LEFT/1'(_input, value) {
@@ -1677,7 +1702,13 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
       text.slice(parseExcelNumber(startNum) - 1 + parseExcelNumber(length));
   },
   *'REPT/2'(_input, text, count) {
-    yield new Array(parseExcelNumber(count) + 1).join(parseExcelString(text));
+    // Excel's limit: a text longer than 32,767 characters is #VALUE!.
+    const repeated = parseExcelString(text);
+    const times = Math.floor(parseExcelNumber(count));
+    if (!(times >= 0) || repeated.length * times > 32_767) {
+      throwExcelError(EXCEL_ERROR.value);
+    }
+    yield repeated.repeat(times);
   },
   *'RIGHT/1'(_input, value) {
     const text = parseExcelString(value);
@@ -2145,10 +2176,14 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'ISODD/1'(_input, value) {
     yield truncValue(value) % 2 !== 0;
   },
-  *'ISLOGICAL/1'(_input, value) {
+  // The value tests behind ISLOGICAL (see formula-contrib-jq.ts), which
+  // answers for an Excel error value in its argument as Excel does.
+  *'_XL_ISLOGICAL/1'(_input, value) {
     yield typeof value === 'boolean';
   },
-  *'ISNONTEXT/1'(_input, value) {
+  // The value tests behind ISNONTEXT (see formula-contrib-jq.ts), which
+  // answers for an Excel error value in its argument as Excel does.
+  *'_XL_ISNONTEXT/1'(_input, value) {
     yield typeof value !== 'string';
   },
 
@@ -2157,9 +2192,8 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   // ═══════════════════════════════════════════════════════════════
 
   *'MEDIAN/1'(_input, values) {
-    const nums = flattenExcelArgs(values)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-      .sort((a, b) => a - b);
+    // a range's numbers, numeric text included, as AVERAGE reads them
+    const nums = excelRangeNumbers(values).sort((a, b) => a - b);
     if (nums.length === 0) throwExcelError(EXCEL_ERROR.num);
     const mid = Math.floor(nums.length / 2);
     yield nums.length % 2 !== 0 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
@@ -2300,6 +2334,23 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     }
     if (sumX2 === 0) throwExcelError(EXCEL_ERROR.div0);
     yield sumXY / sumX2;
+  },
+  // Multiple linear regression and its R², with Excel's shapes and layout;
+  // see formulajs/linest.ts.
+  *'LINEST/1'(_input, knownY) {
+    yield linest(knownY);
+  },
+  *'LINEST/2'(_input, knownY, knownX) {
+    yield linest(knownY, knownX);
+  },
+  *'LINEST/3'(_input, knownY, knownX, constant) {
+    yield linest(knownY, knownX, constant);
+  },
+  *'LINEST/4'(_input, knownY, knownX, constant, stats) {
+    yield linest(knownY, knownX, constant, stats);
+  },
+  *'RSQ/2'(_input, knownY, knownX) {
+    yield rsq(knownY, knownX);
   },
   *'INTERCEPT/2'(_input, knownY, knownX) {
     const y = flattenExcelArgs(knownY).filter(
@@ -2511,16 +2562,31 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield nowSerial();
   },
   *'HOUR/1'(_input, value) {
+    const date = storedDate(value);
+    if (date) {
+      yield date.getUTCHours();
+      return;
+    }
     const n = parseExcelNumber(value);
     const frac = n - Math.floor(n);
     yield Math.floor(frac * 24) % 24;
   },
   *'MINUTE/1'(_input, value) {
+    const date = storedDate(value);
+    if (date) {
+      yield date.getUTCMinutes();
+      return;
+    }
     const n = parseExcelNumber(value);
     const frac = n - Math.floor(n);
     yield Math.floor(frac * 24 * 60) % 60;
   },
   *'SECOND/1'(_input, value) {
+    const date = storedDate(value);
+    if (date) {
+      yield date.getUTCSeconds();
+      return;
+    }
     const n = parseExcelNumber(value);
     const frac = n - Math.floor(n);
     yield Math.floor(frac * 24 * 60 * 60) % 60;

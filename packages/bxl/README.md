@@ -675,14 +675,15 @@ The objection is also fair: a language that can do all of that should not be acc
 
 Profiles are the practical answer. BXL stays one language and one AST, but hosts can validate a strict subset for the place where the expression will run. The full language remains available where full computation is appropriate; narrower profiles reject expressions that exceed their execution contract before they become runtime surprises.
 
-| Profile         | Intent                                   | Typical use                                                                                  | What the subset protects                                                                                                                                                                                                                                              |
-| --------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `compute`       | Full browser/local value computation     | formulas, transforms, UI validation, query transforms                                        | Preserves the current BXL contract: readable jq plus Excel helpers and validator.js functions, including lazy extensions on async runtime paths.                                                                                                                      |
-| `policy`        | Bounded request-time authorization       | write gates, field redaction decisions                                                       | Keeps request checks deterministic and fail-closed; allows bounded scalar helpers but rejects aggregate and collection-scanning calls.                                                                                                                                |
-| `authorization` | Bounded relationship-graph authorization | OpenFGA-semantic rewrites, BXL authorization capability rules                                | Extends `policy` only with compiler-lowered graph forms such as `direct`, `userset`, `userset_from`, and `except`.                                                                                                                                                    |
-| `predicate`     | Query-time boolean filtering             | row-level read filters, search constraints                                                   | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, validator.js functions, and non-lowerable FormulaJS calls unless a host explicitly lowers them.                                                                                  |
-| `derive`        | Headless write/index-time computation    | `computeVia`, denormalized fields, search facets                                             | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior.                                                                                                     |
-| `mutation`      | Bounded single-Card DML planning         | `updateCard` tool calls, streaming edits, atomic field changes, and collection rearrangement | Resolves readable, schema-known locations against one loaded Card or Field and produces a pure mutation plan; enforces exact-one versus explicit bulk intent while keeping authorization, persistence, network access, and cross-document search outside the profile. |
+| Profile         | Intent                                     | Typical use                                                                                  | What the subset protects                                                                                                                                                                                                                                                                                                   |
+| --------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compute`       | Full browser/local value computation       | formulas, transforms, UI validation, query transforms                                        | Preserves the current BXL contract: readable jq plus Excel helpers and validator.js functions, including lazy extensions on async runtime paths.                                                                                                                                                                           |
+| `policy`        | Bounded request-time authorization         | write gates, field redaction decisions                                                       | Keeps request checks deterministic and fail-closed; allows bounded scalar helpers but rejects aggregate and collection-scanning calls.                                                                                                                                                                                     |
+| `authorization` | Bounded relationship-graph authorization   | OpenFGA-semantic rewrites, BXL authorization capability rules                                | Extends `policy` only with compiler-lowered graph forms such as `direct`, `userset`, `userset_from`, and `except`.                                                                                                                                                                                                         |
+| `predicate`     | Query-time boolean filtering               | row-level read filters, search constraints                                                   | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, validator.js functions, and non-lowerable FormulaJS calls unless a host explicitly lowers them.                                                                                                                                       |
+| `derive`        | Headless write/index-time computation      | `computeVia`, denormalized fields, search facets                                             | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior.                                                                                                                                                          |
+| `mutation`      | Bounded single-Card DML planning           | `updateCard` tool calls, streaming edits, atomic field changes, and collection rearrangement | Resolves readable, schema-known locations against one loaded Card or Field and produces a pure mutation plan; enforces exact-one versus explicit bulk intent while keeping authorization, persistence, network access, and cross-document search outside the profile.                                                      |
+| `query`         | An expression a Boxel search query carries | a sort `expression` (with its `top` window), a blend's expression signal                     | Computes one value from a row: spreadsheet functions, arithmetic, comparisons, fields (`peers.`/`stats.` in a window); rejects jq pipes, streams, objects, free variables, request context and runtime calls. Its SQL lowering is the score compiler (`compileBxlScoreToSql`, [`docs/score-sql.md`](./docs/score-sql.md)). |
 
 Boxel `computeVia` belongs in `derive`, not `compute`: it often needs aggregation over nested record data, but it runs in a headless write/index-time environment where the result should not depend on the current user, request, wall clock, or runtime metadata. The `bxl()` / `expression()` factory enforces this profile when it constructs a compute function. In particular, unrestricted `prepareBxl()` accepts jq `def`, while `bxl()` / `expression()` rejects it with `derive-def-banned`; use a built-in helper when the same computation must run as `computeVia`.
 
@@ -699,9 +700,11 @@ ast.profileIssues[0]?.code;
 // => 'predicate-call-banned'
 ```
 
-For predicate-profile expressions, the compiler can also emit a parameterized SQL fragment:
+For predicate-profile expressions, the `@cardstack/bxl/sql` entry can also emit a parameterized SQL fragment:
 
 ```ts
+import { compileBxlPredicateToSql } from '@cardstack/bxl/sql';
+
 const sql = compileBxlPredicateToSql(
   'Status IN ["Active", "Pending"] and Department IN @User.Departments',
   {
@@ -970,7 +973,7 @@ Our own work — the readable-syntax compiler, linter, formatter, sandbox, and r
 import {
   evaluateBxl, // readable BXL → JSON value (full runtime)
   compileBxl, // readable BXL → canonical jq source (no evaluation)
-  compileBxlPredicateToSql, // predicate-profile BXL → parameterized SQL
+  queryExpressionIssues, // query-profile refusals for a search expression
   lintBxl, // parser-only diagnostics (no formula helpers, no evaluator)
   solidifyBxl, // normalize fuzzy input to Solid BXL (one-liner, canonical)
   expandBxl, // wrap at pipes / multi-arg calls for readability
@@ -993,6 +996,13 @@ import {
   jq, // tagged template — plain jq (preserves `\(...)`)
   fx, // tagged template — Excel-like readable BXL
 } from '@cardstack/bxl';
+
+// SQL push-down, for code that builds database queries
+import {
+  compileBxlPredicateToSql, // predicate-profile BXL → parameterized SQL
+  compileBxlScoreToSql, // a query expression's score subset → SQL number
+  prepareSpreadsheetFormula, // the score subset computed in JavaScript
+} from '@cardstack/bxl/sql';
 ```
 
 Every function takes an optional `{ schema, runtimeLimits }` options object. Sub-entries in [`package.json`](./package.json) `exports` let consumers pick exactly what they need — the linter-only bundle omits formula helpers for editor and CI tooling:
@@ -1003,6 +1013,7 @@ Every function takes an optional `{ schema, runtimeLimits }` options object. Sub
 @cardstack/bxl/linter          — parser-only diagnostics
 @cardstack/bxl/runtime         — jq evaluator + helpers
 @cardstack/bxl/runtime-bare    — jq-core evaluator, no spreadsheet helpers
+@cardstack/bxl/sql             — SQL push-down: predicate and score compilers
 @cardstack/bxl/syntax/textmate — TextMate grammar for editors
 ```
 
@@ -1080,7 +1091,8 @@ For the canonical reference on jq vs fx vs plain-string mode, see [`docs/syntax-
 - [`docs/syntax-reference.md`](./docs/syntax-reference.md) — the same reference in Markdown, for GitHub browsing and plain-text viewers
 - [`docs/grammar.ebnf`](./docs/grammar.ebnf) — formal grammar
 - [`docs/syntax-modes.md`](./docs/syntax-modes.md) — jq vs fx vs plain-string call-site modes
-- [`docs/profiles.md`](./docs/profiles.md) — profile contracts for restricted execution surfaces
+- [`docs/profiles.md`](./docs/profiles.md) — profile contracts for restricted execution surfaces, including [`query`](./docs/profiles.md#query) for search expressions
+- [`docs/score-sql.md`](./docs/score-sql.md) — the score compiler that runs a search expression in SQL
 - [`docs/formulas.md`](./docs/formulas.md) — Excel helper matrix (implemented, BXL-only, via jq, won't add)
 - [`docs/browser-runtime.md`](./docs/browser-runtime.md) — browser runtime patterns, worker usage, errors
 - [`docs/mutation-profile.md`](./docs/mutation-profile.md) — the Card-native write planner's contract
