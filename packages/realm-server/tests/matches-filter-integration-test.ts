@@ -4,20 +4,51 @@ import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  hasWarning,
   IndexQueryEngine,
   param,
   query,
   rri,
+  resetSearchBoundsForTests,
+  setSearchBoundsForTests,
   VirtualNetwork,
+  type Definition,
   type DefinitionLookup,
+  type Filter,
 } from '@cardstack/runtime-common';
 
+import { syncSeededValueStore } from './helpers/seed-index-rows.ts';
 import { setupDB } from './helpers/index.ts';
+import { definitionsLookup } from './helpers/definition-lookup.ts';
 
 const testRealmURL = 'http://matches-filter-test/';
 
+// The base card type with its title, for the tests that read a field.
+const cardDefWithTitle = {
+  type: 'card-def',
+  codeRef: { module: '@cardstack/base/card-api', name: 'CardDef' },
+  displayName: 'Card',
+  fields: { cardTitle: 'f0' },
+  fieldDefs: {
+    f0: {
+      type: 'contains',
+      isPrimitive: true,
+      isComputed: false,
+      fieldOrCard: { module: '@cardstack/base/string', name: 'default' },
+    },
+  },
+} as unknown as Definition;
+
 const stubDefinitionLookup: DefinitionLookup = {
-  async lookupDefinition() {
+  // The stack reads the base card type's definition for a synthetic key
+  // (`_title`) in a filter with no type; anything else is refused.
+  async lookupDefinition(codeRef: { module: string; name: string }) {
+    if (
+      codeRef.module === '@cardstack/base/card-api' &&
+      codeRef.name === 'CardDef'
+    ) {
+      return cardDefWithTitle;
+    }
     throw new Error(
       'lookupDefinition should not be called for top-level matches filter tests',
     );
@@ -53,13 +84,25 @@ const stubDefinitionLookup: DefinitionLookup = {
 
 async function seedRow(
   dbAdapter: PgAdapter,
-  { url, markdown }: { url: string; markdown: string | null },
+  {
+    url,
+    markdown,
+    searchDoc = {},
+    // The card's own field words (its role-weighted `search_tsv`). By default
+    // the markdown's words, as for a card whose page renders its fields.
+    fieldText = markdown,
+    // The card's type and its ancestors' (internal keys), own type first.
+    types = [],
+  }: {
+    url: string;
+    markdown: string | null;
+    searchDoc?: Record<string, unknown>;
+    fieldText?: string | null;
+    types?: string[];
+  },
 ) {
   await query(dbAdapter, [
-    // Query V2 ranks a match by the card's search text (`rank_tsv`, which the
-    // index writer derives from `_searchText`); each seeded row's markdown is
-    // its body text (weight C), as a card whose fields hold that prose.
-    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, rank_tsv)`,
+    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, search_tsv, rank_tsv, search_title)`,
     `VALUES (`,
     param(url),
     `,`,
@@ -73,11 +116,13 @@ async function seedRow(
     `,`,
     `'{}'::jsonb`,
     `,`,
-    `'{}'::jsonb`,
+    param(JSON.stringify(searchDoc)),
+    `::jsonb`,
     `,`,
     `'[]'::jsonb`,
     `,`,
-    `'[]'::jsonb`,
+    param(JSON.stringify(types)),
+    `::jsonb`,
     `,`,
     param(false),
     `,`,
@@ -85,17 +130,32 @@ async function seedRow(
     `,`,
     param(Date.now()),
     `,`,
-    `search_rank_vector(jsonb_build_object('C', `,
-    param(markdown),
-    `::text))`,
+    `CASE WHEN`,
+    param(fieldText),
+    `::text IS NULL THEN NULL ELSE setweight(to_tsvector('boxel_english',`,
+    param(fieldText),
+    `), 'C') END`,
+    // The rank vector: the title at A, the field text's start at C.
+    `, setweight(to_tsvector('boxel_english', coalesce(`,
+    param(String(searchDoc._title ?? '')),
+    `::text, '')), 'A') || setweight(to_tsvector('boxel_english', left(coalesce(`,
+    param(fieldText),
+    `::text, ''), 600)), 'C')`,
+    `,`,
+    param(
+      typeof searchDoc._title === 'string'
+        ? searchDoc._title.toLowerCase()
+        : null,
+    ),
     `)`,
   ]);
-  // The full-text `matches` predicate reads `prerendered_html.markdown_tsv`,
-  // which the index writer derives from the markdown at promote; a row seeded
-  // here derives it the same way.
+  // The full-text `matches` predicate reads the rendering half of the row:
+  // its markdown, and the full-text vector the index writer stores beside it
+  // as it promotes a pass (`markdown_tsv`). Seeded directly here, so the
+  // vector is computed the same way the writer computes it.
   await query(dbAdapter, [
-    `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, markdown_tsv, generation, is_deleted, rendered_at)`,
-    `VALUES (`,
+    `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, generation, is_deleted, rendered_at, markdown_tsv)`,
+    `SELECT v.*, CASE WHEN v.markdown IS NULL THEN NULL ELSE to_tsvector('boxel_english', markdown_search_text(v.markdown)) END FROM (VALUES (`,
     param(url),
     `,`,
     param(url),
@@ -105,18 +165,15 @@ async function seedRow(
     param('instance'),
     `,`,
     param(markdown),
-    `,`,
-    `to_tsvector('boxel_english', markdown_search_text(`,
-    param(markdown),
-    `::text))`,
-    `,`,
+    `::text,`,
     param(1),
-    `,`,
+    `::integer,`,
     param(false),
-    `,`,
+    `::boolean,`,
     param(Date.now()),
-    `)`,
+    `::bigint)) AS v(url, file_alias, realm_url, type, markdown, generation, is_deleted, rendered_at)`,
   ]);
+  await syncSeededValueStore(dbAdapter, testRealmURL, [url]);
 }
 
 async function countBoxelIndexRows(dbAdapter: PgAdapter): Promise<number> {
@@ -440,6 +497,699 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    let prefixUrls = async (matches: string, prefix = true) =>
+      (await relevanceUrls({ filter: { matches, prefix } })).sort();
+
+    test('prefix matches the unfinished last word as a word prefix', async function (assert) {
+      assert.deepEqual(
+        await prefixUrls('pupp'),
+        [`${testRealmURL}mango.json`],
+        '"pupp" finds "puppy"',
+      );
+      assert.deepEqual(
+        await prefixUrls('pupp', false),
+        [],
+        'without prefix, "pupp" is a whole word and finds nothing',
+      );
+      assert.deepEqual(
+        await prefixUrls('PUPP'),
+        [`${testRealmURL}mango.json`],
+        'the prefix is case-insensitive',
+      );
+    });
+
+    test('an unfinished word shorter than three letters on its own matches whole', async function (assert) {
+      assert.deepEqual(await prefixUrls('pu'), [], '"pu" is not a prefix yet');
+      assert.deepEqual(
+        await prefixUrls('pup'),
+        [`${testRealmURL}mango.json`],
+        '"pup" is',
+      );
+      assert.deepEqual(
+        await prefixUrls('friendly pu'),
+        [`${testRealmURL}mango.json`],
+        'after a finished word, a short partial word is a prefix',
+      );
+    });
+
+    test('prefix finds a word whose stem is shorter than what was typed', async function (assert) {
+      // "plays" and "play" index as the lexeme "play", which "playi" (on the
+      // way to "playing") is not a prefix of.
+      assert.deepEqual(
+        await prefixUrls('playi'),
+        [`${testRealmURL}mango.json`, `${testRealmURL}ringo.json`],
+        '"playi" finds the "play" rows',
+      );
+      assert.deepEqual(
+        await prefixUrls('painterl'),
+        [`${testRealmURL}vangogh.json`],
+        '"painterl" finds "painterly", indexed as "painter"',
+      );
+    });
+
+    test('prefix matches the finished words as whole words, all of them', async function (assert) {
+      assert.deepEqual(
+        await prefixUrls('friendly pup'),
+        [`${testRealmURL}mango.json`],
+        'a finished word and a partial one, both present',
+      );
+      assert.deepEqual(
+        await prefixUrls('calm pup'),
+        [],
+        'the finished word "calm" and the partial "pup" are never in one row',
+      );
+      assert.deepEqual(
+        await prefixUrls('dog -painterl'),
+        [],
+        'a partial word under websearch negation stays negated',
+      );
+    });
+
+    test('a prefix query that ends in whitespace has no unfinished word', async function (assert) {
+      assert.deepEqual(await prefixUrls('pupp '), [], '"pupp " is a word');
+      assert.deepEqual(
+        await prefixUrls('puppy '),
+        [`${testRealmURL}mango.json`],
+        '"puppy " matches as without prefix',
+      );
+      assert.deepEqual(
+        await prefixUrls('   '),
+        [],
+        'a blank query matches nothing',
+      );
+    });
+
+    test("prefix: the unfinished word reads the card's fields, not its page's chrome", async function (assert) {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}chrome.json`,
+        markdown: 'Special Purpose Processors. Connected concepts: none',
+        fieldText: 'Special Purpose Processors',
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}concurrency.json`,
+        markdown: 'Concurrency and Parallelism. Connected concepts: none',
+        fieldText: 'Concurrency and Parallelism',
+      });
+      assert.deepEqual(
+        await relevanceUrls({ filter: { matches: 'conc', prefix: true } }),
+        [`${testRealmURL}concurrency.json`],
+        "a heading's word does not prefix-match every page",
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({ filter: { matches: 'concepts', prefix: true } })
+        ).sort(),
+        [`${testRealmURL}chrome.json`, `${testRealmURL}concurrency.json`],
+        'a whole word still matches the page',
+      );
+    });
+
+    test('type-ahead ranks a title that starts with the typed word above one where it starts a longer word', async function (assert) {
+      let row = (name: string, title: string) =>
+        seedRow(dbAdapter, {
+          url: `${testRealmURL}${name}.json`,
+          markdown: title,
+          searchDoc: { _title: title, _typeahead: title },
+        });
+      await row('lamport', 'Lamport on writing');
+      await row('lamps', 'Lamps, Bases & Shades');
+      await row('desk', 'Desk lamp');
+      await row('lamp', 'Lamp');
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { prefix: true, scope: 'title', matches: 'lamp' },
+          sort: [{ by: '_matchRelevance', direction: 'desc' }],
+        }),
+        [
+          `${testRealmURL}lamp.json`,
+          `${testRealmURL}lamps.json`,
+          `${testRealmURL}lamport.json`,
+          `${testRealmURL}desk.json`,
+        ],
+        'exact, then the word or its plural first, then a longer word, then a later word',
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: { prefix: true, scope: 'title', matches: 'lamps' },
+            sort: [{ by: '_matchRelevance', direction: 'desc' }],
+          })
+        )[0],
+        `${testRealmURL}lamps.json`,
+        'the plural typed finds the plural title first',
+      );
+    });
+
+    test('type-ahead ranks by title: exact, then starts-with, then word prefix, then the rest', async function (assert) {
+      let row = (name: string, title: string, typeahead: string) =>
+        seedRow(dbAdapter, {
+          url: `${testRealmURL}${name}.json`,
+          markdown: title,
+          searchDoc: { _title: title, _typeahead: typeahead },
+        });
+      await row('learning', 'Learning Rust', 'Learning Rust');
+      await row('production', 'Rust in Production', 'Rust in Production');
+      await row('exact', 'Rust', 'Rust');
+      await row('alias', 'Ferris the Crab', 'Ferris the Crab\nRust mascot');
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { prefix: true, scope: 'title', matches: 'rust' },
+          sort: [{ by: '_matchRelevance', direction: 'desc' }],
+        }),
+        [
+          `${testRealmURL}exact.json`,
+          `${testRealmURL}production.json`,
+          `${testRealmURL}learning.json`,
+          `${testRealmURL}alias.json`,
+        ],
+      );
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { prefix: true, scope: 'title', matches: 'rust in' },
+        }),
+        [`${testRealmURL}production.json`],
+        'every word must match',
+      );
+    });
+
+    test('accents fold everywhere text is searched', async function (assert) {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}tea.json`,
+        markdown: 'Orange Vanilla Crème Brûlée tea, steeped slowly.',
+        searchDoc: {
+          _title: 'Crème Brûlée Tea',
+          _typeahead: 'Crème Brûlée Tea',
+        },
+      });
+      let tea = [`${testRealmURL}tea.json`];
+      for (let matches of ['creme', 'crème', 'CRÈME']) {
+        assert.deepEqual(
+          (await relevanceUrls({ filter: { matches } })).filter((u) =>
+            u.includes('tea'),
+          ),
+          tea,
+          `matches "${matches}" finds Crème on the page and in the fields`,
+        );
+      }
+      for (let matches of ['cre', 'crè', 'brul', 'brû']) {
+        assert.deepEqual(
+          (await prefixUrls(matches)).filter((u) => u.includes('tea')),
+          tea,
+          `the unfinished word "${matches}" folds its accents as the document did`,
+        );
+      }
+      for (let typeahead of ['creme', 'crème', 'brule', 'brûl', 'BRU']) {
+        assert.deepEqual(
+          await relevanceUrls({
+            filter: { prefix: true, scope: 'title', matches: typeahead },
+          }),
+          tea,
+          `type-ahead "${typeahead}" finds Crème Brûlée`,
+        );
+      }
+    });
+
+    test('prefix matches rank by relevance', async function (assert) {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-dense.json`,
+        markdown: 'zebra zebra zebra — a whole herd of zebra on the plain.',
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-sparse.json`,
+        markdown: 'a single zebra grazing quietly.',
+      });
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { matches: 'zeb', prefix: true },
+          sort: [{ by: '_matchRelevance' }],
+        }),
+        [`${testRealmURL}zebra-dense.json`, `${testRealmURL}zebra-sparse.json`],
+        'the denser row ranks first',
+      );
+    });
+
+    // The search sheet's term filter: full text OR either title key.
+    let sheetTermFilter = (term: string): Filter => ({
+      any: [
+        { matches: term },
+        { contains: { _title: term } },
+        { contains: { cardTitle: term } },
+      ],
+    });
+
+    let seedTitledRows = async () => {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}title-only.json`,
+        markdown: 'A talk about logs and replicas.',
+        searchDoc: {
+          _title: 'Designing Data-Intensive Apps',
+          cardTitle: 'Designing Data-Intensive Apps',
+        },
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}file-title.json`,
+        markdown: null,
+        searchDoc: { _title: 'intensive-notes.md' },
+      });
+    };
+
+    test('a matches-or-title any returns the union of its branches', async function (assert) {
+      await seedTitledRows();
+      assert.deepEqual(
+        (await relevanceUrls({ filter: sheetTermFilter('intensive') })).sort(),
+        [`${testRealmURL}file-title.json`, `${testRealmURL}title-only.json`],
+        'a substring of either title key matches (markdown has no "intensive")',
+      );
+      assert.deepEqual(
+        (await relevanceUrls({ filter: sheetTermFilter('replicas') })).sort(),
+        [`${testRealmURL}title-only.json`],
+        'a markdown-only hit still matches',
+      );
+      assert.deepEqual(
+        (await relevanceUrls({ filter: sheetTermFilter('DATA-INT') })).sort(),
+        [`${testRealmURL}title-only.json`],
+        'the title match is case-insensitive and spans punctuation',
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({ filter: { not: sheetTermFilter('intensive') } })
+        ).sort(),
+        // The other rows have no title, and a card with no value is returned
+        // by neither a filter on it nor its `not` (the missing value follows
+        // SQL): the title branch is unknown for them, so the negated union is
+        // too. Lean keeps them.
+        [],
+        'negated, rows with no title are in neither the union nor its not',
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: {
+              any: [
+                { matches: 'kleppm', prefix: true },
+                { contains: { _title: 'zzz' } },
+              ],
+            },
+          })
+        ).sort(),
+        [],
+        'a prefix matches branch compiles in the union too',
+      );
+    });
+
+    test('a matches-or-title any compiles to one indexed union', async function (assert) {
+      let captured: string[] = [];
+      let originalExecute = dbAdapter.execute.bind(dbAdapter);
+      (dbAdapter as any).execute = async (sql: string, opts?: any) => {
+        captured.push(sql);
+        return originalExecute(sql, opts);
+      };
+      try {
+        await relevanceUrls({ filter: sheetTermFilter('intensive') });
+      } finally {
+        (dbAdapter as any).execute = originalExecute;
+      }
+      let dataQuery = captured.find((sql) => sql.includes('UNION'));
+      assert.ok(dataQuery, 'the filter compiles to a UNION');
+      assert.true(
+        dataQuery!.includes(`ti.search_doc ->> '_title' ILIKE`),
+        'the _title key is a literal, so its trigram index can match',
+      );
+      assert.true(
+        dataQuery!.includes(`ti.search_doc ->> 'cardTitle' ILIKE`),
+        'the cardTitle key is a literal, so its trigram index can match',
+      );
+
+      // A tiny table is cheapest to scan, so take scans off the table to see
+      // that the trigram index can answer the title predicate at all.
+      let planText = await dbAdapter.withConnection(async (run) => {
+        await run([`SET enable_seqscan = off`]);
+        let rows = (await run([
+          `EXPLAIN SELECT url FROM boxel_index WHERE search_doc ->> '_title' ILIKE '%intensive%'`,
+        ])) as { 'QUERY PLAN': string }[];
+        await run([`RESET enable_seqscan`]);
+        return rows.map((row) => row['QUERY PLAN']).join('\n');
+      });
+      assert.true(
+        planText.includes('boxel_index_title_trgm_idx'),
+        `the planner can use the title trigram index; got ${planText}`,
+      );
+      let indexes = (await dbAdapter.execute(
+        `SELECT indexname FROM pg_indexes WHERE tablename = 'boxel_index' AND indexname LIKE '%trgm%' ORDER BY indexname`,
+      )) as { indexname: string }[];
+      assert.deepEqual(
+        indexes.map((row) => row.indexname),
+        ['boxel_index_card_title_trgm_idx', 'boxel_index_title_trgm_idx'],
+        'both title trigram indexes are migrated',
+      );
+    });
+
+    let seedTypeAheadRows = async () => {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}crdt.json`,
+        markdown:
+          'Conflict-free replicated data types, as Martin Kleppmann explains them.',
+        searchDoc: {
+          _typeahead: 'Conflict-free Replicated Data Types\nCRDT',
+        },
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}kleppmann.json`,
+        markdown: 'Martin Kleppmann',
+        searchDoc: { _typeahead: 'Martin Kleppmann' },
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}go.json`,
+        markdown: 'The Go programming language',
+        searchDoc: { _typeahead: 'Go' },
+      });
+    };
+    let typeAheadUrls = async (typeahead: string) =>
+      (
+        await relevanceUrls({
+          filter: { prefix: true, scope: 'title', matches: typeahead },
+        })
+      ).sort();
+
+    test('type-ahead (matches, prefix, title scope) matches every word as a prefix of the type-ahead text', async function (assert) {
+      await seedTypeAheadRows();
+      assert.deepEqual(
+        await typeAheadUrls('kleppm'),
+        [`${testRealmURL}kleppmann.json`],
+        'only the card whose type-ahead text has the word; never the markdown that mentions it',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('data repl'),
+        [`${testRealmURL}crdt.json`],
+        'words match in any order',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('crdt'),
+        [`${testRealmURL}crdt.json`],
+        'each line of the text counts (a synonym)',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('MAR'),
+        [`${testRealmURL}kleppmann.json`],
+        'three letters are a prefix, and case is ignored',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('M'),
+        [],
+        'one letter on its own matches only a whole word',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('Go'),
+        [`${testRealmURL}go.json`],
+        'a short name still matches whole',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('G'),
+        [],
+        'but not as a one-letter prefix',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('kleppmann m'),
+        [`${testRealmURL}kleppmann.json`],
+        'beside a longer word a short word stays a prefix',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('the data'),
+        [`${testRealmURL}crdt.json`],
+        'a stop word is dropped when other words remain',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('the'),
+        [],
+        'a query of only stop words matches nothing',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('martin crdt'),
+        [],
+        'every word must match the same card',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('  -- '),
+        [],
+        'no words matches nothing',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('mango'),
+        [],
+        'a card with no type-ahead text never matches',
+      );
+    });
+
+    test('type-ahead (matches, prefix, title scope) composes in an indexed union', async function (assert) {
+      await seedTypeAheadRows();
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: {
+              any: [
+                { prefix: true, scope: 'title', matches: 'kleppm' },
+                { matches: 'puppy' },
+              ],
+            },
+          })
+        ).sort(),
+        [`${testRealmURL}kleppmann.json`, `${testRealmURL}mango.json`],
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: {
+              not: { prefix: true, scope: 'title', matches: 'kleppm' },
+            },
+          })
+        ).length,
+        6,
+        'negated, it keeps every other row',
+      );
+    });
+
+    test('facets count a field over every match, list fields per element', async function (assert) {
+      // Facets count declared fields: the talks' type declares both, and
+      // their value-store rows are written from the seeded rows, as the index
+      // writer writes a pass's.
+      let talkRef = { module: `${testRealmURL}talk`, name: 'Talk' } as const;
+      let talkKey = `${testRealmURL}talk/Talk`;
+      let stringRef = { module: '@cardstack/base/string', name: 'default' };
+      let talkDef = {
+        type: 'card-def',
+        codeRef: talkRef,
+        displayName: 'Talk',
+        fields: { category: 'f0', concepts: 'f1' },
+        fieldDefs: {
+          f0: {
+            type: 'contains',
+            isPrimitive: true,
+            isComputed: false,
+            fieldOrCard: stringRef,
+            search: { facet: true },
+          },
+          f1: {
+            type: 'containsMany',
+            isPrimitive: true,
+            isComputed: false,
+            fieldOrCard: stringRef,
+            search: { facet: true },
+          },
+        },
+      } as unknown as Definition;
+      let talkLookup = {
+        ...stubDefinitionLookup,
+        async lookupDefinition(ref: { module: string; name: string }) {
+          if (ref.module === talkRef.module && ref.name === talkRef.name) {
+            return talkDef;
+          }
+          throw new Error(`unexpected definition lookup: ${ref.module}`);
+        },
+      } as unknown as DefinitionLookup;
+      let talkEngine = new IndexQueryEngine(
+        dbAdapter,
+        talkLookup,
+        new VirtualNetwork(),
+      );
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}talk-1.json`,
+        markdown: 'a talk about clocks',
+        searchDoc: { category: 'Systems', concepts: ['clocks', 'consensus'] },
+        types: [talkKey],
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}talk-2.json`,
+        markdown: 'a talk about clocks and queues',
+        searchDoc: { category: 'Systems', concepts: ['clocks', 'queues'] },
+        types: [talkKey],
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}talk-3.json`,
+        markdown: 'a talk about voting',
+        searchDoc: { category: 'Society', concepts: ['voting'] },
+        types: [talkKey],
+      });
+      let { meta } = await talkEngine.search(
+        new URL(testRealmURL),
+        {
+          filter: { matches: 'talk' },
+          facets: [{ by: 'category' }, { by: 'concepts', size: 2 }],
+          page: { size: 1 },
+        },
+        {},
+        { kind: 'dataOnly' },
+      );
+      assert.strictEqual(meta.page.total, 3, 'the page is one row of three');
+      assert.deepEqual(meta.facets?.category, [
+        { value: 'Systems', count: 2 },
+        { value: 'Society', count: 1 },
+      ]);
+      assert.deepEqual(
+        meta.facets?.concepts,
+        [
+          { value: 'clocks', count: 2 },
+          { value: 'consensus', count: 1 },
+        ],
+        'each element of a list counts, capped at size, ties by value',
+      );
+    });
+
+    let seedPassage = async (
+      url: string,
+      ordinal: number,
+      start: number,
+      text: string,
+    ) => {
+      await query(dbAdapter, [
+        `INSERT INTO boxel_index_passages (realm_url, url, type, field_path, ordinal, start_at, end_at, body, tsv) VALUES (`,
+        param(testRealmURL),
+        `,`,
+        param(url),
+        `, 'instance', 'segments',`,
+        param(ordinal),
+        `,`,
+        param(start),
+        `,`,
+        param(start + 60),
+        `,`,
+        param(text),
+        `, to_tsvector('boxel_english',`,
+        param(text),
+        `))`,
+      ]);
+    };
+    let seedTalks = async () => {
+      for (let [slug, segments] of [
+        [
+          'clocks-talk',
+          [
+            'welcome everyone to the conference',
+            'two machines never agree on what time it is',
+            'so we order events with logical clocks instead',
+          ],
+        ],
+        ['votes-talk', ['every ranked voting rule breaks a fairness rule']],
+      ] as [string, string[]][]) {
+        let url = `${testRealmURL}${slug}.json`;
+        await seedRow(dbAdapter, {
+          url,
+          markdown: `# ${slug}`,
+          searchDoc: { _passages: ['segments'] },
+        });
+        for (let [ordinal, text] of segments.entries()) {
+          await seedPassage(url, ordinal, ordinal * 60, text);
+        }
+      }
+    };
+
+    test('matches within a passage list finds the card by any passage', async function (assert) {
+      await seedTalks();
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: { matches: 'logical clocks', within: 'segments' },
+          })
+        ).sort(),
+        [`${testRealmURL}clocks-talk.json`],
+      );
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { matches: 'clocks-talk', within: 'segments' },
+        }),
+        [],
+        'the markdown is not searched',
+      );
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { matches: 'machin', prefix: true, within: 'segments' },
+        }),
+        [`${testRealmURL}clocks-talk.json`],
+        'prefix works within passages',
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: {
+              any: [
+                { matches: 'fairness', within: 'segments' },
+                { matches: 'puppy' },
+              ],
+            },
+          })
+        ).sort(),
+        [`${testRealmURL}mango.json`, `${testRealmURL}votes-talk.json`],
+        'a passage branch joins the indexed union',
+      );
+    });
+
+    test('a passage search reports which passages matched, and ranks by the best one', async function (assert) {
+      await seedTalks();
+      let { meta } = await engine.search(
+        new URL(testRealmURL),
+        {
+          filter: { matches: 'clocks or time', within: 'segments' },
+          sort: [{ by: '_matchRelevance' }],
+        },
+        {},
+        { kind: 'dataOnly' },
+      );
+      let passages = meta.passages?.[`${testRealmURL}clocks-talk`];
+      assert.deepEqual(
+        passages?.map((p) => [p.field, p.ordinal, p.start]).sort(),
+        [
+          ['segments', 1, 60],
+          ['segments', 2, 120],
+        ],
+        'both matching segments, with where they start',
+      );
+      assert.true(
+        (passages?.[0].score ?? 0) > 0,
+        'each carries a relevance score',
+      );
+      assert.true(
+        passages?.every((p) => /clock|time/i.test(p.snippet ?? '')),
+        'each carries the stretch of text around what matched',
+      );
+    });
+
+    test('a passage search under the request grammar names its list like any field', async function (assert) {
+      await seedTalks();
+      let { meta } = await engine.search(
+        new URL(testRealmURL),
+        {
+          filter: { matches: 'logical clocks', within: 'item.segments' },
+          sort: [{ blend: [{ by: 'textRelevance' }] }],
+        } as any,
+        {},
+        { kind: 'dataOnly' },
+      );
+      assert.deepEqual(
+        Object.keys(meta.passages ?? {}),
+        [`${testRealmURL}clocks-talk`],
+        'a blend beside `within` reads the list through item., as the wire spells it',
+      );
+    });
+
     test('a relevance sort carrying a type anchor ranks the same as one without', async function (assert) {
       await seedRow(dbAdapter, {
         url: `${testRealmURL}zebra-dense.json`,
@@ -538,6 +1288,326 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // A broad term (more field matches than the candidate cap) ranks a
+    // capped candidate set: its best field matches and every card whose page
+    // holds it, with the total reported as a lower bound.
+    module('a term broader than the candidate cap', function (hooks) {
+      hooks.beforeEach(async function () {
+        // A title substring reads its field off the card type: these cases
+        // resolve `CardDef`, with a `cardTitle`, as a realm's would.
+        engine = new IndexQueryEngine(
+          dbAdapter,
+          definitionsLookup([cardDefWithTitle]),
+          new VirtualNetwork(),
+        );
+        setSearchBoundsForTests({ matchCandidateCap: 3 });
+        for (let name of ['alpha', 'beta']) {
+          await seedRow(dbAdapter, {
+            url: `${testRealmURL}lantern-${name}.json`,
+            markdown: `Lantern ${name}: a brass lantern.`,
+            searchDoc: { _title: `Lantern ${name}` },
+            fieldText: `lantern ${name} brass lantern`,
+          });
+        }
+        for (let i = 0; i < 8; i++) {
+          await seedRow(dbAdapter, {
+            url: `${testRealmURL}shed-${i}.json`,
+            markdown: `Shed ${i}, where an old lantern hangs by the door.`,
+            searchDoc: { _title: `Shed ${i}` },
+            fieldText: `shed ${i}`,
+          });
+        }
+        // Crates hold the word only in their fields: with the lanterns, six
+        // field matches, past the cap of 3.
+        for (let i = 0; i < 4; i++) {
+          await seedRow(dbAdapter, {
+            url: `${testRealmURL}crate-${i}.json`,
+            markdown: `Crate ${i}.`,
+            searchDoc: { _title: `Crate ${i}` },
+            fieldText: `crate ${i} holds a lantern`,
+          });
+        }
+      });
+      hooks.afterEach(function () {
+        resetSearchBoundsForTests();
+      });
+
+      async function lanternSearch(page: {
+        size: number;
+        exactTotal?: boolean;
+      }) {
+        let { results, meta } = await engine.search(
+          new URL(testRealmURL),
+          {
+            filter: { matches: 'lantern' },
+            sort: [{ by: '_matchRelevance', direction: 'desc' }],
+            page,
+          },
+          {},
+          { kind: 'dataOnly' },
+        );
+        return { urls: results.map((r) => r.url), meta };
+      }
+
+      test('the top rows are the same, and the total is a flagged lower bound', async function (assert) {
+        let exact = await lanternSearch({ size: 2, exactTotal: true });
+        assert.strictEqual(exact.meta.page.total, 14, 'every match counted');
+        assert.false(
+          hasWarning(exact.meta, 'total-estimated'),
+          'an exact total carries no flag',
+        );
+
+        let capped = await lanternSearch({ size: 2 });
+        assert.deepEqual(
+          capped.urls,
+          exact.urls,
+          'the first page is the one the exact search answers',
+        );
+        assert.deepEqual(capped.urls.sort(), [
+          `${testRealmURL}lantern-alpha.json`,
+          `${testRealmURL}lantern-beta.json`,
+        ]);
+        assert.true(
+          hasWarning(capped.meta, 'total-estimated'),
+          'flagged an estimate',
+        );
+        // Every card whose page holds the word (the 2 lanterns and 8 sheds)
+        // and the best field matches: the lanterns, then the first crate by
+        // url, of the three crates that tie.
+        assert.strictEqual(
+          capped.meta.page.total,
+          11,
+          'the page matches and the best 3 field matches',
+        );
+      });
+
+      test('a broad term answers the same total and order on every run', async function (assert) {
+        let runs = [];
+        for (let run = 0; run < 2; run++) {
+          runs.push(
+            await engine.search(
+              new URL(testRealmURL),
+              {
+                filter: { matches: 'lantern' },
+                sort: [{ by: '_matchRelevance', direction: 'desc' }],
+                page: { size: 20 },
+              },
+              {},
+              { kind: 'dataOnly' },
+            ),
+          );
+        }
+        let [first, second] = runs;
+        assert.true(
+          hasWarning(first.meta, 'total-estimated'),
+          'the term is broad',
+        );
+        assert.strictEqual(first.meta.page.total, second.meta.page.total);
+        assert.deepEqual(
+          first.results.map((r) => r.url),
+          second.results.map((r) => r.url),
+          'the same rows in the same order',
+        );
+        assert.deepEqual(
+          first.results.map((r) => r.url).sort(),
+          [
+            `${testRealmURL}crate-0.json`,
+            `${testRealmURL}lantern-alpha.json`,
+            `${testRealmURL}lantern-beta.json`,
+            ...Array.from(
+              { length: 8 },
+              (_, i) => `${testRealmURL}shed-${i}.json`,
+            ),
+          ].sort(),
+          'every page match and the best field matches',
+        );
+      });
+
+      test("the search sheet's any of matches and title contains is capped the same way", async function (assert) {
+        let sheet = (page: { size: number; exactTotal?: boolean }) =>
+          engine.search(
+            new URL(testRealmURL),
+            {
+              filter: {
+                any: [
+                  { matches: 'lantern' },
+                  { contains: { _title: 'lantern' } },
+                ],
+              },
+              sort: [{ by: '_matchRelevance', direction: 'desc' }],
+              page,
+            },
+            {},
+            { kind: 'dataOnly' },
+          );
+        let exact = await sheet({ size: 2, exactTotal: true });
+        let capped = await sheet({ size: 2 });
+        assert.strictEqual(exact.meta.page.total, 14);
+        assert.deepEqual(
+          capped.results.map((r) => r.url),
+          exact.results.map((r) => r.url),
+          'the same first page',
+        );
+        assert.true(hasWarning(capped.meta, 'total-estimated'));
+        assert.strictEqual(capped.meta.page.total, 11);
+      });
+
+      test('a term of only stop words and single letters matches nothing, without a full-text scan', async function (assert) {
+        let executed: string[] = [];
+        let originalExecute = dbAdapter.execute.bind(dbAdapter);
+        dbAdapter.execute = ((
+          sql: string,
+          opts?: Parameters<typeof originalExecute>[1],
+        ) => {
+          executed.push(sql);
+          return originalExecute(sql, opts);
+        }) as typeof dbAdapter.execute;
+        try {
+          for (let text of ['a', 'the of', 'x', 'a b c']) {
+            let { meta } = await engine.search(
+              new URL(testRealmURL),
+              {
+                filter: { matches: text },
+                sort: [{ by: '_matchRelevance', direction: 'desc' }],
+                page: { size: 5 },
+              },
+              {},
+              { kind: 'dataOnly' },
+            );
+            assert.strictEqual(meta.page.total, 0, `"${text}" matches nothing`);
+          }
+        } finally {
+          dbAdapter.execute = originalExecute;
+        }
+        assert.false(
+          executed.some((sql) => sql.includes('@@')),
+          'no statement ran a full-text match',
+        );
+        let { meta } = await engine.search(
+          new URL(testRealmURL),
+          { filter: { matches: 'the brass' }, page: { size: 5 } },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(
+          meta.page.total,
+          2,
+          'a stop word beside a word is dropped as before',
+        );
+      });
+
+      test('a one- or two-letter title substring matches every card that holds it', async function (assert) {
+        let shed = (page: { size: number; exactTotal?: boolean }) =>
+          engine.search(
+            new URL(testRealmURL),
+            {
+              filter: {
+                any: [
+                  { contains: { _title: 'sh' } },
+                  { contains: { cardTitle: 'sh' } },
+                ],
+              },
+              page,
+            },
+            {},
+            { kind: 'dataOnly' },
+          );
+        let exact = await shed({ size: 2, exactTotal: true });
+        assert.strictEqual(exact.meta.page.total, 8, 'every shed counted');
+        assert.false(hasWarning(exact.meta, 'total-estimated'));
+        let paged = await shed({ size: 2 });
+        assert.strictEqual(
+          paged.meta.page.total,
+          8,
+          'every shed, past the cap',
+        );
+        assert.false(hasWarning(paged.meta, 'total-estimated'));
+        assert.deepEqual(
+          paged.results.map((r) => r.url),
+          exact.results.map((r) => r.url),
+        );
+        let alone = await engine.search(
+          new URL(testRealmURL),
+          { filter: { contains: { _title: 'sh' } }, page: { size: 2 } },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(alone.meta.page.total, 8, 'on its own too');
+        assert.false(hasWarning(alone.meta, 'total-estimated'));
+
+        let sheetQuery = (page: { size: number; exactTotal?: boolean }) =>
+          engine.search(
+            new URL(testRealmURL),
+            {
+              filter: {
+                any: [
+                  { matches: 'a' },
+                  { contains: { _title: 'e' } },
+                  { contains: { cardTitle: 'e' } },
+                ],
+              },
+              page,
+            },
+            {},
+            { kind: 'dataOnly' },
+          );
+        let sheet = await sheetQuery({ size: 2 });
+        let sheetExact = await sheetQuery({ size: 2, exactTotal: true });
+        assert.false(
+          hasWarning(sheet.meta, 'total-estimated'),
+          "the search sheet's one-letter query is not cut",
+        );
+        assert.strictEqual(
+          sheet.meta.page.total,
+          sheetExact.meta.page.total,
+          'it counts every card holding the letter',
+        );
+
+        let narrow = await engine.search(
+          new URL(testRealmURL),
+          {
+            filter: {
+              any: [
+                { contains: { _title: 'al' } },
+                { contains: { cardTitle: 'al' } },
+              ],
+            },
+            page: { size: 5 },
+          },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(narrow.meta.page.total, 1, 'within the cap: exact');
+        assert.false(hasWarning(narrow.meta, 'total-estimated'));
+      });
+
+      test('a term within the cap is exact and unflagged', async function (assert) {
+        let { meta } = await engine.search(
+          new URL(testRealmURL),
+          { filter: { matches: 'brass' }, page: { size: 5 } },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(meta.page.total, 2);
+        assert.false(hasWarning(meta, 'total-estimated'));
+      });
+
+      test('a broad term under not is never capped', async function (assert) {
+        let { meta } = await engine.search(
+          new URL(testRealmURL),
+          {
+            filter: {
+              every: [{ matches: 'shed' }, { not: { matches: 'lantern' } }],
+            },
+            page: { size: 5 },
+          },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(meta.page.total, 0, 'every shed holds a lantern');
+      });
+    });
+
     test('rejects a relevance sort with no positive matches term', async function (assert) {
       await assert.rejects(
         engine.searchCards(new URL(testRealmURL), {
@@ -547,6 +1617,48 @@ module(basename(import.meta.filename), function () {
         /requires at least one positive `matches` filter/,
         'a negated-only tree has no positive term to rank by',
       );
+    });
+
+    test('IndexQueryEngine asks the markdown index once, through an indexed subquery', async function (assert) {
+      // Every positive `matches` term compiles to an uncorrelated
+      // `(url, realm_url, type) IN (SELECT … FROM prerendered_html AS phm …)`,
+      // which Postgres runs as a hashed SubPlan over the markdown GIN index.
+      // Inline beside a type anchor the planner misestimated some terms and
+      // recomputed every typed row's tsvector (~2 s over 6k transcripts). The
+      // subquery keeps the null-rejecting guard on its own rows. This captures
+      // the SQL the engine actually emits, so a regression back to the inline
+      // form fails here.
+      let executed: string[] = [];
+      let originalExecute = dbAdapter.execute.bind(dbAdapter);
+      dbAdapter.execute = ((
+        sql: string,
+        opts?: Parameters<typeof originalExecute>[1],
+      ) => {
+        executed.push(sql);
+        return originalExecute(sql, opts);
+      }) as typeof dbAdapter.execute;
+      try {
+        await engine.searchCards(new URL(testRealmURL), {
+          filter: { matches: 'mango' },
+        });
+      } finally {
+        dbAdapter.execute = originalExecute;
+      }
+
+      let guard = `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM prerendered_html AS phm WHERE phm.markdown_tsv @@`;
+      let matchesSql = executed.filter((sql) =>
+        sql.includes('phm.markdown_tsv'),
+      );
+      assert.ok(
+        matchesSql.length > 0,
+        'the engine ran a full-text matches query',
+      );
+      for (let sql of matchesSql) {
+        assert.ok(
+          sql.includes(guard),
+          `emitted matches SQL should use the indexed subquery; got: ${sql}`,
+        );
+      }
     });
 
     test('the null-rejecting guard reduces the prerendered_html LEFT JOIN to an inner join', async function (assert) {
@@ -575,7 +1687,7 @@ module(basename(import.meta.filename), function () {
       // interpolated, so the SQL stays quoting-safe whatever their contents; only
       // the predicate *shape* — which is test-controlled, not data — is composed
       // inline.
-      let tsPredicate = `to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english', $2)`;
+      let tsPredicate = `to_tsvector('boxel_english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english', $2)`;
       let joinShapeExplain = (predicate: string) =>
         `EXPLAIN (FORMAT JSON)
          SELECT i.url
