@@ -7,6 +7,7 @@ import { isLogBinding } from '@cardstack/runtime-common/query-v2/query-values';
 import {
   applyServerSearchPageBound,
   pageSizeClampWarning,
+  realmDeadlineWithin,
   takesDefaultPage,
   withDefaultPageTruncation,
   withPageSizeClampWarning,
@@ -1140,6 +1141,9 @@ export default function handleSearch(opts: {
     let runSearch = async (abandoned?: AbortSignal) => {
       let doRun = async (budgetSignal?: AbortSignal) => {
         let signal = mergeAbortSignals(budgetSignal, abandoned);
+        // Each realm gets its own deadline inside the request's budget, so
+        // one slow realm is reported as a timeout and the rest still answer.
+        let realmDeadline = timeBudgeted ? realmDeadlineWithin() : undefined;
         // Only the realms rows are read from are mounted: the caller reads
         // them, or their policy scopes the caller into them. A realm an
         // earlier step of the request already tried to mount is answered as
@@ -1158,6 +1162,7 @@ export default function handleSearch(opts: {
         let fanOutOpts = {
           ...runSearchOpts,
           ...(signal ? { signal } : {}),
+          ...(realmDeadline !== undefined ? { realmDeadline } : {}),
         };
         // A merged search over realms the caller reads outright that all
         // share this server's index database runs as one statement over all
