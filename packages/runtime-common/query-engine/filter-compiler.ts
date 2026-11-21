@@ -96,6 +96,7 @@ import {
   tableFromOpts,
 } from './index-sql.ts';
 import { FILE_PATTERN_FIELDS, searchesByPattern } from '../search-intent.ts';
+import { searchRead } from '../search-session.ts';
 import stringify from 'safe-stable-stringify';
 
 // What a card filter's fields resolve in: the type a node is anchored on,
@@ -576,9 +577,13 @@ export abstract class FilterCompiler extends ExpressionResolver {
     try {
       // the prefilter's newline-sensitive form, which it runs only on an
       // expression that sets no embedded options of its own
-      await this.dbAdapter.execute(`SELECT '' ~ $1 AS a, '' ~ $2 AS b`, {
-        bind: [value, value.startsWith('(?') ? value : `(?n)${value}`],
-      });
+      await searchRead(this.dbAdapter, [
+        "SELECT '' ~",
+        param(value),
+        "AS a, '' ~",
+        param(value.startsWith('(?') ? value : `(?n)${value}`),
+        'AS b',
+      ]);
     } catch (e) {
       let message = String((e as Error)?.message ?? e);
       let reason = /invalid regular expression:?\s*(.*)/i.exec(message);

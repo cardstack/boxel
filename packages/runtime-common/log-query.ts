@@ -30,6 +30,7 @@ import {
   type Expression,
 } from './expression.ts';
 import type { DBAdapter } from './db.ts';
+import { searchRead } from './search-session.ts';
 import { dialectFor } from './query-engine/dialect.ts';
 import { CONTAINMENT_ANY_MAX } from './query-engine/filter-sql.ts';
 import { InvalidQueryError, LogQueryError } from './invalid-query-error.ts';
@@ -748,7 +749,7 @@ async function logsUnder(
     ] as Expression)) as { url: string }[];
     return [...new Set(rows.map((r) => r.url).filter(isLogFileURL))];
   }
-  let rows = (await runQuery(dbAdapter, [
+  let rows = (await searchRead(dbAdapter, [
     'SELECT url FROM boxel_index WHERE realm_url =',
     param(realmURL),
     "AND type = 'file' AND (is_deleted = false OR is_deleted IS NULL)",
@@ -778,7 +779,7 @@ export async function ensureLogsIndexed(
   let known = async () =>
     new Set(
       (
-        (await runQuery(dbAdapter, [
+        (await searchRead(dbAdapter, [
           'SELECT url FROM boxel_log_files WHERE url = ANY(',
           param(`{${urls.map(arrayElement).join(',')}}`),
           '::text[])',

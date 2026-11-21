@@ -152,9 +152,17 @@ export interface DBAdapter {
   //
   // `fn` may be run more than once (see `outsideReadSnapshot`), so it must be
   // safe to re-run; only its last run's outcome is returned.
+  //
+  // `settled` is work outside the database already done for this call, by
+  // the key `outsideReadSnapshot` gives it (a search's definitions, looked up
+  // before the snapshot): the snapshot answers those keys with it at once.
   withReadSnapshot?: <T>(
     fn: (reader: DBAdapter) => Promise<T>,
-    opts?: { signal?: AbortSignal; deadline?: number },
+    opts?: {
+      signal?: AbortSignal;
+      deadline?: number;
+      settled?: ReadonlyMap<string, Promise<unknown>>;
+    },
   ) => Promise<T>;
   // Wait on work outside the database (a definition lookup, which may
   // prerender a module) from inside a read snapshot without holding the
