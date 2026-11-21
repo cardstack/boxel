@@ -30,8 +30,20 @@ export const CARD_TYPE_KEY = '_cardType';
 // key too), not `eq: true`.
 export const CARD_INSTANCE_FILE_KEY = '_isCardInstanceFile';
 
+// The card's type-ahead text: its title and `cardInfo.alternativeNames`,
+// one per line, matched by a type-ahead `matches` (`prefix: true, scope: 'title'`)
+// against its own index.
+export const TYPE_AHEAD_KEY = '_typeahead';
+
+// The card's passage fields: the names of its top-level `containsMany` fields
+// of a PassageField subclass, whose items the index keeps searchable one by
+// one in `boxel_index_passages`.
+export const PASSAGE_FIELDS_KEY = '_passages';
+
 export const SYNTHETIC_SEARCH_DOC_KEYS = [
+  PASSAGE_FIELDS_KEY,
   CARD_TITLE_KEY,
+  TYPE_AHEAD_KEY,
   CARD_TYPE_KEY,
   CARD_INSTANCE_FILE_KEY,
 ] as const;
