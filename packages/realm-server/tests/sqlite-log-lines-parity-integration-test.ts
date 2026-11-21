@@ -39,6 +39,7 @@ const BO = 'Feed/bo.jsonl';
 const CY = 'Feed/sub/cy.jsonl';
 const AUDIT = 'Feed/audit.log';
 const OTHER = 'Other/dee.jsonl';
+const OWN_NAMES = 'Own/names.jsonl';
 const url = (file: string) => `${realm}${file}`;
 const NOW = new Date('2026-11-10T12:00:00.000Z');
 
@@ -122,6 +123,18 @@ files.set(
     '2026-11-01 07:00:00 @ada:test signed in',
     '2026-11-03 07:30:00 @bo:test exported the report',
     'not a LogFile line',
+  ]
+    .map((l) => `${l}\n`)
+    .join(''),
+);
+
+// Top-level keys that name an object's own machinery in JavaScript. JSON
+// holds them as plain keys, and a row must too.
+files.set(
+  url(OWN_NAMES),
+  [
+    '{"at":"2026-11-01 08:00:00","actor":"@ada:test","__proto__":{"polluted":true},"constructor":"c1"}',
+    '{"at":"2026-11-01 09:00:00","actor":"@bo:test","__proto__":{"polluted":true},"constructor":"c2"}',
   ]
     .map((l) => `${l}\n`)
     .join(''),
@@ -730,6 +743,75 @@ module(basename(import.meta.filename), function () {
         );
       });
     }
+
+    // A group key, a selected path, a facet and an aggregate are the
+    // caller's names, and each is a key of the answer: one that names an
+    // object's own machinery (`__proto__`, `constructor`, `toString`) is a key
+    // like any other, never the row's prototype or a method.
+    test('as Postgres: names an object holds itself are keys like any other', async function (assert) {
+      let cases: [string, Row, string, string?][] = [
+        [
+          'grouped by them, with aggregates named for Object.prototype members',
+          {
+            from: { log: OWN_NAMES },
+            group: {
+              by: ['__proto__', 'constructor'],
+              aggregates: {
+                toString: { count: true },
+                valueOf: { max: 'line' },
+                hasOwnProperty: { min: 'constructor' },
+              },
+            },
+          },
+          JSON.stringify([
+            JSON.parse(
+              '{"group":{"__proto__":{"polluted":true},"constructor":"c1"},"toString":1,"valueOf":1,"hasOwnProperty":"c1"}',
+            ),
+            JSON.parse(
+              '{"group":{"__proto__":{"polluted":true},"constructor":"c2"},"toString":1,"valueOf":2,"hasOwnProperty":"c2"}',
+            ),
+          ]),
+        ],
+        [
+          'selected',
+          { from: { log: OWN_NAMES }, select: ['__proto__', 'constructor'] },
+          '[{"line":1,"__proto__":{"polluted":true},"constructor":"c1"},{"line":2,"__proto__":{"polluted":true},"constructor":"c2"}]',
+        ],
+        [
+          'faceted',
+          {
+            from: { log: OWN_NAMES },
+            facets: [{ by: '__proto__' }, { by: 'constructor' }],
+            page: { size: 0 },
+          },
+          '[]',
+          '{"__proto__":[{"value":{"polluted":true},"count":2}],"constructor":[{"value":"c1","count":1},{"value":"c2","count":1}]}',
+        ],
+      ];
+      for (let [rule, q, data, facets] of cases) {
+        for (let [engine, db] of [
+          ['Postgres', pg],
+          ['SQLite', sqlite as unknown as DBAdapter],
+        ] as [string, DBAdapter][]) {
+          let result = await runLogQuery(db, realm, q as LogQuery, {
+            readLogFile: read,
+            now: NOW,
+          });
+          assert.strictEqual(
+            JSON.stringify(result.data),
+            data,
+            `${rule} (${engine}): the rows`,
+          );
+          if (facets) {
+            assert.strictEqual(
+              JSON.stringify(result.meta.facets),
+              facets,
+              `${rule} (${engine}): the facets`,
+            );
+          }
+        }
+      }
+    });
 
     test('past the window: roll-ups cover the window, and say so', async function (assert) {
       let result = await onSqlite(
