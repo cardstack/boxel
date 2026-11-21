@@ -188,6 +188,10 @@ function likeContains({ text, needle }: LikeTest): Expression {
   return [...open, param(`%${escapeLikePattern(needle)}%`), `) ESCAPE '\\'`];
 }
 
+// Text a number field's read takes for a number (`numericField`): the
+// value store's range tests repeat it (store-facets.ts).
+export const NUMERIC_TEXT = '^\\s*-?[0-9]+(\\.[0-9]+)?([eE][-+]?[0-9]+)?\\s*$';
+
 // The column a read of the search doc at `names` reads: the row's
 // `search_keys` where it holds the doc's value there, else `search_doc`.
 // `search_keys` (add-boxel-index-search-keys) is the doc with each value a
@@ -353,7 +357,7 @@ function makeDialect(kind: DBAdapter['kind']): Readonly<QueryDialect> {
         [
           '(CASE WHEN (',
           ...read,
-          `) ~ '^\\s*-?[0-9]+(\\.[0-9]+)?([eE][-+]?[0-9]+)?\\s*$' THEN (`,
+          `) ~ '${NUMERIC_TEXT}' THEN (`,
           ...read,
           ')::numeric END)',
         ],

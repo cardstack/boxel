@@ -10,7 +10,10 @@
 // conjunction of type tests (either way round) and `eq` or `in` tests on a
 // text or boolean field, either way round, over a card type (store-blend.ts
 // `storeFacetSet`), and the store holds no marker for any card of its types
-// at or above a path the facets or the tests read.
+// at or above a path the tests read. A card with a marker at or above a
+// facet's path (the value is in its search doc) holds no store row there;
+// that facet counts its value from its search doc
+// (`storeFacetMarkedCards`), as the general read does for such a card.
 //
 // Why it is exact. The store holds every live card instance and nothing
 // else (value-store.ts), one row at the empty path (`c`) per card and one
@@ -28,36 +31,79 @@ import {
   param,
   separatedByCommas,
 } from '../expression.ts';
+import { NUMERIC_TEXT } from './dialect.ts';
 
 export interface StoreValueTest {
   pathId: number;
-  op: 'eq' | 'in' | 'not-eq' | 'not-in';
+  op: 'eq' | 'in' | 'not-eq' | 'not-in' | 'range';
   values: (string | boolean)[];
+  // A positive range's bounds (`gt`, `gte`, `lt`, `lte`), numbers.
+  range?: Record<string, number>;
 }
 
+const BOUNDS: Record<string, string> = {
+  gt: '>',
+  gte: '>=',
+  lt: '<',
+  lte: '<=',
+};
+
 export interface StoreFacetSet {
-  realmId: number;
+  // The search's realms' ids in the store (a union's every realm that has
+  // cards there), and each one's URL.
+  realmIds: number[];
+  realmURLs: Map<number, string>;
   // The types whose cards match (every positive type test, none negated).
   typeIds: number[];
   // Each type's key (its `types ->> 0`).
   typeKeys: Map<number, string>;
   rootId: number;
   tests: StoreValueTest[];
+  // Some card of the types holds only a marker at or above a facet's path:
+  // that facet reads that card's value from its search doc
+  // (`storeFacetMarkedCards`).
+  facetMarkers?: boolean;
+  // The dictionary ids of the facets' paths and their prefixes.
+  facetPrefixIds?: number[];
+  // Each facet path's (and measured path's) dictionary id.
+  facetPathIds?: Map<string, number>;
+  // A counts-only html search over a realm whose error rows the filter
+  // matches (`liveFromStore`): the realm's non-live rows the condition
+  // admits are matches too, each counted by its index row's search doc, its
+  // last good values (non-live-rows.ts).
+  nonLive?: { realms: URL; condition: CardExpression };
 }
 
 const ints = (ids: number[]) =>
   ids.length ? ids.map(Number).join(', ') : 'NULL';
 
-// The text a test compares, of the store row `alias`.
-const text = (alias: string) =>
-  `COALESCE(${alias}.txt COLLATE "default", ${alias}.num::text)`;
-
-// Whether `read` (a store row's text) passes `test`.
+// Whether the store row `alias` passes `test`, read from its text
+// (`txt`: a string's or a boolean's text) or its number (`num`), the two
+// arms a test's rows are read by. A text or number test compares the
+// text the general read compares (a number's numeric text), in byte order,
+// whose equality is the database collation's. A range compares the number
+// the general read reads (`numericField`): a number, or text that spells
+// one (`NUMERIC_TEXT`).
 function holds(
   alias: string,
   test: StoreValueTest,
-  read = text(alias),
+  column: 'txt' | 'num',
 ): CardExpression {
+  if (test.op === 'range') {
+    let read =
+      column === 'num'
+        ? `${alias}.num`
+        : `(CASE WHEN ${alias}.txt ~ '${NUMERIC_TEXT}' THEN ${alias}.txt::numeric END)`;
+    return Object.entries(test.range ?? {}).flatMap(
+      ([op, v], n): CardExpression => [
+        ...(n > 0 ? ['AND'] : []),
+        `${read} ${BOUNDS[op]}`,
+        param(v),
+        '::numeric',
+      ],
+    );
+  }
+  let read = column === 'num' ? `${alias}.num::text` : `${alias}.txt`;
   let listed = separatedByCommas(
     test.values.map((v): CardExpression => [param(v)]),
   ) as CardExpression;
@@ -73,48 +119,63 @@ function holds(
   }
 }
 
+// The value rows of the set's cards at `test`'s path that pass it (`card_id`,
+// `type_id`, `realm_id`): the text index's range and the number index's,
+// by their leading key (realm, type, path).
+function testRows(
+  set: StoreFacetSet,
+  test: StoreValueTest,
+  alias: string,
+): CardExpression {
+  let at = `${alias}.realm_id IN (${ints(set.realmIds)}) AND ${alias}.type_id IN (${ints(set.typeIds)}) AND ${alias}.path_id = ${Number(test.pathId)}`;
+  return [
+    `SELECT ${alias}.card_id, ${alias}.type_id, ${alias}.realm_id FROM boxel_index_values AS ${alias} WHERE ${at} AND ${alias}.txt IS NOT NULL AND`,
+    ...holds(alias, test, 'txt'),
+    `UNION ALL SELECT ${alias}.card_id, ${alias}.type_id, ${alias}.realm_id FROM boxel_index_values AS ${alias} WHERE ${at} AND ${alias}.num IS NOT NULL AND`,
+    ...holds(alias, test, 'num'),
+  ];
+}
+
 // Whether every card of the set's types matches (no value test).
 export function isWholeTypes(set: StoreFacetSet): boolean {
   return set.tests.length === 0;
 }
 
 // The set's matches, one row per card: `kn` (the card's id, by which the
-// facet rows count it), `card_id` and `type_id`. Read from one positive
-// test's rows (or each card's row at the empty path), each other test a
-// keyed read of the card's row at its path.
+// facet rows count it), `card_id`, `type_id` and `realm_id`. Set-based: one
+// positive test's rows (or each card's row at the empty path), and each
+// other test the set of cards whose rows pass it, joined by card; the
+// planner chooses how. A card holds one row per value, so a list that
+// holds a passing value twice is one card (DISTINCT).
 export function storeFacetKeysCte(
   name: string,
   set: StoreFacetSet,
 ): CardExpression {
-  let driver = set.tests.find((t) => t.op === 'eq' || t.op === 'in');
-  let rest = set.tests.filter((t) => t !== driver);
-  let scope = `d.realm_id = ${Number(set.realmId)} AND d.type_id IN (${ints(set.typeIds)})`;
-  let probes: CardExpression = rest.flatMap(
-    (test): CardExpression => [
-      `AND EXISTS (SELECT 1 FROM boxel_index_values AS sv WHERE sv.card_id = d.card_id AND sv.path_id = ${Number(test.pathId)} AND`,
-      ...holds('sv', test),
-      ')',
-    ],
+  let driver = set.tests.find(
+    (t) => t.op === 'eq' || t.op === 'in' || t.op === 'range',
   );
+  let rest = set.tests.filter((t) => t !== driver);
   let rows: CardExpression = driver
     ? [
-        // The driving test's rows: its text by the text index's key (byte
-        // equality is the database collation's equality), and a number's
-        // text from the number index.
-        `(SELECT d.card_id, d.type_id FROM boxel_index_values AS d WHERE ${scope} AND d.path_id = ${Number(driver.pathId)} AND`,
-        ...holds('d', driver, 'd.txt'),
-        `UNION ALL SELECT d.card_id, d.type_id FROM boxel_index_values AS d WHERE ${scope} AND d.path_id = ${Number(driver.pathId)} AND d.num IS NOT NULL AND`,
-        ...holds('d', driver, 'd.num::text'),
-        ') AS d',
+        '(SELECT DISTINCT d.card_id, d.type_id, d.realm_id FROM (',
+        ...testRows(set, driver, 'd'),
+        ') AS d) AS d',
       ]
     : [
-        `(SELECT d.card_id, d.type_id FROM boxel_index_values AS d WHERE ${scope} AND d.path_id = ${Number(set.rootId)} AND d.txt = '') AS d`,
+        `(SELECT d.card_id, d.type_id, d.realm_id FROM boxel_index_values AS d WHERE d.realm_id IN (${ints(set.realmIds)}) AND d.type_id IN (${ints(set.typeIds)}) AND d.path_id = ${Number(set.rootId)} AND d.txt = '') AS d`,
       ];
+  let joins: CardExpression = rest.flatMap(
+    (test, n): CardExpression => [
+      'AND d.card_id IN (SELECT t.card_id FROM (',
+      ...testRows(set, test, `t${n}`),
+      ') AS t)',
+    ],
+  );
   return [
-    `${name} AS MATERIALIZED (SELECT d.card_id::bigint AS kn, d.card_id, d.type_id FROM`,
+    `${name} AS MATERIALIZED (SELECT d.card_id::bigint AS kn, d.card_id, d.type_id, d.realm_id FROM`,
     ...rows,
     'WHERE TRUE',
-    ...probes,
+    ...joins,
     ')',
   ];
 }
@@ -126,39 +187,80 @@ export function storeFacetKeysCte(
 export function storeFacetValueArms(
   name: string,
   set: StoreFacetSet,
-  fs: number[],
+  facets: { f: number; path: string }[],
   holders: Map<number, string[]>,
 ): CardExpression[] {
-  let list = fs.join(', ');
-  let holderTest = (alias: string): string => {
-    if (holders.size === 0) {
-      return '';
-    }
-    let cases = [...holders].map(([f, keys]) => {
-      let ids = [...set.typeKeys]
-        .filter(([, key]) => keys.includes(key))
-        .map(([id]) => id);
-      return `WHEN ${Number(f)} THEN ${alias}.type_id IN (${ints(ids)})`;
-    });
-    return ` AND CASE fp.f ${cases.join(' ')} ELSE TRUE END`;
+  // The rows at each facet's path, one arm per facet and kind of value: the
+  // text index's and the number index's range for (realm, type, path), the
+  // path's id written as a value. An equality on the index's leading key
+  // is an index condition whatever the planner's statistics say: joined to
+  // the paths through a CTE, a realm the statistics had not seen read every
+  // value row of its types per facet (the no-statistics gate). Every card of
+  // the types when the set is whole types, else joined to the set's cards
+  // (one join; the planner chooses how).
+  let whole = isWholeTypes(set);
+  let typesOf = (f: number) => {
+    let keys = holders.get(f);
+    return keys
+      ? [...set.typeKeys]
+          .filter(([, key]) => keys.includes(key))
+          .map(([id]) => id)
+      : set.typeIds;
   };
-  if (isWholeTypes(set)) {
-    // Every card of the types matches: the rows at each facet's path, by
-    // the index's leading key, with no join to the set.
+  return facets.flatMap(({ f, path }): CardExpression[] => {
+    let pathId = set.facetPathIds?.get(path);
+    if (pathId === undefined) {
+      // a path the dictionary does not hold holds no card's value
+      return [];
+    }
     let scan = (column: 'txt' | 'num') =>
-      `SELECT fp.f, v.card_id::bigint AS kn, ${
+      `SELECT ${Number(f)} AS f, ${whole ? 'v.card_id::bigint' : 'k.kn'} AS kn, ${
         column === 'txt' ? 'v.txt' : 'v.num::text'
       } COLLATE "C" AS value, ${
         column === 'txt' ? 'NULL::numeric' : 'v.num'
-      } AS num, NULL::text AS label FROM facet_paths AS fp JOIN boxel_index_values AS v ON v.path_id = fp.path_id AND v.realm_id = ${Number(
-        set.realmId,
-      )} AND v.type_id IN (${ints(set.typeIds)}) AND v.${column} IS NOT NULL WHERE fp.f IN (${list})${holderTest('v')}`;
+      } AS num, NULL::text AS label FROM boxel_index_values AS v${
+        whole ? '' : ` JOIN ${name} AS k ON k.card_id = v.card_id`
+      } WHERE v.realm_id IN (${ints(set.realmIds)}) AND v.type_id IN (${ints(typesOf(f))}) AND v.path_id = ${Number(pathId)} AND v.${column} IS NOT NULL`;
     return [[scan('txt')], [scan('num')]];
-  }
-  // Each match's rows at its facets' paths, one keyed read per card.
+  });
+}
+
+// The set's cards that hold only a marker at or above some facet's path,
+// each once, with its index row's search doc: `kn`, `card_id`,
+// `type_key`, `path_ids` (the marked paths) and `search_doc`, for the facets'
+// search-doc arms. Read from the marker index for the set's types (a few
+// rows), then each card's index row by key. The paths are the dictionary's
+// ids, written as values, as the realm and types are, so the planner reads
+// their statistics: through the `facet_paths` CTE it expected a thousand
+// marked cards and hash-joined a scan of the whole card dictionary (117k
+// rows, 2,855 pages) to find one.
+export function storeFacetMarkedCards(
+  name: string,
+  set: StoreFacetSet,
+): CardExpression {
+  let inSet = isWholeTypes(set)
+    ? ''
+    : ` AND mk.card_id IN (SELECT k.card_id FROM ${name} AS k)`;
   return [
-    [
-      `SELECT fp.f, k.kn, COALESCE(v.txt, v.num::text) COLLATE "C" AS value, v.num, NULL::text AS label FROM ${name} AS k CROSS JOIN LATERAL (SELECT v.path_id, v.txt, v.num FROM boxel_index_values AS v WHERE v.card_id = k.card_id AND v.path_id = ANY (ARRAY(SELECT fp.path_id FROM facet_paths AS fp WHERE fp.f IN (${list}) AND fp.path_id IS NOT NULL)) AND v.kind IN ('s', 'n', 'b')) AS v JOIN facet_paths AS fp ON fp.path_id = v.path_id AND fp.f IN (${list}) WHERE TRUE${holderTest('k')}`,
-    ],
+    `(SELECT mk.kn, mk.card_id, mk.type_key, mk.path_ids, di.search_doc FROM (SELECT mk.card_id::bigint AS kn, mk.card_id, MAX(t.type COLLATE "default") AS type_key, array_agg(DISTINCT mk.path_id) AS path_ids FROM boxel_index_values AS mk JOIN boxel_index_value_types AS t ON t.id = mk.type_id WHERE mk.realm_id IN (${ints(set.realmIds)}) AND mk.type_id IN (${ints(set.typeIds)}) AND mk.kind = 'm' AND mk.path_id IN (${ints(set.facetPrefixIds ?? [])})${inSet} GROUP BY mk.card_id) AS mk`,
+    'JOIN boxel_index_value_cards AS c ON c.id = mk.card_id',
+    `JOIN boxel_index AS di ON di.realm_url = (c.realm_url COLLATE "default")::varchar AND di.url = (c.url COLLATE "default")::varchar AND di.type = 'instance')`,
+  ];
+}
+
+// A measure's value rows (`f`, `kn`, `measure`): each number at the
+// measured path of a card of the set's types (kind `n`: the only rows with
+// a number), by the number index's leading key, joined to the set by card
+// unless the set is whole types.
+export function storeMeasureRows(
+  name: string,
+  set: StoreFacetSet,
+  f: number,
+  path: string,
+): CardExpression {
+  let whole = isWholeTypes(set);
+  let pathId = set.facetPathIds?.get(path) ?? -1;
+  return [
+    `SELECT ${Number(f)} AS f, ${whole ? 'v.card_id::bigint' : 'k.kn'} AS kn, v.num AS measure FROM boxel_index_values AS v${whole ? '' : ` JOIN ${name} AS k ON k.card_id = v.card_id`} WHERE v.realm_id IN (${ints(set.realmIds)}) AND v.type_id IN (${ints(set.typeIds)}) AND v.path_id = ${Number(pathId)} AND v.num IS NOT NULL`,
   ];
 }
