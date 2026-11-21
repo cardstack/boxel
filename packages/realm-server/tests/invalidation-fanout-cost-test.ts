@@ -71,6 +71,19 @@ module(basename(import.meta.filename), function (hooks) {
     await neighbours(entries[0].path);
   }
 
+  // The columns a row can be written with: Postgres computes a generated one
+  // (the search tables' title_sort, search_tsv, ...) and refuses a value for it.
+  async function insertableColumns(table: string) {
+    let [{ columns }] = (await adapter.execute(
+      `SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position) AS columns
+         FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = $1
+          AND is_generated = 'NEVER'`,
+      { bind: [table] },
+    )) as { columns: string }[];
+    return columns;
+  }
+
   // The index tables hold every realm's rows, and production has planner
   // statistics for them. Copies of one seeded row fill both tables with
   // 20,000 cards of other realms, each depending on cards of its own, and
@@ -88,7 +101,12 @@ module(basename(import.meta.filename), function (hooks) {
     let template = new URL(templatePath, testRealm).href;
     let gin = (
       (await adapter.execute(
-        `SELECT indexname FROM pg_indexes WHERE indexdef ILIKE '%USING gin%'`,
+        // A partitioned index (the log lines') holds no storage parameters
+        // of its own; its partitions' indexes are listed on their own.
+        `SELECT i.indexname FROM pg_indexes AS i
+           JOIN pg_class AS c ON c.relname = i.indexname
+           JOIN pg_namespace AS n ON n.oid = c.relnamespace AND n.nspname = i.schemaname
+          WHERE i.indexdef ILIKE '%USING gin%' AND c.relkind = 'i'`,
       )) as { indexname: string }[]
     ).map(({ indexname }) => indexname);
     for (let index of gin) {
@@ -110,16 +128,17 @@ module(basename(import.meta.filename), function (hooks) {
       }
     }
     for (let table of ['boxel_index', 'prerendered_html']) {
+      let columns = await insertableColumns(table);
       await adapter.execute(
-        `INSERT INTO ${table}
-         SELECT (jsonb_populate_record(NULL::${table}, to_jsonb(t) || jsonb_build_object(
+        `INSERT INTO ${table} (${columns})
+         SELECT ${columns} FROM (SELECT (jsonb_populate_record(NULL::${table}, to_jsonb(t) || jsonb_build_object(
            'url', 'http://neighbour-' || (g % 40) || '.test/' || g || '.json',
            'file_alias', 'http://neighbour-' || (g % 40) || '.test/' || g,
            'realm_url', 'http://neighbour-' || (g % 40) || '.test/',
            'deps', jsonb_build_array('http://neighbour-' || (g % 40) || '.test/' || (g % 97) || '.json',
                                      'http://neighbour-' || (g % 40) || '.test/card')))).*
          FROM ${table} t, generate_series(1, 20000) g
-         WHERE t.url = $1 AND t.type = 'instance'`,
+         WHERE t.url = $1 AND t.type = 'instance') AS seeded`,
         { bind: [template] },
       );
       await adapter.execute(`ANALYZE ${table}`);

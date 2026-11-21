@@ -42,6 +42,18 @@ import {
 
 import type { TestIndexRow } from '../helpers';
 
+// Columns the search tables add to boxel_index, which BoxelIndexTable does not
+// describe. A `SELECT *` row includes them.
+type SearchTableColumns = {
+  search_tsv?: unknown;
+  rank_tsv?: unknown;
+  pattern_text?: string | null;
+  search_title?: string | null;
+  title_sort?: string | null;
+  search_keys?: unknown;
+  search_text_fp?: string | null;
+};
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const testRealmURL2 = ri(`http://test-realm/test2/`);
@@ -1458,7 +1470,34 @@ module('Unit | index-writer', function (hooks) {
     // the error_doc (the indexer mirrors diagnostics onto
     // error_doc.diagnostics for UI compat); they're verified
     // separately below.
-    let { indexed_at: _remove, diagnostics, ...errorEntry } = rawErrorEntry;
+    // The search tables' columns (Postgres generates them; on SQLite nothing
+    // writes them yet) are not part of the row this test is about: an error
+    // row carries none of them.
+    let {
+      indexed_at: _remove,
+      diagnostics,
+      search_tsv,
+      rank_tsv,
+      pattern_text,
+      search_title,
+      title_sort,
+      search_keys,
+      search_text_fp,
+      ...errorEntry
+    } = rawErrorEntry as BoxelIndexTable & SearchTableColumns;
+    assert.deepEqual(
+      [
+        search_tsv,
+        rank_tsv,
+        pattern_text,
+        search_title,
+        title_sort,
+        search_keys,
+        search_text_fp,
+      ],
+      [null, null, null, null, null, null, null],
+      'no search-table column is written for the error row',
+    );
     assert.ok(errorEntry.error_doc, 'row has an error_doc');
     // The indexer mirrors `diagnostics` onto `error_doc.diagnostics`
     // for UI compat. Strip it out before the deep-equal (and verify the
@@ -1810,7 +1849,34 @@ module('Unit | index-writer', function (hooks) {
       'SELECT * FROM boxel_index WHERE generation = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
-    let { indexed_at: _remove, diagnostics, ...errorEntry } = rawErrorEntry;
+    // The search tables' columns (Postgres generates them; on SQLite nothing
+    // writes them yet) are not part of the row this test is about: an error
+    // row carries none of them.
+    let {
+      indexed_at: _remove,
+      diagnostics,
+      search_tsv,
+      rank_tsv,
+      pattern_text,
+      search_title,
+      title_sort,
+      search_keys,
+      search_text_fp,
+      ...errorEntry
+    } = rawErrorEntry as BoxelIndexTable & SearchTableColumns;
+    assert.deepEqual(
+      [
+        search_tsv,
+        rank_tsv,
+        pattern_text,
+        search_title,
+        title_sort,
+        search_keys,
+        search_text_fp,
+      ],
+      [null, null, null, null, null, null, null],
+      'no search-table column is written for the error row',
+    );
     assert.ok(errorEntry.error_doc, 'row has an error_doc');
     // The indexer mirrors `diagnostics` onto `error_doc.diagnostics`
     // for UI compat. Strip it out before the deep-equal (and verify the

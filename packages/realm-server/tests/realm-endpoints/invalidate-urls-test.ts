@@ -290,16 +290,23 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       // id, which is the row the index holds once something has recorded the
       // card's bytes there.
       let cardId = `${testRealm.url}person-1`;
+      // Only the writable columns: a generated column takes no value.
+      let [{ columns }] = (await dbAdapter.execute(
+        `SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position) AS columns
+           FROM information_schema.columns
+          WHERE table_schema = current_schema() AND table_name = 'boxel_index'
+            AND is_generated = 'NEVER'`,
+      )) as { columns: string }[];
       await dbAdapter.execute(
-        `INSERT INTO boxel_index
-         SELECT (jsonb_populate_record(
+        `INSERT INTO boxel_index (${columns})
+         SELECT ${columns} FROM (SELECT (jsonb_populate_record(
            null::boxel_index,
            to_jsonb(b) || jsonb_build_object('url', $2::text, 'file_alias', $2::text)
          )).*
          FROM boxel_index b
          WHERE b.realm_url = $3
            AND b.url = $1
-           AND b.type = 'file'`,
+           AND b.type = 'file') AS copied`,
         { bind: [`${cardId}.json`, cardId, testRealm.url] },
       );
       let seeded = (await dbAdapter.execute(

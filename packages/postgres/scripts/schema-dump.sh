@@ -2,6 +2,12 @@
 set -euo pipefail
 
 tmpFile='./schema_tmp.sql'
+# boxel_index_passages is excluded too: SQLite matches passages from the
+# search doc. boxel_index_vectors (with its per-space partitions) and its
+# catalog boxel_vector_spaces are excluded: they exist only where Postgres has
+# pgvector, and the SQLite index scores `near` sorts from the search doc.
+# The value store (boxel_index_values and its dictionaries) is excluded: the
+# SQLite index reads the search doc.
 # Directory where SQLite schema files are written (relative to this script's location)
 SCHEMA_DIR="../host/config/schema"
 
@@ -86,7 +92,21 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=realm_event_rooms \
   --exclude-table-and-children=retired_realm_event_rooms \
   --exclude-table-and-children=host_shell_generation \
+  --exclude-table-and-children=boxel_index_vectors \
+  --exclude-table-and-children=boxel_vector_spaces \
+  --exclude-table-and-children=boxel_index_passages \
+  --exclude-table-and-children=boxel_index_values \
+  --exclude-table-and-children=boxel_index_value_realms \
+  --exclude-table-and-children=boxel_index_value_cards \
+  --exclude-table-and-children=boxel_index_value_paths \
+  --exclude-table-and-children=boxel_index_value_types \
+  --exclude-table-and-children=boxel_index_words \
+  --exclude-table-and-children=boxel_index_vector_sidecars \
+  --exclude-table-and-children=boxel_log_lines \
+  --exclude-table-and-children=boxel_log_files \
+  --exclude-table-and-children=boxel_log_realms \
   --no-tablespaces \
+  --no-toast-compression \
   --no-table-access-method \
   --no-owner \
   --no-acl \

@@ -168,6 +168,12 @@ function createColumns(
           }
 
           let generatedExpr = show(constraint.expr);
+          // A column generated from the search doc (`boxel_index.title_sort`,
+          // `search_keys`) is a plain column in SQLite: only the Postgres
+          // engine reads it.
+          if (generatedExpr.includes('search_doc')) {
+            break;
+          }
           generatedExpr = toSQLiteGeneratedExpression(
             generatedExpr,
             item.name.name,
@@ -286,9 +292,32 @@ function primaryKeyColumnForSQLite(
 // This strips out all the things that our SQL AST chokes on (it's still in an
 // experimental phase for postgresql)
 function prepareDump(sql: string): string {
+  // Extensions (pgvector's `vector`), planner statistics and newer pg_dump's
+  // `\restrict` meta-commands mean nothing to SQLite and trip the parser, so
+  // they go before parsing; only CREATE TABLEs are converted anyway.
   let result = sql
+    // Planner statistics (per-column targets, extended statistics objects)
+    // are Postgres-only tuning; before the SET rule, which would otherwise
+    // cut an `ALTER TABLE … SET STATISTICS` short.
+    .replace(/\s*ALTER\sTABLE\s[^;]*\sSET\sSTATISTICS\s[^;]*;/gm, '')
+    .replace(/\s*CREATE\sSTATISTICS\s[^;]*;/gm, '')
+    // A column's storage (`SET STORAGE MAIN`) is Postgres-only too, and
+    // likewise goes before the SET rule.
+    .replace(/\s*ALTER\sTABLE\s[^;]*\sSET\sSTORAGE\s[^;]*;/gm, '')
     .replace(/\s*SET\s[^;].*;/gm, '')
-    .replace(/\s*CREATE\sTYPE\s[^;]*;/gm, '');
+    // A function's body is dollar-quoted SQL (the value store's
+    // boxel_value_rows returns a quoted "char" the parser can't read); only
+    // CREATE TABLEs are converted, so functions go before parsing.
+    .replace(
+      /\s*CREATE\s(?:OR\sREPLACE\s)?FUNCTION\s[\s\S]*?(\$\w*\$)[\s\S]*?\1\s*;/g,
+      '',
+    )
+    .replace(/\s*CREATE\sTYPE\s[^;]*;/gm, '')
+    .replace(/\s*CREATE\sEXTENSION\s[^;]*;/gm, '')
+    .replace(/\s*(CREATE|ALTER)\sTEXT\sSEARCH\s[^;]*;/gm, '')
+    .replace(/\s*COMMENT\sON\sTEXT\sSEARCH\s[^;]*;/gm, '')
+    .replace(/\s*COMMENT\sON\sEXTENSION\s[^;]*;/gm, '')
+    .replace(/^\\(un)?restrict\s.*$/gm, '');
   return result;
 }
 
