@@ -4,7 +4,7 @@ import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import {
-  LegacyIndexQueryEngine as IndexQueryEngine,
+  IndexQueryEngine,
   internalKeyFor,
   param,
   query,
@@ -431,7 +431,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('nested eq through an INTERIOR plural field stays on json_tree (no `@>`)', async function (assert) {
+    test('nested eq through an INTERIOR plural field is not served by `@>`', async function (assert) {
       // `contacts` is plural, so `contacts.email` crosses an array at an
       // interior segment. `@>` with a nested object would lose the
       // per-element positional binding, so the walk must divert to json_tree.
@@ -449,11 +449,7 @@ module(basename(import.meta.filename), function () {
       ]);
       assert.notOk(
         usesFieldContainment(),
-        'an interior plural segment forces json_tree, never `@>`',
-      );
-      assert.ok(
-        lastFilterSql().includes('fullkey'),
-        'the json_tree `fullkey LIKE` path-anchor is used instead',
+        'an interior plural segment is never served by `@>`',
       );
     });
 

@@ -70,31 +70,12 @@ export function withFilterNow<T>(now: Date | undefined, build: () => T): T {
   }
 }
 
-export interface FieldValue {
-  type: CodeRef;
-  path: string;
-  value: CardExpression;
-  errorHint: string;
-  kind: 'field-value';
-}
-
 export interface TableValuedTree {
   kind: 'table-valued-tree';
   column: string;
   rootPath: string;
   fieldPath: string;
   treeColumn: string;
-}
-
-// Deferred (pass-1 input) node for a non-null `eq` predicate. The first pass
-// resolves it against the field schema and decides — based on the leaf field's
-// serializer — whether it can become a GIN-servable `JsonContains`. It is the
-// `eq` analogue of FieldQuery.
-export interface JsonContainsQuery {
-  kind: 'json-contains-query';
-  path: string;
-  type: CodeRef;
-  value: CardExpression;
 }
 
 // Resolved (pass-2 input) node describing JSON containment of `column` by the
@@ -138,16 +119,6 @@ export interface SortDirection {
   direction: string | null | undefined;
 }
 
-export interface FieldArity {
-  type: CodeRef;
-  path: string;
-  value: CardExpression;
-  pluralValue?: CardExpression;
-  usePluralContainer?: boolean;
-  errorHint: string;
-  kind: 'field-arity';
-}
-
 // A type (`type`/`on`) condition, deferred so pass 1 can resolve the ref's
 // definition: rows stamp `types` with the canonical (defining-module) key, so
 // a ref that names the type through a re-exporting module only matches once
@@ -169,10 +140,7 @@ export type CardExpression = (
   | JsonContains
   | TypesContains
   | SortDirection
-  | JsonContainsQuery
   | FieldQuery
-  | FieldValue
-  | FieldArity
   | FieldTest
   | TypeCondition
 )[];
@@ -294,19 +262,6 @@ export function tableValuedTree(
   };
 }
 
-export function jsonContainsQuery(
-  path: string,
-  type: CodeRef,
-  value: CardExpression,
-): JsonContainsQuery {
-  return {
-    kind: 'json-contains-query',
-    path,
-    type,
-    value,
-  };
-}
-
 export function typesContains(key: string, column = 'i.types'): TypesContains {
   return {
     kind: 'types-contains',
@@ -383,47 +338,6 @@ export function fieldQuery(
     useJsonBValue,
     errorHint,
     kind: 'field-query',
-  };
-}
-
-export function fieldValue(
-  path: string,
-  value: CardExpression,
-  type: CodeRef,
-  errorHint: string,
-): FieldValue {
-  return {
-    type,
-    path,
-    value,
-    errorHint,
-    kind: 'field-value',
-  };
-}
-
-export function fieldArity({
-  type,
-  path,
-  value,
-  usePluralContainer,
-  errorHint,
-  pluralValue,
-}: {
-  type: CodeRef;
-  path: string;
-  value: CardExpression;
-  usePluralContainer?: boolean;
-  errorHint: string;
-  pluralValue?: CardExpression;
-}): FieldArity {
-  return {
-    type,
-    path,
-    value,
-    errorHint,
-    usePluralContainer,
-    pluralValue,
-    kind: 'field-arity',
   };
 }
 

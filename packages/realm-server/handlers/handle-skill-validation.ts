@@ -1,5 +1,5 @@
 import type Koa from 'koa';
-import { indexQueryEngineFor } from '@cardstack/runtime-common/query-engine/engine-choice';
+import { IndexQueryEngine } from '@cardstack/runtime-common/query-engine/index-query-engine';
 import {
   RealmPaths,
   SupportedMimeType,
@@ -261,8 +261,7 @@ async function computeValidation(
     prerenderer,
     createPrerenderAuth,
   } = deps;
-  let indexQueryEngine = indexQueryEngineFor(
-    'skill-validation',
+  let indexQueryEngine = new IndexQueryEngine(
     dbAdapter,
     definitionLookup,
     virtualNetwork,

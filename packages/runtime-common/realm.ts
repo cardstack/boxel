@@ -19,7 +19,6 @@ import {
   type LogLineIndexHost,
 } from './log-line-index.ts';
 import { dialectFor } from './query-engine/dialect.ts';
-import { queryEngineFor } from './query-engine/engine-choice.ts';
 import {
   DEFAULT_ANONYMOUS_RATE_LIMIT,
   type AnonymousRateLimit,
@@ -20200,10 +20199,8 @@ export class Realm {
   // entry projection engine. Same opts threading as `search` —
   // `cardUrls` rides inside the SearchEntryQuery itself.
   //
-  // Takes either grammar's entry query: a realm's own `_search` parses with
-  // main's grammar, a federated search with Query V2's once its row moved it
-  // (`engine-choice.ts`, 'federated'), which may carry a time zone the merge
-  // reckons every realm in.
+  // Takes either grammar's entry query. Both search routes parse with Query
+  // V2's, which may carry a time zone the merge reckons every realm in.
   public async searchEntries(
     searchEntryQuery: SearchEntryQuery | V2SearchEntryQuery,
     opts?: SearchOpts & { timeZone?: string },
@@ -20520,9 +20517,6 @@ export class Realm {
     contentSize: number | undefined,
   ): Promise<number | undefined> {
     if (
-      // Main's answer, with no line index, until the logs' row moves them
-      // (`engine-choice.ts`).
-      queryEngineFor('realm-logs') !== 'v2' ||
       !isLogFileURL(fileURL) ||
       contentSize === undefined ||
       !this.#dbAdapter ||
@@ -20658,10 +20652,8 @@ export class Realm {
     }
 
     // A search over this realm's logs (`from: { log }` or `{ logs }`) is
-    // answered from their line rows (`log-query.ts`, `searchLogLines`), once
-    // the logs' row moves them to Query V2 (`engine-choice.ts`). Until then
-    // main's parser answers it, as it answers any member it doesn't know.
-    if (isLogQuery(payload) && queryEngineFor('realm-logs') === 'v2') {
+    // answered from their line rows (`log-query.ts`, `searchLogLines`).
+    if (isLogQuery(payload)) {
       let declined = this.#coarseDeclined(requestContext) === 'all';
       let { status, body } = await this.searchLogLines(payload, {
         readsRealm: !declined,
@@ -20757,8 +20749,7 @@ export class Realm {
     }
 
     try {
-      // Query V2's grammar, or main's under `BOXEL_QUERY_ENGINE=legacy`
-      // (realm-entry-grammar.ts).
+      // Query V2's grammar (realm-entry-grammar.ts).
       let grammar = realmEntryGrammar();
       // A `$REALM/` module resolves against this realm, and a card id in
       // prefix form to the URL the index keys the card by, where the request

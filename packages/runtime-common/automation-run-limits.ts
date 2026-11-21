@@ -52,7 +52,7 @@ import {
   maskedRunLogURL,
   type RunLogLine,
 } from './automation-run-log.ts';
-import { indexQueryEngineFor } from './query-engine/engine-choice.ts';
+import { IndexQueryEngine } from './query-engine/index-query-engine.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -86,8 +86,7 @@ export async function readRunDeclaration({
   automationId: RealmResourceIdentifier;
 }): Promise<RunDeclarationRead> {
   let cardURL = virtualNetwork.toURLHref(automationId);
-  let engine = indexQueryEngineFor(
-    'automations',
+  let engine = new IndexQueryEngine(
     dbAdapter,
     definitionLookup,
     virtualNetwork,
