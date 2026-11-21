@@ -12,6 +12,7 @@ import * as PhoneSerializer from './phone.ts';
 import * as PathSpecifierSerializer from './path-specifier.ts';
 import * as PolicyPredicateSerializer from './policy-predicate.ts';
 import * as StringToContentSerializer from './string-to-content.ts';
+import * as VectorSerializer from './vector.ts';
 
 import type { CardDocument, RealmResourceIdentifier } from '../index.ts';
 import type {
@@ -39,6 +40,7 @@ export {
   PathSpecifierSerializer,
   PolicyPredicateSerializer,
   StringToContentSerializer,
+  VectorSerializer,
 };
 
 export type { SerializedPathSpecifier } from './path-specifier.ts';
@@ -82,6 +84,7 @@ const serializerMapping: { [name: string]: Serializer } = {
   'path-specifier': PathSpecifierSerializer,
   'policy-predicate': PolicyPredicateSerializer,
   'string-to-content': StringToContentSerializer,
+  vector: VectorSerializer,
 };
 
 export type SerializerName =
@@ -98,7 +101,8 @@ export type SerializerName =
   | 'phone'
   | 'path-specifier'
   | 'policy-predicate'
-  | 'string-to-content';
+  | 'string-to-content'
+  | 'vector';
 
 export function getSerializer(name: SerializerName): Serializer {
   assertIsSerializerName(name);
