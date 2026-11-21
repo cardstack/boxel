@@ -75,6 +75,7 @@ import { type FacetPlan, filterWithout } from './facet-sql.ts';
 import {
   type FacetQuery,
   SHARED_FACET_PREFIX,
+  fansOut,
   storeCounts,
   storedPathOf,
 } from './facets.ts';
@@ -85,6 +86,7 @@ import {
 } from './value-store-filter.ts';
 import {
   liveAndNonLiveMatches,
+  nonLiveFacetRows,
   nonLiveRowsOf,
   realmHoldsNonLiveRows,
 } from './non-live-rows.ts';
@@ -95,7 +97,7 @@ import {
   isFilterRefersToNonexistentTypeError,
   isTransientDefinitionLookupError,
 } from '../definition-lookup.ts';
-import { isRealmUnion, realmIs } from '../realm-union.ts';
+import { isRealmUnion, realmsOf, realmIs } from '../realm-union.ts';
 import {
   lowerQuery,
   queryHasLabels,
@@ -423,18 +425,29 @@ export abstract class SearchPipeline extends StoreBlend {
       opts.includeErrors &&
       !opts.countsOnlySplit &&
       this.dialect.valueStore &&
-      !isRealmUnion(realmURL) &&
       tableFromOpts(opts) === 'boxel_index' &&
       entryType !== 'file'
     ) {
       let { includeErrors: _counted, ...rest } = opts;
       let live: QueryOptions = { ...rest, countsOnlySplit: true };
       let [held] = await this.queryCards(
-        realmHoldsNonLiveRows(realmURL.href),
+        realmHoldsNonLiveRows(realmURL),
         opts.timings,
         opts,
       );
       let extra = 0;
+      // A union's per-realm totals count each realm's error cards too: it
+      // takes the store's count of both, in one statement, without
+      // counting the error rows first.
+      if (held?.held && isRealmUnion(realmURL)) {
+        return await this._search(
+          realmURL,
+          asWritten,
+          { ...opts, countsOnlySplit: true, liveFromStore: true },
+          selectClauseExpression,
+          entryType,
+        );
+      }
       if (held?.held) {
         let { facets: _facets, sort: _sort, ...counted } = asWritten as Query;
         let nonLive = await this._search(
@@ -615,7 +628,7 @@ export abstract class SearchPipeline extends StoreBlend {
       // files and drops the card `.json`.
 
       if (opts.nonLiveOnly) {
-        conditions.push(nonLiveRowsOf(realmURL.href));
+        conditions.push(nonLiveRowsOf(realmURL));
       }
 
       if (opts.cardUrls && opts.cardUrls.length > 0) {
@@ -835,22 +848,44 @@ export abstract class SearchPipeline extends StoreBlend {
           groups.set(key, [...(groups.get(key) ?? []), plan]);
         }
         for (let group of groups.values()) {
-          let set = await this.storeFacetSet({
-            realmURL,
-            filter: facetFilterOf(group[0]),
-            opts,
-            entryType,
-            condition: facetConditionOf(group[0]),
-            facetPaths: group
-              .filter((plan) => !plan.empty && !plan.column)
-              .map(storedPathOf),
-          });
+          let condition = facetConditionOf(group[0]);
+          // A counts-only html search over a realm with matching error rows
+          // (`liveFromStore`) counts the live cards from the store and the
+          // non-live rows its condition admits from their search docs.
+          let nonLive =
+            opts.liveFromStore && !fansOut(condition)
+              ? { realms: realmURL, condition }
+              : undefined;
+          let set =
+            opts.liveFromStore && !nonLive
+              ? undefined
+              : await this.storeFacetSet({
+                  realmURL,
+                  filter: facetFilterOf(group[0]),
+                  opts: nonLive ? { ...opts, includeErrors: undefined } : opts,
+                  entryType,
+                  condition,
+                  facetPaths: group
+                    .filter((plan) => !plan.empty && !plan.column)
+                    .flatMap((plan) => [
+                      storedPathOf(plan),
+                      // a scalar measure's field: its markers matter too
+                      ...(plan.measurePath && plan.measureScalar
+                        ? [plan.measureRead ?? plan.measurePath]
+                        : []),
+                    ]),
+                });
+          if (set && nonLive) {
+            set = { ...set, nonLive };
+          }
           for (let plan of group) {
             facetStoreSets.set(plan, set);
           }
         }
       }
       let storeSetOf = (plan: FacetPlan) => facetStoreSets.get(plan);
+      // A union's per-realm totals, where the store counted them.
+      let storeRealmTotals: Record<string, number> | undefined;
       // The facets counted in the page's own statement, over its match set.
       let facetsFirst:
         | { query: FacetQuery; row: Record<string, unknown> }
@@ -1237,16 +1272,42 @@ export abstract class SearchPipeline extends StoreBlend {
           // A counts-only page whose matches the value store decides counts
           // them there (store-facets.ts); its facets count on their own.
           keys = [];
+          // One statement: the store's matches by realm, and the realms'
+          // non-live rows the condition admits, by realm.
+          let nonLiveRows = countsOnlySet.nonLive
+            ? nonLiveFacetRows(countsOnlySet.nonLive.realms, everyCondition)
+            : undefined;
           let [row] = await this.queryCards(
             [
               'WITH',
               ...storeFacetKeysCte('k', countsOnlySet),
-              'SELECT COUNT(*) AS total FROM k',
+              "SELECT (SELECT COALESCE(json_object_agg(c.realm_id, c.n), '{}'::json) FROM (SELECT k.realm_id, COUNT(*) AS n FROM k GROUP BY k.realm_id) AS c) AS live,",
+              ...(nonLiveRows ? nonLiveRows.byRealm : ["'{}'::json"]),
+              'AS non_live',
             ],
             opts.timings,
             opts,
           );
-          matchTotal = Number(row?.total ?? 0);
+          let byRealm: Record<string, number> = {};
+          for (let [id, n] of Object.entries(
+            (row?.live as Record<string, number>) ?? {},
+          )) {
+            let realm = countsOnlySet.realmURLs.get(Number(id));
+            if (realm) {
+              byRealm[realm] = (byRealm[realm] ?? 0) + Number(n);
+            }
+          }
+          for (let [realm, n] of Object.entries(
+            (row?.non_live as Record<string, number>) ?? {},
+          )) {
+            byRealm[realm] = (byRealm[realm] ?? 0) + Number(n);
+          }
+          matchTotal = Object.values(byRealm).reduce((t, n) => t + n, 0);
+          if (isRealmUnion(realmURL)) {
+            storeRealmTotals = Object.fromEntries(
+              realmsOf(realmURL).map((realm) => [realm, byRealm[realm] ?? 0]),
+            );
+          }
         } else if (this.dialect.plannerPaging) {
           // The facets of the search's own match set are counted in the same
           // statement, over its `m`.
@@ -1283,7 +1344,7 @@ export abstract class SearchPipeline extends StoreBlend {
                     matches: liveAndNonLiveMatches(
                       liveSet,
                       everyCondition,
-                      realmURL.href,
+                      realmURL,
                     ),
                   }
                 : {}),
@@ -1538,7 +1599,8 @@ export abstract class SearchPipeline extends StoreBlend {
       // total, in the same snapshot, so they sum to it. Not counted where
       // the total is itself a bound or not counted.
       let realmTotals =
-        isRealmUnion(realmURL) &&
+        storeRealmTotals ??
+        (isRealmUnion(realmURL) &&
         !candidatesCapped &&
         !totalIsEstimate &&
         page?.total !== 'none'
@@ -1551,7 +1613,7 @@ export abstract class SearchPipeline extends StoreBlend {
               relevanceColumn,
               nearJoins,
             })
-          : undefined;
+          : undefined);
       return {
         results,
         meta: {
@@ -1790,14 +1852,25 @@ export abstract class SearchPipeline extends StoreBlend {
     if (own) {
       return facetStoreSets.get(own);
     }
-    return await this.storeFacetSet({
+    // A counts-only html search over realms with matching error rows
+    // (`liveFromStore`): the live matches from the store, and the non-live
+    // rows the condition admits.
+    let nonLive =
+      opts.liveFromStore && !fansOut(condition)
+        ? { realms: realmURL, condition }
+        : undefined;
+    if (opts.liveFromStore && !nonLive) {
+      return undefined;
+    }
+    let set = await this.storeFacetSet({
       realmURL,
       filter,
-      opts,
+      opts: nonLive ? { ...opts, includeErrors: undefined } : opts,
       entryType,
       condition,
       facetPaths: [],
     });
+    return set && nonLive ? { ...set, nonLive } : set;
   }
 
   async #cappedCollapsedCount(

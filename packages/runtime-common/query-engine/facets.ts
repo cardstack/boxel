@@ -91,10 +91,13 @@ import {
   tableFromOpts,
 } from './index-sql.ts';
 import { realmIs } from '../realm-union.ts';
+import { nonLiveFacetRows } from './non-live-rows.ts';
 import {
   type StoreFacetSet,
   storeFacetKeysCte,
   storeFacetValueArms,
+  storeFacetMarkedCards,
+  storeMeasureRows,
 } from './store-facets.ts';
 
 export abstract class Facets extends SortWindow {
@@ -988,10 +991,35 @@ export abstract class Facets extends SortWindow {
           ...storeFacetValueArms(
             name,
             storeSet,
-            held.map((w) => w.f),
+            held.map((w) => ({ f: w.f, path: storedPathOf(w.plan) })),
             holders,
           ),
         );
+        if (storeSet.nonLive) {
+          // The realms' non-live rows the search matches: each facet reads
+          // their values from their search docs.
+          arms.push([
+            'SELECT d.f, k.kn, d.txt COLLATE "C" AS value, d.num, NULL::text AS label FROM',
+            ...nonLiveFacetRows(
+              storeSet.nonLive.realms,
+              storeSet.nonLive.condition,
+            ).docs,
+            'AS k CROSS JOIN LATERAL (',
+            ...unionAll(held.map((w) => this.#docValuesArm(w, false))),
+            ') AS d',
+          ]);
+        }
+        if (storeSet.facetMarkers) {
+          // A card with a marker at or above a facet's path has no store
+          // row there: that facet reads its value from its search doc.
+          arms.push([
+            'SELECT d.f, k.kn, d.txt COLLATE "C" AS value, d.num, NULL::text AS label FROM',
+            ...storeFacetMarkedCards(name, storeSet),
+            'AS k CROSS JOIN LATERAL (',
+            ...unionAll(held.map((w) => this.#docValuesArm(w, true))),
+            ') AS d',
+          ]);
+        }
       }
     } else if (storeHeld) {
       ctes.push([
@@ -1079,7 +1107,46 @@ export abstract class Facets extends SortWindow {
     let measuredOf = (w: FacetWork) =>
       w.plan.measurePath && w.plan.measureScalar ? w : undefined;
     let measured = counted.filter(measuredOf);
-    if (measured.length > 0) {
+    if (measured.length > 0 && storeSet) {
+      // Each measure is the set's value rows at its path, joined to the set
+      // by card: a range of the number index per measure, with no read per
+      // card. A card that holds the measured value only as a marker (at or
+      // above its path) reads it from its search doc, and so does a non-live
+      // row of a counts-only html search.
+      ctes.push([
+        `${name}_ms AS MATERIALIZED (`,
+        ...unionAll(
+          measured.flatMap((w) => {
+            let path = w.plan.measureRead ?? w.plan.measurePath!;
+            let docNumber = `CASE WHEN jsonb_typeof(k.search_doc #> ${pathArray(path)}) = 'number' THEN (k.search_doc #>> ${pathArray(path)})::numeric END`;
+            let arms: CardExpression[] = [
+              storeMeasureRows(name, storeSet, w.f, path),
+            ];
+            if (storeSet.facetMarkers) {
+              arms.push([
+                `SELECT ${w.f} AS f, k.kn, ${docNumber} AS measure FROM`,
+                ...storeFacetMarkedCards(name, storeSet),
+                'AS k WHERE k.path_ids && ARRAY(SELECT vp.id FROM boxel_index_value_paths AS vp WHERE vp.path IN (',
+                ...separatedByCommas(pathPrefixes(path).map((p) => [param(p)])),
+                '))',
+              ]);
+            }
+            if (storeSet.nonLive) {
+              arms.push([
+                `SELECT ${w.f} AS f, k.kn, ${docNumber} AS measure FROM`,
+                ...nonLiveFacetRows(
+                  storeSet.nonLive.realms,
+                  storeSet.nonLive.condition,
+                ).docs,
+                'AS k',
+              ]);
+            }
+            return arms;
+          }),
+        ),
+        ')',
+      ]);
+    } else if (measured.length > 0) {
       ctes.push([
         `${name}_ms AS MATERIALIZED (SELECT ms.f, k.kn, ms.measure FROM ${name} AS k CROSS JOIN LATERAL (`,
         ...unionAll(
@@ -1629,7 +1696,7 @@ function facetPathsCte(held: FacetWork[]): CardExpression {
 // Whether a facet over a set the value store decides counts from the store
 // alone: a declared field's values, with no measure.
 export function storeCounts(plan: FacetPlan): boolean {
-  return !plan.column && !plan.measurePath && !facetMeasureOf(plan.facet);
+  return !plan.column;
 }
 
 // Where a declared facet's values are in the value store: its read path, or
@@ -1666,7 +1733,7 @@ function unionAll(arms: CardExpression[]): CardExpression {
 
 // Whether `expression` reads a list as a table (a lateral join of the
 // statement), which can repeat an index row.
-function fansOut(expression: unknown[]): boolean {
+export function fansOut(expression: unknown[]): boolean {
   return expression.some((element) => {
     if (!element || typeof element !== 'object') {
       return false;
