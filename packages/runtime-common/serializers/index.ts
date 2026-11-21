@@ -42,6 +42,8 @@ export {
 };
 
 export type { SerializedPathSpecifier } from './path-specifier.ts';
+export type { Vector, VectorEncoding } from './vector.ts';
+
 export type {
   PolicyPredicate,
   SerializedPolicyPredicate,
