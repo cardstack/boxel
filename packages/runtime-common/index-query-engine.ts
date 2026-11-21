@@ -1382,12 +1382,16 @@ export class IndexQueryEngine {
       // When file rows are in scope, also carry the columns the file-row
       // assembly reads to synthesize each file's `file-meta` resource + type
       // descriptor. The effective error columns fold in current render errors
-      // from the prerendered_html channel.
+      // from the prerendered_html channel. `deps` is file-gated like the
+      // file-only columns: it is a toasted jsonb of a few hundred dependency
+      // URLs per row, and nothing in the item-only assembly of an instance
+      // row reads it — selecting it for every row made it the whole of a
+      // list page's prerendered_html TOAST read.
       let dataOnly = `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.generation) as generation`;
       selectClauseExpression =
         entryType !== 'instance'
           ? [
-              `${dataOnly}, ANY_VALUE(i.types) as types, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(ph.deps) as deps, ANY_VALUE(i.icon_html) as icon_html${fileColumns}`,
+              `${dataOnly}, ANY_VALUE(i.types) as types, ANY_VALUE(i.display_names) as display_names, ${fileOnly('ph.deps')} as deps, ANY_VALUE(i.icon_html) as icon_html${fileColumns}`,
             ]
           : [dataOnly];
     } else {
