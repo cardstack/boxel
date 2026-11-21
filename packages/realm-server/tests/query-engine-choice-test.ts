@@ -24,7 +24,7 @@ const CALLER_ENGINES: Readonly<Record<QueryEngineCaller, QueryEngineChoice>> = {
   'skill-validation': 'v2',
   'realm-logs': 'v2',
   federated: 'v2',
-  'query-fields': 'legacy',
+  'query-fields': 'v2',
   host: 'legacy',
 };
 
@@ -107,7 +107,7 @@ module(basename(import.meta.filename), function () {
   });
 
   test('an override it does not know is ignored', function (assert) {
-    assert.strictEqual(queryEngineFor('query-fields', 'V2'), 'legacy');
+    assert.strictEqual(queryEngineFor('host', 'V2'), 'legacy');
     assert.strictEqual(queryEngineFor('realm-search', ''), 'v2');
   });
 

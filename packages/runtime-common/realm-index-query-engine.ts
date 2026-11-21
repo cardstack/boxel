@@ -404,7 +404,7 @@ export class RealmIndexQueryEngine {
   #fetch: typeof globalThis.fetch;
   // A realm's `_search`, named queries, card reads and link targets.
   #indexQueryEngine: AnyIndexQueryEngine;
-  // Query-backed fields, which move with their own switch row.
+  // Query-backed fields (the 'query-fields' caller).
   #queryFieldEngine: AnyIndexQueryEngine;
   #definitionLookup: DefinitionLookup;
   #log = logger('realm:index-query-engine');
