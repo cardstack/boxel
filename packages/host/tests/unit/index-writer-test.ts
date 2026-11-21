@@ -4,7 +4,7 @@ import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
-  IndexQueryEngine,
+  LegacyIndexQueryEngine as IndexQueryEngine,
   IndexWriter,
   internalKeyFor,
   baseCardRef,

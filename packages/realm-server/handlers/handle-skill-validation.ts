@@ -1,6 +1,6 @@
 import type Koa from 'koa';
 import {
-  IndexQueryEngine,
+  LegacyIndexQueryEngine,
   RealmPaths,
   SupportedMimeType,
   fetchUserPermissions,
@@ -261,7 +261,7 @@ async function computeValidation(
     prerenderer,
     createPrerenderAuth,
   } = deps;
-  let indexQueryEngine = new IndexQueryEngine(
+  let indexQueryEngine = new LegacyIndexQueryEngine(
     dbAdapter,
     definitionLookup,
     virtualNetwork,

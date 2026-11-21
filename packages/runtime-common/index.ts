@@ -1963,6 +1963,13 @@ export * from './expression.ts';
 export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
 export * from './index-query-engine.ts';
+// The query engine (Query V2, query-engine/) as `IndexQueryEngine`; main's
+// engine as `LegacyIndexQueryEngine`, which every production caller uses
+// until its switch row moves it.
+// Both go when the old engine is deleted.
+export { IndexQueryEngine } from './query-engine/index-query-engine.ts';
+export { IndexQueryEngine as LegacyIndexQueryEngine } from './index-query-engine.ts';
+export * from './value-store.ts';
 export * from './index-writer.ts';
 export * from './vector-space.ts';
 export * from './vector-sidecar.ts';
