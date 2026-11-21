@@ -92,6 +92,10 @@ import {
   type DefinitionLookup,
 } from './definition-lookup.ts';
 import { DefinitionsUnavailableError } from './search-bounds.ts';
+import {
+  cardIdentityURLs,
+  isCardIdentityFilter,
+} from './card-identity-filter.ts';
 import type { FileMetaResource } from './resource-types.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RequestTimings } from './request-timings.ts';
@@ -1618,6 +1622,26 @@ export class IndexQueryEngine {
 
     if (typeRef && Object.keys(filter).length === 1) {
       return this.typeCondition(typeRef);
+    }
+
+    // Named cards by the row's own `url` (card-identity-filter.ts), the
+    // internal node a policy-scoped search leaves the realm's authorization
+    // cards out with.
+    if (isCardIdentityFilter(filter)) {
+      let urls = cardIdentityURLs(filter.cardIdentity.ids);
+      return any([
+        ...(urls.length
+          ? [
+              [
+                'i.url IN',
+                ...addExplicitParens(
+                  separatedByCommas(urls.map((url) => [param(url)])),
+                ),
+              ] as CardExpression,
+            ]
+          : []),
+        ['i.search_doc IS NULL'] as CardExpression,
+      ]);
     }
 
     // The validator rejects a multi-operator node on the wire, but a

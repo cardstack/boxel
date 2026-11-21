@@ -46,6 +46,7 @@ import {
   MATCH_RELEVANCE_SORT_KEY,
 } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
+import { isCardIdentityFilter } from './card-identity-filter.ts';
 import { parseUsedRenderType } from './search-resource-helpers.ts';
 
 // ---------------------------------------------------------------------------
@@ -1214,6 +1215,15 @@ export interface SearchEntryWireQuery {
 // A filter in the grammar the engine runs, written back in the grammar a
 // search request carries.
 export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
+  // The internal card-identity node has no wire spelling; a request names the
+  // same cards by id (card-identity-filter.ts says what the two differ on).
+  if (isCardIdentityFilter(filter)) {
+    return {
+      any: filter.cardIdentity.ids.map((id) => ({
+        eq: { [`${ITEM_PREFIX}id`]: id },
+      })),
+    } as SearchEntryWireFilter;
+  }
   let out: SearchEntryWireFilter = {};
   for (let [key, value] of Object.entries(filter)) {
     if (key === 'type' || key === 'on') {

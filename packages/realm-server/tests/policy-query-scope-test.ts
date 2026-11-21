@@ -265,7 +265,9 @@ function scope(
 const OWN = { on: SCHEDULE, eq: { providerId: ACTOR } };
 
 // `filter` as a scope carries it: less the realm's config card, the card its
-// policy key names, and every policy card, whichever grant it came from.
+// policy key names, and every policy card, whichever grant it came from. The
+// two cards are named once, by their index rows' identity
+// (card-identity-filter.ts).
 function scoped(filter: Filter): Filter {
   return {
     every: [
@@ -273,8 +275,11 @@ function scoped(filter: Filter): Filter {
       {
         not: {
           any: [
-            { eq: { id: `${REALM}realm` } },
-            { eq: { id: `${REALM}policies/policy` } },
+            {
+              cardIdentity: {
+                ids: [`${REALM}realm`, `${REALM}policies/policy`],
+              },
+            } as unknown as Filter,
             { type: realmPolicyRef },
           ],
         },
@@ -557,7 +562,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(result, {
         kind: 'scoped',
-        filters: [scoped(OWN), scoped({ type: SCHEDULE })],
+        filters: [scoped({ any: [OWN, { type: SCHEDULE }] })],
       });
     });
 
