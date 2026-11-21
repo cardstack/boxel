@@ -239,6 +239,90 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('ownPassesForRead holds a read only for the cards its writer touched', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+    let writer = '@test-writer:localhost';
+    let { settled } = await updater.enqueueUpdate(
+      [new URL(`${realmURL}Concept/a.json`)],
+      { initiatedBy: writer },
+    );
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.ownPassesForRead(writer, `${realmURL}Concept/a`, 1000),
+      undefined,
+      'a read of the written card waits (extension-less URL)',
+    );
+    assert.strictEqual(
+      updater.ownPassesForRead(writer, `${realmURL}Concept/b`, 1000),
+      undefined,
+      'a read of a card the pass never touched does not wait',
+    );
+    assert.strictEqual(
+      updater.ownPassesForRead(
+        '@test-bystander:localhost',
+        `${realmURL}Concept/a`,
+        1000,
+      ),
+      undefined,
+      "another user's read never waits on the writer's pass",
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test('ownPassesForRead holds every read behind a module change, once per pass', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+    let writer = '@test-writer:localhost';
+    let { settled } = await updater.enqueueUpdate(
+      [new URL(`${realmURL}concept.gts`)],
+      { initiatedBy: writer },
+    );
+    settled.catch(() => {});
+
+    let first = updater.ownPassesForRead(
+      writer,
+      `${realmURL}Concept/b`,
+      1000,
+      10_000,
+    );
+    assert.strictEqual(
+      first?.deadline,
+      11_000,
+      'a module change holds a read of any card, for one budget',
+    );
+    let later = updater.ownPassesForRead(
+      writer,
+      `${realmURL}Concept/c`,
+      1000,
+      10_500,
+    );
+    assert.strictEqual(
+      later?.deadline,
+      11_000,
+      'a later read shares the first read’s deadline instead of starting its own',
+    );
+    assert.strictEqual(
+      updater.ownPassesForRead(writer, `${realmURL}Concept/d`, 1000, 11_001),
+      undefined,
+      'once the budget is spent, the pass holds no more reads',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
   test('an untagged job is invisible to every user-scoped gate', async function (assert) {
     let { queue, waiters } = makeStubQueue();
     let updater = new RealmIndexUpdater({
