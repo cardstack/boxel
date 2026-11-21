@@ -37,6 +37,9 @@ export interface FacetPlan {
   labelColumn?: string;
   // No card the query could match holds the facet: it counts nothing.
   empty?: boolean;
+  // Not counted on SQLite: a `measure` order, or a field of some matched
+  // cards' types that only the value store resolves (sqlite-facets.ts).
+  uncounted?: boolean;
   // A `measure`'s field, and whether it holds one number per card (a list
   // holds none to aggregate); `measureRead` is where its value is read.
   measurePath?: string;

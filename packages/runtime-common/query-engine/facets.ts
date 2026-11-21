@@ -46,7 +46,19 @@ import {
   facetCountsOf,
   facetMeasureOf,
   facetRangeBound,
+  filterWithout,
 } from './facet-sql.ts';
+import {
+  type FacetRow,
+  type SqliteFacetWork,
+  countFacet,
+  readFacetValues,
+  sqliteFacetIntervalUtc,
+  sqliteFacetLimits,
+  sqliteFacetNotCounted,
+  sqliteFacetSampled,
+} from './sqlite-facets.ts';
+import stringify from 'safe-stable-stringify';
 import {
   DEFAULT_FACET_SIZE,
   FACET_INTERVALS,
@@ -56,6 +68,7 @@ import {
   type FacetRange,
   type FacetStats,
   type Filter,
+  type Query,
   InvalidQueryError,
   assertRelativeDateWellFormed,
   facetRangeLabel,
@@ -137,16 +150,6 @@ export abstract class Facets extends SortWindow {
     if (facets.length === 0) {
       return [];
     }
-    // Without a value store (SQLite) each facet answers with no counts.
-    if (!this.dialect.valueStore) {
-      opts.approximations?.push(
-        ...facets.map((facet) => ({
-          code: 'sqlite-facet-not-counted',
-          message: `the facet by "${facet.by}" has no counts: facets are counted from the value store, which this index (SQLite) does not keep`,
-        })),
-      );
-      return [];
-    }
     let anchor = filterAnchor(filter);
     let definition: Definition | undefined;
     if (anchor) {
@@ -185,7 +188,7 @@ export abstract class Facets extends SortWindow {
       // Set by a facet whose query names its shape: holders that declare the
       // field as different kinds of value are then counted as plain values.
       shaped = false,
-    ): Promise<DeclaredFacet | 'empty' | 'rows'> => {
+    ): Promise<DeclaredFacet | 'empty' | 'rows' | 'uncounted'> => {
       let own = declared?.get(path);
       if (own) {
         return own;
@@ -203,7 +206,12 @@ export abstract class Facets extends SortWindow {
       }
       // Not a field of the queried type: a subclass's, or, with no type, any
       // card's. Its cards' own types must declare it; only those types'
-      // cards are counted.
+      // cards are counted. Only the value store says which hold it (or that
+      // none does, for a name no card holds), so SQLite answers it without
+      // counts (sqlite-facets.ts).
+      if (!this.dialect.valueStore) {
+        return 'uncounted';
+      }
       let { stored: holders, doc } = realmURL
         ? await this.#facetHolderTypes(realmURL, anchor, path, opts)
         : { stored: [], doc: undefined };
@@ -347,11 +355,10 @@ export abstract class Facets extends SortWindow {
         let m = await resolve(measured.path, `facet measure ${measured.op}`);
         measure = {
           measurePath: measured.path,
-          measureRead: m !== 'empty' && m !== 'rows' ? m.read : measured.path,
+          measureRead: typeof m === 'object' ? m.read : measured.path,
           // A list holds no one number to aggregate.
           measureScalar:
-            m !== 'empty' &&
-            m !== 'rows' &&
+            typeof m === 'object' &&
             !m.link &&
             !m.list &&
             m.field.type === 'contains',
@@ -395,11 +402,11 @@ export abstract class Facets extends SortWindow {
         });
         continue;
       }
-      if (found === 'empty') {
+      if (found === 'empty' || found === 'uncounted') {
         plans.push({
           facet,
           shape: queryShape ?? 'values',
-          empty: true,
+          ...(found === 'empty' ? { empty: true } : { uncounted: true }),
           ...measure,
         });
         continue;
@@ -420,6 +427,12 @@ export abstract class Facets extends SortWindow {
         ...(serializer === 'date' ? { dateOnly: true } : {}),
         ...measure,
       });
+    }
+    // SQLite counts no `measure` (sqlite-facets.ts).
+    if (!this.dialect.valueStore) {
+      for (let plan of plans) {
+        if (plan.measurePath) plan.uncounted = true;
+      }
     }
     return plans;
   }
@@ -727,7 +740,7 @@ export abstract class Facets extends SortWindow {
     f: number,
     base: string,
     condition: CardExpression,
-    opts: QueryOptions,
+    _opts: QueryOptions,
   ): FacetWork {
     let { facet, shape } = plan;
     let interval: FacetInterval | undefined =
@@ -749,11 +762,6 @@ export abstract class Facets extends SortWindow {
       throw refuse('facet-interval-must-one', undefined, {
         value0: FACET_INTERVALS.join(', '),
       });
-    }
-    if (interval && !isUtcZone(zoneOfClock(opts.queryNow))) {
-      this.dialect.requirePostgres(
-        `a facet interval in a time zone other than UTC ("${zoneOfClock(opts.queryNow)}") runs on Postgres only`,
-      );
     }
     if (shape === 'range' && facet.ranges && plan.dateField) {
       // A relative date is one only on a date field; elsewhere it is text.
@@ -1241,7 +1249,10 @@ export abstract class Facets extends SortWindow {
     let rows = await this.queryCards(
       [
         // `title_sort` is the card's title as its generated column holds it.
-        `SELECT i.file_alias AS card_id, ANY_VALUE(i.title_sort) AS card_title`,
+        // SQLite generates no `title_sort`: its title is read from the doc.
+        this.dialect.titleSort
+          ? `SELECT i.file_alias AS card_id, ANY_VALUE(i.title_sort) AS card_title`
+          : `SELECT i.file_alias AS card_id, ANY_VALUE(json_extract(i.search_doc, '$.cardTitle')) AS card_title`,
         `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)} ${tableValuedFunctionsPlaceholder}`,
         `WHERE i.type = 'instance' AND`,
         ...realmIs('i.realm_url', realmURL),
@@ -1383,6 +1394,107 @@ export abstract class Facets extends SortWindow {
       `LIMIT ${Number(work.size)}`,
       ') AS x)',
     ];
+  }
+
+  // On SQLite, which keeps no value store: each facet counted in JS over its
+  // match set's first rows (sqlite-facets.ts), read through the search
+  // itself in the query's order, `query` being the search as asked. A set
+  // the bounds cut is counted over the rows read, and says so.
+  protected async countFacetsFromSearchDocs(
+    plans: FacetPlan[],
+    query: Pick<Query, 'filter' | 'sort' | 'let'>,
+    realmURL: URL,
+    opts: QueryOptions,
+    entryType: 'instance' | 'file' | 'all',
+  ): Promise<Map<FacetPlan, { counts: FacetCount[]; stats?: FacetStats }>> {
+    let out = new Map<
+      FacetPlan,
+      { counts: FacetCount[]; stats?: FacetStats }
+    >();
+    let zone = zoneOfClock(opts.queryNow);
+    let groups = new Map<string, FacetPlan[]>();
+    for (let plan of plans) {
+      if (plan.uncounted) {
+        out.set(plan, { counts: [] });
+        opts.approximations?.push(
+          sqliteFacetNotCounted(
+            plan.facet.by,
+            plan.measurePath
+              ? 'a measure is aggregated in the value store'
+              : 'only the value store says which cards of other types hold it',
+          ),
+        );
+        continue;
+      }
+      let filter =
+        plan.facet.own === 'ignore' && query.filter
+          ? filterWithout(query.filter, plan.facet.by)
+          : query.filter;
+      let key = stringify(filter ?? null);
+      groups.set(key, [...(groups.get(key) ?? []), plan]);
+    }
+    let { rows: bound } = sqliteFacetLimits(opts);
+    for (let group of groups.values()) {
+      let filter =
+        group[0].facet.own === 'ignore' && query.filter
+          ? filterWithout(query.filter, group[0].facet.by)
+          : query.filter;
+      let works = group.map((plan, f) => {
+        let work = this.#facetWork(plan, f, '', [], opts);
+        if (work.interval && !isUtcZone(zone)) {
+          opts.approximations?.push(
+            sqliteFacetIntervalUtc(plan.facet.by, zone),
+          );
+        }
+        return { plan, work };
+      });
+      let { results, meta } = await this._search(
+        realmURL,
+        {
+          filter,
+          sort: query.sort,
+          ...(query.let ? { let: query.let } : {}),
+          page: { size: bound, total: 'exact' },
+        },
+        opts,
+        [
+          'SELECT i.url AS url, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(i.last_modified) AS last_modified',
+        ],
+        entryType,
+      );
+      let rows: FacetRow[] = (results as Record<string, unknown>[]).map(
+        (row) => {
+          let doc: unknown = row.search_doc;
+          if (typeof doc === 'string') {
+            try {
+              doc = JSON.parse(doc);
+            } catch {
+              doc = undefined;
+            }
+          }
+          return { key: String(row.url), doc, columns: row };
+        },
+      );
+      let sqliteWorks = works.map(({ work }) => work as SqliteFacetWork);
+      let { values, read } = readFacetValues(sqliteWorks, rows, opts);
+      let total = Number(meta.page?.total ?? rows.length);
+      if (read < total) {
+        opts.approximations?.push(sqliteFacetSampled(read, total));
+      }
+      for (let work of sqliteWorks) {
+        let result = countFacet(work, values.get(work)!, read, opts.queryNow);
+        if (work.plan.link && !work.interval && work.plan.shape !== 'range') {
+          result.counts = await this.#labelLinkCounts(
+            result.counts,
+            opts,
+            realmURL,
+            work.plan.linkTarget,
+          );
+        }
+        out.set(work.plan, result);
+      }
+    }
+    return out;
   }
 }
 
