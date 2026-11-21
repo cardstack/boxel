@@ -2569,6 +2569,39 @@ async function computeContentSizeFromRef(
   }
 }
 
+// The text files whose FileDef (TextFileDef and the logs built on it) carries
+// a `lineCount` its extract computes. The answer from disk counts them the same
+// way, so a card computing over a linked log's `lineCount` reads the count
+// while the log's index row is unusable (errored, or not written yet), rather
+// than nothing.
+const LINE_COUNTED_EXTENSIONS = new Set(['.txt', '.text', '.log', '.jsonl']);
+
+async function computeLineCountFromRef(
+  localPath: LocalPath,
+  ref: FileRef,
+): Promise<number | undefined> {
+  let dot = localPath.lastIndexOf('.');
+  if (dot === -1 || !LINE_COUNTED_EXTENSIONS.has(localPath.slice(dot))) {
+    return undefined;
+  }
+  try {
+    let content = ref.content;
+    let text =
+      typeof content === 'string'
+        ? content
+        : new TextDecoder().decode(
+            content instanceof Uint8Array
+              ? content
+              : await fileContentToBytes({ content }),
+          );
+    // As TextFileDef's extract: a trailing newline is not a line, and empty
+    // content is zero lines.
+    return text ? text.replace(/\n$/, '').split('\n').length : 0;
+  } catch {
+    return undefined;
+  }
+}
+
 async function computeContentHashFromRef(
   ref: FileRef,
 ): Promise<string | undefined> {
@@ -16476,6 +16509,7 @@ export class Realm {
         persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef)),
       contentSize:
         persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef)),
+      lineCount: await computeLineCountFromRef(localPath, fileRef),
     });
   }
 
@@ -16505,11 +16539,14 @@ export class Realm {
       createdAt,
       contentHash,
       contentSize,
+      lineCount,
     }: {
       lastModified: number;
       createdAt: number;
       contentHash: string | undefined;
       contentSize: number | undefined;
+      // A text file's line count, as its FileDef's extract counts it.
+      lineCount?: number;
     },
   ): Promise<SingleFileMetaDocument> {
     let fileURL = this.paths.fileURL(localPath).href;
@@ -16530,6 +16567,7 @@ export class Realm {
           contentSize,
           lastModified,
           createdAt,
+          ...(lineCount !== undefined ? { lineCount } : {}),
         },
         meta: {
           adoptsFrom: fileDefCodeRef,
