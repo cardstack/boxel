@@ -2116,6 +2116,20 @@ export class Batch {
       last_modified: number;
       indexed_at: number;
     };
+    // An instance row that is not an error row holds its types as a list.
+    // A counts-only search finds the instance rows the value store does not
+    // hold by their errors alone (`boxel_index_non_live_rows_idx`,
+    // query-engine/non-live-rows.ts), so one that was neither live nor an
+    // error would go uncounted: it is refused here instead.
+    if (
+      preparedEntry.type === 'instance' &&
+      !preparedEntry.has_error &&
+      !Array.isArray(preparedEntry.types)
+    ) {
+      throw new Error(
+        `refusing to index ${href}: an instance row's types must be a list, not ${JSON.stringify(preparedEntry.types ?? null)}`,
+      );
+    }
     // The post-pass half of `#touchedTypes`. Taken from the prepared row
     // rather than from `entry`, so an error row that fell back to its last
     // known good chain is recorded under the chain it actually persists.

@@ -834,6 +834,19 @@ export function assertRealmsBound(realms: string[]): void {
 // caller can always see it got less than it asked for.
 //
 // Returns the (possibly clamped) query without mutating input.
+// Whether `page` is a counts-only page (`size: 0`): the total and the
+// facets, no rows. A size written as a numeric string is the number it
+// spells, as the engine reads it (`Number(page.size)`), so `"0"` asks for no
+// rows too; given the default page instead, a counts-only request read and
+// returned 500 rows. A blank or absent size is no size, not zero.
+export function isCountsOnlyPage(page: unknown): boolean {
+  let size = (page as { size?: unknown } | null | undefined)?.size;
+  if (typeof size === 'string') {
+    return size.trim() !== '' && Number(size) === 0;
+  }
+  return size === 0;
+}
+
 function boundPageSize(
   query: Query,
   dflt: number,
@@ -853,7 +866,7 @@ function boundPageSize(
   let size = Number((page as { size?: unknown }).size);
   // `size: 0` is a counts-only page: the total and the facets, no rows. It is
   // already bounded, so it passes through as asked.
-  if ((page as { size?: unknown }).size === 0) {
+  if (isCountsOnlyPage(page)) {
     return query;
   }
   if (!Number.isFinite(size) || size < 1) {
@@ -1065,7 +1078,7 @@ export function withPageSizeClampWarning<
 export function takesDefaultPage(query: Query): boolean {
   let page = query.page as { size?: unknown } | undefined | null;
   if (page == null) return true;
-  if (page.size === 0) return false;
+  if (isCountsOnlyPage(page)) return false;
   let size = Number(page.size);
   return !Number.isFinite(size) || size < 1;
 }

@@ -78,6 +78,11 @@ import {
 } from './facets.ts';
 import { type StoreFacetSet, storeFacetKeysCte } from './store-facets.ts';
 import { storedTypeCount } from './value-store-filter.ts';
+import {
+  liveAndNonLiveMatches,
+  nonLiveRowsOf,
+  realmHoldsNonLiveRows,
+} from './non-live-rows.ts';
 import { besideNearFilters, cappedMatchCount } from './near-filter-beside.ts';
 import { vectorSearchSettings } from '../vector-store.ts';
 import { unwrapLiterals } from '../query-v2/binding-reference.ts';
@@ -398,6 +403,69 @@ export abstract class SearchPipeline extends StoreBlend {
         });
       }
     }
+    // A counts-only html search answers what a paged html search of the
+    // same query answers: its total and facets cover the cards it lists,
+    // error cards included, an error card counted by its last good values.
+    // The value store holds the live cards only, so the realm's non-live
+    // rows are found off their own indexes (non-live-rows.ts). A realm with
+    // none, which two index-only reads tell, is counted from the store
+    // alone. Where some match the filter, the total adds them, and facets
+    // are counted over the live matches the store names together with
+    // those rows, in one statement (`liveFromStore`).
+    if (
+      page &&
+      Number(page.size) === 0 &&
+      opts.includeErrors &&
+      !opts.countsOnlySplit &&
+      this.dialect.valueStore &&
+      !isRealmUnion(realmURL) &&
+      tableFromOpts(opts) === 'boxel_index' &&
+      entryType !== 'file'
+    ) {
+      let { includeErrors: _counted, ...rest } = opts;
+      let live: QueryOptions = { ...rest, countsOnlySplit: true };
+      let [held] = await this.queryCards(
+        realmHoldsNonLiveRows(realmURL.href),
+        opts.timings,
+        opts,
+      );
+      let extra = 0;
+      if (held?.held) {
+        let { facets: _facets, sort: _sort, ...counted } = asWritten as Query;
+        let nonLive = await this._search(
+          realmURL,
+          { ...counted, page: { size: 0 } } as Query,
+          { ...opts, countsOnlySplit: true, nonLiveOnly: true },
+          selectClauseExpression,
+          entryType,
+        );
+        extra = Number(nonLive.meta.page?.total ?? 0);
+      }
+      if (extra > 0 && facets?.length) {
+        return await this._search(
+          realmURL,
+          asWritten,
+          { ...opts, countsOnlySplit: true, liveFromStore: true },
+          selectClauseExpression,
+          entryType,
+        );
+      }
+      let out = await this._search(
+        realmURL,
+        asWritten,
+        live,
+        selectClauseExpression,
+        entryType,
+      );
+      if (extra > 0 && out.meta.page) {
+        out.meta.page = {
+          ...out.meta.page,
+          total: Number(out.meta.page.total ?? 0) + extra,
+          hasMore: true,
+        };
+      }
+      return out;
+    }
     // One-card bindings resolve first: their values stand in for each
     // reference, and the query runs on without them.
     if (lets && Object.values(lets).some((b) => b.one)) {
@@ -534,6 +602,10 @@ export abstract class SearchPipeline extends StoreBlend {
       // row filters on the `_isCardInstanceFile` search-doc key (stamped only on
       // that row) — e.g. `eq: { _isCardInstanceFile: false }` keeps cards + plain
       // files and drops the card `.json`.
+
+      if (opts.nonLiveOnly) {
+        conditions.push(nonLiveRowsOf(realmURL.href));
+      }
 
       if (opts.cardUrls && opts.cardUrls.length > 0) {
         // Restrict to this URL subset. Instance rows key on their `.json` file
@@ -1138,6 +1210,22 @@ export abstract class SearchPipeline extends StoreBlend {
             facetPlans.length > 0 && nearJoins.length === 0
               ? this.facetQuery(facetPlans, opts, facetConditionOf, storeSetOf)
               : undefined;
+          // A counts-only html search over a realm with matching error rows
+          // (`liveFromStore`): its match set is the live matches the value
+          // store names and the realm's non-live rows the filter matches,
+          // which together are the rows the page's own condition admits,
+          // read without the realm's other rows.
+          let liveSet =
+            opts.liveFromStore && Number(page.size) === 0 && shared
+              ? await this.storeFacetSet({
+                  realmURL,
+                  filter,
+                  opts: { ...opts, includeErrors: undefined },
+                  entryType,
+                  condition: everyCondition,
+                  facetPaths: [],
+                })
+              : undefined;
           keys = await this.queryCards(
             this.pgNarrowPass({
               opts,
@@ -1146,12 +1234,27 @@ export abstract class SearchPipeline extends StoreBlend {
               nearJoins,
               everyCondition: pageCondition,
               limitClause,
+              ...(liveSet
+                ? {
+                    matches: liveAndNonLiveMatches(
+                      liveSet,
+                      everyCondition,
+                      realmURL.href,
+                    ),
+                  }
+                : {}),
               ...(shared
                 ? {
-                    facets: this.facetSql(shared, opts, SHARED_FACET_PREFIX, {
-                      condition: everyCondition,
-                      from: 'm',
-                    }),
+                    facets: this.facetSql(
+                      shared,
+                      opts,
+                      SHARED_FACET_PREFIX,
+                      realmURL,
+                      {
+                        condition: everyCondition,
+                        from: 'm',
+                      },
+                    ),
                   }
                 : {}),
             }),
