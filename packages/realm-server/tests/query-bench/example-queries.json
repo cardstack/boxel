@@ -1,0 +1,67 @@
+{
+  "realms": {
+    "example": "http://localhost:4201/example-user/example-realm/"
+  },
+  "queries": [
+    {
+      "id": "example-facets",
+      "realm": "example",
+      "query": {
+        "type": {
+          "module": "{realm}product",
+          "name": "Product"
+        },
+        "page": {
+          "size": 0
+        },
+        "facets": [
+          {
+            "by": "category",
+            "size": 100
+          },
+          {
+            "by": "color",
+            "size": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "example-list",
+      "realm": "example",
+      "query": {
+        "type": {
+          "module": "{realm}product",
+          "name": "Product"
+        },
+        "sort": [
+          {
+            "by": "price",
+            "direction": "asc"
+          }
+        ],
+        "page": {
+          "size": 25
+        }
+      }
+    },
+    {
+      "id": "example-filter",
+      "realm": "example",
+      "query": {
+        "type": {
+          "module": "{realm}product",
+          "name": "Product"
+        },
+        "filter": {
+          "eq": {
+            "color": "blue"
+          }
+        },
+        "page": {
+          "size": 25
+        }
+      }
+    }
+  ]
+}
