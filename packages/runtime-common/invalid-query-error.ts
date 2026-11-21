@@ -6,9 +6,50 @@
 // endpoints turn it into a 400 and let anything else surface as a 500, so a
 // grammar violation reported as a plain `Error` reads to a caller as a server
 // fault rather than a bad request.
+//
+// `code` names the mistake for a caller that reacts to it (an editor, a
+// test), and every refusal carries one; it rides in the 400 body as
+// `errors[0].code`. The codes:
+//   invalid-value          a member has the wrong kind of value, or is out
+//                          of range
+//   missing-member         something the query needs is absent
+//   unknown-key            a member the grammar does not have
+//   conflicting-members    two members that cannot go together
+//   limit-exceeded         more of something than a query may have
+//   invalid-nesting        something placed where it cannot go
+//   invalid-type           a type reference that names no card type
+//   needs-type, sort-needs-type  a path that needs a type anchor
+//   needs-declaration      a field or type lacks a declaration a feature
+//                          needs
+//   expression-placement   an expression placed where it cannot run
+//   expression-unsupported an expression BXL's score profile (SQL) cannot
+//                          express, such as one calling a text function
+//   needs-postgres         a feature this index (SQLite) cannot run
+//   matches-required       a text-relevance sort with no `matches` filter
+//   engine-only            a member only the engine sets
+//   invalid-expression, invalid-json, invalid-page, unknown-field,
+//   unknown-binding, binding-kind, policy-linked-from
+//   not-selectable         a select path the search doc does not carry
+//   select-excludes-fields select beside fields (a table or entries, not both)
 export class InvalidQueryError extends Error {
-  constructor(message: string) {
+  code: string;
+  constructor(message: string, code = 'invalid-value') {
     super(message);
     this.name = 'InvalidQueryError';
+    this.code = code;
+  }
+}
+
+// A refusal of a log query (log-query.ts). `code` is the vocabulary above,
+// plus three a log has and a card query doesn't: `log-not-found` (404: no
+// such log), `log-not-indexed` (409: the log has no rows and nothing could
+// sync it) and `log-not-readable` (403: the caller may read neither the
+// realm nor any of the log's lines).
+export class LogQueryError extends InvalidQueryError {
+  status: number;
+  constructor(message: string, code = 'invalid-value', status = 400) {
+    super(message, code);
+    this.name = 'LogQueryError';
+    this.status = status;
   }
 }
