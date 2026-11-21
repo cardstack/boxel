@@ -32,6 +32,7 @@ import {
   type MisreadingType,
 } from './policy.ts';
 import { lowerQueryOperation } from './query.ts';
+import { cardIdentityFilter } from '../card-identity-filter.ts';
 
 // ============================================================================
 // What a realm's policy contributes to a search.
@@ -332,9 +333,15 @@ async function scopeFor(
   );
 }
 
-// `scope`, with every filter it carries leaving out the rows of the cards that
-// hold the realm's authorization. A scope with no filter to narrow reads no
-// pointer.
+// `scope`, as one filter: the union of the filters it carries, leaving out the
+// rows of the cards that hold the realm's authorization. A scope with no
+// filter to narrow reads no pointer.
+//
+// The exclusion is stated once, around the union, rather than once per grant:
+// `any(a and not x, b and not x)` is `any(a, b) and not x`, and each copy is
+// one more test of every candidate row. The cards are matched by the index
+// row's own `url` (card-identity-filter.ts), not by `eq: { id }`, which reads
+// each candidate's whole search document to find its id.
 async function withoutAuthorization(
   core: OperationCore,
   scope: PolicyQueryScope,
@@ -342,21 +349,18 @@ async function withoutAuthorization(
   if (scope.kind !== 'scoped') {
     return scope;
   }
-  let infrastructure = [
-    ...(await authorizationCardIds(core)).map((id) => ({ eq: { id } })),
-    { type: realmPolicyRef },
-  ];
+  let infrastructure: Filter = {
+    any: [
+      cardIdentityFilter(await authorizationCardIds(core)),
+      { type: realmPolicyRef },
+    ],
+  };
+  let granted: Filter =
+    scope.filters.length === 1 ? scope.filters[0] : { any: scope.filters };
   return {
     kind: 'scoped',
-    filters: scope.filters.map((filter) => excluding(filter, infrastructure)),
+    filters: [{ every: [granted, { not: infrastructure }] }],
   };
-}
-
-// `filter`, less every row any of `excluded` matches.
-function excluding(filter: Filter, excluded: Filter[]): Filter {
-  return excluded.length === 0
-    ? filter
-    : { every: [filter, { not: { any: excluded } }] };
 }
 
 // What this realm's policy contributes to a search `principal` sends, where
