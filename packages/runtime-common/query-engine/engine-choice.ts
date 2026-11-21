@@ -48,7 +48,7 @@ const DEFAULTS: Readonly<Record<QueryEngineCaller, QueryEngineChoice>> =
     'skill-validation': 'v2',
     'realm-logs': 'v2',
     federated: 'v2',
-    'query-fields': 'legacy',
+    'query-fields': 'v2',
     host: 'legacy',
   });
 
