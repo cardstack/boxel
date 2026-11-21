@@ -15,13 +15,23 @@ export type SearchRequestErrorCode =
   | 'invalid-render'
   | 'invalid-prerendered-html-format';
 
+// One class for both engines' request refusals: the query-v2 copy
+// (query-v2/search-utils.ts) re-exports it, so a refusal Query V2's grammar
+// raises is the same error every caller tests for (a 400, never a 500).
 export class SearchRequestError extends Error {
   code: SearchRequestErrorCode;
+  // the query grammar's own code for the mistake, when it has one
+  queryCode?: string;
 
-  constructor(code: SearchRequestErrorCode, message: string) {
+  constructor(
+    code: SearchRequestErrorCode,
+    message: string,
+    queryCode?: string,
+  ) {
     super(message);
     this.code = code;
     this.name = 'SearchRequestError';
+    if (queryCode) this.queryCode = queryCode;
   }
 }
 

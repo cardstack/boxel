@@ -131,10 +131,27 @@ export function searchInvocation(
   let anchors = isPlainRecord(filter)
     ? wireFilterGrantTypes(filter as SearchEntryWireFilter)
     : undefined;
-  return {
-    operation: 'query',
-    types: anchors?.every((anchor) => isCodeRef(anchor)) ? anchors : [],
-  };
+  // A type named once at the top of the query is the type every clause
+  // targets, so its grants apply as an anchor's do.
+  let top =
+    isPlainRecord(payload) && isCodeRef(payload.type) ? [payload.type] : [];
+  if (!anchors?.length) {
+    return { operation: 'query', types: top };
+  }
+  if (!anchors.every((anchor) => isCodeRef(anchor))) {
+    return { operation: 'query', types: [] };
+  }
+  let seen = new Set<string>();
+  let types = [...top, ...anchors].filter((t) => {
+    let key = JSON.stringify([
+      (t as { module?: unknown }).module,
+      (t as { name?: unknown }).name,
+    ]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return { operation: 'query', types };
 }
 
 export interface NamedQueryContext {

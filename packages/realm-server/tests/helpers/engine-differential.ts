@@ -123,6 +123,82 @@ export async function compareEngines(
   }
 }
 
+// A request main's entry grammar and Query V2's read differently, by design:
+// a member only the newer grammar has. Main refuses it as an unknown member;
+// Query V2 reads it, or refuses it for what it says, with the grammar's code.
+// The federated route reads Query V2's grammar from row 24a, so these are its
+// request-level changes, beside the engine's answers above.
+export const GRAMMAR_CASES: {
+  name: string;
+  payload: Record<string, unknown>;
+  // why the two differ (docs/search.md); the case fails if they agree
+  shape: string;
+}[] = [
+  {
+    name: 'let that is not a map of bindings',
+    payload: { filter: { 'item.on': refOf('Thing') }, let: 'nope' },
+    shape: 'a member only the newer grammar has',
+  },
+  {
+    name: 'let binding a log',
+    payload: {
+      filter: { 'item.on': refOf('Thing'), in: { 'item.id': '$liked' } },
+      let: { $liked: { from: { log: 'likes.jsonl' }, select: 'what.post' } },
+    },
+    shape: 'a member only the newer grammar has',
+  },
+  {
+    name: 'facets',
+    payload: {
+      filter: { 'item.on': refOf('Thing') },
+      page: { size: 0 },
+      facets: [{ by: 'tags' }],
+    },
+    shape: 'a member only the newer grammar has',
+  },
+];
+
+type GrammarOutcome = { refused: string } | { read: true };
+
+function grammarOutcome(
+  parse: (payload: unknown) => unknown,
+  payload: unknown,
+) {
+  try {
+    parse(payload);
+    return { read: true } as GrammarOutcome;
+  } catch (e) {
+    return { refused: (e as Error).message } as GrammarOutcome;
+  }
+}
+
+// Each grammar case through both parsers, counted into `total`: a case whose
+// grammars agree, or whose main does not refuse the member as unknown, is a
+// failure (its listed change is not the one that happened).
+export function compareGrammars(
+  legacyParse: (payload: unknown) => unknown,
+  nextParse: (payload: unknown) => unknown,
+  total: Tally,
+) {
+  for (let c of GRAMMAR_CASES) {
+    let before = grammarOutcome(legacyParse, c.payload);
+    let after = grammarOutcome(nextParse, c.payload);
+    total.compared++;
+    let mainRefusesUnknown =
+      'refused' in before && /unknown member "/.test(before.refused);
+    if (
+      JSON.stringify(before) !== JSON.stringify(after) &&
+      mainRefusesUnknown
+    ) {
+      total.intentional[c.shape] = (total.intentional[c.shape] ?? 0) + 1;
+    } else {
+      total.failures.push(
+        `grammar ${c.name}: main ${JSON.stringify(before)}, new ${JSON.stringify(after)}`,
+      );
+    }
+  }
+}
+
 // The line each switch row's description carries.
 export function countLine(total: Tally): string {
   let sum = (r: Record<string, number>) =>

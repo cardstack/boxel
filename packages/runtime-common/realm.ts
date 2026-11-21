@@ -77,6 +77,8 @@ import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import { InvalidQueryError } from './invalid-query-error.ts';
+import { deferredSelectRefusal } from './query-engine/deferred-select.ts';
+import type { SearchEntryQuery as V2SearchEntryQuery } from './query-v2/search-entry.ts';
 import {
   applyServerSearchPageBound,
   assembledLinkResourceBudget,
@@ -608,7 +610,7 @@ import {
   isCoarseRefusal,
   routedPath,
 } from './router.ts';
-import { parseQuery } from './query.ts';
+import { parseQuery, type Filter } from './query.ts';
 import type { Readable } from 'stream';
 import {
   createResponse,
@@ -10676,6 +10678,62 @@ export class Realm {
     return true;
   }
 
+  // For each card a policy-scoped search's `linkedFrom` names (in its filter
+  // or its sort), the grants a direct read of that card would face: those of
+  // the card's own type, which `grantsFor` answers, not the query's. Null
+  // where no grant on the card's type admits the caller, or the card is not
+  // here. Asked by both search routes, so the grant decides, not the
+  // endpoint.
+  async linkedFromGrants(
+    itemQuery: { filter?: unknown; sort?: unknown },
+    grantsFor: (type: CodeRef) => Promise<Filter[] | null>,
+  ): Promise<Map<string, Filter[] | null>> {
+    let cards = new Set<string>();
+    let walk = (v: unknown) => {
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object') {
+        let linked = (v as { linkedFrom?: { card?: unknown } }).linkedFrom;
+        if (linked && typeof linked.card === 'string') cards.add(linked.card);
+        Object.values(v).forEach(walk);
+      }
+    };
+    walk(itemQuery.filter);
+    walk(itemQuery.sort);
+    let grants = new Map<string, Filter[] | null>();
+    for (let card of cards) {
+      // The card's id in any form (a URL, a registered prefix's, or
+      // `$REALM/<path>` in this realm), resolved through the realm's network.
+      // One that resolves to no location names no card here, so no grant
+      // admits it.
+      let url: URL;
+      try {
+        let id = card.endsWith('.json') ? card : `${card}.json`;
+        url = id.startsWith('$REALM/')
+          ? new URL(id.slice('$REALM/'.length), this.url)
+          : this.#virtualNetwork.toURL(id);
+      } catch {
+        grants.set(card, null);
+        continue;
+      }
+      let own: Filter[] | null = null;
+      let row = await this.#realmIndexQueryEngine.instance(url);
+      let adoptsFrom =
+        row?.type === 'instance' ? row.instance?.meta?.adoptsFrom : undefined;
+      if (adoptsFrom) {
+        own = await grantsFor(
+          codeRefWithAbsoluteIdentifier(
+            adoptsFrom,
+            url,
+            undefined,
+            this.#virtualNetwork,
+          ),
+        );
+      }
+      grants.set(card, own);
+    }
+    return grants;
+  }
+
   // Whether this realm admits a request that authenticated nobody to a search
   // that spans several realms, which the realm server answers rather than this
   // realm's own routes. The same question this realm's own `_search` asks: its
@@ -20083,9 +20141,14 @@ export class Realm {
   // query + the applied htmlQuery + the sparse fieldset) against the
   // entry projection engine. Same opts threading as `search` —
   // `cardUrls` rides inside the SearchEntryQuery itself.
+  //
+  // Takes either grammar's entry query: a realm's own `_search` parses with
+  // main's grammar, a federated search with Query V2's once its row moved it
+  // (`engine-choice.ts`, 'federated'), which may carry a time zone the merge
+  // reckons every realm in.
   public async searchEntries(
-    searchEntryQuery: SearchEntryQuery,
-    opts?: SearchOpts,
+    searchEntryQuery: SearchEntryQuery | V2SearchEntryQuery,
+    opts?: SearchOpts & { timeZone?: string },
   ): Promise<EntryCollectionDocument> {
     let engineOpts = {
       loadLinks: true as const,
@@ -20115,6 +20178,7 @@ export class Realm {
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
       ...(opts?.signal ? { signal: opts.signal } : {}),
+      ...(opts?.timeZone !== undefined ? { timeZone: opts.timeZone } : {}),
     };
     return await this.#realmIndexQueryEngine.searchEntries(
       searchEntryQuery,
@@ -20582,6 +20646,10 @@ export class Realm {
     }
 
     try {
+      let deferredSelect = deferredSelectRefusal(payload);
+      if (deferredSelect) {
+        throw deferredSelect;
+      }
       let searchEntryQuery = parseSearchEntryQueryFromPayload(payload);
       let duringPrerender = isDuringPrerenderRequest(request);
       // What this realm's policy contributes, for a caller its ACL declined.
@@ -20781,7 +20849,9 @@ export class Realm {
       }
       if (e instanceof SearchRequestError) {
         return createResponse({
-          body: JSON.stringify(buildSearchErrorBody(e.message)),
+          body: JSON.stringify(
+            buildSearchErrorBody(e.message, 400, e.queryCode),
+          ),
           init: {
             status: 400,
             headers: { 'content-type': SupportedMimeType.CardJson },

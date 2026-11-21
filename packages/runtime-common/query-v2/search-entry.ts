@@ -1654,37 +1654,6 @@ export function markPolicyScoped(
   };
 }
 
-// A single realm's `_search` answer with that realm's entry in
-// `meta.realms`, in the shape a federated search reports each realm: `ok`,
-// its total, whether it holds more, and `ms`, the server's time on the
-// request from its arrival until the document was complete. A document that
-// already reports realms is left as it is.
-export function withRealmStatus(
-  doc: EntryCollectionDocument,
-  realmURL: string,
-  startedAt: number,
-): EntryCollectionDocument {
-  if (doc.meta?.realms) {
-    return doc;
-  }
-  return {
-    ...doc,
-    meta: {
-      ...doc.meta,
-      realms: {
-        [realmURL]: {
-          status: 'ok',
-          total: doc.meta?.page?.total ?? 0,
-          ...(doc.meta?.page?.hasMore !== undefined
-            ? { hasMore: doc.meta.page.hasMore }
-            : {}),
-          ms: Date.now() - startedAt,
-        },
-      },
-    },
-  };
-}
-
 // The document a realm answers with when it contributes no rows because the
 // caller may not see any: the one a search matching nothing produces, so a
 // realm that grants the caller nothing reads exactly as a realm holding
@@ -2786,11 +2755,8 @@ export async function searchEntryRealms(
       if (!realm) {
         return { url, status: { status: 'unavailable' as const } };
       }
-      // A realm's `ms` is its whole part of the request: what was spent
-      // preparing it before the fan-out (its mount), and its search from the
-      // moment the fan-out asks for it until its document is complete (rows,
-      // count, facets, link assembly and the rendering of each entry).
-      let t0 = Date.now() - (url ? (opts?.realmPreparedMs?.[url] ?? 0) : 0);
+      // A realm's status carries no timing: the body is cached and
+      // compared, and a timing would make two identical answers differ.
       try {
         let doc = await withRealmDeadline(
           opts?.realmDeadline,
@@ -2812,7 +2778,6 @@ export async function searchEntryRealms(
             ...(doc.meta?.page?.hasMore !== undefined
               ? { hasMore: doc.meta.page.hasMore }
               : {}),
-            ms: Date.now() - t0,
           },
         };
       } catch (e: any) {
@@ -2826,7 +2791,7 @@ export async function searchEntryRealms(
         }
         return {
           url,
-          status: { ...realmFailureStatus(e), ms: Date.now() - t0 },
+          status: realmFailureStatus(e),
           ...(isDefinitionsUnavailableError(e) ? { unavailable: e } : {}),
         };
       }

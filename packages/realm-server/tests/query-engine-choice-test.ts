@@ -23,7 +23,7 @@ const CALLER_ENGINES: Readonly<Record<QueryEngineCaller, QueryEngineChoice>> = {
   automations: 'v2',
   'skill-validation': 'v2',
   'realm-logs': 'v2',
-  federated: 'legacy',
+  federated: 'v2',
   'query-fields': 'legacy',
   host: 'legacy',
 };
@@ -40,8 +40,12 @@ const CONSTRUCTION_SITES: Readonly<Record<string, QueryEngineCaller[]>> = {
   ],
   // A realm's log search, and a log's line count in its file meta.
   'packages/runtime-common/realm.ts': ['realm-logs', 'realm-logs'],
-  // A federated `_search` of one realm's logs.
-  'packages/realm-server/handlers/handle-search.ts': ['realm-logs'],
+  // A federated `_search` of one realm's logs, and the entry grammar a
+  // federated search is read with.
+  'packages/realm-server/handlers/handle-search.ts': [
+    'realm-logs',
+    'federated',
+  ],
   'packages/runtime-common/automation-index-hook.ts': ['automations'],
   'packages/runtime-common/automation-run-limits.ts': ['automations'],
   'packages/realm-server/handlers/handle-skill-validation.ts': [
@@ -99,7 +103,7 @@ module(basename(import.meta.filename), function () {
   });
 
   test('an override it does not know is ignored', function (assert) {
-    assert.strictEqual(queryEngineFor('federated', 'V2'), 'legacy');
+    assert.strictEqual(queryEngineFor('query-fields', 'V2'), 'legacy');
     assert.strictEqual(queryEngineFor('realm-search', ''), 'v2');
   });
 

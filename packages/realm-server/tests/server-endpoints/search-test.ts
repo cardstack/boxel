@@ -441,6 +441,49 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
     });
 
+    test('a query Query V2’s grammar refuses is a 400 with its code, never a 500', async function (assert) {
+      // The federated route reads with Query V2's grammar, whose refusals are
+      // main's SearchRequestError: a refusal is the caller's 400, carrying
+      // the grammar's code.
+      let response = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url],
+        let: 'not a map of bindings',
+      });
+      assert.strictEqual(response.status, 400, response.text);
+      assert.strictEqual(
+        response.body.errors[0].code,
+        'invalid-value',
+        response.text,
+      );
+      assert.true(
+        response.body.errors[0].message.includes(
+          'let must map names to bindings',
+        ),
+        response.text,
+      );
+    });
+
+    test('select is refused with a 400 until its own row', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url],
+        select: ['title'],
+      });
+      assert.strictEqual(response.status, 400, response.text);
+      assert.strictEqual(
+        response.body.errors[0].code,
+        'unknown-key',
+        response.text,
+      );
+      assert.true(
+        response.body.errors[0].message.includes(
+          'select (a table of values) is not answered yet',
+        ),
+        response.text,
+      );
+    });
+
     test('a realm named by a registered prefix answers as its URL does', async function (assert) {
       // The prefix is registered after the realms indexed, so only the
       // request is in a different form: the rows the realm answers with are
@@ -565,6 +608,44 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         uncached.headers['etag'],
         undefined,
         'non-indexer traffic carries no ETag',
+      );
+    });
+
+    test('a merged federation and a per-realm one of the same query are cached apart', async function (assert) {
+      let baseBody = {
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      };
+      let mergedBody = { ...baseBody, federation: { results: 'merged' } };
+
+      // The live cache: the second request is not served the first's body.
+      let byRealm = await postSearch(baseBody);
+      let merged = await postSearch(mergedBody);
+      assert.strictEqual(byRealm.status, 200);
+      assert.strictEqual(merged.status, 200);
+      assert.strictEqual(
+        merged.body.meta.federation?.results,
+        'merged',
+        'the merged search is answered merged',
+      );
+      assert.notStrictEqual(
+        byRealm.body.meta.federation?.results,
+        'merged',
+        'the per-realm search is not',
+      );
+
+      // The job-scoped cache: two shapes, two ETags.
+      let post = (body: Record<string, unknown>) =>
+        postSearch(body)
+          .set('x-boxel-job-id', '42.2')
+          .set('x-boxel-consuming-realm', testRealm.url);
+      let first = await post(baseBody);
+      let second = await post(mergedBody);
+      assert.true(Boolean(first.headers['etag']));
+      assert.notStrictEqual(
+        second.headers['etag'],
+        first.headers['etag'],
+        'a merged federation → a different ETag',
       );
     });
 

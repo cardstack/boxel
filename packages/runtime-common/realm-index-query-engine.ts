@@ -46,6 +46,17 @@ import type {
 } from './realm-identifiers.ts';
 import { rri } from './realm-identifiers.ts';
 import type { Filter, Query } from './query.ts';
+import type { ResultExplanation } from './query-v2/query.ts';
+import {
+  type QueryOptions as V2QueryOptions,
+  BLEND_SCORE_KEY,
+  COLLAPSE_SIZE_KEY,
+  EXPLAIN_KEY,
+  FORMULA_KEY,
+  RERANK_KEY,
+  SORT_VALUES_KEY,
+} from './query-engine/types.ts';
+import { NEAR_SIMILARITY_KEY } from './vector-query.ts';
 import {
   CardError,
   type RenderErrorSummary,
@@ -87,7 +98,6 @@ import {
 import {
   buildHtmlResource,
   buildIconResource,
-  buildEntryResource,
   buildSparseItemResource,
   htmlQueryFormats,
   htmlQueryHasRenderTypePredicate,
@@ -96,8 +106,15 @@ import {
   searchEntryWireQueryFromQuery,
   type RenderingCandidate,
   type SearchEntryFieldset,
-  type SearchEntryQuery,
 } from './search-entry.ts';
+// Either grammar's entry query: a realm's own `_search` parses with main's,
+// a federated search with Query V2's (`engine-choice.ts`, 'federated'). Its
+// entries carry the per-row values the newer grammar asks for (a merge's
+// sort values, a near similarity, a collapse size, an explanation).
+import {
+  buildEntryResource,
+  type SearchEntryQuery,
+} from './query-v2/search-entry.ts';
 import type { FieldDefinition } from './definitions.ts';
 import { urlNamesFile } from './file-def-code-ref.ts';
 import {
@@ -265,7 +282,19 @@ type Options = {
   // cards other than this one. Reporting from the one choke point every
   // application passes through is exact where sniffing the output is not.
   onQueryFieldApplied?: () => void;
-} & QueryOptions;
+} & QueryOptions &
+  // What a federated search in Query V2's grammar carries to the engine
+  // (`searchEntries`).
+  Pick<
+    V2QueryOptions,
+    | 'readLogFile'
+    | 'logAccess'
+    | 'anonymizeStatistics'
+    | 'labelFilter'
+    | 'grantFilter'
+    | 'exposeSortValues'
+    | 'timeZone'
+  >;
 
 export type SearchResult = SearchResultDoc | SearchResultError;
 
@@ -448,10 +477,30 @@ export class RealmIndexQueryEngine {
       fieldset,
       cardUrls,
       scope,
+      anonymizeStatistics,
+      labelFilter,
+      grantFilter,
+      grantsForType,
+      exposeSortValues,
+      logAccess,
     } = searchEntryQuery;
     let engineOpts: Options = {
       ...opts,
+      // A `let` binding read from a log syncs a log no pass has reached from
+      // its file, and reads only what a policy-scoped caller may.
+      readLogFile: this.#realm.readLogFileForQuery,
+      ...(logAccess ? { logAccess } : {}),
       ...(cardUrls && cardUrls.length > 0 ? { cardUrls } : {}),
+      // A caller a realm policy scopes: the grants a federated search composed
+      // (`policyScopedQuery`) also bound its typo corrections (the small-count
+      // floor) and its link labels.
+      ...(anonymizeStatistics ? { anonymizeStatistics } : {}),
+      ...(labelFilter ? { labelFilter } : {}),
+      ...(grantFilter ? { grantFilter } : {}),
+      // A linked card read for the query (a link facet's label) shows under
+      // its own type's grants, as a direct read of it would.
+      ...(grantsForType ? { grantsForType } : {}),
+      ...(exposeSortValues ? { exposeSortValues } : {}),
     };
 
     // `scope` pins `boxel_index.type` directly. 'all' searches both kinds in one
@@ -486,7 +535,10 @@ export class RealmIndexQueryEngine {
     let runSql = () =>
       this.#indexQueryEngine.search(
         new URL(this.#realm.url),
-        query,
+        // A query in Query V2's grammar reaches Query V2's engine alone: the
+        // federated route reads with main's grammar wherever this realm reads
+        // through main's engine (`engine-choice.ts`).
+        query as Query,
         sqlOpts,
         projection,
         entryTypeScope,
@@ -520,6 +572,38 @@ export class RealmIndexQueryEngine {
       ];
       let matchRelevance =
         rawRelevance == null ? undefined : Number(rawRelevance);
+      // Likewise the first `near` sort's cosine distance (see `isNearSort`).
+      let rawNearSimilarity = (row as Record<string, unknown>)[
+        NEAR_SIMILARITY_KEY
+      ];
+      let nearSimilarity =
+        rawNearSimilarity == null ? undefined : Number(rawNearSimilarity);
+      // And the first `_blend` sort's fused score.
+      let rawBlendScore = (row as Record<string, unknown>)[BLEND_SCORE_KEY];
+      let blendScore =
+        rawBlendScore == null ? undefined : Number(rawBlendScore);
+      // And, for a federated merge, the values the row was sorted by.
+      let sortValues = (row as Record<string, unknown>)[SORT_VALUES_KEY] as
+        | unknown[]
+        | undefined;
+      // And, under `collapse`, how many matches the row's group holds.
+      let rawCollapseSize = (row as Record<string, unknown>)[COLLAPSE_SIZE_KEY];
+      let collapseSize =
+        rawCollapseSize == null ? undefined : Number(rawCollapseSize);
+      // And, under `explain`, why it ranks where it does.
+      let explanation = (row as Record<string, unknown>)[EXPLAIN_KEY] as
+        | ResultExplanation
+        | undefined;
+      // And the row's formula value, wherever the query's formula ran (under
+      // `rerank`, or as a placed expression).
+      let formulaValue = (row as Record<string, unknown>)[FORMULA_KEY] as
+        | number
+        | null
+        | undefined;
+      let windowValue = (row as Record<string, unknown>)[RERANK_KEY] as
+        | number
+        | null
+        | undefined;
       // A `file` row (mixed 'all' scope) renders natively and carries no
       // ancestor coercion — its renderings hang off its own type's entry with
       // no renderTypeKey, and its resource is the synthesized `file-meta`. This
@@ -602,6 +686,13 @@ export class RealmIndexQueryEngine {
             iconId: fileIconId,
             generation: file.generation,
             matchRelevance,
+            nearSimilarity,
+            blendScore,
+            explanation,
+            windowValue,
+            collapseSize,
+            sortValues,
+            formulaValue,
           }),
         );
         continue;
@@ -751,6 +842,13 @@ export class RealmIndexQueryEngine {
           iconId,
           generation,
           matchRelevance,
+          nearSimilarity,
+          blendScore,
+          explanation,
+          windowValue,
+          collapseSize,
+          sortValues,
+          formulaValue,
         }),
       );
     }

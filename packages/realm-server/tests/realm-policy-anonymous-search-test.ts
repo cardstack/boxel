@@ -628,6 +628,17 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a search across realms that names its type at the top is admitted as one that anchors it in its filter', async function (assert) {
+    let response = await request
+      .post('/_federated-search')
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('Content-Type', 'application/json')
+      .set('X-HTTP-Method-Override', 'QUERY')
+      .set('X-Forwarded-For', VISITOR)
+      .send({ type: articleType(NEWSROOM), realms: [NEWSROOM] });
+    assert.deepEqual(ids(response), [`${NEWSROOM}articles/published`]);
+  });
+
   test('a realm that admits nothing contributes no rows to a search another realm admits', async function (assert) {
     let response = await federatedSearch([NEWSROOM, LIBRARY]);
     assert.deepEqual(ids(response), [`${NEWSROOM}articles/published`]);
