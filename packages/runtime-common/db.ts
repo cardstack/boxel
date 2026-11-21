@@ -14,6 +14,16 @@ export interface ExecuteOptions {
   // print a placeholder in their place, and an error it throws drops the
   // detail in which Postgres quotes the offending row or value.
   redactBindings?: boolean;
+  // Cancels the statement when it aborts: Postgres is asked to cancel the
+  // backend running it (`pg_cancel_backend`), and the call rejects with the
+  // signal's reason. A signal already aborted runs nothing. SQLite ignores it.
+  signal?: AbortSignal;
+  // Set by the adapter a read snapshot hands out (see `withReadSnapshot`):
+  // the statement runs on that snapshot's connection. The snapshot's adapter
+  // sends each statement through `execute` with it, so a wrapper of
+  // `execute` sees every statement a snapshot runs; a wrapper passes the
+  // options on as it got them. Opaque: nothing else sets it.
+  readSnapshot?: object;
 }
 
 // The bindings as an adapter's statement and error logs print them.
@@ -105,4 +115,82 @@ export interface DBAdapter {
   // Adapters that do not share connections out by tenant leave it undefined,
   // and callers run `fn` as it is.
   withSharedWork?: <T>(fn: () => Promise<T>) => Promise<T>;
+  // Wait on shared work another caller started (a coalesced lookup's
+  // pending result). A caller inside a read snapshot holds a connection while
+  // it waits, and the shared work may itself be waiting for one; PgAdapter
+  // counts such a wait so a pool full of those holders is recognized as stuck
+  // and the shared work is granted a connection. Adapters without a pool
+  // leave it undefined, and callers await `fn` as it is.
+  waitingOnSharedWork?: <T>(fn: () => Promise<T>) => Promise<T>;
+  // Run `fn` against one read snapshot: every statement `fn` issues through
+  // the adapter it is handed sees the database as it stood at the first of
+  // them, whatever commits in between. A search reads its rows, its count,
+  // its facets and its bindings this way, so it never answers with some of
+  // them from before a commit and some from after.
+  //
+  // PgAdapter pins one pool connection, checked out at the first statement,
+  // in a `REPEATABLE READ READ ONLY` transaction, and runs the statements on
+  // it one at a time. A statement that fails leaves the snapshot usable for
+  // the next, as a statement on its own would. `signal` cancels whichever
+  // statement is running when it aborts (a statement's own signal does too),
+  // and the transaction ends when `fn` settles, on success, error or cancel.
+  // The handed adapter's `withTransaction` runs its body on the snapshot
+  // inside a savepoint that is rolled back afterwards, so a `SET LOCAL` in
+  // it reaches no other statement; a write there is refused (read only).
+  // Calling `withReadSnapshot` on the handed adapter reuses the snapshot.
+  // Its locks and writes (`withWriteLock`, `notify`, …) go to the adapter
+  // itself, outside the snapshot.
+  //
+  // Adapters without it leave it undefined, and callers run `fn` with the
+  // adapter as it is.
+  //
+  // `deadline` (epoch ms) is when the search must have finished. Postgres
+  // then stops any one statement of the snapshot that runs past it (plus a
+  // small margin), so a runaway statement ends even if cancelling it through
+  // `signal` fails; such a statement fails as the time budget's refusal
+  // (`SearchBoundError`, 408).
+  //
+  // `fn` may be run more than once (see `outsideReadSnapshot`), so it must be
+  // safe to re-run; only its last run's outcome is returned.
+  withReadSnapshot?: <T>(
+    fn: (reader: DBAdapter) => Promise<T>,
+    opts?: { signal?: AbortSignal; deadline?: number },
+  ) => Promise<T>;
+  // Wait on work outside the database (a definition lookup, which may
+  // prerender a module) from inside a read snapshot without holding the
+  // snapshot's connection idle in its transaction for it. `start` begins the
+  // work once per `key` for the whole `withReadSnapshot` call, and is handed
+  // the snapshot's `signal` and `deadline` so it can bound itself. While the
+  // snapshot has no connection yet the wait holds nothing and runs on; once it
+  // holds one and the work outlasts a short grace, the snapshot gives the
+  // attempt up (this call rejects, and the attempt's outcome is discarded
+  // whatever the body does with that), releases the connection, waits for the
+  // work holding nothing, and runs the body again on a fresh snapshot, where
+  // the same `key` answers with the settled work at once. Outside a snapshot
+  // it runs `start` and awaits it. Adapters without snapshots leave it
+  // undefined, and callers run the work as it is.
+  outsideReadSnapshot?: <T>(
+    key: string,
+    start: (bound: { signal?: AbortSignal; deadline?: number }) => Promise<T>,
+  ) => Promise<T>;
+}
+
+// The deadline (epoch ms) a time budget gave the search an abort signal
+// cancels. Whoever arms a budget's signal records its deadline here (the
+// earliest, when more than one budget arms it), so a search reading through
+// the signal it was handed knows how long it has left. A signal no budget
+// armed has none.
+const signalDeadlines = new WeakMap<AbortSignal, number>();
+
+export function setSignalDeadline(signal: AbortSignal, deadline: number) {
+  let current = signalDeadlines.get(signal);
+  if (current === undefined || deadline < current) {
+    signalDeadlines.set(signal, deadline);
+  }
+}
+
+export function signalDeadline(
+  signal: AbortSignal | null | undefined,
+): number | undefined {
+  return signal ? signalDeadlines.get(signal) : undefined;
 }
