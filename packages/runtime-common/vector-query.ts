@@ -1,6 +1,7 @@
 import type { DBAdapter } from './db.ts';
 import { refuse } from './query-v2/query-refusals.ts';
-import type { CardExpression } from './expression.ts';
+import { param, type CardExpression } from './expression.ts';
+import { searchRead } from './search-session.ts';
 import type { FieldDefinition } from './definitions.ts';
 import {
   type CodeRef,
@@ -592,22 +593,26 @@ export class VectorQuery {
     if (!cached || Date.now() - cached.at > 5_000) {
       cached = {
         at: Date.now(),
-        space: this.#host.dbAdapter
-          .execute(
-            `SELECT d.space, d.recorded FROM (
-               SELECT bi.search_doc -> '_vectorFields' -> $3 ->> 'space' AS space,
-                      jsonb_exists(bi.search_doc, '_vectorFields') AS recorded,
-                      bi.indexed_at, bi.url
-                 FROM boxel_index AS bi
-                WHERE bi.realm_url = $1 AND bi.type = 'instance'
-                  AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)
-                  AND COALESCE(bi.types, '[]'::jsonb) @> $2::jsonb
-             ) AS d
-             ORDER BY d.space IS NULL, d.recorded DESC,
-                      d.indexed_at DESC NULLS LAST, d.url
-             LIMIT 1`,
-            { bind: [realmURL.href, JSON.stringify([typeKey]), fieldPath] },
-          )
+        space: searchRead(this.#host.dbAdapter, [
+          `SELECT d.space, d.recorded FROM (
+             SELECT bi.search_doc -> '_vectorFields' ->`,
+          param(fieldPath),
+          `->> 'space' AS space,
+                    jsonb_exists(bi.search_doc, '_vectorFields') AS recorded,
+                    bi.indexed_at, bi.url
+               FROM boxel_index AS bi
+              WHERE bi.realm_url =`,
+          param(realmURL.href),
+          `AND bi.type = 'instance'
+                AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)
+                AND COALESCE(bi.types, '[]'::jsonb) @>`,
+          param(JSON.stringify([typeKey])),
+          `::jsonb
+           ) AS d
+           ORDER BY d.space IS NULL, d.recorded DESC,
+                    d.indexed_at DESC NULLS LAST, d.url
+           LIMIT 1`,
+        ])
           .then(([row]) =>
             row?.space != null
               ? String(row.space)

@@ -118,6 +118,7 @@ export abstract class EngineCore {
   protected async inSnapshot<T>(
     opts: QueryOptions,
     fn: (opts: QueryOptions) => Promise<T>,
+    settled?: ReadonlyMap<string, Promise<unknown>>,
   ): Promise<T> {
     if (opts.reader || !this.dbAdapter.withReadSnapshot) {
       return await fn(opts);
@@ -127,10 +128,11 @@ export abstract class EngineCore {
     let deadline = signalDeadline(opts.signal);
     return await this.dbAdapter.withReadSnapshot(
       (reader) => fn({ ...opts, reader }),
-      opts.signal
+      opts.signal || settled
         ? {
-            signal: opts.signal,
+            ...(opts.signal ? { signal: opts.signal } : {}),
             ...(deadline !== undefined ? { deadline } : {}),
+            ...(settled ? { settled } : {}),
           }
         : undefined,
     );
@@ -262,31 +264,39 @@ export abstract class EngineCore {
   // the definition wait bound (`definitionWaitMs`): that one is refused as
   // `definitions-unavailable` (503), since the search would only wait on it
   // again.
+  //
+  // Returns the lookups that succeeded, by their key as work outside the
+  // snapshot, for the search to hand its snapshot (`inSnapshot`): the search
+  // then reads each definition once. One that failed is not handed on, so
+  // the search's own lookup tries again and decides.
   protected async resolveDefinitionsBeforeSnapshot(
     query: unknown,
     opts: { signal?: AbortSignal },
-  ): Promise<void> {
+  ): Promise<Map<string, Promise<unknown>>> {
+    let settled = new Map<string, Promise<unknown>>();
     let refs = namedTypeRefs(query);
     if (refs.length === 0) {
-      return;
+      return settled;
     }
     let pending = new Set(refs);
     let lookups = Promise.all(
-      refs.map((ref) =>
-        this.lookupDefinitionForSearch(ref).then(
+      refs.map((ref) => {
+        let lookup = this.lookupDefinitionForSearch(ref);
+        return lookup.then(
           () => {
             pending.delete(ref);
+            settled.set(definitionWorkKey(ref), lookup);
           },
           () => {
             pending.delete(ref);
           },
-        ),
-      ),
+        );
+      }),
     );
     let signal = opts.signal;
     if (!signal) {
       await lookups;
-      return;
+      return settled;
     }
     signal.throwIfAborted();
     lookups.catch(() => {});
@@ -315,6 +325,7 @@ export abstract class EngineCore {
         clearTimeout(timer);
       }
     }
+    return settled;
   }
 
   // Every `types` membership key a ref can legitimately match:
@@ -439,6 +450,13 @@ async function withinDefinitionWait<T>(
   }
 }
 
+// The key a definition lookup has as work outside a read snapshot
+// (`outsideReadSnapshot`), so a lookup done before the snapshot answers the
+// same lookup inside it.
+function definitionWorkKey(codeRef: ResolvedCodeRef, rest: unknown[] = []) {
+  return `definition:${stringify([codeRef.module, codeRef.name, rest])}`;
+}
+
 function classifyingDefinitionLookup(
   inner: DefinitionLookup,
   dbAdapter: DBAdapter,
@@ -471,7 +489,7 @@ function classifyingDefinitionLookup(
             return await run({});
           }
           return await dbAdapter.outsideReadSnapshot(
-            `definition:${stringify([codeRef.module, codeRef.name, rest])}`,
+            definitionWorkKey(codeRef, rest),
             run,
           );
         };

@@ -206,15 +206,21 @@ export abstract class SearchPipeline extends StoreBlend {
       // snapshot pins a connection: a lookup can wait on a module prerender,
       // and a search holding a connection idle in its transaction for that
       // long starves the pool. The wait sits inside the search's own bound.
-      await this.resolveDefinitionsBeforeSnapshot(asWritten, opts);
-      return await this.inSnapshot(opts, (inSnapshot) =>
-        this._search(
-          realmURL,
-          asWritten,
-          inSnapshot,
-          selectClauseExpression,
-          entryType,
-        ),
+      let settled = await this.resolveDefinitionsBeforeSnapshot(
+        asWritten,
+        opts,
+      );
+      return await this.inSnapshot(
+        opts,
+        (inSnapshot) =>
+          this._search(
+            realmURL,
+            asWritten,
+            inSnapshot,
+            selectClauseExpression,
+            entryType,
+          ),
+        settled,
       );
     }
     // A caller's `typeahead` is refused before anything runs: type-ahead is

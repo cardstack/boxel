@@ -66,6 +66,7 @@ import { realmIs, typoRealmIs } from '../realm-union.ts';
 import { matchCandidateCap } from '../query-v2/search-bounds.ts';
 import { storeKept } from './store-narrow.ts';
 import { typoCorrections } from '../search-intent.ts';
+import { inSearchSettings } from '../search-session.ts';
 
 export abstract class TextSearch extends FilterCompiler {
   // Widens each `typos` term's words to the closest words of the realm's
@@ -321,7 +322,7 @@ export abstract class TextSearch extends FilterCompiler {
     // word ("clsoed", 0.27 to "closed") is nominated; the edit budget then
     // decides (`typoCorrections`, which counts a swap as one edit).
     let offered: Set<string> | undefined;
-    let rows = (await this.dbAdapter.withTransaction(async (q) => {
+    let rows = (await inSearchSettings(this.dbAdapter, async (q) => {
       await q([
         `SELECT set_config('pg_trgm.similarity_threshold', '${TYPO_NOMINATION_SIMILARITY}', true)`,
       ]);
@@ -366,8 +367,8 @@ export abstract class TextSearch extends FilterCompiler {
   // word only a few cards (perhaps cards the caller cannot read) contain.
   // Counted at query time through the full-text index, for the candidates
   // only, each count stopping at its floor. Returns the corrections that
-  // pass. A handful of index probes: JIT is off for them (compiling would
-  // cost more than the probes), and the per-word count reads the full-text
+  // pass. A handful of index probes, run in the nominations' transaction
+  // and so with JIT off (`inSearchSettings`), and the per-word count reads the full-text
   // index alone and checks the realm on each row it finds, so it never
   // builds the realm's whole bitmap for every candidate.
   async #aboveTypoFloor(
@@ -378,7 +379,6 @@ export abstract class TextSearch extends FilterCompiler {
     if (corrections.length === 0) {
       return new Set();
     }
-    await q([`SELECT set_config('jit', 'off', true)`]);
     let rows = (await q([
       'SELECT c.w AS word FROM jsonb_array_elements_text(',
       param(JSON.stringify(corrections)),
