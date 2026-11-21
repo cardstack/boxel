@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import pg from 'pg';
 const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest, Response } from 'supertest';
@@ -336,17 +337,26 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   // Every index read the database is asked for while `run` runs.
+  // Every statement a client sends, a search's own read snapshot included
+  // (a paged search runs inside one, beside rather than through `execute`).
   async function indexReadsDuring(run: () => Promise<unknown>) {
     let statements: { sql: string; bind: unknown }[] = [];
-    let execute = db.execute;
-    db.execute = function (this: PgAdapter, ...args) {
-      statements.push({ sql: args[0], bind: args[1]?.bind });
-      return execute.apply(this, args);
-    };
+    let query = pg.Client.prototype.query;
+    pg.Client.prototype.query = function (this: pg.Client, ...args: any[]) {
+      let [first, second] = args;
+      let sql = typeof first === 'string' ? first : first?.text;
+      if (typeof sql === 'string') {
+        statements.push({
+          sql,
+          bind: Array.isArray(second) ? second : first?.values,
+        });
+      }
+      return (query as any).apply(this, args);
+    } as typeof query;
     try {
       await run();
     } finally {
-      db.execute = execute;
+      pg.Client.prototype.query = query;
     }
     return indexReads(statements);
   }

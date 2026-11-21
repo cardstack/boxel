@@ -7,8 +7,6 @@ import {
   inferContentType,
   unixTime,
   maybeURL,
-  // Main's engine until this caller's switch row moves it.
-  LegacyIndexQueryEngine as IndexQueryEngine,
   MATCH_RELEVANCE_SORT_KEY,
   fileEntryFromResult,
   codeRefWithAbsoluteIdentifier,
@@ -32,6 +30,10 @@ import {
   isScopedReference,
   codeRefFromInternalKey,
 } from './index.ts';
+import {
+  indexQueryEngineFor,
+  type AnyIndexQueryEngine,
+} from './query-engine/engine-choice.ts';
 import type { Realm } from './realm.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import { FILE_META_RESERVED_KEYS } from './realm.ts';
@@ -364,7 +366,10 @@ export class RealmIndexQueryEngine {
   #realm: Realm;
   #realmURL: URL | undefined;
   #fetch: typeof globalThis.fetch;
-  #indexQueryEngine: IndexQueryEngine;
+  // A realm's `_search`, named queries, card reads and link targets.
+  #indexQueryEngine: AnyIndexQueryEngine;
+  // Query-backed fields, which move with their own switch row.
+  #queryFieldEngine: AnyIndexQueryEngine;
   #definitionLookup: DefinitionLookup;
   #log = logger('realm:index-query-engine');
 
@@ -384,7 +389,14 @@ export class RealmIndexQueryEngine {
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexQueryEngine = new IndexQueryEngine(
+    this.#indexQueryEngine = indexQueryEngineFor(
+      'realm-search',
+      dbAdapter,
+      definitionLookup,
+      realm.virtualNetwork,
+    );
+    this.#queryFieldEngine = indexQueryEngineFor(
+      'query-fields',
       dbAdapter,
       definitionLookup,
       realm.virtualNetwork,
@@ -901,13 +913,13 @@ export class RealmIndexQueryEngine {
     // check has to read the realm's rows to learn there are none.
     for (let ref of refs) {
       if (
-        await this.#indexQueryEngine.hasInstanceType(this.realmURL, ref, opts)
+        await this.#queryFieldEngine.hasInstanceType(this.realmURL, ref, opts)
       ) {
         return false;
       }
     }
     for (let ref of refs) {
-      if (await this.#indexQueryEngine.hasFileType(this.realmURL, ref, opts)) {
+      if (await this.#queryFieldEngine.hasFileType(this.realmURL, ref, opts)) {
         return true;
       }
     }
@@ -1439,7 +1451,7 @@ export class RealmIndexQueryEngine {
           if (
             await this.queryTargetsFileMeta(query.filter, opts, fileMetaTargets)
           ) {
-            let { files, meta } = await this.#indexQueryEngine.searchFiles(
+            let { files, meta } = await this.#queryFieldEngine.searchFiles(
               this.realmURL,
               query,
               opts,
@@ -1449,7 +1461,7 @@ export class RealmIndexQueryEngine {
             );
             addToTotal(meta?.page?.total);
           } else {
-            let collection = await this.#indexQueryEngine.searchCards(
+            let collection = await this.#queryFieldEngine.searchCards(
               this.realmURL,
               query,
               opts,

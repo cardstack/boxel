@@ -56,6 +56,7 @@ import { vectorSidecarFor } from './vector-sidecar.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
+import { InvalidQueryError } from './invalid-query-error.ts';
 import {
   applyServerSearchPageBound,
   assembledLinkResourceBudget,
@@ -20245,13 +20246,23 @@ export class Realm {
         readable: () => policyScope === undefined,
         resolvedByServer,
       });
+      // The answer a search matching nothing gives: the engine says whether
+      // more follow on every paged search, and the page bound below gives
+      // every search a page.
+      let noMatchesDocument = () => {
+        let doc = emptySearchEntryDocument(searchEntryQuery);
+        let bounded = applyServerSearchPageBound(searchEntryQuery.itemQuery);
+        return bounded.page
+          ? {
+              ...doc,
+              meta: { ...doc.meta, page: { ...doc.meta.page, hasMore: false } },
+            }
+          : doc;
+      };
       let noRows = () =>
         createResponse({
           body: JSON.stringify(
-            markPolicyScoped(
-              emptySearchEntryDocument(searchEntryQuery),
-              scopedRealms,
-            ),
+            markPolicyScoped(noMatchesDocument(), scopedRealms),
             null,
             2,
           ),
@@ -20382,6 +20393,19 @@ export class Realm {
       if (e instanceof SearchRequestError) {
         return createResponse({
           body: JSON.stringify(buildSearchErrorBody(e.message)),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      // A query the engine refuses while it runs (Query V2 checks some
+      // members only once it reads the query's types) is the caller's
+      // mistake, answered with its code, never a 500.
+      if (e instanceof InvalidQueryError) {
+        return createResponse({
+          body: JSON.stringify(buildSearchErrorBody(e.message, 400, e.code)),
           init: {
             status: 400,
             headers: { 'content-type': SupportedMimeType.CardJson },

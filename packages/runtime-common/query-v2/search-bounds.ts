@@ -2,6 +2,21 @@ import { logger } from '../log.ts';
 import { setSignalDeadline } from '../db.ts';
 import type { Query } from './query.ts';
 import type { SearchEntryFieldset } from '../search-entry.ts';
+// One class for each refusal, shared with main's search-bounds.ts, so a
+// refusal from either engine is the same error to every caller that tests it
+// (`instanceof`, `isDefinitionsUnavailableError`).
+import {
+  DefinitionsUnavailableError,
+  SearchBoundError,
+  isDefinitionsUnavailableError,
+  type SearchBoundStatus,
+} from '../search-bounds.ts';
+export {
+  DefinitionsUnavailableError,
+  SearchBoundError,
+  isDefinitionsUnavailableError,
+  type SearchBoundStatus,
+};
 
 const log = logger('search-bounds');
 
@@ -716,21 +731,6 @@ export function isItemLegSearch(fieldset: SearchEntryFieldset): boolean {
 
 // The HTTP statuses a bound violation maps to. 408 for the time budget so a
 // client reads it as "took too long — narrow the query / retry".
-export type SearchBoundStatus = 400 | 408 | 503;
-
-export class SearchBoundError extends Error {
-  status: SearchBoundStatus;
-  // the grammar's code for a refused page or fan-out (`limit-exceeded`);
-  // a search cut off by the time budget (408) has none
-  code?: string;
-  constructor(status: SearchBoundStatus, message: string, code?: string) {
-    super(message);
-    this.status = status;
-    this.name = 'SearchBoundError';
-    let c = code ?? (status === 400 ? 'limit-exceeded' : undefined);
-    if (c) this.code = c;
-  }
-}
 
 // A search that needs a type's definition and could not read it: its module's
 // prerender failed, timed out or was aborted, or a cached row records that it
@@ -739,26 +739,6 @@ export class SearchBoundError extends Error {
 // rather than answered `ok, 0`, and — being a rejection — is never cached.
 // The time budget keeps its own 408.
 export const DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS = 5;
-export class DefinitionsUnavailableError extends SearchBoundError {
-  readonly retryAfterSeconds = DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS;
-  constructor(what: string, opts?: { cause?: unknown }) {
-    super(
-      503,
-      `the definition of ${what} is still loading; retry the search shortly`,
-      'definitions-unavailable',
-    );
-    if (opts?.cause !== undefined) {
-      (this as any).cause = opts.cause;
-    }
-    Object.setPrototypeOf(this, new.target.prototype);
-  }
-}
-
-export function isDefinitionsUnavailableError(
-  e: unknown,
-): e is DefinitionsUnavailableError {
-  return e instanceof DefinitionsUnavailableError;
-}
 
 // The bounds cap the item leg only, so a genuinely large or wide result set
 // belongs on the prerendered-HTML leg (rendered lazily, never live-serialized).
