@@ -1964,6 +1964,8 @@ export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
 export * from './index-query-engine.ts';
 export * from './index-writer.ts';
+export * from './vector-space.ts';
+export * from './vector-sidecar.ts';
 export * from './index-structure.ts';
 export * from './db.ts';
 export * from './sql-literal.ts';
