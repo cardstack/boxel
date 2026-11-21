@@ -86,6 +86,10 @@ import {
   runWithSearchTimeBudget,
   SearchBoundError,
   isDefinitionsUnavailableError,
+  pageSizeClampWarning,
+  takesDefaultPage,
+  withDefaultPageTruncation,
+  withPageSizeClampWarning,
 } from './search-bounds.ts';
 import {
   LinkShapePolicy,
@@ -21107,9 +21111,14 @@ export class Realm {
       // marks a render is set by the caller. Clamp an absent page to the
       // default so the query carries a LIMIT, and an over-maximum explicit one
       // to the maximum (logged, so a short page has an explanation somewhere).
-      searchEntryQuery.itemQuery = grammar.boundPage(
-        searchEntryQuery.itemQuery,
-      );
+      // A clamped page says so in `meta.warnings` (`page-size-clamped`), and
+      // the page the default gave a query that named none says so when it
+      // cut the answer short (`default-page-truncated`), on either leg.
+      let asked = searchEntryQuery.itemQuery;
+      searchEntryQuery.itemQuery = grammar.boundPage(asked);
+      let pageClamp = pageSizeClampWarning(asked, searchEntryQuery.itemQuery);
+      let defaultPage: { size?: unknown; number?: unknown } | undefined =
+        takesDefaultPage(asked) ? searchEntryQuery.itemQuery.page : undefined;
       if (columns) {
         // The page bound above holds on a table too: a table is values off
         // the index, never rendered, so its page is the item leg's page.
@@ -21175,11 +21184,17 @@ export class Realm {
         });
       // Cut an over-budget live search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
-      let doc = grammar.markPolicyScoped(
-        timeBudgeted
-          ? await runWithSearchTimeBudget(runSearch)
-          : await runSearch(),
-        scopedRealms,
+      let doc = withDefaultPageTruncation(
+        withPageSizeClampWarning(
+          grammar.markPolicyScoped(
+            timeBudgeted
+              ? await runWithSearchTimeBudget(runSearch)
+              : await runSearch(),
+            scopedRealms,
+          ),
+          pageClamp,
+        ),
+        defaultPage,
       );
       // A run's search runs on the index and answers each card it staged
       // as staged (see `#withStagedCards`).
