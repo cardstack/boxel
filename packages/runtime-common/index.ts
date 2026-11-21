@@ -2641,6 +2641,8 @@ export {
 } from './bot-command.ts';
 export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
+export * from './search-intent.ts';
+export * from './facet-declaration-change.ts';
 export * from './automation-runs.ts';
 export * from './automation-change-events.ts';
 export * from './automation-run-events.ts';
