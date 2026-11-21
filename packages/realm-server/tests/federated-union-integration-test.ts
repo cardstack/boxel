@@ -26,6 +26,7 @@ import {
   createTestPgAdapter,
   prepareTestDB,
 } from './helpers/index.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 import { searchStatementsJit } from './helpers/jit-guard.ts';
 
 // A merged federated search over realms on one database runs as one
@@ -243,6 +244,7 @@ type Answer = {
 };
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let adapter: PgAdapter;
   let engine: IndexQueryEngine;
   let vectors = false;

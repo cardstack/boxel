@@ -30,6 +30,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A create is the one operation whose type comes from the caller: an envelope
 // entry with no href names the type it mints in `data.meta.adoptsFrom`. These
@@ -170,6 +171,7 @@ function create(
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let shop: Realm;
   let other: Realm;
   let request: SuperTest<Test>;

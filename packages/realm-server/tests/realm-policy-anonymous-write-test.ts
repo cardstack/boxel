@@ -30,6 +30,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A newsroom nobody may read or write without signing in, governed by a
 // policy card in an Org realm. Its policy lets callers who aren't signed in
@@ -313,6 +314,7 @@ const POLICY = JSON.stringify({
 });
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let newsroom: Realm;
   let board: Realm;
   let org: Realm;

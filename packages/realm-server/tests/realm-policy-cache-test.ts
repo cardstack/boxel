@@ -13,6 +13,7 @@ import {
 } from '@cardstack/runtime-common';
 import { RealmPolicyCache } from '@cardstack/runtime-common/card-operations';
 import { stubPolicyCache } from './helpers/policy-cache-stub.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // The compiled-policy cache's own logic, over an environment held in memory:
 // no realm, no database, no prerender.
@@ -31,6 +32,7 @@ async function until(done: () => boolean, what: string) {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   hooks.afterEach(function () {
     delete (globalThis as { __boxelNow?: number }).__boxelNow;
   });

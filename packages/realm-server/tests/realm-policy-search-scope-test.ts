@@ -26,6 +26,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A caller a realm policy admits reads a search's every output through the
 // grants: its rows, its facet counts, its link labels and its scores. So a
@@ -130,6 +131,7 @@ function policyCard() {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let newsroom: Realm;
   let virtualNetwork: VirtualNetwork;
   let org: Realm;

@@ -31,6 +31,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // Authorization infrastructure stays outside what a realm's policy can grant.
 // An operation whose declaration is `nonGrantable`, and any operation on the
@@ -234,6 +235,7 @@ function adoptsFrom(ref: { module: string; name: string }) {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let school: Realm;
   let education: Realm;
   let request: SuperTest<Test>;

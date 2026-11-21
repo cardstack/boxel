@@ -31,6 +31,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // What a policy card reports of itself when asked to validate: every issue
 // compiling it records, and the rules and grants that compile, which are the
@@ -148,6 +149,7 @@ function invoke(
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let db: PgAdapter;

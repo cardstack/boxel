@@ -21,6 +21,7 @@ import {
   withoutMisreadings,
 } from '@cardstack/runtime-common/card-operations';
 import { runBxlTransform } from '@cardstack/bxl/transform';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A query grant's predicate compiled to a search filter, driven through the
 // compiled-policy cache over an environment held in memory: no realm, no
@@ -349,7 +350,8 @@ function bind(
 const ANCHOR = { 'item.on': CLASSROOM };
 const ACTOR = { $ref: 'actor' };
 
-module(basename(import.meta.filename), function () {
+module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   test('equality with the caller compiles to an `eq`, which a search fills in with the caller', async function (assert) {
     let { filter, issues } = await filterFor('.providerId == actor()');
     assert.deepEqual(issues, []);

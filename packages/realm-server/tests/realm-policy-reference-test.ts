@@ -10,6 +10,7 @@ import {
   realmConfigCardJSON,
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A card in a realm this suite never starts. Nothing here follows the
 // pointer, so the card it names does not need to exist.
@@ -60,7 +61,8 @@ const NOTE = {
   },
 };
 
-module(basename(import.meta.filename), function () {
+module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   module('a realm whose realm.json names its policy card', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/policy-reference/');
     let testRealm: Realm;

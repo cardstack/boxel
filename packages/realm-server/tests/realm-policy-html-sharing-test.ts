@@ -30,6 +30,7 @@ import {
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { settlePrerenderHtmlJobs } from './helpers/indexing.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // ============================================================================
 // Which prerendered formats a read or a query serves, and who decides.
@@ -239,6 +240,7 @@ interface EntryBody {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let notices: Realm;

@@ -48,17 +48,21 @@ import {
   separatedByCommas,
   typesContains,
 } from '../expression.ts';
+import { type StoreGrantKeys, grantedTypeTest } from './store-grant.ts';
 
 // The dictionary ids the set's statement names: the realm, the types whose
-// chain names the set's type, and the paths it reads.
+// chain names the set's type (and, with `grant`, a realm policy's grant the
+// store carries, that it admits: store-grant.ts), and the paths it reads.
 export function storedComparisonIds({
   realm,
   typeKeys,
   paths,
+  grant,
 }: {
   realm: string;
   typeKeys: string[];
   paths: string[];
+  grant?: StoreGrantKeys;
 }): Expression {
   return [
     'SELECT (SELECT id FROM boxel_index_value_realms WHERE realm_url =',
@@ -69,7 +73,9 @@ export function storedComparisonIds({
     ...(any(
       typeKeys.map((key) => [typesContains(key, 't.types')]),
     ) as Expression),
-    ")) AS types, (SELECT COALESCE(json_object_agg(p.path, p.id), '{}'::json) FROM boxel_index_value_paths AS p WHERE p.path IN (",
+    ')',
+    ...(grant ? grantedTypeTest('t.types', grant) : []),
+    ") AS types, (SELECT COALESCE(json_object_agg(p.path, p.id), '{}'::json) FROM boxel_index_value_paths AS p WHERE p.path IN (",
     ...(separatedByCommas(paths.map((p) => [param(p)])) as Expression),
     ')) AS paths',
   ];

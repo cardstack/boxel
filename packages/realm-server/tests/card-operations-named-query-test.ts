@@ -17,6 +17,7 @@ import {
   type ResolvedNamedQuery,
 } from '@cardstack/runtime-common/card-operations';
 import type { Definition } from '@cardstack/runtime-common/definitions';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // ============================================================================
 // Resolving a named query against a type's stored definition.
@@ -178,7 +179,8 @@ async function resolves(
   return resolved;
 }
 
-module(basename(import.meta.filename), function () {
+module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   test('the named form is decided by `operation` alone', function (assert) {
     assert.true(isNamedQueryPayload({ operation: 'byStatus', on: REPORT }));
     assert.false(

@@ -36,6 +36,7 @@ import {
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { holdIndexingLane } from './helpers/indexing.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // The school example realms, served exactly as they ship in
 // `packages/school-example-realm`. The three realms are mounted side by side,
@@ -117,6 +118,11 @@ function errorOf(response: Response) {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks, {
+    except: [
+      'a scoped listing reads the index as many times as the IT admin’s unscoped one',
+    ],
+  });
   let code: Realm;
   let org: Realm;
   let education: Realm;

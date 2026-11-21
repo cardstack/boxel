@@ -34,6 +34,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A stored-bytes read is resolved before any definition, so the policy has no
 // type handed to it the way every other behavior does. It types the target
@@ -242,6 +243,7 @@ const GONE_PACKAGE_README = `${EDUCATION}public/gone/pkgs/README.md`;
 const DRAFT_ROOM_SOURCE = `${EDUCATION}drafts/room.json`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let educationAdapter: RealmAdapter;
   let org: Realm;
