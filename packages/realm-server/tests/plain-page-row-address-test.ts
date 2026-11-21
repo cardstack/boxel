@@ -274,7 +274,11 @@ module(basename(import.meta.filename), function () {
         ),
         "no row is looked up through the realm's (realm_url, type) index",
       );
-      let bound = 1.5 * (await onePassBuffers()) + 2 * N;
+      // Per row: the row's own fetch and the live-row filter's probe for a
+      // render error, which with no statistics may go through either render-
+      // error index; the instance-errors partial index (counts-only search)
+      // reads one more page per probe than the (url, realm_url, ...) one.
+      let bound = 1.5 * (await onePassBuffers()) + 3 * N;
       assert.true(
         buffers <= bound,
         `the page read ${buffers} buffers, within ${bound}`,

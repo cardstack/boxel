@@ -616,9 +616,17 @@ export abstract class Facets extends SortWindow {
     query: FacetQuery,
     opts: QueryOptions,
     prefix: string,
+    realmURL: URL,
     shared?: FacetSource,
   ): { ctes: CardExpression[]; columns: CardExpression } {
-    return this.#facetSql(query.works, query.parts, opts, prefix, shared);
+    return this.#facetSql(
+      query.works,
+      query.parts,
+      opts,
+      prefix,
+      realmURL,
+      shared,
+    );
   }
 
   // Counts every requested facet over its match set, in one statement: each
@@ -658,7 +666,7 @@ export abstract class Facets extends SortWindow {
         ]),
       );
     } else {
-      [row] = await this.#facetStatement(works, parts, opts);
+      [row] = await this.#facetStatement(works, parts, opts, realmURL);
     }
     // A facet whose ranges come from its statistics.
     let later = new Map<FacetWork, string>();
@@ -680,7 +688,7 @@ export abstract class Facets extends SortWindow {
     });
     let [laterRow] =
       laterParts.length > 0
-        ? await this.#facetStatement(laterWorks, laterParts, opts)
+        ? await this.#facetStatement(laterWorks, laterParts, opts, realmURL)
         : [];
     for (let [index, work] of works.entries()) {
       let { plan } = work;
@@ -793,8 +801,9 @@ export abstract class Facets extends SortWindow {
     works: FacetWork[],
     parts: CardExpression[],
     opts: QueryOptions,
+    realmURL: URL,
   ): Promise<Record<string, unknown>[]> {
-    let { ctes, columns } = this.#facetSql(works, parts, opts, 'p');
+    let { ctes, columns } = this.#facetSql(works, parts, opts, 'p', realmURL);
     return await this.queryCards(
       ['WITH', ...separatedByCommas(ctes), 'SELECT', ...columns],
       opts.timings,
@@ -807,6 +816,7 @@ export abstract class Facets extends SortWindow {
     parts: CardExpression[],
     opts: QueryOptions,
     prefix: string,
+    realmURL: URL,
     shared?: FacetSource,
   ): { ctes: CardExpression[]; columns: CardExpression } {
     let stored = this.#readsValueStore(opts);
@@ -846,6 +856,7 @@ export abstract class Facets extends SortWindow {
           first && !from,
           stored,
           opts,
+          realmURL,
           from,
         ),
         ...this.#facetRowCtes(name, own, stored, opts),
@@ -865,12 +876,20 @@ export abstract class Facets extends SortWindow {
   // a number (`kn`) the facet rows count it by, and, where the value store
   // holds the card (a live card of the promoted index), its realm, type and
   // card ids there; a card the store does not hold has no `card_id`.
+  //
+  // The store's card ids are read for the search's own realms only
+  // (`realmURL`, a realm or a union of them), through the cards' (realm_url,
+  // url) key. Joined on the match's realm alone, the planner could read the
+  // table for every realm on the database: a match set it took for
+  // thousands of rows hash-joined a scan of all of them (117k rows, 2,855
+  // pages, to count one realm's 12k products).
   #matchSetCte(
     name: string,
     condition: CardExpression,
     first: boolean,
     stored: boolean,
     opts: QueryOptions,
+    realmURL: URL,
     from?: string,
   ): CardExpression {
     // Index rows are unique by key; only a condition that reads a list as a
@@ -899,7 +918,9 @@ export abstract class Facets extends SortWindow {
     return [
       `${name} AS MATERIALIZED (SELECT m.realm_url, m.url, m.type, m.type_key, ROW_NUMBER() OVER () AS kn, vr.id AS realm_id, vt.id AS type_id, vc.id AS card_id FROM`,
       ...matches,
-      `LEFT JOIN boxel_index_value_realms AS vr ON vr.realm_url = m.realm_url LEFT JOIN boxel_index_value_types AS vt ON vt.realm_url = m.realm_url AND vt.type = COALESCE(m.type_key, '') LEFT JOIN boxel_index_value_cards AS vc ON m.type = 'instance' AND vc.realm_url = m.realm_url AND vc.url = m.url AND EXISTS (SELECT 1 FROM boxel_index_values AS vk WHERE vk.realm_id = vr.id AND vk.type_id = vt.id AND vk.path_id = (SELECT id FROM boxel_index_value_paths WHERE path = '') AND vk.txt = '' AND vk.card_id = vc.id AND vk.kind = 'c'))`,
+      `LEFT JOIN boxel_index_value_realms AS vr ON vr.realm_url = m.realm_url LEFT JOIN boxel_index_value_types AS vt ON vt.realm_url = m.realm_url AND vt.type = COALESCE(m.type_key, '') LEFT JOIN boxel_index_value_cards AS vc ON m.type = 'instance' AND`,
+      ...realmIs('vc.realm_url', realmURL),
+      `AND vc.realm_url = m.realm_url AND vc.url = m.url AND EXISTS (SELECT 1 FROM boxel_index_values AS vk WHERE vk.realm_id = vr.id AND vk.type_id = vt.id AND vk.path_id = (SELECT id FROM boxel_index_value_paths WHERE path = '') AND vk.txt = '' AND vk.card_id = vc.id AND vk.kind = 'c'))`,
     ];
   }
 

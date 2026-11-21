@@ -225,6 +225,14 @@ export type ReadContext = { signal?: AbortSignal; reader?: DBAdapter };
 
 export type QueryOptions = WIPOptions & {
   includeErrors?: true;
+  // Internal to a counts-only html search (non-live-rows.ts): the search
+  // reads only the realm's rows that are not live cards, and a search already
+  // split into its live and non-live counts is not split again.
+  nonLiveOnly?: true;
+  countsOnlySplit?: true;
+  // A counts-only html search whose filter matches error rows: its match
+  // set is the value store's live matches and those rows.
+  liveFromStore?: true;
   // Set by a federated merge: each paged row carries the values the query
   // sorted it by (`_sortValues`), so rows from several realms can be ordered
   // by the query's own sort.

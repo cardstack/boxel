@@ -595,6 +595,9 @@ export class RealmIndexQueryEngine {
       let { includeErrors: _drop, ...rest } = engineOpts;
       sqlOpts = rest;
     } else if (fieldset.html) {
+      // A counts-only page (`size: 0`) counts the error rows too, as a paged
+      // html search lists them; the engine counts them apart from the live
+      // cards the value store counts (non-live-rows.ts).
       sqlOpts = { ...engineOpts, includeErrors: true };
     } else {
       sqlOpts = engineOpts;
