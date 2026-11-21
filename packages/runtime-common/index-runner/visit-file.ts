@@ -639,6 +639,7 @@ function mergeVisitDiagnostics(
     // taking one visit's value would leave the other visit's plumbing
     // looking like measured step time.
     'unattributedMs',
+    'postRenderResetMs',
   ] as const) {
     let total = sum(index[key], html[key]);
     if (total !== undefined) {
