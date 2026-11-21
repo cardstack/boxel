@@ -2653,6 +2653,26 @@ export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
 export * from './search-intent.ts';
 export * from './facet-declaration-change.ts';
+// Test-facing exports the Query V2 suites read through the barrel.
+export { hasVectorIndex, collectSearchDocVectors } from './vector-index.ts';
+export {
+  VECTOR_EXACT_THRESHOLD,
+  setVectorSearchSettings,
+  vectorStoreFor,
+} from './vector-store.ts';
+export {
+  resolveTypeReferences,
+  searchTypeReferenceContext,
+  parseTypeReference,
+} from './query-v2/type-reference.ts';
+export {
+  resolveRelativeDateInZone,
+  withViewerTimeZone,
+  clockInZone,
+} from './query-v2/time-zone.ts';
+export { logSearchResponse } from './log-query.ts';
+export { syncLogFile, type LogLineIndexHost } from './log-line-index.ts';
+export { BASE_INDEX_FIELDS } from './facet-declarations.ts';
 export * from './automation-runs.ts';
 export * from './automation-change-events.ts';
 export * from './automation-run-events.ts';
