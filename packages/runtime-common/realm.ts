@@ -77,12 +77,14 @@ import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import { InvalidQueryError } from './invalid-query-error.ts';
-import { deferredSelectRefusal } from './query-engine/deferred-select.ts';
 import {
   realmEntryGrammar,
   type RealmEntryQuery,
 } from './query-engine/realm-entry-grammar.ts';
-import type { SearchEntryQuery as V2SearchEntryQuery } from './query-v2/search-entry.ts';
+import type {
+  SearchColumnsDocument,
+  SearchEntryQuery as V2SearchEntryQuery,
+} from './query-v2/search-entry.ts';
 import {
   assembledLinkResourceBudget,
   runWithSearchTimeBudget,
@@ -675,9 +677,10 @@ import { isUserOfMatrixServer } from './matrix-server-name.ts';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler.ts';
 
 import RealmPermissionChecker from './realm-permission-checker.ts';
-import type {
-  ResponseWithNodeStream,
-  VirtualNetwork,
+import {
+  mergeAbortSignals,
+  type ResponseWithNodeStream,
+  type VirtualNetwork,
 } from './virtual-network.ts';
 
 import { RealmAuthDataSource } from './realm-auth-data-source.ts';
@@ -4011,6 +4014,20 @@ export class Realm {
       .query(
         '/_search',
         SupportedMimeType.CardJson,
+        this.searchEntriesResponse.bind(this),
+        SEARCH_ROUTE,
+      )
+      // A `select` search can answer one row a line, as NDJSON or JSONL
+      // (the same format under two names).
+      .query(
+        '/_search',
+        SupportedMimeType.NDJSON,
+        this.searchEntriesResponse.bind(this),
+        SEARCH_ROUTE,
+      )
+      .query(
+        '/_search',
+        SupportedMimeType.JSONL,
         this.searchEntriesResponse.bind(this),
         SEARCH_ROUTE,
       )
@@ -10707,6 +10724,16 @@ export class Realm {
     }
     requestContext.anonymousCaller = caller;
     return true;
+  }
+
+  // A `select` search of this realm a federated search names alone: the
+  // table its own `_search` answers, for a query the federated route has
+  // already scoped to the caller (`policyScopedQuery`, `grantsForType`).
+  async searchColumns(
+    query: V2SearchEntryQuery,
+    opts?: { cacheOnlyDefinitions?: boolean; signal?: AbortSignal },
+  ): Promise<SearchColumnsDocument> {
+    return await this.#realmIndexQueryEngine.searchColumns(query, opts);
   }
 
   // For each card a policy-scoped search's `linkedFrom` names (in its filter
@@ -20730,10 +20757,6 @@ export class Realm {
     }
 
     try {
-      let deferredSelect = deferredSelectRefusal(payload);
-      if (deferredSelect) {
-        throw deferredSelect;
-      }
       // Query V2's grammar, or main's under `BOXEL_QUERY_ENGINE=legacy`
       // (realm-entry-grammar.ts).
       let grammar = realmEntryGrammar();
@@ -20745,6 +20768,24 @@ export class Realm {
         canonicalize: (url) => this.#virtualNetwork.unresolveURL(url),
         resolveCardId: (id) => this.#virtualNetwork.toURLHref(id),
       });
+      // `select`: a table of values read off each row (Query V2's grammar
+      // only; main's refuses the member).
+      let columns = grammar.v2
+        ? (searchEntryQuery as V2SearchEntryQuery).columns
+        : undefined;
+      let accept = request.headers.get('Accept') ?? '';
+      let lineType = accept.includes(SupportedMimeType.JSONL)
+        ? SupportedMimeType.JSONL
+        : accept.includes(SupportedMimeType.NDJSON)
+          ? SupportedMimeType.NDJSON
+          : undefined;
+      if (lineType && !columns) {
+        throw new SearchRequestError(
+          'invalid-query',
+          'Invalid query: an NDJSON or JSONL answer is a table: give the query a select',
+          'missing-member',
+        );
+      }
       let duringPrerender = isDuringPrerenderRequest(request);
       // What this realm's policy contributes, for a caller its ACL declined.
       // A caller it allows is never asked: a policy widens what the ACL
@@ -20797,24 +20838,59 @@ export class Realm {
         readable: () => policyScope === undefined,
         resolvedByServer,
       });
+      // A `select` search answers a table, as JSON, or as one JSON object a
+      // line (NDJSON or JSONL, the same format under two names) ending in a
+      // `{ "meta" }` line.
+      let columnsResponse = (doc: SearchColumnsDocument) =>
+        lineType
+          ? createResponse({
+              body:
+                doc.rows
+                  .map((row) =>
+                    JSON.stringify(
+                      Object.fromEntries(
+                        doc.columns.map((c, i) => [c, row[i] ?? null]),
+                      ),
+                    ),
+                  )
+                  .join('\n') +
+                (doc.rows.length ? '\n' : '') +
+                JSON.stringify({ meta: doc.meta }) +
+                '\n',
+              init: { headers: { 'content-type': lineType } },
+              requestContext,
+            })
+          : createResponse({
+              body: JSON.stringify(doc),
+              init: {
+                headers: { 'content-type': SupportedMimeType.CardJson },
+              },
+              requestContext,
+            });
       let noRows = () =>
-        createResponse({
-          body: JSON.stringify(
-            grammar.markPolicyScoped(
-              grammar.emptySearchEntryDocument({
-                ...searchEntryQuery,
-                itemQuery: grammar.boundPage(searchEntryQuery.itemQuery),
-              }),
-              scopedRealms,
-            ),
-            null,
-            2,
-          ),
-          init: {
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
+        columns
+          ? columnsResponse({
+              columns: ['id', ...columns.map((c) => c.name)],
+              rows: [],
+              meta: { page: { total: 0 } },
+            })
+          : createResponse({
+              body: JSON.stringify(
+                grammar.markPolicyScoped(
+                  grammar.emptySearchEntryDocument({
+                    ...searchEntryQuery,
+                    itemQuery: grammar.boundPage(searchEntryQuery.itemQuery),
+                  }),
+                  scopedRealms,
+                ),
+                null,
+                2,
+              ),
+              init: {
+                headers: { 'content-type': SupportedMimeType.CardJson },
+              },
+              requestContext,
+            });
       if (admittingNothing || policyScope?.kind === 'denied') {
         return noRows();
       }
@@ -20886,6 +20962,36 @@ export class Realm {
       searchEntryQuery.itemQuery = grammar.boundPage(
         searchEntryQuery.itemQuery,
       );
+      if (columns) {
+        // The page bound above holds on a table too: a table is values off
+        // the index, never rendered, so its page is the item leg's page.
+        let columnsQuery = searchEntryQuery as V2SearchEntryQuery;
+        // The budget's signal and the request's own both stop the table's
+        // SQL, as they stop the item leg's below.
+        let runColumns = (budgetSignal?: AbortSignal) => {
+          let signal = mergeAbortSignals(budgetSignal, request.signal);
+          return this.#realmIndexQueryEngine.searchColumns(columnsQuery, {
+            cacheOnlyDefinitions: duringPrerender,
+            ...(signal ? { signal } : {}),
+          });
+        };
+        try {
+          return columnsResponse(
+            duringPrerender
+              ? await runColumns()
+              : await runWithSearchTimeBudget(runColumns),
+          );
+        } catch (e) {
+          if (e instanceof InvalidQueryError) {
+            throw new SearchRequestError(
+              'invalid-query',
+              `Invalid query: ${e.message}`,
+              e.code,
+            );
+          }
+          throw e;
+        }
+      }
       // Classified from the page the query will actually run with — the clamp
       // above has already been applied — because that is the only bound on
       // this read's result count available before it runs, and the link mode

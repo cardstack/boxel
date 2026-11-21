@@ -536,6 +536,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `DELETE ${SupportedMimeType.CardJson} /|/.+(?<!.json)`,
           `GET ${SupportedMimeType.CardJson} /_search`,
           `QUERY ${SupportedMimeType.CardJson} /_search`,
+          `QUERY ${SupportedMimeType.JSONL} /_search`,
+          `QUERY ${SupportedMimeType.NDJSON} /_search`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
           `POST ${SupportedMimeType.JSONAPI} /_operations`,
           `POST ${SupportedMimeType.JSON} /_capabilities`,
@@ -655,6 +657,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `DELETE ${SupportedMimeType.CardJson} /|/.+(?<!.json)`,
           `GET ${SupportedMimeType.CardJson} /_search`,
           `QUERY ${SupportedMimeType.CardJson} /_search`,
+          `QUERY ${SupportedMimeType.JSONL} /_search`,
+          `QUERY ${SupportedMimeType.NDJSON} /_search`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
           `POST ${SupportedMimeType.JSONAPI} /_operations`,
           `POST ${SupportedMimeType.JSON} /_capabilities`,
@@ -692,6 +696,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         [
           `GET ${SupportedMimeType.CardJson} /_search`,
           `QUERY ${SupportedMimeType.CardJson} /_search`,
+          `QUERY ${SupportedMimeType.JSONL} /_search`,
+          `QUERY ${SupportedMimeType.NDJSON} /_search`,
         ].sort(),
         'the search, which answers such a user with no rows as a federated search does',
       );

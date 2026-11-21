@@ -36,6 +36,11 @@ export const SupportedMimeType = {
   BoxelOperations:
     `application/vnd.api+json;ext="${BOXEL_OPERATIONS_EXT}"` as const,
   JSON: 'application/json',
+  // A `select` search's rows, one JSON object a line, then a `{ "meta" }`
+  // line: what a table loader (DuckDB's read_json) reads directly.
+  NDJSON: 'application/x-ndjson',
+  // The same lines under the type the realm serves `.jsonl` files with.
+  JSONL: 'application/jsonl',
   CardDependencies: 'application/json',
   CardTypeSummary: 'application/json',
   OctetStream: 'application/octet-stream',
