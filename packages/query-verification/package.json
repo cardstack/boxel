@@ -1,0 +1,26 @@
+{
+  "name": "@cardstack/query-verification",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./conformance": "./src/conformance.ts",
+    "./known": "./src/known.ts",
+    "./engine-fixture": "./src/engine-fixture.ts",
+    "./sqlite-adapter": "./src/sqlite-adapter.ts"
+  },
+  "scripts": {
+    "prove": "cd lean && lake build QueryV2 && out=$(lake env lean Audit.lean) && echo \"$out\" && ! echo \"$out\" | grep -q sorryAx",
+    "vectors": "node src/build-vectors.ts",
+    "vectors:check": "node src/build-vectors.ts --check",
+    "test": "node src/check-grammar.ts && node src/check-sqlite.ts",
+    "lint": "eslint . --report-unused-disable-directives --cache",
+    "lint:fix": "eslint . --report-unused-disable-directives --fix"
+  },
+  "dependencies": {
+    "@cardstack/runtime-common": "workspace:*"
+  },
+  "devDependencies": {
+    "eslint": "catalog:"
+  }
+}

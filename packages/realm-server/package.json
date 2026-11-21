@@ -13,6 +13,7 @@
     "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/postgres": "workspace:*",
+    "@cardstack/query-verification": "workspace:*",
     "@cardstack/realm-test-harness": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@glint/ember-tsc": "catalog:",
