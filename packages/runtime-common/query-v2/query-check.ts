@@ -11,7 +11,8 @@ import { isEqual } from 'lodash-es';
 import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
 import qs from 'qs';
 import { assertJSONValue, assertJSONPrimitive } from '../json-validation.ts';
-import type { InvalidQueryError } from '../invalid-query-error.ts';
+import { InvalidQueryError } from '../invalid-query-error.ts';
+import { parsePathSpecifier } from '../path-specifier.ts';
 import {
   type FilterOperatorName,
   type GrammarScopeName,
@@ -718,7 +719,30 @@ const FILTER_OPERATOR_ASSERTS: Record<FilterOperatorName, FilterCheck> = {
   linkedFrom: (f, p) => assertLinkedFrom(f.linkedFrom, p.concat('linkedFrom')),
   pattern: (f, p) => assertStringKeyedFilter(f, p, 'pattern'),
   regex: (f, p) => assertStringKeyedFilter(f, p, 'regex'),
+  paths: assertPathsFilter,
 };
+
+// A `paths` filter: realm path prefixes, as main's grammar reads them.
+function assertPathsFilter(filter: any, pointer: string[]): void {
+  let pathsPointer = pointer.concat('paths');
+  if (
+    !Array.isArray(filter.paths) ||
+    filter.paths.some((path: unknown) => typeof path !== 'string')
+  ) {
+    throw new InvalidQueryError(
+      `${pathsPointer.join('/')}: paths must be a list of path prefixes`,
+      'invalid-value',
+    );
+  }
+  let parsed = parsePathSpecifier(filter.paths);
+  if (!parsed.ok) {
+    let [first] = parsed.errors;
+    throw new InvalidQueryError(
+      `${pathsPointer.concat(String(first.prefixIndex)).join('/')}: ${first.message}`,
+      'invalid-value',
+    );
+  }
+}
 const FILTER_OPERATORS = Object.keys(
   FILTER_OPERATOR_ASSERTS,
 ) as FilterOperatorName[];

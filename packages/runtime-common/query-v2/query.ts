@@ -354,10 +354,21 @@ export type Filter =
   | NearFilter
   | PatternFilter
   | RegexFilter
+  | PathsFilter
   | CardTypeFilter;
 
 export interface TypedFilter {
   on?: CodeRef;
+}
+
+// The entries stored at realm paths a path specifier names (ADR 037): a list
+// of prefixes, relative to the root of each realm the search reads, and an
+// entry matches when its file falls under any of them. `blog/` matches every
+// entry stored in `blog/`, and `blog/post-1.json` that one card or file. An
+// empty list has no path limit. A policy that limits a search grant to some
+// paths composes one of these into the search it scopes.
+export interface PathsFilter extends TypedFilter {
+  paths: string[];
 }
 
 // The anchorless sort keys: the column-backed general fields plus the
