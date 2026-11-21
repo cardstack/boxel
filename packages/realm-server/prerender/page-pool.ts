@@ -1582,9 +1582,7 @@ export class PagePool {
     // where the initial warm is often still running — closes that browser as
     // soon as this resolves. A standby that completed afterwards would add
     // itself to `#standbys` holding a page on the replaced browser, where a
-    // later `getPage` can commandeer it, and its `#creatingStandbys--` would
-    // land below the zero this method resets the counter to, under-reporting
-    // pool occupancy for the life of the process. Pinned by
+    // later `getPage` can commandeer it. Pinned by
     // `tests/page-pool-standby-refill-test.ts`.
     //
     // Bumping the close generation first is what keeps that wait bounded. The
@@ -1625,8 +1623,23 @@ export class PagePool {
     this.#fileAdmission.clear();
     this.#reducedFileAdmission.clear();
     this.#unresponsiveTabSwaps.clear();
+    // The waits above leave room for a refill to start while the pool is
+    // closing: the refill slot is cleared at the top, so any `getPage` or
+    // landing close kicks a fresh one under the generation bumped there, and
+    // it creates on the browser being replaced. Bumping again makes that
+    // refill stale too, so it stops at its next check and a standby it is
+    // still booting is discarded rather than added after `#standbys` was
+    // cleared above.
+    //
+    // `#creatingStandbys` is deliberately not reset. Every creation balances
+    // its own increment in a `finally`, including one still in flight here,
+    // so a reset to zero would send the counter negative when that creation
+    // settles. A negative count makes the context budget look free while it
+    // is spent: callers that should wait for a tab throw "No standby page
+    // available" instead, and the refill oversubscribes the browser, for the
+    // life of the process.
+    this.#closeGeneration++;
     this.#ensuringStandbys = null;
-    this.#creatingStandbys = 0;
     // Callers parked on the closed pool re-select against what comes next —
     // a restarted browser's standbys, or a throw if nothing can be made.
     this.#wakeTabWaiters();
@@ -2001,7 +2014,7 @@ export class PagePool {
       }
       attempt++;
       try {
-        return await this.#createStandby();
+        return await this.#createStandby(refillGeneration);
       } catch (e) {
         let message = `Standby creation attempt ${attempt} failed (page pool capacity ${this.#totalContextCount()}/${this.#maxPages + 1}):`;
         if (isExpectedStandbyTargetNotReadyError(e)) {
@@ -2019,7 +2032,12 @@ export class PagePool {
     return undefined;
   }
 
-  async #createStandby(): Promise<StandbyEntry> {
+  // Resolves undefined when the pool was closed while the page booted: the
+  // page lives on the browser that close is replacing, so it is closed here
+  // rather than added to `#standbys`.
+  async #createStandby(
+    refillGeneration: number,
+  ): Promise<StandbyEntry | undefined> {
     this.#creatingStandbys++;
     let context: BrowserContext | undefined;
     try {
@@ -2035,6 +2053,14 @@ export class PagePool {
       let pageId = uuidv4();
       await this.#attachPageObservability(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
+      if (this.#closeGeneration !== refillGeneration) {
+        try {
+          await context.close();
+        } catch (closeErr) {
+          log.debug('Error closing standby context after close:', closeErr);
+        }
+        return undefined;
+      }
       let entry: StandbyEntry = {
         type: 'standby',
         context,
@@ -4041,6 +4067,23 @@ export class PagePool {
   // assert the cap holds across commandeers, releases and contraction.
   __test_liveTabCount(): number {
     return this.#liveEntryCount();
+  }
+
+  // Test-only seam: the context-budget accounting the refill and the
+  // wait-or-throw decision read, so tests can assert it stays balanced
+  // across failed creations and closes.
+  __test_contextBudget(): {
+    creating: number;
+    standbys: number;
+    used: number;
+    budget: number;
+  } {
+    return {
+      creating: this.#creatingStandbys,
+      standbys: this.#standbys.size,
+      used: this.#totalContextCount(),
+      budget: this.#maxPages + 1,
+    };
   }
 
   // Test-only seam: invokes the saturation-detection hook the way
