@@ -52,6 +52,11 @@ import {
 } from './vector-index-writer.ts';
 export type { VectorSidecarReader } from './vector-index-writer.ts';
 import { vectorStoreFor } from './vector-store.ts';
+import {
+  syncLogLineIndex,
+  type LogFileReader,
+  currentLogLineCount,
+} from './log-line-index.ts';
 import { collectSearchDocPassages } from './passage-index.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
@@ -183,6 +188,9 @@ export class IndexWriter {
       // Reads a card's vector sidecar (`<card>.vectors.jsonl`) by the card's
       // URL, with its modified time; undefined when it has none.
       readVectorSidecar?: VectorSidecarReader;
+      // Reads a log file (`.jsonl`, `.log`) by URL, for its line rows
+      // (`log-line-index.ts`); undefined when it's gone.
+      readLogFile?: LogFileReader;
     },
   ) {
     let batch = new Batch(
@@ -947,6 +955,7 @@ export class Batch {
   // opposed to an incremental fan-out; recorded on the ledger row.
   #fullRealm = false;
   #readVectorSidecar: VectorSidecarReader | undefined;
+  #readLogFile: LogFileReader | undefined;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
   private jobInfo?: JobInfo;
@@ -962,6 +971,9 @@ export class Batch {
       // Reads a card's vector sidecar (`<card>.vectors.jsonl`) by the card's
       // URL, with its modified time; undefined when it has none.
       readVectorSidecar?: VectorSidecarReader;
+      // Reads a log file (`.jsonl`, `.log`) by URL, for its line rows
+      // (`log-line-index.ts`); undefined when it's gone.
+      readLogFile?: LogFileReader;
     },
   ) {
     this.realmURL = realmURL;
@@ -972,6 +984,7 @@ export class Batch {
       opts?.splitPrerenderHtml ?? dbAdapter.kind === 'pg';
     this.#prerenderHtmlOnly = opts?.prerenderHtmlOnly ?? false;
     this.#readVectorSidecar = opts?.readVectorSidecar;
+    this.#readLogFile = opts?.readLogFile;
     this.#stagingId =
       jobInfo && jobInfo.jobId > 0
         ? jobStagingId(jobInfo.jobId, jobInfo.reservationId)
@@ -1499,6 +1512,25 @@ export class Batch {
       };
     }
     return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
+  }
+
+  // A log's line count as it stands now, for the log's visit to hand its file
+  // extract (`currentLogLineCount`). Undefined for any other file, or a log
+  // this batch can't read.
+  async currentLogLineCount(
+    url: string,
+    contentSize: number,
+  ): Promise<number | undefined> {
+    return await currentLogLineCount(
+      {
+        dbAdapter: this.#dbAdapter,
+        realmURL: this.realmURL.href,
+        query: (expression) => this.#query(expression),
+        readLogFile: this.#readLogFile,
+      },
+      url,
+      contentSize,
+    );
   }
 
   private get nodeResolvedInvalidations() {
@@ -4199,6 +4231,7 @@ export class Batch {
       });
       await this.#syncVectorIndex();
       await this.#syncPassageIndex();
+      await this.#syncLogLineIndex();
       await this.#syncWordList();
 
       // Publish this pass's `prerendered_html_pending` rows, UNLESS this is a
@@ -4259,6 +4292,20 @@ export class Batch {
         [filter],
       ]),
     ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'search_doc'>[];
+  }
+
+  // Keeps `boxel_log_lines` in step with every log this pass staged: only
+  // the appended lines when a log has only grown (`log-line-index.ts`).
+  async #syncLogLineIndex() {
+    await syncLogLineIndex(
+      {
+        dbAdapter: this.#dbAdapter,
+        realmURL: this.realmURL.href,
+        query: (expression) => this.#query(expression),
+        readLogFile: this.#readLogFile,
+      },
+      [...this.#invalidations],
+    );
   }
 
   // After a pass that rebuilt the whole realm: the realm's vectors, vector

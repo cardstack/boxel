@@ -1,4 +1,5 @@
 // Isomorphic UUID — matches IndexRunner's batch-id minting.
+import { isLogFileURL, logFileSource } from '../log-line-index.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { heartbeatJob } from '../queue.ts';
 
@@ -236,6 +237,23 @@ export async function runPrerenderHtmlPass({
 
   let batch = await indexWriter.createBatch(realmURL, virtualNetwork, jobInfo, {
     prerenderHtmlOnly: true,
+    // Read by range, so a log's visit can count its lines without reading it
+    // whole (`currentLogLineCount`).
+    readLogFile: {
+      read: async (url: string, start: number, end?: number) => {
+        if (reader.readRange) {
+          return await reader.readRange(new URL(url), start, end);
+        }
+        let ref = await reader.readFile(new URL(url));
+        return ref
+          ? await logFileSource(async () => ({ content: ref.content })).read(
+              url,
+              start,
+              end,
+            )
+          : undefined;
+      },
+    },
   });
 
   // The job's URL set arrives fully computed in its args, so the progress row
@@ -1057,14 +1075,27 @@ async function visitForPrerenderedHtml({
   // time the visits began. A URL the index holds as a tombstone is one the
   // index pass took as removed, and this pass takes it as removed too, so the
   // two channels agree.
-  let fileRef = batch.indexHoldsTombstone(url.href)
-    ? (await readFile()).file
-    : await writtenFileRereads.readVisitedFile(readFile, {
-        recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
-        label: `${jobIdentity(jobInfo)} file ${url.href}`,
-        ifMissing: 'rendering nothing for it',
-        log: { info: (m) => log.info(m), warn: (m) => log.warn(m) },
-      });
+  // A log's render needs none of its bytes here (see `renderFileForIndexing`):
+  // only its modification time, from a one-byte range.
+  let logMeta =
+    isLogFileURL(url.href) &&
+    reader.readRange &&
+    !batch.indexHoldsTombstone(url.href)
+      ? await reader.readRange(url, 0, 1)
+      : undefined;
+  let fileRef = logMeta
+    ? {
+        content: '',
+        lastModified: logMeta.lastModified ?? unixTime(Date.now()),
+      }
+    : batch.indexHoldsTombstone(url.href)
+      ? (await readFile()).file
+      : await writtenFileRereads.readVisitedFile(readFile, {
+          recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
+          label: `${jobIdentity(jobInfo)} file ${url.href}`,
+          ifMissing: 'rendering nothing for it',
+          log: { info: (m) => log.info(m), warn: (m) => log.warn(m) },
+        });
   if (!fileRef) {
     // Unreadable file — the same outcome as the index visit's
     // missing-file handling: write nothing, so the up-front tombstone
@@ -1109,6 +1140,10 @@ async function visitForPrerenderedHtml({
   // skip buffering the file (same optimization as the index visit; only
   // forwarded when both are present).
   let { contentHash, contentSize } = await batch.getContentMeta(localPath);
+  let fileLineCount =
+    isLogFileURL(url.href) && contentSize !== undefined
+      ? await batch.currentLogLineCount(url.href, contentSize)
+      : undefined;
   // And the file's timestamps, the same values the index visit writes to its
   // row (visit-file.ts): the extract stamps them onto the resource this
   // visit's fileRender pass hydrates its FileDef from, so the HTML it bakes
@@ -1128,6 +1163,7 @@ async function visitForPrerenderedHtml({
     ...(contentHash !== undefined && contentSize !== undefined
       ? { fileContentHash: contentHash, fileContentSize: contentSize }
       : {}),
+    ...(fileLineCount !== undefined ? { fileLineCount } : {}),
     // Floored the way the index visit floors it (visit-file.ts), because the
     // row this visit runs after already holds that floor: leaving the option
     // off when the adapter reports no mtime would bake HTML with no modified

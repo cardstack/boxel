@@ -1057,10 +1057,13 @@ async function answerLogQuery(
       ) as Expression,
       limit,
     ));
+    // A row is keyed by the caller's paths and names: with no prototype, a
+    // name such as `__proto__` or `toString` is a key like any other.
     answerOf = (r) => {
-      let group: Record<string, unknown> = {};
+      let group: Record<string, unknown> = Object.create(null);
       by.forEach((path, i) => (group[path] = r[`g${i}`] ?? null));
-      let out: Record<string, unknown> = { group };
+      let out: Record<string, unknown> = Object.create(null);
+      out.group = group;
       for (let [name] of aggregates) out[name] = r[`a_${name}`] ?? null;
       return out;
     };
@@ -1092,7 +1095,11 @@ async function answerLogQuery(
         ...(source.many ? { file: r.url as string } : {}),
       };
       if (selected) {
-        let out: Record<string, unknown> = line;
+        // keyed by the caller's paths, so no prototype (as a grouped row)
+        let out: Record<string, unknown> = Object.assign(
+          Object.create(null),
+          line,
+        );
         selected.forEach((path, i) => (out[path] = r[columnAlias(i)] ?? null));
         return out;
       }
@@ -1108,6 +1115,9 @@ async function answerLogQuery(
   let data = rows.slice(0, size).map(answerOf);
   let hasMore = rows.length > size;
   let totalMode = q.page?.total ?? 'capped';
+  // A grouped page that shows a group says how many there are; one that
+  // shows none (a page past the last group, a counts-only page) counts them.
+  let groups = q.group && rows.length ? Number(rows[0].groups) : undefined;
   let { total, totalIsEstimate } = await pageTotal(
     size,
     totalMode,
@@ -1115,6 +1125,7 @@ async function answerLogQuery(
     data.length,
     hasMore,
     async (cap) => {
+      if (groups !== undefined) return cap ? Math.min(groups, cap) : groups;
       let [row] = await run([
         'SELECT COUNT(*) AS total FROM (',
         ...counted,
@@ -1127,7 +1138,8 @@ async function answerLogQuery(
 
   let facets: Record<string, { value: Json; count: number }[]> | undefined;
   if (q.facets?.length) {
-    facets = {};
+    // keyed by the caller's paths, so no prototype (as a row)
+    facets = Object.create(null) as NonNullable<typeof facets>;
     for (let facet of assertDistinctFacets(q.facets) as typeof q.facets) {
       // `at` counts per day of the query's zone, in date order.
       let day = facet.by === 'at';

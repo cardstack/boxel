@@ -214,6 +214,8 @@ const REFUSALS = {
   'log-group-aggregates-names-query-takes': ['limit-exceeded', 'group.aggregates names {{length}}, and a query takes at most {{LOG_MAX_AGGREGATES}}', 400],
   'log-grouped-query-sorts-by-group': ['invalid-value', 'a grouped query sorts by a group path or an aggregate, not {{key}}', 400],
   'log-invalid-aggregate-name-name-letter': ['invalid-value', 'Invalid aggregate name: {{name}} (a name is a letter or _ then letters, digits or _)', 400],
+  'log-aggregate-name-reserved': ['invalid-value', 'aggregate name "{{name}}" is reserved ({{why}}); name the aggregate otherwise', 400],
+  'log-aggregate-name-too-long': ['invalid-value', 'an aggregate name is {{length}} characters, and a name is at most {{LOG_MAX_AGGREGATE_NAME}} characters', 400],
   'log-aggregate-one-as-op-path': ['invalid-value', 'aggregate "{{name}}" is one of {{ops}}, as { <op>: <path> }', 400],
   'log-aggregate-names-one-not': ['missing-member', 'aggregate "{{name}}" names one of {{ops}}, not {{length}}', 400],
   'log-aggregate-names-one-not-2': ['conflicting-members', 'aggregate "{{name}}" names one of {{ops}}, not {{length}}', 400],

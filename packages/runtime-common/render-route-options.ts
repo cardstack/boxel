@@ -32,6 +32,9 @@ export interface RenderRouteOptions {
   fileDefCodeRef?: ResolvedCodeRef;
   fileContentHash?: string;
   fileContentSize?: number;
+  // A log's line count as the realm knows it, which the extract can't count
+  // from the tail it keeps (`currentLogLineCount`).
+  fileLineCount?: number;
   // The file's server-side timestamps (epoch seconds), so the extract's
   // resource carries the same `meta.lastModified` / `meta.resourceCreatedAt`
   // the realm stamps on a served file-meta document. The fileRender pass
@@ -73,6 +76,9 @@ export function parseRenderRouteOptions(
       }
       if (typeof parsed.fileContentSize === 'number') {
         options.fileContentSize = parsed.fileContentSize;
+      }
+      if (typeof parsed.fileLineCount === 'number') {
+        options.fileLineCount = parsed.fileLineCount;
       }
       if (typeof parsed.fileLastModified === 'number') {
         options.fileLastModified = parsed.fileLastModified;
@@ -119,6 +125,9 @@ export function serializeRenderRouteOptions(
     }
     if (options.fileContentSize !== undefined) {
       serialized.fileContentSize = options.fileContentSize;
+    }
+    if (options.fileLineCount !== undefined) {
+      serialized.fileLineCount = options.fileLineCount;
     }
     if (options.fileLastModified !== undefined) {
       serialized.fileLastModified = options.fileLastModified;

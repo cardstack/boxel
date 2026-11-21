@@ -207,6 +207,7 @@ export function getFieldDefinitions(
         : {}),
       query: queryDefinition,
       searchable: field.searchable,
+      ...(field.lineOf ? { lineOf: identifyCard(field.lineOf())! } : {}),
       ...(() => {
         // A link's target is a card, whose `searchDefaults` are card-level
         // defaults, not a field intent.

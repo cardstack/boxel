@@ -16,6 +16,8 @@ export class LogFile extends TextFileDef {
   // attached here would be a `TextFileDef`, which declares no `record`.
   static acceptTypes = '.log';
   static textExtensions: readonly string[] = ['.log'];
+  // A log's file meta keeps its recent lines, not the whole log.
+  static contentTailBytes = 16 * 1024;
   static fileKind = 'Log';
 
   // The caller says what happened. The realm says when, and who.

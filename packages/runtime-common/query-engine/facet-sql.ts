@@ -275,9 +275,10 @@ export function sourceAggregateSql(
 }
 
 // A grouped page over a source's rows: one row per distinct key (`"g<i>"`),
-// with its aggregates (`"a_<name>"`), in `order`; and the groups its total
-// counts, grouped by the key reads themselves (a subquery has no SELECT list
-// for ordinals to name).
+// with its aggregates (`"a_<name>"`) and how many groups there are in all
+// (`"groups"`, counted before the page's LIMIT), in `order`; and the groups
+// its total counts when the page shows none, grouped by the key reads
+// themselves (a subquery has no SELECT list for ordinals to name).
 export function sourceGroupSql(
   from: Expression,
   keys: Expression[],
@@ -298,6 +299,7 @@ export function sourceGroupSql(
             `AS "a_${names[i]}"`,
           ],
         ),
+        ['COUNT(*) OVER () AS "groups"'],
       ]),
       ...from,
       `GROUP BY ${keys.map((_, i) => i + 1).join(', ')}`,

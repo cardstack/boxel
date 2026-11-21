@@ -591,9 +591,10 @@ async function stampLineCount(host: LogLineIndexHost, url: string) {
 // the same pass (a computed over `lineCount`) sees none. The count matches
 // what `stampLineCount` writes at the swap: complete lines, plus a final line
 // still without its newline. It reads only what the indexed state hasn't
-// covered (an append the write-through couldn't place), and the whole file
-// only when the log has no current state, which is when the sync reads it
-// whole too. Undefined when the log can't be read.
+// covered (an append the write-through couldn't place), or, when the log has
+// grown past `contentSize` since, the lines indexed after it; and the whole
+// file only when the log has no current state, which is when the sync reads
+// it whole too. Undefined when the log can't be read.
 export async function currentLogLineCount(
   host: LogLineIndexHost,
   url: string,
@@ -606,6 +607,21 @@ export async function currentLogLineCount(
   let state = dialectFor(host.dbAdapter.kind).logs
     ? await readState(host, url)
     : undefined;
+  // The log grew past `contentSize` since the visit read its size (an append
+  // the realm wrote through while the visit waited): its count at
+  // `contentSize` is the indexed count less the complete lines indexed after
+  // it, read from there, never from the start. Only when `contentSize` falls
+  // inside a line does it count from the beginning.
+  if (state && state.offset > contentSize && contentSize > 0) {
+    let after = await source.read(url, contentSize - 1, state.offset);
+    if (!after) {
+      return undefined;
+    }
+    if (after.bytes[0] === NEWLINE) {
+      let { lines } = splitLines(after.bytes.subarray(1));
+      return state.lineCount - lines.length;
+    }
+  }
   let counted = state && state.offset <= contentSize ? state.lineCount : 0;
   let from = state && state.offset <= contentSize ? state.offset : 0;
   if (from === contentSize) {

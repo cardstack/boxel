@@ -22,20 +22,26 @@ const CALLER_ENGINES: Readonly<Record<QueryEngineCaller, QueryEngineChoice>> = {
   'realm-search': 'v2',
   automations: 'legacy',
   'skill-validation': 'legacy',
-  'realm-logs': 'legacy',
+  'realm-logs': 'v2',
   federated: 'legacy',
   'query-fields': 'legacy',
   host: 'legacy',
 };
 
-// Every production file that builds a query engine, and the callers it names
-// when it does (`indexQueryEngineFor(caller, ...)`). Only engine-choice.ts
-// constructs an engine itself.
+// Every production file that chooses a query engine, and the callers it names
+// when it does: by building one (`indexQueryEngineFor(caller, ...)`), or, for
+// a caller that reads through no engine, by asking which one its caller is set
+// to (`queryEngineFor(caller)`). Only engine-choice.ts constructs an engine
+// itself.
 const CONSTRUCTION_SITES: Readonly<Record<string, QueryEngineCaller[]>> = {
   'packages/runtime-common/realm-index-query-engine.ts': [
     'realm-search',
     'query-fields',
   ],
+  // A realm's log search, and a log's line count in its file meta.
+  'packages/runtime-common/realm.ts': ['realm-logs', 'realm-logs'],
+  // A federated `_search` of one realm's logs.
+  'packages/realm-server/handlers/handle-search.ts': ['realm-logs'],
   'packages/runtime-common/automation-index-hook.ts': ['automations'],
   'packages/runtime-common/automation-run-limits.ts': ['automations'],
   'packages/realm-server/handlers/handle-skill-validation.ts': [
@@ -64,14 +70,14 @@ function productionFilesMatching(pattern: string): string[] {
     .sort();
 }
 
-// The callers a file names in its `indexQueryEngineFor(` calls (line comments
-// left out, so a comment never reads as a call).
+// The callers a file names in its `indexQueryEngineFor(` and `queryEngineFor(`
+// calls (line comments left out, so a comment never reads as a call).
 function namedCallers(file: string): string[] {
   let source = readFileSync(join(REPO, file), 'utf8').replace(
     /^\s*\/\/.*$/gm,
     '',
   );
-  return [...source.matchAll(/indexQueryEngineFor\(\s*'([^']+)'/g)].map(
+  return [...source.matchAll(/\b(?:indexQ|q)ueryEngineFor\(\s*'([^']+)'/g)].map(
     ([, caller]) => caller,
   );
 }
@@ -125,7 +131,7 @@ module(basename(import.meta.filename), function () {
 
   test('each production construction site names the callers it is listed with', function (assert) {
     assert.deepEqual(
-      productionFilesMatching('indexQueryEngineFor\\(').filter(
+      productionFilesMatching('(indexQ|q)ueryEngineFor\\(').filter(
         (file) => file !== CHOOSER,
       ),
       Object.keys(CONSTRUCTION_SITES).sort(),

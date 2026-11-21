@@ -1,6 +1,26 @@
 import { isStagedFile, type StagedFile } from './staged-file.ts';
 import { Deferred } from './deferred.ts';
 import {
+  isLogQuery,
+  logSearchResponse,
+  realmTimeZoneFromIndex,
+  type LogAccess,
+  type LogQuery,
+} from './log-query.ts';
+import { logLineAccessFor } from './card-operations/log-line-policy.ts';
+import { ensureLogPartition } from './log-line-partitions.ts';
+import { LogLineTypeError, normalizeLogLine } from './log-line-typing.ts';
+import {
+  appendThroughLogIndex,
+  currentLogLineCount,
+  isLogFileURL,
+  markLogRewritten,
+  type LogFileSource,
+  type LogLineIndexHost,
+} from './log-line-index.ts';
+import { dialectFor } from './query-engine/dialect.ts';
+import { queryEngineFor } from './query-engine/engine-choice.ts';
+import {
   DEFAULT_ANONYMOUS_RATE_LIMIT,
   type AnonymousRateLimit,
 } from './anonymous-access.ts';
@@ -6717,6 +6737,11 @@ export class Realm {
         }
         results.push({ path, lastModified, contentHash });
         fileMetaRows.push({ path, contentHash, contentSize });
+        // A log written whole rather than appended to: its indexed lines are
+        // rebuilt at its next sync (`log-line-index.ts`).
+        if (isLogFileURL(url.href)) {
+          await this.#onLogLines((host) => markLogRewritten(host, url.href));
+        }
         urls.push(url);
         lastWriteType = currentWriteType ?? lastWriteType;
       }
@@ -6749,13 +6774,33 @@ export class Realm {
         await this.trackOwnWrite(path);
         let { lastModified, size } = await this.#adapter.append(path, content);
         appendedPaths.add(path);
+        // A log's appended lines are indexed as they land, so they are
+        // searchable when the append returns and the index pass reads nothing
+        // (`appendThroughLogIndex`).
+        if (isLogFileURL(url.href)) {
+          await this.#onLogLines((host) =>
+            appendThroughLogIndex(host, url.href, content, size),
+          );
+        }
         this.invalidateCache(path);
         await this.#notifyFileChange(path);
-        let contentHash = await computeContentHashFromRanges(
-          size,
-          async (start, length) =>
-            await readRangeBytes(this.#adapter, path, start, length),
-        );
+        // A log's fingerprint extends the one recorded for the bytes before
+        // the append, so an append costs its own bytes (`#appendedLogHash`);
+        // any other file's is read back off the file, in bounded ranges.
+        let contentHash =
+          (isLogFileURL(url.href)
+            ? await this.#appendedLogHash(
+                path,
+                content,
+                size,
+                fileMetaRows.find((meta) => meta.path === path),
+              )
+            : undefined) ??
+          (await computeContentHashFromRanges(
+            size,
+            async (start, length) =>
+              await readRangeBytes(this.#adapter, path, start, length),
+          ));
         // The write leg may have reached this file already, which is one file
         // changing twice rather than two files changing — a caller that replaces
         // a log and then adds a line to it. Everything the write recorded
@@ -8677,6 +8722,7 @@ export class Realm {
     ) => Promise<void>,
   ): Promise<{ transformed: ResolvedEnvelopeEntry; batchEntry: BatchEntry }> {
     try {
+      write = await this.#typedLogRecord(write);
       let transformed = await stageWriteEntry(
         write,
         this.#transformContext(write.entry, caller),
@@ -9239,6 +9285,7 @@ export class Realm {
         indexQueryEngine: this.#realmIndexQueryEngine,
         readFileAsText: async (localPath) =>
           (await this.readFileAsText(localPath))?.content,
+        typeLogLine: (url, what) => this.#typeLogLine(url, what),
         openStoredFile: (localPath) => this.#operationStoredFile(localPath),
         storedFileMeta: (localPath, file, opts) =>
           this.#operationStoredFileMeta(localPath, file, opts),
@@ -13062,6 +13109,9 @@ export class Realm {
       // `buildEtag`. Callers that have the materialized body already
       // (the source endpoint cache-miss path) compute this for free.
       etagBase?: string;
+      // Served for this request only, never kept: a read whose response a
+      // client must not reuse as a validator for the next one.
+      noStore?: true;
       // When the realm first saw this path, for a caller that already read the
       // file's stored metadata and so already has it. Supplying it is what
       // keeps such a caller from reading the same row twice per request.
@@ -13092,9 +13142,11 @@ export class Realm {
     // explicit Cache-Control so browsers don't fall back to Last-Modified
     // heuristics. must-revalidate + ETag keeps updates responsive while
     // avoiding repeated revalidation within a browsing session.
-    let cacheControl = contentType?.startsWith('image/')
-      ? `${cacheVisibility}, max-age=60, must-revalidate`
-      : `${cacheVisibility}, max-age=0`;
+    let cacheControl = options?.noStore
+      ? 'no-store'
+      : contentType?.startsWith('image/')
+        ? `${cacheVisibility}, max-age=60, must-revalidate`
+        : `${cacheVisibility}, max-age=0`;
     let etag = buildEtag(
       totalEtagBase(
         options?.etagBase,
@@ -16109,10 +16161,19 @@ export class Realm {
         // Not the hash the realm recorded at write time: only the file's size
         // vouches for that record, so an out-of-band rewrite of the same length
         // would keep it.
+        // A log is the exception, read by its line index's sync and its file
+        // meta's head and tail in ranges: it is answered without fingerprinting
+        // it, since the fingerprint reads the whole file below 5 MB, which for
+        // a reader taking a log's head and tail would cost the log rather than
+        // the range. Nor is it kept by a client's cache: it changes with every
+        // append, so a kept copy only turns the next read of it into a
+        // conditional one that fails and costs the whole log.
+        let log = isLogFileURL(new URL(request.url).href.split('?')[0]);
         return await this.serveLocalFile(request, served, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
-          etagBase: await contentHashFromRanges(handle),
+          etagBase: log ? undefined : await contentHashFromRanges(handle),
+          ...(log ? { noStore: true as const } : {}),
           createdAt: source.created,
           notThere,
         });
@@ -16533,14 +16594,22 @@ export class Realm {
     let persistedMeta = this.#dbAdapter
       ? await getContentMeta(this.#dbAdapter, this.url, localPath)
       : { contentHash: undefined, contentSize: undefined };
+    let contentSize =
+      persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef));
     return await this.#fileMetaDocumentOf(localPath, {
       lastModified: fileRef.lastModified,
       createdAt: createdAt ?? fileRef.lastModified,
       contentHash:
         persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef)),
-      contentSize:
-        persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef)),
-      lineCount: await computeLineCountFromRef(localPath, fileRef),
+      contentSize,
+      // A log's line count is the line index's, which counts it the way the
+      // index's own answer does without reading the log; any other text
+      // file's is counted from its bytes.
+      lineCount:
+        (await this.#currentLogLineCount(
+          this.paths.fileURL(localPath).href,
+          contentSize,
+        )) ?? (await computeLineCountFromRef(localPath, fileRef)),
     });
   }
 
@@ -16682,6 +16751,15 @@ export class Realm {
       if (value !== undefined) {
         attributes[key] = value;
       }
+    }
+    // A log's line count lags the same way: the swap stamps it on the row, so
+    // a render inside the pass that indexes an append would read the count
+    // from before it. The line index is written through on every append, so
+    // the count it holds is current; it is preferred, and the indexed value
+    // remains where the line index has none.
+    let lineCount = await this.#currentLogLineCount(fileURL, contentSize);
+    if (lineCount !== undefined) {
+      attributes.lineCount = lineCount;
     }
     let doc: SingleFileMetaDocument = {
       data: {
@@ -20072,6 +20150,305 @@ export class Realm {
     return probe.data.length > 0;
   }
 
+  // A search over the lines of this realm's logs (`log-query.ts`), for the
+  // realm's own `_search` and for a federated `_search` that names only this
+  // realm. A caller who reads the realm reads every line. One the ACL
+  // declined reads only what a log-line grant in the realm's policy admits
+  // them to: their own lines (`searchableLogLines`); with no such grant, the
+  // search is refused. A log no index pass has synced yet is synced from
+  // its file first, so it is never answered as empty for want of a pass.
+  async searchLogLines(
+    payload: LogQuery,
+    caller: { readsRealm: boolean; user?: string },
+  ): Promise<{ status: number; body: unknown }> {
+    let access: ((url: string) => Promise<LogAccess>) | undefined;
+    if (!caller.readsRealm) {
+      let lines = await this.#logLineAccess(caller.user);
+      if (!lines) {
+        return {
+          status: 403,
+          body: buildSearchErrorBody(
+            'a log search needs read access to the realm, or a grant on its log lines',
+            403,
+            'log-not-readable',
+          ),
+        };
+      }
+      access = lines;
+    }
+    return await logSearchResponse(this.#dbAdapter, this.url, payload, {
+      virtualNetwork: this.#virtualNetwork,
+      readLogFile: this.readLogFileForQuery,
+      // The realm's default zone, for a query that names none.
+      realmTimeZone: () => realmTimeZoneFromIndex(this.#dbAdapter, this.url),
+      ...(access ? { access } : {}),
+    });
+  }
+
+  // A log's `record` in a batch, its `what` held to the log's line type
+  // (`#typeLogLine`) before its input program composes the line. Only the
+  // base log types' named `record` (an `appendLine` whose input program
+  // composes the line), whose `what` is the line's payload.
+  async #typedLogRecord(
+    write: ResolvedEnvelopeEntry,
+  ): Promise<ResolvedEnvelopeEntry> {
+    let { entry, definition } = write;
+    let data = entry.data as Record<string, unknown> | undefined;
+    if (
+      entry.name !== 'record' ||
+      definition.base !== 'appendLine' ||
+      !definition.input ||
+      !entry.href ||
+      !isLogFileURL(entry.href) ||
+      !data ||
+      !('what' in data)
+    ) {
+      return write;
+    }
+    try {
+      let what = await this.#typeLogLine(entry.href, data.what);
+      return { ...write, entry: { ...entry, data: { ...data, what } } };
+    } catch (e) {
+      if (e instanceof LogLineTypeError) {
+        throw new OperationFailure({
+          id: entry.href,
+          status: 400,
+          code: 'invalid-params',
+          title: 'Invalid line',
+          detail: `this log's lines are typed, and this one is refused: ${e.message}`,
+        });
+      }
+      throw e;
+    }
+  }
+
+  // `record`'s `what` for the log at `url`, held to its line type: the
+  // `of:` type of every card field in this realm that links the log
+  // (`linksTo(JSONLFile, { of })`), read from the index's link edges
+  // (`relationship_deps`) and the cards' definitions. One line type types
+  // the line (`normalizeLogLine`); none, or two different ones, leave it as
+  // the operations client checked it, since no one type can be said to be
+  // the log's.
+  async #typeLogLine(url: string, what: unknown): Promise<unknown> {
+    let lineType = await this.#logLineType(url);
+    if (!lineType) {
+      return what;
+    }
+    let lookup = async (ref: CodeRef) => {
+      let absolute = codeRefWithAbsoluteIdentifier(
+        ref,
+        new URL(this.url),
+        undefined,
+        this.#virtualNetwork,
+      );
+      return isResolvedCodeRef(absolute)
+        ? await this.#definitionLookup.lookupDefinition(absolute)
+        : undefined;
+    };
+    let definition = await lookup(lineType);
+    return definition ? await normalizeLogLine(definition, what, lookup) : what;
+  }
+
+  async #logLineType(url: string): Promise<CodeRef | undefined> {
+    if (!dialectFor(this.#dbAdapter.kind).logs) {
+      return undefined;
+    }
+    let spellings = [...new Set([url, this.#virtualNetwork.unresolveURL(url)])];
+    let rows = (await query(this.#dbAdapter, [
+      'SELECT url, types, pristine_doc FROM boxel_index WHERE realm_url =',
+      param(this.url),
+      "AND type = 'instance' AND (is_deleted = FALSE OR is_deleted IS NULL)",
+      'AND relationship_deps ?| CAST(ARRAY[',
+      ...spellings.flatMap((u, i) => [...(i > 0 ? [','] : []), param(u)]),
+      '] AS text[])',
+      'LIMIT 100',
+    ] as Parameters<typeof query>[1])) as {
+      url: string;
+      types: unknown;
+      pristine_doc: unknown;
+    }[];
+    let found = new Map<string, CodeRef>();
+    for (let row of rows) {
+      let types =
+        typeof row.types === 'string' ? JSON.parse(row.types) : row.types;
+      let doc =
+        typeof row.pristine_doc === 'string'
+          ? JSON.parse(row.pristine_doc)
+          : row.pristine_doc;
+      let ref = codeRefFromInternalKey((types as string[] | undefined)?.[0]);
+      if (!ref) continue;
+      let absolute = codeRefWithAbsoluteIdentifier(
+        ref,
+        new URL(row.url),
+        undefined,
+        this.#virtualNetwork,
+      );
+      if (!isResolvedCodeRef(absolute)) continue;
+      let definition = await this.#definitionLookup
+        .lookupDefinition(absolute)
+        .catch(() => undefined);
+      if (!definition) continue;
+      let relationships = ((doc as { relationships?: unknown } | undefined)
+        ?.relationships ?? {}) as Record<
+        string,
+        { links?: { self?: string | null } }
+      >;
+      for (let [name, defId] of Object.entries(definition.fields)) {
+        let lineOf = definition.fieldDefs[defId]?.lineOf;
+        let self = relationships[name]?.links?.self;
+        if (!lineOf || typeof self !== 'string') continue;
+        let linked: string;
+        try {
+          linked = new URL(self, row.url).href;
+        } catch {
+          continue;
+        }
+        if (linked === url) {
+          found.set(JSON.stringify(lineOf), lineOf);
+        }
+      }
+    }
+    return found.size === 1 ? [...found.values()][0] : undefined;
+  }
+
+  // The fingerprint of a log after an append, from the one recorded for it
+  // before: `log:<md5 of the previous fingerprint and the appended bytes>`.
+  // It changes with every append and with nothing else, which is what each
+  // reader of a fingerprint needs: a write's `If-Match` and the version a
+  // card+json read reports compare it as they compare any fingerprint, and
+  // the recorded value is trusted only while the file's size is the one
+  // recorded beside it. Undefined, so the caller hashes the file, when there
+  // is no recorded fingerprint for exactly the bytes before the append (a
+  // new log, or another writer's bytes in between). A write of the whole file
+  // (`update`) records the full hash again.
+  async #appendedLogHash(
+    path: LocalPath,
+    appended: string | Uint8Array,
+    sizeAfter: number,
+    inBatch: { contentHash?: string; contentSize?: number } | undefined,
+  ): Promise<string | undefined> {
+    if (!dialectFor(this.#dbAdapter.kind).logs) {
+      return undefined;
+    }
+    let bytes =
+      typeof appended === 'string'
+        ? new TextEncoder().encode(appended)
+        : appended;
+    let before =
+      inBatch?.contentHash !== undefined && inBatch.contentSize !== undefined
+        ? { contentHash: inBatch.contentHash, contentSize: inBatch.contentSize }
+        : await getContentMeta(this.#dbAdapter, this.url, path);
+    if (
+      before.contentHash === undefined ||
+      before.contentSize === undefined ||
+      before.contentSize !== sizeAfter - bytes.byteLength
+    ) {
+      return undefined;
+    }
+    return `log:${computeContentHash(`${before.contentHash}:${computeContentHash(bytes)}`)}`;
+  }
+
+  // A log's line count as its line index holds it, for its file-meta answer.
+  // Undefined for any other file, or where the database keeps no line index.
+  async #currentLogLineCount(
+    fileURL: string,
+    contentSize: number | undefined,
+  ): Promise<number | undefined> {
+    if (
+      // Main's answer, with no line index, until the logs' row moves them
+      // (`engine-choice.ts`).
+      queryEngineFor('realm-logs') !== 'v2' ||
+      !isLogFileURL(fileURL) ||
+      contentSize === undefined ||
+      !this.#dbAdapter ||
+      !dialectFor(this.#dbAdapter.kind).logs
+    ) {
+      return undefined;
+    }
+    let dbAdapter = this.#dbAdapter;
+    try {
+      return await currentLogLineCount(
+        {
+          dbAdapter,
+          realmURL: this.url,
+          query: (e) => query(dbAdapter, e),
+          readLogFile: this.readLogFileForQuery,
+        },
+        fileURL,
+        contentSize,
+      );
+    } catch (err: unknown) {
+      this.#log.warn(
+        `could not count the lines of ${fileURL}; serving its indexed count: ${stringifyErrorForLog(err)}`,
+      );
+      return undefined;
+    }
+  }
+
+  // A log's bytes, read by range, for a sync of a log a query or a write
+  // reaches before the index pass does (`log-line-index.ts`).
+  readLogFileForQuery: LogFileSource = {
+    read: async (url: string, start: number, end?: number) => {
+      let path = this.paths.local(new URL(url));
+      let ref = await this.#adapter.openFile(path);
+      if (!ref) {
+        return undefined;
+      }
+      let size: number;
+      if (typeof ref.size === 'number') {
+        size = ref.size;
+      } else {
+        // An adapter that can't say the size without reading: read it.
+        let file = await this.readFileAsText(path);
+        size = file ? new TextEncoder().encode(file.content).byteLength : 0;
+      }
+      let from = Math.min(start, size);
+      let to = Math.min(end ?? size, size);
+      let bytes =
+        to > from
+          ? await readRangeBytes(this.#adapter, path, from, to - from)
+          : new Uint8Array();
+      return { bytes, size };
+    },
+  };
+
+  // Runs `fn` on this realm's log-line rows in a transaction of its own. A
+  // failure is logged rather than failing the write it follows: the index
+  // pass syncs the log anyway.
+  async #onLogLines(fn: (host: LogLineIndexHost) => Promise<unknown>) {
+    if (!dialectFor(this.#dbAdapter.kind).logs) {
+      return;
+    }
+    try {
+      await ensureLogPartition(this.#dbAdapter, this.url);
+      await this.#dbAdapter.withTransaction(async (tx) => {
+        await fn({
+          dbAdapter: this.#dbAdapter,
+          realmURL: this.url,
+          query: (e) => tx(e),
+          readLogFile: this.readLogFileForQuery,
+        });
+      });
+    } catch (err: unknown) {
+      this.#log.warn(
+        `failed to index a log's lines as it was written; the index pass will: ${stringifyErrorForLog(err)}`,
+      );
+    }
+  }
+
+  // What a caller the ACL declined may read of this realm's logs, per log,
+  // or undefined when nothing: a realm policy's log-line grants (see
+  // `log-line-policy.ts`).
+  async #logLineAccess(
+    user: string | undefined,
+  ): Promise<((url: string) => Promise<LogAccess>) | undefined> {
+    if (!user) {
+      return undefined;
+    }
+    let access = logLineAccessFor(await this.getCompiledPolicy(), user);
+    return access ? async (url: string) => access(url) : undefined;
+  }
+
   private async searchEntriesResponse(
     request: Request,
     requestContext: RequestContext,
@@ -20099,6 +20476,31 @@ export class Realm {
         ),
         init: {
           status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    }
+
+    // A search over this realm's logs (`from: { log }` or `{ logs }`) is
+    // answered from their line rows (`log-query.ts`, `searchLogLines`), once
+    // the logs' row moves them to Query V2 (`engine-choice.ts`). Until then
+    // main's parser answers it, as it answers any member it doesn't know.
+    if (isLogQuery(payload) && queryEngineFor('realm-logs') === 'v2') {
+      let declined = this.#coarseDeclined(requestContext) === 'all';
+      let { status, body } = await this.searchLogLines(payload, {
+        readsRealm: !declined,
+        user: requestContext.realmAuthority
+          ? undefined
+          : requestContext.authenticatedUser,
+      });
+      if (status === 403 && requestContext.anonymousCaller) {
+        return this.#authenticationRequired(requestContext);
+      }
+      return createResponse({
+        body: JSON.stringify(body),
+        init: {
+          status,
           headers: { 'content-type': SupportedMimeType.CardJson },
         },
         requestContext,

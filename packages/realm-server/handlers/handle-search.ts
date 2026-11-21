@@ -1,4 +1,7 @@
 import type Koa from 'koa';
+import { isLogQuery } from '@cardstack/runtime-common/log-query';
+import { queryEngineFor } from '@cardstack/runtime-common/query-engine/engine-choice';
+import { respondToLogSearch } from './log-search.ts';
 import {
   applyFederatedRowBudget,
   applyServerSearchPageBound,
@@ -158,6 +161,17 @@ export default function handleSearch(opts: {
     // policy-scoped mark names these, so it never says which of them a
     // declaration searched.
     let requested = named;
+    // A search over one of the realm's logs (`from: { log }`) is answered
+    // from its line rows, not the card index (`log-search.ts`), once the
+    // logs' row moves them to Query V2 (`engine-choice.ts`).
+    if (isLogQuery(payload) && queryEngineFor('realm-logs') === 'v2') {
+      await respondToLogSearch(ctxt, payload, named, realmList, dbAdapter, {
+        realmFor: (url) => reconciler.mounted.get(url),
+        grantCandidates,
+        user: principal?.kind === 'user' ? principal.user : undefined,
+      });
+      return;
+    }
     // What a policy fragment is looked up by: a named query runs under the
     // name it was invoked with, on the type that declares it, and an ad-hoc
     // search as `query` on the type its filter targets. A filter with no type

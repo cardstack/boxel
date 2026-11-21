@@ -38,6 +38,7 @@ export type FileDefExport = {
     options?: {
       contentHash?: string;
       contentSize?: number;
+      lineCount?: number;
       toolContext?: ToolContext;
       fileSizeLimitBytes?: number;
     },
@@ -78,6 +79,7 @@ export class FileDefAttributesExtractor {
   #baseFileDefCodeRef: ResolvedCodeRef;
   #contentHash: string | undefined;
   #contentSize: number | undefined;
+  #lineCount: number | undefined;
   #lastModified: number | undefined;
   #createdAt: number | undefined;
   // Timestamps read off the file response when this extractor fetched the
@@ -99,6 +101,7 @@ export class FileDefAttributesExtractor {
     baseFileDefCodeRef,
     contentHash,
     contentSize,
+    lineCount,
     lastModified,
     createdAt,
     fileSizeLimitBytes,
@@ -114,6 +117,9 @@ export class FileDefAttributesExtractor {
     baseFileDefCodeRef: ResolvedCodeRef;
     contentHash: string | undefined;
     contentSize: number | undefined;
+    // A log's line count as the realm knows it, for the class that keeps only
+    // the log's tail and so can't count it (`TextFileDef`).
+    lineCount?: number;
     // The file's server-side timestamps (epoch seconds), stamped onto the
     // resource's `meta` so a FileDef hydrated from it reports them the way
     // one hydrated from a served file-meta document does. The indexing path
@@ -145,6 +151,7 @@ export class FileDefAttributesExtractor {
     this.#baseFileDefCodeRef = baseFileDefCodeRef;
     this.#contentHash = contentHash;
     this.#contentSize = contentSize;
+    this.#lineCount = lineCount;
     this.#lastModified = lastModified;
     this.#createdAt = createdAt;
     this.#fileSizeLimitBytes = fileSizeLimitBytes;
@@ -207,8 +214,14 @@ export class FileDefAttributesExtractor {
           {
             contentHash: this.#contentHash,
             contentSize: this.#contentSize,
+            ...(this.#lineCount !== undefined
+              ? { lineCount: this.#lineCount }
+              : {}),
             fileSizeLimitBytes: this.#fileSizeLimitBytes,
             toolContext: this.#toolContext,
+            // Where the bytes are fetched rather than handed in: a range,
+            // which a log's extraction reads instead of the whole file.
+            ...(this.#fileBytes ? {} : { readRange: this.#readRange }),
           },
         );
       } catch (err) {
@@ -400,6 +413,35 @@ export class FileDefAttributesExtractor {
       },
       { highWaterMark: 0 },
     );
+  };
+
+  // Bytes `[start, end)` of the file, by a range request through the same
+  // authenticated fetch the whole read uses.
+  #readRange = async (start: number, end: number): Promise<Uint8Array> => {
+    if (end <= start) {
+      return new Uint8Array();
+    }
+    let request = new Request(this.#fileURL, {
+      method: 'GET',
+      headers: {
+        Accept: SupportedMimeType.CardSource,
+        Range: `bytes=${start}-${end - 1}`,
+      },
+    });
+    let response = this.#authGuard
+      ? await this.#authGuard.race(() => this.#network.authedFetch(request))
+      : await this.#network.authedFetch(request);
+    if (response.status === 416) {
+      return new Uint8Array();
+    }
+    if (!response.ok) {
+      throw new Error(
+        `file extract range read of ${this.#fileURL} answered ${response.status}`,
+      );
+    }
+    let bytes = new Uint8Array(await response.arrayBuffer());
+    // A server that ignored the range answered the whole file.
+    return response.status === 206 ? bytes : bytes.subarray(start, end);
   };
 
   async #fetch(): Promise<Response> {
