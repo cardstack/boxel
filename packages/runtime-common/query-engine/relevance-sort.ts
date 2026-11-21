@@ -20,7 +20,7 @@ import {
   type Sort,
   collectPositiveMatchTerms,
   isRelevanceSort,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import type { CodeRef } from '../index.ts';
 import { RELEVANCE_SORT_KEY_NAME, explainNames } from './sort-sql.ts';
 import { SEARCH_RANK_SIGNALS, rankFieldsOf } from '../search-intent.ts';

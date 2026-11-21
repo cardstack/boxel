@@ -16,7 +16,7 @@ import {
   typeCondition as typeConditionNode,
 } from '../expression.ts';
 import type { CodeRef } from '../index.ts';
-import type { EqFilter, Filter } from '../query-v2/query.ts';
+import type { EqFilter, Filter } from '../query.ts';
 import type { FilterContext } from './types.ts';
 import type * as JSONTypes from 'json-typescript';
 import { realmBound } from './index-sql.ts';

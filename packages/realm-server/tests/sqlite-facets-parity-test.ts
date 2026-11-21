@@ -15,7 +15,7 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import type { QueryOptions } from '@cardstack/runtime-common/query-engine/types';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 import { NodeSQLiteAdapter } from '@cardstack/query-verification/sqlite-adapter';
 
 import {

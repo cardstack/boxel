@@ -5,7 +5,7 @@
 // holds the model's copies of the grammar table's member lists to the table.
 import { isDeepStrictEqual } from 'util';
 
-import { assertQuery } from '@cardstack/runtime-common/query-v2/query';
+import { assertQuery } from '@cardstack/runtime-common/query';
 import {
   grammarMembers,
   newerSpellingMarkers,

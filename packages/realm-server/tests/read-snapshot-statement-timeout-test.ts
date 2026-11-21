@@ -15,7 +15,7 @@ import {
   statementTimeoutFor,
 } from '@cardstack/postgres/pg-adapter';
 import { setSignalDeadline, signalDeadline } from '@cardstack/runtime-common';
-import { SearchBoundError } from '@cardstack/runtime-common/query-v2/search-bounds';
+import { SearchBoundError } from '@cardstack/runtime-common/search-bounds';
 import { mergeAbortSignals } from '@cardstack/runtime-common/virtual-network';
 import { setupDB } from './helpers/index.ts';
 import { searchStatementsJit } from './helpers/jit-guard.ts';

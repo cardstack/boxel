@@ -26,7 +26,7 @@ import {
   separatedByCommas,
   typesContains,
 } from '../expression.ts';
-import type { MatchesFilter } from '../query-v2/query.ts';
+import type { MatchesFilter } from '../query.ts';
 
 export interface StoreKeep {
   realm: string;

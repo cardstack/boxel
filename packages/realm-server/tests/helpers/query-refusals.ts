@@ -22,12 +22,12 @@ import {
 } from '@cardstack/runtime-common';
 import { assertQuery } from '@cardstack/runtime-common/query-v2/query-check';
 import { setVectorSearchSettings } from '@cardstack/runtime-common/vector-store';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 import {
   lowerQuery,
   usesNewSyntax,
 } from '@cardstack/runtime-common/query-v2/query-syntax';
-import { parseSearchEntryQueryFromPayload } from '@cardstack/runtime-common/query-v2/search-entry';
+import { parseSearchEntryQueryFromPayload } from '@cardstack/runtime-common/search-entry';
 import { setupDB } from './index.ts';
 import { definitionsLookup } from './definition-lookup.ts';
 function ref(module: string, name: string): ResolvedCodeRef {

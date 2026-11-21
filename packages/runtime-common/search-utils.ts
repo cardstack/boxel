@@ -15,9 +15,8 @@ export type SearchRequestErrorCode =
   | 'invalid-render'
   | 'invalid-prerendered-html-format';
 
-// One class for both engines' request refusals: the query-v2 copy
-// (query-v2/search-utils.ts) re-exports it, so a refusal Query V2's grammar
-// raises is the same error every caller tests for (a 400, never a 500).
+// One class for every request refusal, so a refusal the query grammar raises
+// is the same error every caller tests for (a 400, never a 500).
 export class SearchRequestError extends Error {
   code: SearchRequestErrorCode;
   // the query grammar's own code for the mistake, when it has one
@@ -161,6 +160,9 @@ export function resolveSearchRequestMethod(request: Request): string {
 // the realm-server handler down to searchCards.
 export type SearchOpts = {
   cacheOnlyDefinitions?: boolean;
+  // The zone a query that names none is reckoned in, ahead of the realm's
+  // default (time-zone.ts). A federated search over several realms sets UTC.
+  timeZone?: string;
   // Prerender searches set this so `searchCardsUncoalesced` skips the
   // `loadLinks` relationship-assembly pass entirely (the host re-resolves
   // every result from card+source and reads only `data[].id`). Live /
@@ -206,6 +208,10 @@ export type SearchOpts = {
   // engine's `loadLinks` fan-out stops promptly instead of running to
   // completion. Threaded the same way as `timings`.
   signal?: AbortSignal;
+  // A federated search's deadline for each realm (epoch ms; see
+  // `realmDeadlineWithin`): a realm that has not answered by then is cut off
+  // and reported as a timeout, and the search answers with the others.
+  realmDeadline?: number;
 };
 
 // Indirection so a host integration test can deterministically capture

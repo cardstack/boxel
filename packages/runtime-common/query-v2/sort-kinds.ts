@@ -1,7 +1,7 @@
 // The sort kinds the query schema and its check recognize. The engine reads
 // them too (query-engine/types.ts and vector-query.ts import them from here),
 // so the schema compiles without the engine beneath it.
-import type { BlendSortExpression, NearSortTarget } from './query.ts';
+import type { BlendSortExpression, NearSortTarget } from '../query.ts';
 import type { CodeRef } from '../index.ts';
 
 export const generalSortFields: Record<string, string> = {

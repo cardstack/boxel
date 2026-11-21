@@ -61,7 +61,7 @@ import {
   DEFAULT_FACET_SIZE,
   isRelativeDate,
   resolveRelativeDate,
-} from './query-v2/query.ts';
+} from './query.ts';
 import { assertDistinctFacets } from './query-v2/query-syntax.ts';
 import {
   assertLogQuery,
@@ -72,7 +72,7 @@ import {
   PAGE_SIZE_CLAMPED,
   TOTAL_ESTIMATED,
   totalEstimatedMessage,
-} from './query-v2/search-bounds.ts';
+} from './search-bounds.ts';
 import { RealmPaths } from './paths.ts';
 import { arrayElement, sqlTextArrayLiteral } from './sql-literal.ts';
 import { isPrefixForm } from './realm-identifiers.ts';

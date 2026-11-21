@@ -18,7 +18,7 @@ import {
   type Sort,
   isExprSort,
   isWhenSignal,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import {
   type CardExpression,
   fieldQuery,

@@ -12,7 +12,7 @@
 // compares by code unit, as SQLite's does. Past a bound, they are the rows'
 // that were read, which `sqliteFacetSampled` says.
 
-import type { FacetCount, FacetRange, FacetStats } from '../query-v2/query.ts';
+import type { FacetCount, FacetRange, FacetStats } from '../query.ts';
 import { facetRangeLabel } from '../query-v2/query-check.ts';
 import {
   SQLITE_FACET_BUDGET_MS,

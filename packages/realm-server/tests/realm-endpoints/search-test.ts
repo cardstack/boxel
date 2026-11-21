@@ -11,7 +11,7 @@ import {
 import {
   setSearchBoundsForTests as setV2SearchBounds,
   resetSearchBoundsForTests as resetV2SearchBounds,
-} from '@cardstack/runtime-common/query-v2/search-bounds';
+} from '@cardstack/runtime-common/search-bounds';
 
 // A realm's `_search` bounds its page with the grammar it reads the request
 // with (realm-entry-grammar.ts), Query V2's or main's, so a test lowering the

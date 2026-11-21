@@ -58,6 +58,8 @@ module('Integration | query-field page opt-in', function (hooks) {
     setSearchBoundsForTests({
       serverMaxPageSize: DEFAULT_CEILING,
       serverAbsoluteMaxPageSize: ABSOLUTE_MAX,
+      // A field naming no page is sent the query-field default explicitly.
+      queryFieldPageSize: DEFAULT_CEILING,
     });
 
     let permissions: Permissions = { canWrite: true, canRead: true };

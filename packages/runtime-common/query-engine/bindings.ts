@@ -21,7 +21,7 @@ import {
   logBindingSelect,
   mapCardReferences,
   mapLetReferences,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import { Facets } from './facets.ts';
 import type * as JSONTypes from 'json-typescript';
 import {

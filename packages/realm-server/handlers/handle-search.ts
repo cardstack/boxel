@@ -4,7 +4,7 @@ import {
   type LogAccess,
 } from '@cardstack/runtime-common/log-query';
 import { isLogBinding } from '@cardstack/runtime-common/query-v2/query-values';
-import { applyServerSearchPageBound as applyV2ServerSearchPageBound } from '@cardstack/runtime-common/query-v2/search-bounds';
+import { applyServerSearchPageBound } from '@cardstack/runtime-common/search-bounds';
 import {
   emptySearchEntryDocument,
   markPolicyScoped,
@@ -13,7 +13,7 @@ import {
   searchEntryRealms as v2SearchEntryRealms,
   type SearchColumnsDocument,
   type SearchEntryQuery,
-} from '@cardstack/runtime-common/query-v2/search-entry';
+} from '@cardstack/runtime-common/search-entry';
 import { InvalidQueryError } from '@cardstack/runtime-common/invalid-query-error';
 import { mergeAbortSignals } from '@cardstack/runtime-common/virtual-network';
 import {
@@ -143,7 +143,7 @@ interface FederatedEntryGrammar {
 
 const V2_ENTRY_GRAMMAR: FederatedEntryGrammar = {
   parse: (payload) => parseV2SearchEntryQuery(payload),
-  boundPage: applyV2ServerSearchPageBound,
+  boundPage: applyServerSearchPageBound,
   policyScopedQuery: v2PolicyScopedQuery,
   searchEntryRealms: v2SearchEntryRealms,
 };
@@ -818,13 +818,13 @@ export default function handleSearch(opts: {
     // above, so no share is taken: the page keeps the size and number asked.
     if (parsed.federation?.results !== 'merged') {
       parsed.itemQuery = applyFederatedRowBudget(
-        parsed.itemQuery as Query,
+        parsed.itemQuery,
         new Set(
           realmList.filter(
             (realm) => access.readable.has(realm) || access.scoped.has(realm),
           ),
         ).size,
-      ) as typeof parsed.itemQuery;
+      );
     }
 
     // The query each policy-scoped realm runs. Composed here, off the bounded
@@ -1735,7 +1735,7 @@ async function respondWithTable(
   }
   let bounded: SearchEntryQuery = {
     ...query,
-    itemQuery: applyV2ServerSearchPageBound(query.itemQuery),
+    itemQuery: applyServerSearchPageBound(query.itemQuery),
   };
   let run = (budgetSignal?: AbortSignal) => {
     let merged = mergeAbortSignals(budgetSignal, signal);

@@ -15,7 +15,7 @@ import {
   type FieldDefinition,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 
 import {
   closeTestPgAdapter,

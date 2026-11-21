@@ -11,7 +11,7 @@ import {
   type MatchTerm,
   splitTypeAheadQuery as splitTypeAheadQueryAsWritten,
   typeAheadWords as typeAheadWordsAsWritten,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import { TYPE_AHEAD_KEY } from '../search-doc-keys.ts';
 
 // The small-count floor on typo corrections offered to a caller a realm

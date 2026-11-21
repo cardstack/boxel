@@ -72,7 +72,7 @@ import {
   InvalidQueryError,
   assertRelativeDateWellFormed,
   facetRangeLabel,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import type { Definition } from '../definitions.ts';
 import type { QueryOptions } from './types.ts';
 import { SortWindow } from './sort-window.ts';

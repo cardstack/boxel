@@ -40,7 +40,7 @@ import type {
   QueryResultsMeta,
   SearchProjection,
 } from './types.ts';
-import type { Query } from '../query-v2/query.ts';
+import type { Query } from '../query.ts';
 import {
   effectiveErrorDoc,
   effectiveHasError,

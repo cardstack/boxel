@@ -15,7 +15,7 @@ import {
   isBlendSort,
   isMatchRelevanceSort,
 } from './types.ts';
-import { type Sort, isExprSort } from '../query-v2/query.ts';
+import { type Sort, isExprSort } from '../query.ts';
 import {
   type CardExpression,
   fieldQuery,

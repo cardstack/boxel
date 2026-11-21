@@ -3,7 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import { InvalidQueryError } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 import { assertQuery } from '@cardstack/runtime-common/query-v2/query-check';
 
 // Every refusal names its mistake with a code (invalid-query-error.ts lists

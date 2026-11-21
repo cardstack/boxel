@@ -15,7 +15,7 @@ import {
   type DefinitionLookup,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 
 import { setupDB } from './helpers/index.ts';
 import { definitionLookupOf } from './helpers/definition-lookup.ts';

@@ -37,7 +37,7 @@ import type {
   TypeAheadFilter,
   MatchTerm,
   NearFilter,
-} from './query.ts';
+} from '../query.ts';
 import { parseQuery } from './query-check.ts';
 
 export const FACET_MEASURES = ['avg', 'min', 'max', 'sum'] as const;

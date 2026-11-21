@@ -3990,7 +3990,7 @@ try { await realm.cards.search({ filter: { type: ${recipeRef} }, limit: 10 }); }
 return { message, found: (await realm.cards.search({ filter: { type: ${recipeRef} } })).total };`);
 
       assert.true(
-        /unknown field in query: limit/.test(value.message),
+        /unknown member "limit"/.test(value.message),
         `the bad query was refused: ${value.message}`,
       );
       assert.strictEqual(value.found, 3, 'the next search still ran');
