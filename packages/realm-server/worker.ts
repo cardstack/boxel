@@ -263,7 +263,7 @@ let autoMigrate = migrateDB || undefined;
     };
   };
 
-  let dbAdapter = new PgAdapter({ autoMigrate });
+  let dbAdapter = new PgAdapter({ autoMigrate, poolRole: 'worker' });
   let queue = new PgQueueRunner({
     adapter: dbAdapter,
     workerId,
