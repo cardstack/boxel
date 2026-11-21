@@ -10,6 +10,11 @@ const {
   RUNTIME_PACKAGE_FILES,
   CLOUD_PROVIDER_ADAPTER_MODULES,
 } = require('./eslint/cloud-provider-sdk-imports.cjs');
+const {
+  BXL_SQL_IMPORT_RULE,
+  BXL_SQL_BROWSER_FILES,
+  SQL_PUSH_DOWN_MODULES,
+} = require('./eslint/bxl-sql-imports.cjs');
 
 module.exports = {
   root: true,
@@ -120,6 +125,16 @@ module.exports = {
       files: CLOUD_PROVIDER_ADAPTER_MODULES,
       rules: {
         '@cardstack/boxel/no-cloud-provider-sdk': 'off',
+      },
+    },
+    {
+      // BXL's SQL push-down stays out of browser-bundled code
+      // (eslint/bxl-sql-imports.cjs). `host` re-declares it.
+      files: BXL_SQL_BROWSER_FILES,
+      excludedFiles: ['**/tests/**', ...SQL_PUSH_DOWN_MODULES],
+      plugins: ['@typescript-eslint'],
+      rules: {
+        '@typescript-eslint/no-restricted-imports': BXL_SQL_IMPORT_RULE,
       },
     },
   ],
