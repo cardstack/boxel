@@ -2241,6 +2241,11 @@ export class IndexQueryEngine {
             return this.handleJsonContainsQuery(element);
           } else if (element.kind === 'type-condition') {
             return this.handleTypeCondition(element);
+          } else if (element.kind === 'field-test') {
+            // compiled only by the query engine that makes it
+            throw new Error(
+              'a field-test expression reached the legacy query engine',
+            );
           } else {
             throw assertNever(element);
           }

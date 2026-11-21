@@ -51,6 +51,25 @@ export interface FieldQuery {
   kind: 'field-query';
 }
 
+// The query's clock reading while a filter compiles. Filter compilation is
+// synchronous, so a value set around it is seen by exactly the field values
+// that compile inside it (see `withFilterNow`).
+let filterNow: Date | undefined;
+
+export function currentFilterNow(): Date | undefined {
+  return filterNow;
+}
+
+export function withFilterNow<T>(now: Date | undefined, build: () => T): T {
+  let outer = filterNow;
+  filterNow = now;
+  try {
+    return build();
+  } finally {
+    filterNow = outer;
+  }
+}
+
 export interface FieldValue {
   type: CodeRef;
   path: string;
@@ -138,6 +157,8 @@ export interface FieldArity {
 export interface TypeCondition {
   kind: 'type-condition';
   ref: CodeRef;
+  // The `types` column tested (`i.types` unless a subquery names its own).
+  column?: string;
 }
 
 export type CardExpression = (
@@ -152,6 +173,7 @@ export type CardExpression = (
   | FieldQuery
   | FieldValue
   | FieldArity
+  | FieldTest
   | TypeCondition
 )[];
 
@@ -306,10 +328,46 @@ export function sortDirection(
   };
 }
 
-export function typeCondition(ref: CodeRef): TypeCondition {
+export function typeCondition(ref: CodeRef, column?: string): TypeCondition {
   return {
     kind: 'type-condition',
     ref,
+    ...(column ? { column } : {}),
+  };
+}
+
+// One test of one field, resolved against the field's definition in pass 2:
+// `eq` and `in` against `values`, `like` and `pattern` against a prepared
+// operand, `range` against bounds, `missing` for no value, and `file` for a
+// file-backed card (`values[0]` says which way).
+export interface FieldTest {
+  kind: 'field-test';
+  type: CodeRef;
+  path: string;
+  op: 'eq' | 'in' | 'like' | 'pattern' | 'range' | 'missing' | 'file';
+  values: JSONTypes.Value[];
+  range?: Record<string, unknown>;
+  sqlOp?: string;
+  polarity: 'positive' | 'negated';
+  perRow?: boolean;
+  indexTable?: string;
+  realmBound?: Expression;
+  now?: Date;
+  // The realm whose value store may narrow a positive range test on a
+  // number field to the cards it holds in range (value-store-filter.ts).
+  valueStoreRealm?: string;
+}
+
+export function fieldTest(
+  test: Omit<FieldTest, 'kind' | 'now' | 'values' | 'polarity'> &
+    Partial<Pick<FieldTest, 'values' | 'polarity'>>,
+): FieldTest {
+  return {
+    values: [],
+    polarity: 'positive',
+    ...test,
+    kind: 'field-test',
+    ...(filterNow ? { now: filterNow } : {}),
   };
 }
 
@@ -522,11 +580,13 @@ export async function query(
   dbAdapter: DBAdapter,
   query: Expression,
   coerceTypes?: TypeCoercion,
+  signal?: AbortSignal,
 ) {
   let sql = await expressionToSql(dbAdapter.kind, query);
   return await dbAdapter.execute(sql.text, {
     coerceTypes,
     bind: sql.values,
+    ...(signal ? { signal } : {}),
   });
 }
 
