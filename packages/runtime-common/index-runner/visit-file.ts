@@ -491,16 +491,32 @@ export async function routeIndexVisitResult(
     });
   }
 
-  // Route file extract + file render to the file indexer. The file indexer's
-  // existing error-path handling runs even if extractResult is missing; that
-  // behavior is preserved by passing undefined through.
+  // Route file extract + file render to the file indexer. When the page died
+  // before the extract ran (a card render that timed out or crashed evicts the
+  // tab, and the fused visit has no page left to extract on), the reason is the
+  // page's error, so the file half records that error, markers included: a
+  // render timeout is transient for the file as it is for the card, and a
+  // genuine crash still errors with its own message. With no extract and no
+  // page error the file indexer's own error-path handling runs on undefined.
+  let extractResult: RenderVisitResponse['fileExtract'] =
+    fileExtract ??
+    (pageUnusableError
+      ? {
+          id: pageUnusableError.error.id ?? localPath,
+          nonce: '',
+          status: 'error',
+          searchDoc: null,
+          deps: pageUnusableError.error.deps ?? [],
+          error: { type: 'file-error', error: pageUnusableError.error },
+        }
+      : undefined);
   await indexFileWithResults({
     path: localPath,
     lastModified,
     resourceCreatedAt,
     hasModulePrerender: isModule,
     isCardInstance: Boolean(parsedCardResource),
-    extractResult: fileExtract,
+    extractResult,
     renderResult: fileRender,
     diagnostics,
   });
