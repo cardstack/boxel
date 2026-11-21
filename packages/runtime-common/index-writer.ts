@@ -79,6 +79,22 @@ import {
   syncValueStore,
   syncValueStoreLiveness,
 } from './value-store.ts';
+import { dialectFor } from './query-engine/dialect.ts';
+import { SEARCH_TEXT_KEY } from './search-intent.ts';
+import { CARD_TITLE_KEY, TYPE_AHEAD_KEY } from './search-doc-keys.ts';
+
+// The production columns a swap derives from the staged row rather than
+// copying it: `boxel_index_pending` and `prerendered_html_pending` have none
+// of them. Each is promoted only when the production table has it (see
+// `#restampedColumns` and `promotePrerenderedHtmlPending`).
+const DERIVED_INDEX_COLUMNS: readonly string[] = [
+  'search_text_fp',
+  'search_tsv',
+  'rank_tsv',
+  'search_title',
+  'pattern_text',
+];
+const DERIVED_HTML_COLUMNS: readonly string[] = ['markdown_tsv'];
 
 // One element of a Postgres array literal (`{"a","b"}`), quoted so a comma,
 // brace, space or quote in a URL stays inside its element.
@@ -488,6 +504,8 @@ const WRITE_BUFFER_FLUSH_THRESHOLD = 100;
 // kilobytes) still reaches the row-count threshold first, and a flush peaks
 // at tens of megabytes however large the realm's files are.
 const WRITE_BUFFER_FLUSH_BYTES = 8 * 1024 * 1024;
+// The largest search doc the writer stores whole (`#boundedSearchDoc`).
+export const SEARCH_DOC_MAX_CHARS = 16 * 1024 * 1024;
 
 // Type-watermark rows written per statement. The set is bounded by the
 // realm's type vocabulary rather than its row count, so this only has to keep
@@ -2093,13 +2111,71 @@ export class Batch {
     // display_names, diagnostics, error_doc) in one place, including rendered
     // card content that can carry a split emoji surrogate or a stray NUL folded
     // in from an upstream resolver.
+    let sanitized = sanitizeForJsonb(preparedEntry) as Record<string, unknown>;
+    if ('search_doc' in sanitized) {
+      // A search doc over `SEARCH_DOC_MAX_CHARS` keeps only its reserved keys.
+      let searchDoc = this.#boundedSearchDoc(
+        href,
+        sanitized.search_doc as Record<string, unknown> | null,
+      );
+      sanitized.search_doc = searchDoc;
+      // The render's `_searchText` (docs/search-intent.md) is the source of
+      // the row's weighted full-text vector, which only Postgres has. Staging
+      // keeps it so promotion can build the vector (`#restampedColumns`); the
+      // promoted doc never holds it. SQLite has no use for it.
+      if (
+        this.#dbAdapter.kind !== 'pg' &&
+        searchDoc &&
+        typeof searchDoc === 'object' &&
+        SEARCH_TEXT_KEY in searchDoc
+      ) {
+        let { [SEARCH_TEXT_KEY]: _searchText, ...rest } = searchDoc;
+        sanitized.search_doc = rest;
+      }
+    }
     return {
       preparedEntry: await this.#onlyPendingColumns(
         'boxel_index_pending',
-        sanitizeForJsonb(preparedEntry) as Record<string, unknown>,
+        sanitized,
       ),
       htmlEntry: prerenderedHtmlEntryFrom(entry, diagnostics),
     };
+  }
+
+  // The search doc as stored. Postgres keeps a large jsonb value out of line,
+  // lz4-compressed (TOAST; see the `search-tables-vacuum-and-statistics`
+  // migration), so a large doc needs no special handling up to a bound:
+  // `SEARCH_DOC_MAX_CHARS` of JSON text, far under jsonb's 255 MB limit, so a
+  // runaway doc can neither fail the batch's upsert nor bloat every read of
+  // its row. A doc over it keeps only its reserved keys (`_`-prefixed, less
+  // `_searchText`, and `cardTitle`), so the card stays listed under its type
+  // and title while its fields match nothing, and the writer logs an error, as
+  // `clampSerializedError` clamps an oversized error doc.
+  #boundedSearchDoc(
+    href: string,
+    searchDoc: Record<string, unknown> | null,
+  ): Record<string, unknown> | null {
+    if (!searchDoc || typeof searchDoc !== 'object') {
+      return searchDoc;
+    }
+    let size = approximateSize(searchDoc);
+    if (size <= SEARCH_DOC_MAX_CHARS) {
+      return searchDoc;
+    }
+    let kept = Object.fromEntries(
+      Object.entries(searchDoc).filter(
+        ([key]) =>
+          (key.startsWith('_') && key !== SEARCH_TEXT_KEY) ||
+          key === 'cardTitle',
+      ),
+    );
+    if (approximateSize(kept) > SEARCH_DOC_MAX_CHARS) {
+      kept = {};
+    }
+    this.#log.error(
+      `search doc of ${href} is about ${size} characters, over the ${SEARCH_DOC_MAX_CHARS} limit: indexed with its reserved keys only, so its fields match no filter`,
+    );
+    return kept;
   }
 
   // Fix a prerenderHtmlOnly batch's stamps: every row it writes for a URL
@@ -2685,31 +2761,40 @@ export class Batch {
     // Read outside the transaction: `getColumnNames` runs on the adapter, not
     // on the transaction's connection, so calling it inside would check out a
     // second pool connection while the first sits waiting.
-    // Only the columns its pending table also has are promoted: a column the
-    // search tables' migrations add to `boxel_index` or `prerendered_html`
-    // (the Query V2 text columns, and the generated ones, which no insert may
-    // name) is left to the database until the writer fills it.
+    // Only the columns its pending table also has are promoted as staged: a
+    // column the search tables' migrations add to `boxel_index` or
+    // `prerendered_html` (the generated ones, which no insert may name, and
+    // any the writer does not know) is left to the database. The derived text
+    // columns (`DERIVED_INDEX_COLUMNS`, `DERIVED_HTML_COLUMNS`) are the
+    // exception: production-only, each is computed from the staged row as it
+    // promotes, when the production table has it.
     let promoted = async (
       table: 'boxel_index' | 'prerendered_html',
       pending: 'boxel_index_pending' | 'prerendered_html_pending',
+      derived: readonly string[],
     ) => {
       let staged = new Set(await this.#dbAdapter.getColumnNames(pending));
       let names = await this.#dbAdapter.getColumnNames(table);
-      // A production column the pending table lacks (one a newer writer
-      // added) is promoted as NULL, so a row never keeps a value derived from
-      // the document it replaced.
+      // A production column the pending table lacks and the writer does not
+      // derive (one a newer writer added) is promoted as NULL, so a row never
+      // keeps a value derived from the document it replaced.
       for (let name of names) {
-        if (!staged.has(name)) {
+        if (!staged.has(name) && !derived.includes(name)) {
           this.#unstagedColumns.add(`${table}.${name}`);
         }
       }
       return names;
     };
     let columns = {
-      boxelIndex: await promoted('boxel_index', 'boxel_index_pending'),
+      boxelIndex: await promoted(
+        'boxel_index',
+        'boxel_index_pending',
+        DERIVED_INDEX_COLUMNS,
+      ),
       prerenderedHtml: await promoted(
         'prerendered_html',
         'prerendered_html_pending',
+        DERIVED_HTML_COLUMNS,
       ),
     };
     if (this.#prerenderHtmlOnly) {
@@ -3647,8 +3732,19 @@ export class Batch {
       resource_created_at: _remove3,
       generation: _remove4,
       job_id: _remove5,
+      // Derived at promotion and kept there for a row that brings no
+      // `_searchText` (see `applyBatchUpdates`); staging has no such column.
+      search_tsv: _remove6,
+      pattern_text: _remove7,
+      rank_tsv: _remove8,
+      search_title: _remove9,
       ...productionVersion
-    } = entry;
+    } = entry as typeof entry & {
+      search_tsv?: unknown;
+      pattern_text?: unknown;
+      rank_tsv?: unknown;
+      search_title?: unknown;
+    };
     return {
       ...productionVersion,
       last_modified: entry.last_modified ? parseInt(entry.last_modified) : null,
@@ -4050,13 +4146,29 @@ export class Batch {
             : []),
         ]),
         'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
-        ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
+        ...separatedByCommas(
+          names.map((name) =>
+            // A row staged without the render's `_searchText` (an error row
+            // carrying its last good doc forward, or a render from before
+            // search intent) keeps the vector it has.
+            names.includes('search_tsv') &&
+            (name === 'search_tsv' ||
+              name === 'search_text_fp' ||
+              name === 'pattern_text' ||
+              name === 'rank_tsv')
+              ? [
+                  `${name}=CASE WHEN EXCLUDED.search_tsv IS NULL THEN boxel_index.${name} ELSE EXCLUDED.${name} END`,
+                ]
+              : [`${name}=EXCLUDED.${name}`],
+          ),
+        ),
       ] as Expression);
       await this.#applyStagedTombstones({
         table: 'boxel_index',
         tombstoneColumns: INDEX_TOMBSTONE_COLUMNS,
         restamp: true,
       });
+      await this.#syncWordList();
 
       // Publish this pass's `prerendered_html_pending` rows, UNLESS this is a
       // split-mode index pass — in which case HTML flows only through the
@@ -4118,8 +4230,48 @@ export class Batch {
     }
   }
 
+  // Adds the words of this pass's `typos` fields, and of each card's
+  // type-ahead text (its title and alternative names), to the realm's word
+  // list (see the `search-text-columns` migration): lowercased, split on
+  // anything but letters and digits, three characters or more. A word
+  // already listed stays as it is.
+  async #syncWordList() {
+    if (!dialectFor(this.#dbAdapter.kind).typoCorrection) {
+      return;
+    }
+    let urls = [...this.#invalidations];
+    const CHUNK = 500;
+    for (let start = 0; start < urls.length; start += CHUNK) {
+      let chunk = urls.slice(start, start + CHUNK);
+      await this.#query([
+        'INSERT INTO boxel_index_words (realm_url, word)',
+        'SELECT DISTINCT p.realm_url, w.word',
+        `FROM boxel_index_pending AS p CROSS JOIN LATERAL regexp_split_to_table(lower(concat_ws(' ', p.search_doc -> '${SEARCH_TEXT_KEY}' ->> 'typos', p.search_doc ->> '${TYPE_AHEAD_KEY}')), '[^[:alnum:]]+') AS w(word)`,
+        'WHERE',
+        ...every([
+          ['p.realm_url =', param(this.realmURL.href)],
+          ['p.staging_id =', param(this.#stagingId)],
+          [
+            'p.url IN',
+            ...addExplicitParens(
+              separatedByCommas(chunk.map((url) => [param(url)])),
+            ),
+          ],
+          any([['p.is_deleted = false'], ['p.is_deleted IS NULL']]),
+          any([
+            [`p.search_doc -> '${SEARCH_TEXT_KEY}' ? 'typos'`],
+            [`p.search_doc ? '${TYPE_AHEAD_KEY}'`],
+          ]),
+          ['char_length(w.word) >= 3'],
+        ]),
+        'ON CONFLICT ON CONSTRAINT boxel_index_words_pkey DO NOTHING',
+      ] as Expression);
+    }
+  }
+
   // The swap's SELECT list: every column as staged, except `generation`,
-  // which takes this commit's. The pending rows carry the provisional
+  // which takes this commit's, and the derived text columns, which are
+  // computed from the staged row. The pending rows carry the provisional
   // generation the pass anticipated at setup, which a peer that committed
   // first may have taken.
   // That every content column of `boxel_index` row `prod` equals the staged
@@ -4131,13 +4283,30 @@ export class Batch {
       let kind = INDEX_COLUMN_CLASSES[c] ?? 'content';
       return kind === 'content';
     });
-    return content
-      .map((c) =>
-        this.#unstagedColumns.has(`boxel_index.${c}`)
-          ? `${prod}.${c} IS NULL`
+    let equal = content.map((c) =>
+      this.#unstagedColumns.has(`boxel_index.${c}`)
+        ? `${prod}.${c} IS NULL`
+        : c === 'search_doc'
+          ? // The promoted doc drops the render's search text (see
+            // `#derivedColumn`), so the staged doc is compared as promoted.
+            `${prod}.search_doc IS NOT DISTINCT FROM (${staged}.search_doc - '${SEARCH_TEXT_KEY}')`
           : `${prod}.${c} IS NOT DISTINCT FROM ${staged}.${c}`,
-      )
-      .join(' AND ');
+    );
+    // The search text itself, which the vectors and pattern text are built
+    // from, is compared by its fingerprint. Without the fingerprint column a
+    // row staged with search text counts as changed.
+    equal.push(
+      columns.includes('search_text_fp')
+        ? `${prod}.search_text_fp IS NOT DISTINCT FROM ${this.#searchTextFp(staged)}`
+        : `NOT (${staged}.search_doc ? '${SEARCH_TEXT_KEY}')`,
+    );
+    return equal.join(' AND ');
+  }
+
+  // The fingerprint of the render's search text in `alias`'s search doc, or
+  // NULL for a doc without one (Postgres).
+  #searchTextFp(alias: string): string {
+    return `CASE WHEN ${alias}.search_doc ? '${SEARCH_TEXT_KEY}' THEN md5((${alias}.search_doc -> '${SEARCH_TEXT_KEY}')::text) END`;
   }
 
   // The pass's staged rows whose content equals their production row's are
@@ -4198,8 +4367,61 @@ export class Batch {
               param(this.commitGeneration),
               'AS INTEGER) AS generation',
             ] as Expression)
-          : [column],
+          : (this.#derivedColumn(column) ?? [column]),
     );
+  }
+
+  // The SELECT expression of a derived text column of `boxel_index`, from the
+  // staged row; undefined for any other column. On SQLite the vectors and
+  // pattern text are NULL: it has no full-text vector, and its `matches` and
+  // `pattern` read the search doc directly.
+  #derivedColumn(column: string): Expression | undefined {
+    let pg = this.#dbAdapter.kind === 'pg';
+    switch (column) {
+      case 'search_doc':
+        // No row keeps the render's `_searchText`: it lives on as
+        // `search_tsv`.
+        return pg
+          ? [`(search_doc - '${SEARCH_TEXT_KEY}') AS search_doc`]
+          : undefined;
+      case 'rank_tsv':
+        // The row's small, inline ranking vector.
+        return [
+          pg
+            ? `CASE WHEN search_doc ? '${SEARCH_TEXT_KEY}' THEN search_rank_vector(search_doc -> '${SEARCH_TEXT_KEY}') END AS rank_tsv`
+            : 'NULL AS rank_tsv',
+        ];
+      case 'search_text_fp':
+        // The search text's fingerprint, by which a later promotion tells
+        // an unchanged search text from a changed one (`#contentEqual`).
+        return [
+          pg
+            ? `${this.#searchTextFp('boxel_index_pending')} AS search_text_fp`
+            : 'NULL AS search_text_fp',
+        ];
+      case 'search_title':
+        // The row's display title, lowercased, inline for type-ahead
+        // ranking.
+        return [`lower(search_doc ->> '${CARD_TITLE_KEY}') AS search_title`];
+      case 'pattern_text':
+        // The row's pattern-field values, one per line, from the render's
+        // `_searchText`.
+        return [
+          pg
+            ? `search_doc -> '${SEARCH_TEXT_KEY}' ->> 'patterns' AS pattern_text`
+            : 'NULL AS pattern_text',
+        ];
+      case 'search_tsv':
+        // The row's role-weighted full-text vector, built from the render's
+        // `_searchText`.
+        return [
+          pg
+            ? `CASE WHEN search_doc ? '${SEARCH_TEXT_KEY}' THEN search_text_vector(search_doc -> '${SEARCH_TEXT_KEY}') END AS search_tsv`
+            : 'NULL AS search_tsv',
+        ];
+      default:
+        return undefined;
+    }
   }
 
   // Render-only dependents keep their index row — its search document
@@ -4437,19 +4659,34 @@ export class Batch {
     }
     let prerenderedColumns = columns.map((c) => [c]);
     let prerenderedNames = columns;
+    // Production rows carry the card's full-text vector in `markdown_tsv`,
+    // which staging doesn't have: it's computed here, from the markdown being
+    // promoted, so every production row's vector matches its markdown and
+    // each render pays for it once. It uses Postgres's own parser and stemmer
+    // so it agrees with the tsquery a search builds. SQLite has no full-text
+    // vector; its `matches` reads the markdown directly.
+    let selectList = (
+      opts?.monotonicGuard
+        ? prerenderedNames.map((column) =>
+            this.#unstagedColumns.has(`prerendered_html.${column}`)
+              ? [`NULL AS ${column}`]
+              : [column],
+          )
+        : this.#restampedColumns(prerenderedNames, 'prerendered_html')
+    ).map((expression, index) =>
+      prerenderedNames[index] === 'markdown_tsv'
+        ? [
+            this.#dbAdapter.kind === 'pg'
+              ? `CASE WHEN markdown IS NULL THEN NULL ELSE to_tsvector('boxel_english', markdown_search_text(markdown)) END AS markdown_tsv`
+              : 'NULL AS markdown_tsv',
+          ]
+        : expression,
+    );
     await this.#query([
       'INSERT INTO prerendered_html',
       ...addExplicitParens(separatedByCommas(prerenderedColumns)),
       'SELECT',
-      ...separatedByCommas(
-        opts?.monotonicGuard
-          ? prerenderedNames.map((column) =>
-              this.#unstagedColumns.has(`prerendered_html.${column}`)
-                ? [`NULL AS ${column}`]
-                : [column],
-            )
-          : this.#restampedColumns(prerenderedNames, 'prerendered_html'),
-      ),
+      ...separatedByCommas(selectList),
       'FROM prerendered_html_pending',
       'WHERE',
       ...every([

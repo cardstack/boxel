@@ -24,6 +24,7 @@ import {
   type FusedIndexMeta,
   type PrerenderMetaDiagnostics,
   type RenderError,
+  SEARCH_TEXT_KEY,
 } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -288,6 +289,39 @@ export default class RenderMetaRoute extends Route<Model> {
     // and A-Z sort both row types on a single key. For a card it mirrors the
     // `cardTitle` computed already present in the search doc.
     searchDoc._title = searchDoc.cardTitle;
+    // `_typeahead` is the card's type-ahead text: its title and its
+    // `cardInfo.alternativeNames`, one per line, which a type-ahead `matches`
+    // (`prefix: true, scope: 'title'`)
+    // matches on an index of its own. Every card has a title, so every card
+    // can be suggested; a type extends what it is suggested by through the
+    // card info's alternative names (or a CardInfoField subclass).
+    let typeAheadText = typeAheadTextOf(searchDoc);
+    if (typeAheadText) {
+      searchDoc._typeahead = typeAheadText;
+    }
+    // `_searchText` is the card's words grouped by the weight its fields'
+    // search roles give them (docs/search-intent.md). The index writer turns
+    // it into the row's weighted full-text vector and drops it from the
+    // stored doc. Computing it also takes the fields declared
+    // `search: false` out of the doc.
+    if (typeof api.searchTextOf === 'function') {
+      let searchText = api.searchTextOf(Klass, searchDoc) ?? {};
+      // The card's type names (its own and its ancestors', short of the
+      // generic roots) are words of the card too: "alice employee" finds the
+      // Employee titled Alice though "employee" is nowhere in its data. They
+      // weigh like a summary, and join the type-ahead text, below the title
+      // in type-ahead ranking (which reads the title alone).
+      let typeWords = typeWordsOf(displayNames);
+      if (typeWords) {
+        searchText.B = [typeWords, searchText.B].filter(Boolean).join('\n');
+        searchDoc._typeahead = [searchDoc._typeahead, typeWords]
+          .filter(Boolean)
+          .join('\n');
+      }
+      if (Object.keys(searchText).length > 0) {
+        searchDoc[SEARCH_TEXT_KEY] = searchText;
+      }
+    }
 
     let searchDocFieldsMs = pruneTimingPaths(fieldsMs);
     // A target the generator loaded directly also lands in the store's
@@ -573,4 +607,28 @@ function normalizeDisplayName(current: typeof BaseDef): string {
     return current.name;
   }
   return name;
+}
+
+// A card's title and its card info's alternative names, as its search doc
+// holds them, one per line; undefined when there are none.
+function typeAheadTextOf(searchDoc: Record<string, any>): string | undefined {
+  let alternatives = searchDoc.cardInfo?.alternativeNames;
+  let lines = [
+    searchDoc.cardTitle,
+    ...(Array.isArray(alternatives) ? alternatives : []),
+  ]
+    .filter((line): line is string => typeof line === 'string')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  return lines.length > 0 ? [...new Set(lines)].join('\n') : undefined;
+}
+
+// The display names of a card's type and its ancestors, one per line, short
+// of the roots every card shares (they would match every card).
+const GENERIC_TYPE_NAMES = new Set(['Card', 'Base', 'Field', 'File']);
+function typeWordsOf(displayNames: string[]): string | undefined {
+  let names = [...new Set(displayNames)].filter(
+    (name) => name && !GENERIC_TYPE_NAMES.has(name),
+  );
+  return names.length > 0 ? names.join('\n') : undefined;
 }
