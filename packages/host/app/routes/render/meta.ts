@@ -295,6 +295,19 @@ export default class RenderMetaRoute extends Route<Model> {
     // matches on an index of its own. Every card has a title, so every card
     // can be suggested; a type extends what it is suggested by through the
     // card info's alternative names (or a CardInfoField subclass).
+    // `_passages` names the card's passage fields (containsMany of a
+    // PassageField subclass), whose items the index searches one by one.
+    let passageFields = passageFieldsOf(api, Klass);
+    if (passageFields.length > 0) {
+      searchDoc._passages = passageFields;
+    }
+    // `_vectorFields` names the card's vector fields by schema path, with
+    // the space each one declares, so the index writer can check a sidecar's
+    // lines against their fields and record the space of every vector.
+    let vectorFields = vectorFieldsOf(api, Klass);
+    if (Object.keys(vectorFields).length > 0) {
+      searchDoc._vectorFields = vectorFields;
+    }
     let typeAheadText = typeAheadTextOf(searchDoc);
     if (typeAheadText) {
       searchDoc._typeahead = typeAheadText;
@@ -621,6 +634,69 @@ function typeAheadTextOf(searchDoc: Record<string, any>): string | undefined {
     .map((line) => line.trim())
     .filter((line) => line !== '');
   return lines.length > 0 ? [...new Set(lines)].join('\n') : undefined;
+}
+
+// The names of a card's top-level containsMany fields of a PassageField
+// subclass.
+function passageFieldsOf(
+  api: { getFields: (card: any, opts?: any) => Record<string, any> },
+  Klass: unknown,
+): string[] {
+  return Object.entries(api.getFields(Klass))
+    .filter(
+      ([, field]) =>
+        field?.fieldType === 'containsMany' &&
+        (field?.card as { isPassageField?: boolean })?.isPassageField,
+    )
+    .map(([name]) => name);
+}
+
+// A card's vector fields by schema path (`imageVector`, `segments.vector`):
+// each one's declared space, whether it sits inside a list (so its vectors
+// are keyed by item id), and whether it is computed. Contained fields are
+// followed; linked cards are not (a card ranks by its own vectors).
+interface VectorFieldInfo {
+  space: string;
+  list: boolean;
+  computed: boolean;
+}
+function vectorFieldsOf(
+  api: { getFields: (card: any, opts?: any) => Record<string, any> },
+  Klass: unknown,
+): Record<string, VectorFieldInfo> {
+  let found: Record<string, VectorFieldInfo> = {};
+  let visit = (type: unknown, path: string[], list: boolean, depth: number) => {
+    if (depth > 6) {
+      return;
+    }
+    for (let [name, field] of Object.entries(
+      api.getFields(type, { includeComputeds: true }),
+    )) {
+      if (
+        field?.fieldType !== 'contains' &&
+        field?.fieldType !== 'containsMany'
+      ) {
+        continue;
+      }
+      let card = field.card as { space?: unknown; dimensions?: unknown };
+      let inList = list || field.fieldType === 'containsMany';
+      if (
+        card &&
+        typeof card.space === 'string' &&
+        typeof card.dimensions === 'number'
+      ) {
+        found[[...path, name].join('.')] = {
+          space: card.space,
+          list: inList,
+          computed: Boolean(field.computeVia),
+        };
+      } else if (card) {
+        visit(card, [...path, name], inList, depth + 1);
+      }
+    }
+  };
+  visit(Klass, [], false, 0);
+  return found;
 }
 
 // The display names of a card's type and its ancestors, one per line, short
