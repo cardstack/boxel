@@ -2127,6 +2127,140 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
     });
 
+    // A merged search that names a realm whose policy scopes the caller is
+    // answered by the merge, which searches that realm with its grants
+    // composed in, never by the union path: no row, count or facet value
+    // from the scoped realm reaches the answer beyond what its grants admit.
+    // Each answer is checked against the same search of each realm alone.
+    // A merged search that names a realm whose policy scopes the caller is
+    // answered by the merge, which searches that realm with its grants
+    // composed in, never by the union path: no row, count or facet value
+    // from the scoped realm reaches the answer beyond what its grants admit.
+    // Each answer is checked against the same search of each realm alone.
+    // Enumerable's grant admits every open schedule to a query, and nothing
+    // closed, though provider A may read their own closed one.
+    module('a merged search naming a realm the policy scopes', function () {
+      function merged(realmURLs: string[], status?: string) {
+        return {
+          filter: {
+            'item.on': SCHEDULE,
+            ...(status ? { eq: { 'item.status': status } } : {}),
+          },
+          realms: realmURLs,
+          federation: { results: 'merged' },
+          facets: [{ by: '_realm' }],
+          page: { size: 100 },
+        };
+      }
+
+      type Answer = {
+        status: number;
+        body: {
+          data: { id: string }[];
+          meta: {
+            page: { total: number };
+            federation?: { path?: string };
+            facets?: Record<string, { value: string; count: number }[]>;
+          };
+        };
+      };
+
+      // The `_realm` facet, as realm → count.
+      function realmCounts(response: Answer): Record<string, number> {
+        return Object.fromEntries(
+          (response.body.meta.facets?._realm ?? [])
+            .filter((v) => v.count > 0)
+            .map((v) => [v.value, v.count]),
+        );
+      }
+
+      async function ask(realmURLs: string[], status?: string) {
+        return (await federatedSearch(
+          merged(realmURLs, status),
+          PROVIDER_A,
+        )) as unknown as Answer;
+      }
+
+      test('for rows the grant admits: what each realm alone answers, and no more', async function (assert) {
+        let response = await ask([COARSE, ENUMERABLE]);
+        let coarse = await ask([COARSE]);
+        let enumerable = await ask([ENUMERABLE]);
+        assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+        assert.strictEqual(
+          response.body.meta.federation?.path,
+          'merge',
+          'answered by the merge',
+        );
+        assert.deepEqual(
+          ids(response).sort(),
+          [...ids(coarse), ...ids(enumerable)].sort(),
+          'the rows of each realm alone',
+        );
+        assert.deepEqual(
+          inRealm(ENUMERABLE, response).sort(),
+          [`${ENUMERABLE}schedules/a-open`, `${ENUMERABLE}schedules/b-open`],
+          "the scoped realm's rows are the ones its grant admits",
+        );
+        assert.strictEqual(
+          response.body.meta.page.total,
+          coarse.body.meta.page.total + enumerable.body.meta.page.total,
+          'the total counts what each realm alone counts',
+        );
+        assert.deepEqual(
+          realmCounts(response),
+          { ...realmCounts(coarse), ...realmCounts(enumerable) },
+          'the facet counts each realm as it alone counts',
+        );
+        assert.strictEqual(
+          realmCounts(response)[ENUMERABLE],
+          2,
+          'the scoped realm counts the two rows its grant admits',
+        );
+        assert.false(
+          JSON.stringify(response.body).includes(
+            `${ENUMERABLE}schedules/a-closed`,
+          ),
+          'nothing of the row the grant does not admit appears',
+        );
+      });
+
+      test('for rows the grant does not admit: what the realm read outright answers, and nothing of the other', async function (assert) {
+        let response = await ask([COARSE, ENUMERABLE], 'closed');
+        let coarse = await ask([COARSE], 'closed');
+        assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+        assert.strictEqual(response.body.meta.federation?.path, 'merge');
+        assert.deepEqual(
+          ids(response).sort(),
+          ids(coarse).sort(),
+          'the rows of the realm read outright, alone',
+        );
+        assert.deepEqual(
+          inRealm(ENUMERABLE, response),
+          [],
+          'none of the scoped realm',
+        );
+        assert.strictEqual(
+          response.body.meta.page.total,
+          coarse.body.meta.page.total,
+          'the total counts nothing of the scoped realm',
+        );
+        assert.deepEqual(
+          realmCounts(response),
+          realmCounts(coarse),
+          'the facet counts nothing of the scoped realm',
+        );
+      });
+
+      test('a merged search of realms the caller reads outright takes the union', async function (assert) {
+        let response = (await federatedSearch(
+          merged([COARSE, ENUMERABLE]),
+          OWNER,
+        )) as unknown as Answer;
+        assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+        assert.strictEqual(response.body.meta.federation?.path, 'union');
+      });
+    });
+
     module('the policy-scoped mark', function () {
       // An ad-hoc search, which no policy here grants: a realm the caller
       // does not read contributes no rows to it.
