@@ -9,6 +9,7 @@ import {
 } from './index.ts';
 import type { OperationDefinition } from './card-operations/types.ts';
 import type { SerializerName } from './serializers/index.ts';
+import type { FieldSearchOption } from './search-intent.ts';
 import type { FieldType, Searchable } from '@cardstack/base/card-api';
 import type { BaseDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -20,12 +21,21 @@ export interface FieldDefinition {
   isComputed: boolean;
   fieldOrCard: CodeRef;
   serializerName?: SerializerName;
+  // A vector field's declared space (vector-space.ts), worked out from its
+  // type's static vectorizer, provider and size as the type's own `space`
+  // is. A near search compares in this space, whatever spaces the type's
+  // cards are stored in at the moment. Only on vector fields.
+  vectorSpace?: string;
   query?: Query;
   // Raw `searchable` annotation mirrored from the field descriptor (the source
   // of truth in `card-api.gts`). Carried here for the loaderless query compiler
   // and definition-build validation — not a pre-resolved plan. Persisted as
   // plain JSON in `modules.definitions`; omitted when the field declares none.
   searchable?: Searchable;
+  // The field's `search` option (docs/search-intent.md): its own, or else its
+  // type's `searchDefaults`; omitted when neither says anything. The query
+  // engine reads `rank`, `facet` and `patterns` from it.
+  search?: FieldSearchOption;
 }
 
 // Which of the three `BaseDef` families a definition describes. A card has its
