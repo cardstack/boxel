@@ -3759,10 +3759,18 @@ module('Integration | card-basics', function (hooks) {
       assertOnlyTheNarrowingChanged('pets', Puppy, [
         'configuration',
         'searchable',
-        'queryDefinition',
         'eager',
         'declaredCardThunk',
       ]);
+      // `queryDefinition` is an accessor that resolves the query's labels on
+      // read, so it is not an own property to compare above. The narrowed
+      // field is built from the declared one and resolves the same query.
+      assert.deepEqual(
+        getField(new TestCard({ [fields]: { pets: Puppy } }), 'pets')!
+          .queryDefinition,
+        getField(new TestCard(), 'pets')!.queryDefinition,
+        'pets keeps its declared query when narrowed',
+      );
 
       // Replacing an override has to produce a field resolving to the new
       // subtype, and one owner's override must not answer another's. Asserted
