@@ -3,6 +3,8 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   CachingDefinitionLookup,
+  IndexQueryEngine,
+  isTransientDefinitionLookupError,
   internalKeyFor,
   logger,
   mintRealmLoaderEpoch,
@@ -1530,8 +1532,8 @@ module(basename(import.meta.filename), function () {
           module: rri(moduleURL),
           name: 'TransientError',
         }),
-        /nonexistent type/,
-        'lookup fails with cached error',
+        (e: any) => isTransientDefinitionLookupError(e),
+        'lookup fails with cached error, as a transient failure',
       );
       assert.strictEqual(calls, 1, 'prerenderModule called once');
 
@@ -1542,7 +1544,7 @@ module(basename(import.meta.filename), function () {
           module: rri(moduleURL),
           name: 'TransientError',
         }),
-        /nonexistent type/,
+        (e: any) => isTransientDefinitionLookupError(e),
         'lookup still fails with fresh cached error',
       );
       assert.strictEqual(
@@ -2957,6 +2959,154 @@ module(basename(import.meta.filename), function () {
   // setupPermissionedRealmsCached fixture — pre-warm runs in the worker,
   // which has no realm-server / prerender / Chromium, so we only need a pg
   // adapter, a fake registered realm for the reader, and a mock prerenderer.
+
+  // A search over a type whose definition could not be read: an engine whose
+  // lookup fails first and then works, the way a cold start's prerenders do.
+  // Lightweight like the module above — a pg adapter and a registered fake
+  // realm, no indexing — so a recovered search answers an empty page; what
+  // these assert is that a failed lookup is never that answer.
+  module('search over a failing definition lookup', function (hooks) {
+    let adapter: PgAdapter;
+    let definitionLookup: CachingDefinitionLookup;
+    let virtualNetwork: VirtualNetwork;
+    let realmURL = 'http://127.0.0.1:4452/';
+    let testUserId = '@user1:localhost';
+    let timedOut = false;
+    let prerenderCalls = 0;
+
+    let personRef = () => ({
+      module: rri(`${realmURL}person`),
+      name: 'Person',
+    });
+    let search = (
+      lookup: DefinitionLookup,
+      opts: Record<string, unknown> = {},
+    ) =>
+      new IndexQueryEngine(adapter, lookup, virtualNetwork).search(
+        new URL(realmURL),
+        { filter: { on: personRef(), eq: { name: 'Maple' } } } as any,
+        opts as any,
+        { kind: 'dataOnly' } as any,
+      );
+
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+      virtualNetwork = createVirtualNetwork();
+      timedOut = false;
+      prerenderCalls = 0;
+      let prerenderer: Prerenderer = {
+        async prerenderModule(args: ModulePrerenderArgs) {
+          prerenderCalls++;
+          if (timedOut) {
+            return buildModuleResponse(args.url, 'Person', [], {
+              type: 'module-error',
+              error: {
+                id: args.url,
+                message: 'Render timeout after 30000ms',
+                status: 504,
+                title: 'Render timeout',
+                deps: [],
+                additionalErrors: null,
+              },
+            });
+          }
+          let moduleURL = new URL(args.url);
+          let base = moduleURL.href.replace(/\.gts$/, '');
+          return {
+            id: 'example-id',
+            status: 'ready',
+            nonce: '12345',
+            isShimmed: false,
+            lastModified: +new Date(),
+            createdAt: +new Date(),
+            deps: [],
+            definitions: {
+              [`${base}/Person`]: {
+                type: 'definition',
+                moduleURL: moduleURL.href,
+                definition: {
+                  type: 'card-def',
+                  codeRef: { module: rri(moduleURL.href), name: 'Person' },
+                  displayName: 'Person',
+                  fields: { name: 'f0' },
+                  fieldDefs: {
+                    f0: {
+                      type: 'contains',
+                      isPrimitive: true,
+                      isComputed: false,
+                      fieldOrCard: {
+                        module: rri('@cardstack/base/string'),
+                        name: 'default',
+                      },
+                      serializerName: undefined,
+                    },
+                  },
+                },
+                types: [],
+              },
+            },
+          } as ModuleRenderResponse;
+        },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+      };
+      definitionLookup = new CachingDefinitionLookup(
+        adapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      definitionLookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+      await adapter.execute(
+        `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+         VALUES ($1, $2, true, true, true)`,
+        { bind: [realmURL, testUserId] },
+      );
+    });
+
+    hooks.afterEach(async function () {
+      await closeTestPgAdapter(adapter);
+    });
+
+    test('a module whose prerender timed out is never answered as ok, 0 rows', async function (assert) {
+      timedOut = true;
+      await assert.rejects(
+        definitionLookup.lookupDefinition(personRef()),
+        (e: any) => isTransientDefinitionLookupError(e),
+        'the cached timeout row is a transient failure, not a missing type',
+      );
+      // While the timeout row stands (ERROR_CACHE_TTL_MS), every search on the
+      // type is refused rather than answered empty.
+      for (let attempt of [1, 2]) {
+        await assert.rejects(
+          search(definitionLookup),
+          (e: any) => e?.status === 503,
+          `search ${attempt} over the timed-out type is refused, not ok 0`,
+        );
+      }
+      timedOut = false;
+      await adapter.execute(`UPDATE modules SET created_at = $1`, {
+        bind: [Date.now() - 60_000],
+      });
+      let result = await search(definitionLookup);
+      assert.deepEqual(result.results, [], 'answers once the row ages out');
+      assert.ok(prerenderCalls >= 2, 'the module was prerendered again');
+    });
+  });
+
   module('remote realm visibility probe', function (hooks) {
     let adapter: PgAdapter;
     let localRealmURL = 'http://127.0.0.1:4453/';

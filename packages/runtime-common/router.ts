@@ -3,6 +3,11 @@ import { isOperationFailure } from './card-operations/types.ts';
 import { CardError, responseWithError } from './error.ts';
 import type { RequestContext } from './index.ts';
 import { RealmPaths, logger } from './index.ts';
+import { isTransientDefinitionLookupError } from './definition-lookup.ts';
+import {
+  DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  isDefinitionsUnavailableError,
+} from './search-bounds.ts';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
@@ -542,6 +547,28 @@ export class Router {
         if (err.error.meta) {
           cardError.meta = err.error.meta;
         }
+        return responseWithError(cardError, requestContext);
+      }
+      // A definition the request needed could not be read just now: its
+      // module's prerender timed out or its server was unavailable. That says
+      // nothing about the card, so it is answered as the retryable 503 a
+      // search gets (`definitions-unavailable`, with `Retry-After`), not as
+      // an unexpected exception.
+      if (
+        isTransientDefinitionLookupError(err) ||
+        isDefinitionsUnavailableError(err)
+      ) {
+        this.log.warn(
+          `handler for ${request.method} ${request.url} could not read a definition: ${(err as Error).message}`,
+        );
+        let cardError = new CardError((err as Error).message, {
+          status: 503,
+          title: 'Definitions Unavailable',
+        });
+        cardError.meta = {
+          code: 'definitions-unavailable',
+          retryAfterSeconds: DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS,
+        };
         return responseWithError(cardError, requestContext);
       }
 
