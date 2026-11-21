@@ -20,8 +20,8 @@ import {
 // the switch.
 const CALLER_ENGINES: Readonly<Record<QueryEngineCaller, QueryEngineChoice>> = {
   'realm-search': 'v2',
-  automations: 'legacy',
-  'skill-validation': 'legacy',
+  automations: 'v2',
+  'skill-validation': 'v2',
   'realm-logs': 'v2',
   federated: 'legacy',
   'query-fields': 'legacy',
