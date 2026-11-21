@@ -277,6 +277,7 @@ export class FilterRefersToNonexistentTypeError extends Error {
   // "this type has no cards" — that answer is a confident `ok, 0` for a type
   // that may have thousands — so it surfaces as a retryable 503 instead.
   transient: boolean;
+  status: number | undefined;
 
   constructor(
     codeRef: ResolvedCodeRef,
@@ -290,6 +291,7 @@ export class FilterRefersToNonexistentTypeError extends Error {
     this.name = 'FilterRefersToNonexistentTypeError';
     this.codeRef = codeRef;
     this.transient = Boolean(opts?.transient);
+    this.status = this.transient ? 503 : undefined;
     if (opts?.cause !== undefined) {
       (this as any).cause = opts.cause;
     }

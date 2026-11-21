@@ -115,7 +115,6 @@ export interface EntryCollectionDocument {
           total?: number;
           // Whether this realm holds rows past the ones it answered with.
           hasMore?: boolean;
-          ms?: number;
         }
       >;
       // The realms whose rows here are the only ones of theirs the result may

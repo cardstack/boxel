@@ -517,6 +517,37 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a card query that binds a log is never answered from a cache the append left stale', async function (assert) {
+    let POST = { module: `${FEED}feed`, name: 'Post' };
+    let body = {
+      realms: [FEED],
+      filter: { 'item.on': POST, in: { 'item.uri': '$liked' } },
+      let: {
+        $liked: { from: { log: LIKES }, select: 'what.post' },
+      },
+    };
+    let ids = async () => {
+      let { status, body: answer } = await federated(body, OWNER);
+      assert.strictEqual(status, 200, JSON.stringify(answer));
+      return (answer.data as Row[])
+        .map((d) => String(d.id).split('/').pop())
+        .sort();
+    };
+    assert.deepEqual(await ids(), ['p1']);
+    let liked = await operations(OWNER, {
+      op: 'invoke',
+      'boxel:name': 'record',
+      href: `${FEED}${LIKES}`,
+      data: { what: { post: 'p2' } },
+    });
+    assert.strictEqual(liked.status, 200, JSON.stringify(liked.body));
+    assert.deepEqual(
+      await ids(),
+      ['p1', 'p2'],
+      'the appended like is in the next answer, with no index pass between',
+    );
+  });
+
   test('a log’s file meta counts every line and keeps the tail, after appends', async function (assert) {
     for (let day of ['2026-11-07', '2026-11-08', '2026-11-09']) {
       let { status, body } = await operationsOn(PLAIN, plain, OWNER, {
