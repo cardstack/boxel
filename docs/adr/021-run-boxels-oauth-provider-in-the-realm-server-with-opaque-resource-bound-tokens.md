@@ -233,8 +233,10 @@ library renders, MUST go to the secure origin's error page. A link from that
 page back to the client MUST go through a realm-server route that reads the
 redirect URI it stored with the error. The secure origin MUST NOT receive a
 redirect address. A user who denies consent MAY be returned to the client at
-once. An error the library raises for a request Boxel has already checked MAY
-redirect.
+once. Boxel's checks MUST refuse every authorization parameter Boxel doesn't
+accept, and every value the library would refuse. An error the library raises
+on the authorization endpoint MUST go to the error page, even for a request
+Boxel has already checked.
 
 ### 1.9. Renewal and revocation
 
@@ -347,7 +349,8 @@ because the secure origin's pages post forms only to themselves (ADR 005
 The ticket travels in its URL, but it is spent on first presentation, so one
 that reaches a log is already dead. With open registration, error redirects
 would let anyone use Boxel's domain as a redirect to their own site (RFC 9700
-§4.11.2).
+§4.11.2). A redirect URI the client registered doesn't prevent it: anyone can
+register a client whose redirect URI is their own site.
 
 A refresh can fail on the way back: the client's request is used, but the
 response is lost, or the client refreshes twice at once. The grace window
@@ -423,6 +426,10 @@ it, and the provider warns before it does.
   revocation after a password change would end grants made in the hour after
   it, though nothing it covers can create one.
 - **Pre-registered clients only.** Outside MCP clients could not connect.
+- **Letting the library redirect its own errors once Boxel has checked the
+  client and its redirect URI.** With open registration that redirect URI is
+  anyone's, so a parameter only the library refuses, such as a request
+  object, would still send a browser from Boxel's domain to any site.
 - **Boxel's own apps registered by DCR or CIMD.** DCR shows them as
   unverified, which teaches users to click through the label. CIMD needs a
   client ID off Boxel's own hosts.

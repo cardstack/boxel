@@ -18,6 +18,7 @@ import { newDynamicClientId } from './dynamic-client-id.ts';
 import type { CallerLimit } from './caller-limit.ts';
 import {
   authorizationHandler,
+  keepAuthorizationErrorsOnBoxelsPage,
   DEFAULT_AUTHORIZATION_LIMIT,
   errorDetailsHandler,
   errorReturnHandler,
@@ -273,6 +274,9 @@ export function startOAuthProvider({
       testOnlyDocumentOrigins,
     }),
   });
+  provider.use(
+    keepAuthorizationErrorsOnBoxelsPage({ dbAdapter, secureOriginURL, issuer }),
+  );
   // Boxel's own apps, listed in code. None is listed yet.
   let preRegistered: ReadonlySet<string> = new Set();
   // The token and revocation endpoints count failures in the same buckets,

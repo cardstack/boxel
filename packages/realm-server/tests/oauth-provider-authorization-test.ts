@@ -4,6 +4,7 @@ import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import fsExtra from 'fs-extra';
 import supertest from 'supertest';
+import type { IncomingMessage, ServerResponse } from 'http';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
@@ -23,6 +24,7 @@ import {
   assertNoSecrets,
   telemetryDuring,
 } from './helpers/oauth-provider-secrets.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
 import {
   AUTHORIZATION_REFUSAL_REASONS,
   InteractionAdapter,
@@ -48,6 +50,7 @@ import {
   OAuthProviderConfigError,
   readAuthorizationLimit,
 } from '../lib/oauth-provider/config.ts';
+import { startOAuthProvider } from '../lib/oauth-provider/provider.ts';
 import type {
   OAuthResourceDefinition,
   OAuthScope,
@@ -161,6 +164,18 @@ async function start({
 
 type Params = Record<string, string | string[] | undefined>;
 
+function queryString(params: Params): string {
+  let query = new URLSearchParams();
+  for (let [name, value] of Object.entries(params)) {
+    for (let item of Array.isArray(value) ? value : [value]) {
+      if (item !== undefined) {
+        query.append(name, item);
+      }
+    }
+  }
+  return query.toString();
+}
+
 function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
   let server: Server | undefined;
   let db: PgAdapter | undefined;
@@ -195,7 +210,10 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
       return supertest(server!).options(path).set('Host', serverURL.host);
     },
     db: () => db!,
-    async register(redirectUris: string[] = [REDIRECT_URI]): Promise<string> {
+    async register(
+      redirectUris: string[] = [REDIRECT_URI],
+      { scope }: { scope?: string } = {},
+    ): Promise<string> {
       let response = await supertest(server!)
         .post('/_oauth-provider/reg')
         .set('Host', serverURL.host)
@@ -206,6 +224,7 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
           JSON.stringify({
             client_name: 'Test App',
             redirect_uris: redirectUris,
+            ...(scope !== undefined ? { scope } : {}),
           }),
         );
       if (response.status !== 201) {
@@ -227,15 +246,7 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
         headers?: Record<string, string>;
       } = {},
     ) {
-      let query = new URLSearchParams();
-      for (let [name, value] of Object.entries(params)) {
-        for (let item of Array.isArray(value) ? value : [value]) {
-          if (item !== undefined) {
-            query.append(name, item);
-          }
-        }
-      }
-      let request = get(`${AUTHORIZATION}?${query}`);
+      let request = get(`${AUTHORIZATION}?${queryString(params)}`);
       if (forwardedFor) {
         request = request.set('X-Forwarded-For', forwardedFor);
       }
@@ -484,6 +495,33 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(prompt.name, 'login', 'the flow asks for sign-in');
     });
 
+    test("each supported client's parameters start a flow", async function (assert) {
+      let clientId = await server.register();
+      let cases: [string, Params][] = [
+        // The MCP SDK, which MCP Inspector and Claude Code use.
+        ['the MCP SDK', validParams(clientId)],
+        [
+          'the MCP SDK, asking for consent',
+          validParams(clientId, { prompt: 'consent' }),
+        ],
+        [
+          'a client asking for sign-in',
+          validParams(clientId, { prompt: 'login consent' }),
+        ],
+        // Codex adds a resource of its own beside the one its OAuth library
+        // names, when it is configured with one.
+        ['Codex', validParams(clientId, { resource: [MCP, MCP] })],
+      ];
+      for (let [name, params] of cases) {
+        let response = await server.authorize(params);
+        assert.strictEqual(response.status, 303, `${name}: ${response.text}`);
+        let interaction = await server.interaction(
+          interactionUid(response.headers.location),
+        );
+        assert.ok(interaction, `${name}: the interaction is stored`);
+      }
+    });
+
     test('a request naming no resource is given the one whose scopes it asks for', async function (assert) {
       let clientId = await server.register();
       let response = await server.authorize(
@@ -558,6 +596,65 @@ module(basename(import.meta.filename), function () {
           'invalid_scope',
           'missing-scope',
         ],
+        // Parameters the library refuses itself, and would send that error
+        // to the redirect URI, and others Boxel doesn't accept.
+        ...(
+          [
+            ['a request object', { request: 'x' }],
+            ['a request URI', { request_uri: 'urn:example:x' }],
+            ['a registration', { registration: '{}' }],
+            ['the claims parameter', { claims: '{}' }],
+            ['a response mode', { response_mode: 'form_post' }],
+            ['an ID token hint', { id_token_hint: 'x' }],
+            ['a malformed max_age', { max_age: '-1' }],
+            ['a nonce', { nonce: 'x' }],
+            ['a login hint', { login_hint: 'ada@example.com' }],
+            ['an unknown parameter', { unknown: 'x' }],
+            ['an empty unknown parameter', { unknown: '' }],
+            [
+              'a prompt the library has no step for',
+              { prompt: 'select_account' },
+            ],
+          ] as [string, Params][]
+        ).map(
+          ([name, overrides]) =>
+            [name, overrides, 'invalid_request', 'unsupported-parameter'] as [
+              string,
+              Params,
+              string,
+              string,
+            ],
+        ),
+        [
+          'a PKCE challenge shorter than 43 characters',
+          { code_challenge: 'x' },
+          'invalid_request',
+          'pkce-required',
+        ],
+        [
+          'a PKCE challenge longer than 128 characters',
+          { code_challenge: 'a'.repeat(129) },
+          'invalid_request',
+          'pkce-required',
+        ],
+        [
+          'a PKCE challenge with a character RFC 7636 does not allow',
+          { code_challenge: `${'a'.repeat(42)}+` },
+          'invalid_request',
+          'pkce-required',
+        ],
+        [
+          'scopes with two spaces between them',
+          { scope: 'boxel:read  boxel:write' },
+          'invalid_request',
+          'malformed',
+        ],
+        [
+          'a scope with a space after it',
+          { scope: 'boxel:read ' },
+          'invalid_request',
+          'malformed',
+        ],
       ];
       for (let [name, overrides, error, reason] of cases) {
         let response = await server.authorize(validParams(clientId, overrides));
@@ -580,6 +677,119 @@ module(basename(import.meta.filename), function () {
         ['ErrorReference'],
         'no interaction was started',
       );
+    });
+
+    test('a client that registered its scopes may ask only for those', async function (assert) {
+      let clientId = await server.register([REDIRECT_URI], {
+        scope: 'boxel:read',
+      });
+      let allowed = await server.authorize(validParams(clientId));
+      assert.strictEqual(allowed.status, 303, allowed.text);
+      interactionUid(allowed.headers.location);
+
+      let refused = await server.authorize(
+        validParams(clientId, { scope: 'boxel:read boxel:write' }),
+      );
+      assert.strictEqual(refused.status, 303, refused.text);
+      let found = await details(
+        errorReference(assert, refused.headers.location),
+      );
+      assert.strictEqual(found.body.error, 'invalid_scope');
+      assert.strictEqual(found.body.reason, 'unregistered-scope');
+      assert.true(found.body.returnOffered, '"Return" is offered');
+    });
+
+    test("a refusal of a parameter Boxel doesn't accept names it in the log, never what the client sent with it", async function (assert) {
+      let clientId = await server.register();
+      let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+        await server.authorize(
+          validParams(clientId, {
+            nonce: 'nonce-marker-3f9e',
+            'access_token=tokenmarker81c2': 'x',
+            'Token-Marker-6d07': 'x',
+          }),
+        );
+        await server.authorize(
+          validParams(clientId, { prompt: 'consent select_account' }),
+        );
+      });
+      let refusals = lines
+        .map(({ message }) => message)
+        .filter((message) => message.startsWith('authorization refused:'));
+      assert.deepEqual(refusals, [
+        `authorization refused: unsupported-parameter (invalid_request): nonce, other, client ${clientId}`,
+        `authorization refused: unsupported-parameter (invalid_request): prompt=select_account, client ${clientId}`,
+      ]);
+    });
+
+    test('an error the library would send to the client goes to the error page instead', async function (assert) {
+      let clientId = await server.register();
+      // The library on its own, without Boxel's checks before it, which
+      // refuse a request object first.
+      let { provider } = startOAuthProvider({
+        serverURL,
+        config: testOAuthProviderConfig(),
+        dbAdapter: server.db(),
+        secureOriginURL: testOAuthSecureOriginURL,
+      });
+      let callback = provider.callback();
+      let issuerURL = new URL(ISSUER);
+      let response = await supertest(
+        (req: IncomingMessage, res: ServerResponse) => {
+          asTheIssuerServes(req, issuerURL);
+          return callback(req, res);
+        },
+      )
+        .get(
+          `${AUTHORIZATION}?${queryString(validParams(clientId, { request: 'x' }))}`,
+        )
+        .set('Host', serverURL.host);
+      assert.strictEqual(response.status, 303, response.text);
+      assert.false(
+        (response.headers.location ?? '').startsWith(REDIRECT_URI),
+        'the browser is not sent to the client',
+      );
+      let found = await details(
+        errorReference(assert, response.headers.location),
+      );
+      assert.strictEqual(found.body.error, 'request_not_supported');
+      assert.strictEqual(found.body.reason, 'library');
+      assert.true(found.body.returnOffered, '"Return" is offered');
+
+      let back = await server.get(
+        `/_oauth-provider/error/${errorReference(assert, response.headers.location)}/return`,
+      );
+      let returned = new URL(back.headers.location);
+      assert.strictEqual(
+        `${returned.origin}${returned.pathname}`,
+        REDIRECT_URI,
+        '"Return" goes to the client',
+      );
+      assert.strictEqual(
+        returned.searchParams.get('error'),
+        'request_not_supported',
+      );
+      assert.strictEqual(
+        returned.searchParams.get('state'),
+        'state-marker-5a1c',
+      );
+    });
+
+    test('a parameter after a thousand others is still checked', async function (assert) {
+      let clientId = await server.register();
+      for (let [extra, reason] of [
+        ['request=x', 'unsupported-parameter'],
+        ['prompt=none', 'prompt-none'],
+      ]) {
+        let response = await server.get(
+          `${AUTHORIZATION}?${queryString(validParams(clientId))}${'&'.repeat(1000)}&${extra}`,
+        );
+        assert.strictEqual(response.status, 303, `${extra}: ${response.text}`);
+        let found = await details(
+          errorReference(assert, response.headers.location),
+        );
+        assert.strictEqual(found.body.reason, reason, extra);
+      }
     });
 
     test('a repeated parameter is refused as malformed, and a repeated redirect URI or state offers nothing to return to', async function (assert) {
