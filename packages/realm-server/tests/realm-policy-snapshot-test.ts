@@ -35,6 +35,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A grant whose predicate reads a computed value or a linked card's field,
 // annotated `snapshot: true`, and judged against the card's index row.
@@ -220,6 +221,7 @@ const ROOM_999 = `${EDUCATION}classrooms/room-999`;
 const BULLETIN_1 = `${EDUCATION}bulletins/b1`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let db: PgAdapter;

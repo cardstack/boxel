@@ -29,6 +29,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // The realm's reads that come straight from its index, as a caller the realm's
 // ACL declines meets them in a realm whose policy grants that caller a card.
@@ -75,6 +76,7 @@ const ROOM_204 = `${EDUCATION}classrooms/room-204`;
 const NOTES = `${EDUCATION}public/notes.txt`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let plain: Realm;

@@ -112,6 +112,266 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  // A search inside its read snapshot holds a pool connection while it waits
+  // on a definition lookup another caller started and the lookup cache
+  // coalesced it onto. When every connection is held by such a search and the
+  // lookup still needs one, nothing gives a connection back unless the pool
+  // recognizes the wait.
+  module('read snapshots joined to shared work', function (hooks) {
+    setupDB(hooks, { beforeEach: async () => {} });
+
+    function smallPool(max: number): PgAdapter {
+      let previous = process.env.PG_POOL_MAX;
+      process.env.PG_POOL_MAX = String(max);
+      try {
+        return new PgAdapter();
+      } finally {
+        if (previous === undefined) {
+          delete process.env.PG_POOL_MAX;
+        } else {
+          process.env.PG_POOL_MAX = previous;
+        }
+      }
+    }
+
+    test('a pool full of snapshots waiting on a lookup that needs a connection still answers', async function (assert) {
+      assert.timeout(20_000);
+      const POOL = 3;
+      let adapter = smallPool(POOL);
+      try {
+        let resume!: () => void;
+        let gate = new Promise<void>((resolve) => (resume = resolve));
+        // The coalesced lookup, started outside any snapshot.
+        let lookup = adapter.withSharedWork(async () => {
+          await gate;
+          let [row] = await adapter.execute('SELECT 41 + 1 AS answer');
+          return Number(row.answer);
+        });
+        let opened = 0;
+        let searches = Array.from({ length: POOL }, () =>
+          adapter.withReadSnapshot(async (reader) => {
+            // the generation probe: the snapshot's first statement pins it
+            await reader.execute('SELECT 1');
+            opened++;
+            let answer = await adapter.waitingOnSharedWork(() => lookup);
+            let [row] = await reader.execute(`SELECT ${answer} AS answer`);
+            return Number(row.answer);
+          }),
+        );
+        let start = Date.now();
+        while (opened < POOL && Date.now() - start < 5_000) {
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        assert.strictEqual(opened, POOL, 'every connection is a snapshot');
+        assert.strictEqual(adapter.connectionStats.holds, POOL);
+        resume();
+        let answers = await Promise.race([
+          Promise.all(searches),
+          new Promise<'wedged'>((r) => setTimeout(() => r('wedged'), 5_000)),
+        ]);
+        assert.deepEqual(
+          answers,
+          Array(POOL).fill(42),
+          'every search answered once the lookup got a connection',
+        );
+        assert.strictEqual(adapter.connectionStats.inUse, 0);
+      } finally {
+        await adapter.close();
+      }
+    });
+
+    async function idleInTransaction(adapter: PgAdapter): Promise<number> {
+      let [row] = await adapter.execute(
+        `SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND state LIKE 'idle in transaction%'`,
+      );
+      return Number(row.n);
+    }
+
+    async function until(check: () => boolean, ms = 5_000) {
+      let start = Date.now();
+      while (!check() && Date.now() - start < ms) {
+        await new Promise((r) => setTimeout(r, 5));
+      }
+    }
+
+    test('a snapshot waiting on work outside the database gives its connection back, then reads on a fresh snapshot', async function (assert) {
+      let adapter = new PgAdapter();
+      try {
+        let resume!: (value: number) => void;
+        let gate = new Promise<number>((r) => (resume = r));
+        let runs = 0;
+        let starts = 0;
+        let answer = adapter.withReadSnapshot(async (reader) => {
+          runs++;
+          // the snapshot's first statement pins its connection
+          await reader.execute('SELECT 1');
+          let value = await adapter.outsideReadSnapshot('lookup', async () => {
+            starts++;
+            return await gate;
+          });
+          let [row] = await reader.execute(`SELECT ${value} + 1 AS answer`);
+          return Number(row.answer);
+        });
+        await until(() => starts > 0);
+        // past the grace, the attempt has given its connection up
+        await new Promise((r) => setTimeout(r, 400));
+        assert.strictEqual(starts, 1, 'the work is pending');
+        assert.strictEqual(
+          adapter.connectionStats.inUse,
+          0,
+          'no connection out',
+        );
+        assert.strictEqual(adapter.connectionStats.holds, 0, 'none held');
+        assert.strictEqual(
+          await idleInTransaction(adapter),
+          0,
+          'nothing is idle in a transaction',
+        );
+        resume(41);
+        assert.strictEqual(
+          await answer,
+          42,
+          'the body reads on once it settles',
+        );
+        assert.strictEqual(runs, 2, 'on a second snapshot');
+        assert.strictEqual(
+          starts,
+          1,
+          'where the settled work is not started again',
+        );
+        assert.strictEqual(adapter.connectionStats.inUse, 0);
+      } finally {
+        await adapter.close();
+      }
+    });
+
+    test('work that settles within the grace is read in place, on one snapshot', async function (assert) {
+      let adapter = new PgAdapter();
+      try {
+        let runs = 0;
+        let answer = await adapter.withReadSnapshot(async (reader) => {
+          runs++;
+          await reader.execute('SELECT 1');
+          let value = await adapter.outsideReadSnapshot(
+            'cached',
+            async () => 7,
+          );
+          let [row] = await reader.execute(`SELECT ${value} AS answer`);
+          return Number(row.answer);
+        });
+        assert.strictEqual(answer, 7);
+        assert.strictEqual(runs, 1, 'the snapshot was not reopened');
+      } finally {
+        await adapter.close();
+      }
+    });
+
+    test('a wait before the snapshot holds a connection holds nothing and is not restarted', async function (assert) {
+      let adapter = new PgAdapter();
+      try {
+        let resume!: (value: number) => void;
+        let gate = new Promise<number>((r) => (resume = r));
+        let runs = 0;
+        let answer = adapter.withReadSnapshot(async (reader) => {
+          runs++;
+          let value = await adapter.outsideReadSnapshot('lookup', () => gate);
+          let [row] = await reader.execute(`SELECT ${value} AS answer`);
+          return Number(row.answer);
+        });
+        await new Promise((r) => setTimeout(r, 400));
+        assert.strictEqual(adapter.connectionStats.holds, 0, 'nothing held');
+        resume(3);
+        assert.strictEqual(await answer, 3);
+        assert.strictEqual(runs, 1, 'one snapshot');
+      } finally {
+        await adapter.close();
+      }
+    });
+
+    test('a body that swallows the give-up still has its outcome discarded and runs again', async function (assert) {
+      let adapter = new PgAdapter();
+      try {
+        let resume!: (value: number) => void;
+        let gate = new Promise<number>((r) => (resume = r));
+        let runs = 0;
+        let answer = adapter.withReadSnapshot(async (reader) => {
+          runs++;
+          await reader.execute('SELECT 1');
+          let value = await adapter
+            .outsideReadSnapshot('lookup', () => gate)
+            .catch(() => -1);
+          return value;
+        });
+        await new Promise((r) => setTimeout(r, 400));
+        resume(5);
+        assert.strictEqual(await answer, 5, 'the second run answers');
+        assert.strictEqual(runs, 2);
+      } finally {
+        await adapter.close();
+      }
+    });
+
+    test("the snapshot's signal ends a wait outside it", async function (assert) {
+      let adapter = new PgAdapter();
+      try {
+        let controller = new AbortController();
+        let reason = new Error('the caller went away');
+        let answer = adapter.withReadSnapshot(
+          async (reader) => {
+            await reader.execute('SELECT 1');
+            return await adapter.outsideReadSnapshot(
+              'never',
+              () => new Promise<number>(() => {}),
+            );
+          },
+          { signal: controller.signal },
+        );
+        await new Promise((r) => setTimeout(r, 400));
+        controller.abort(reason);
+        await assert.rejects(answer, (e: any) => e === reason);
+        assert.strictEqual(adapter.connectionStats.inUse, 0);
+      } finally {
+        await adapter.close();
+      }
+    });
+
+    test('outside a snapshot the work just runs', async function (assert) {
+      let adapter = new PgAdapter();
+      try {
+        assert.strictEqual(
+          await adapter.outsideReadSnapshot('k', async () => 9),
+          9,
+        );
+      } finally {
+        await adapter.close();
+      }
+    });
+
+    test('a read snapshot ends its session when left idle past the timeout', async function (assert) {
+      let previous = process.env.PG_READ_SNAPSHOT_IDLE_TIMEOUT_MS;
+      process.env.PG_READ_SNAPSHOT_IDLE_TIMEOUT_MS = '1234';
+      let adapter = new PgAdapter();
+      try {
+        let setting = await adapter.withReadSnapshot(async (reader) => {
+          let [row] = await reader.execute(
+            'SHOW idle_in_transaction_session_timeout',
+          );
+          return row.idle_in_transaction_session_timeout;
+        });
+        assert.strictEqual(setting, '1234ms');
+      } finally {
+        if (previous === undefined) {
+          delete process.env.PG_READ_SNAPSHOT_IDLE_TIMEOUT_MS;
+        } else {
+          process.env.PG_READ_SNAPSHOT_IDLE_TIMEOUT_MS = previous;
+        }
+        await adapter.close();
+      }
+    });
+  });
+
   // The scheduler counts a turn from its grant to its release, so a checkout
   // that never gets a working connection, or loses it, must give its turn
   // back or every waiter queues behind a connection Postgres no longer has.

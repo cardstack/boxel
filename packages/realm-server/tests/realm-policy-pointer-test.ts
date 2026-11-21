@@ -13,12 +13,14 @@ import {
   realmConfigCardJSON,
   setupDB,
 } from './helpers/index.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // Whether a realm may name a policy, told without mounting it: read from the
 // realm's `realm.json` on disk, found through its registry row. The realms
 // here are directories and registry rows only, and the reconciler refuses to
 // mount any of them, so an answer that needed a mount would fail the test.
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let db: PgAdapter;
   let root: string;
   let realmsRootPath: string;

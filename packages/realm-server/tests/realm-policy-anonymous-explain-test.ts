@@ -29,6 +29,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A notice board nobody may read or write without signing in, governed by a
 // policy card in an Org realm. Its policy opens edits of a notice to callers
@@ -158,6 +159,7 @@ function policyCard(realm: string, { limited }: { limited: boolean }) {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let board: Realm;
   let plain: Realm;
   let org: Realm;

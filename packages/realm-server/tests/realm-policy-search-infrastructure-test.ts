@@ -26,6 +26,7 @@ import {
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // ============================================================================
 // What a search finds of a realm's authorization infrastructure for a caller
@@ -113,6 +114,7 @@ const INFRASTRUCTURE = [
 ];
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let school: Realm;
   let district: Realm;
   let request: SuperTest<Test>;

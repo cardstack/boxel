@@ -33,6 +33,7 @@ import {
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 const testRealm2URL = 'http://127.0.0.1:4445/test/';
 
@@ -43,6 +44,7 @@ const testRealm2URL = 'http://127.0.0.1:4445/test/';
 // send a key shared with the realm, so no grant admits a write into it. A
 // pointer to a card anywhere else is dropped.
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let testRealmHttpServer: Server;
   let testRealmServer: Awaited<
     ReturnType<typeof runTestRealmServer>

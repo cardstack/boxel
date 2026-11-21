@@ -39,6 +39,7 @@ import {
 import { installRealmServerAssertOwnRealmServerBypassPatch } from './helpers/prerender-page-patches.ts';
 import { FakeMediaCacheAdapter } from './helpers/fake-media-cache-adapter.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // ============================================================================
 // A capture a reader asks for renders with that reader's authority.
@@ -295,6 +296,7 @@ function pngHeight(bytes: Buffer): number {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let realms: Record<string, Realm> = {};
   let request: SuperTest<Test>;
   let server: Server;

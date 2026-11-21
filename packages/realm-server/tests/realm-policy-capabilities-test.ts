@@ -39,6 +39,7 @@ import {
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // The capability check: `POST {realm}/_capabilities`, which answers what the
 // policy gate would decide for a bounded list of `{ target, operation }` pairs
@@ -247,6 +248,7 @@ const NOTE = `${EDUCATION}note`;
 const ABSENT = `${EDUCATION}classrooms/room-999`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let educationAdapter: RealmAdapter;
   let org: Realm;

@@ -32,6 +32,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A query grant's compiled filter, run through the realm's own search engine
 // against real card definitions and indexed cards, and set against what its
@@ -202,6 +203,7 @@ const CASES: {
 ];
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let server: Server;
   let virtualNetwork: VirtualNetwork;

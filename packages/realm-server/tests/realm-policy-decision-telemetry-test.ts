@@ -38,6 +38,7 @@ import {
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // The records the policy writes on `boxel:operations`: one per gate decision,
 // one per realm a search consults through its policy, and one per compile of
@@ -200,6 +201,7 @@ const NEVER_RECORDED = [
 ];
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let annex: Realm;

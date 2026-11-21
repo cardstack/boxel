@@ -37,6 +37,7 @@ import {
 } from './helpers/indexing.ts';
 import { installRealmServerAssertOwnRealmServerBypassPatch } from './helpers/prerender-page-patches.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // ============================================================================
 // A search fired inside a render a realm makes of its own cards is never
@@ -189,6 +190,7 @@ function board(revision: number) {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let realms: Record<string, Realm> = {};
   let request: SuperTest<Test>;
   let server: Server;

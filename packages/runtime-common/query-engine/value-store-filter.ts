@@ -23,6 +23,7 @@ import {
   separatedByCommas,
   typesContains,
 } from '../expression.ts';
+import { type StoreGrantKeys, grantedTypeTest } from './store-grant.ts';
 
 const BOUNDS: Record<string, string> = {
   gt: '>',
@@ -137,8 +138,13 @@ export function storedRangesCandidates(
 // `typeKeys`: one entry per card in the value store's text index (each live
 // card's row at the empty path), so a count over a whole type reads no
 // index row. The store holds exactly the cards a search of live instances
-// of the promoted index admits.
-export function storedTypeCount(realm: string, typeKeys: string[]): Expression {
+// of the promoted index admits. With `grant`, a realm policy's grant the
+// store carries (store-grant.ts), only the cards of the types it admits.
+export function storedTypeCount(
+  realm: string,
+  typeKeys: string[],
+  grant?: StoreGrantKeys,
+): Expression {
   return [
     'SELECT COUNT(*) AS total FROM boxel_index_values AS v WHERE v.realm_id = (SELECT id FROM boxel_index_value_realms WHERE realm_url =',
     param(realm),
@@ -148,6 +154,8 @@ export function storedTypeCount(realm: string, typeKeys: string[]): Expression {
     ...(any(
       typeKeys.map((key) => [typesContains(key, 't.types')]),
     ) as Expression),
-    ")) AND v.path_id = (SELECT id FROM boxel_index_value_paths WHERE path = '') AND v.txt = '' AND v.kind = 'c'",
+    ')',
+    ...(grant ? grantedTypeTest('t.types', grant) : []),
+    ") AND v.path_id = (SELECT id FROM boxel_index_value_paths WHERE path = '') AND v.txt = '' AND v.kind = 'c'",
   ];
 }

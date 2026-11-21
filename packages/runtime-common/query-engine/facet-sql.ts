@@ -146,7 +146,8 @@ export function filterWithout(filter: Filter, by: string): Filter | undefined {
   if ('every' in node) {
     let mapped = (node.every as Filter[]).map((b) => filterWithout(b, by));
     // Nothing removed: the filter itself, so an `any` holding it can tell
-    // (above).
+    // (above), and a realm policy's grant conjunct, which never tests a
+    // facet's field, stays the grant filter it was (store-grant.ts).
     if (mapped.every((b, i) => b === (node.every as Filter[])[i])) {
       return filter;
     }

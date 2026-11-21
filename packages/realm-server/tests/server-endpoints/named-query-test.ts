@@ -36,6 +36,7 @@ import {
   setupDB,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from '../helpers/policy-store-differential.ts';
 
 // ============================================================================
 // A named query: a search request that names a declared query operation, the
@@ -217,6 +218,7 @@ function drifting(status: string) {
 }
 
 module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let school: Realm;
   let other: Realm;
   let privateRealm: Realm;

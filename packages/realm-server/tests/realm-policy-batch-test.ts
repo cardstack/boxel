@@ -26,6 +26,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A batch is all-or-nothing, and under a realm's policy that holds entry by
 // entry: each entry is gated against its own target and its own definition,
@@ -214,6 +215,7 @@ type EnvelopeError = {
 };
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let educationAdapter: RealmAdapter;
   let request: SuperTest<Test>;

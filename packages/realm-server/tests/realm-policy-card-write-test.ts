@@ -25,6 +25,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // The card+json writes — a `POST` creating a card, a `PATCH` updating one and
 // a `DELETE` removing one — reach the policy gate as the `create`, `update` and
@@ -210,6 +211,7 @@ const TAKEN_BULLETIN = `${EDUCATION}Bulletin/taken`;
 const TAKEN_CLASSROOM = `${EDUCATION}Classroom/room-301`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let open: Realm;
   let org: Realm;

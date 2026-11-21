@@ -39,6 +39,7 @@ import {
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { holdIndexingLane } from './helpers/indexing.ts';
 import { policyWarningsDuring } from './helpers/policy-log.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // The worked example's topology. The Education realm holds the cards a policy
 // governs, and its policy card lives in an Org realm. An IT admin reads both
@@ -307,6 +308,7 @@ const COURSE_42 = `${EDUCATION}syllabi/course-42`;
 const EDUCATION_CONFIG = `${EDUCATION}realm`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let db: PgAdapter;
