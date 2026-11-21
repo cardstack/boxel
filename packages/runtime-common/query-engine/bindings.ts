@@ -30,7 +30,6 @@ import {
   ensureLogsIndexed,
   logBindingValues,
   resolveLogURL,
-  SQLITE_LOG_NOT_READ,
 } from '../log-query.ts';
 import {
   NO_BINDING_VALUE,
@@ -376,10 +375,14 @@ export abstract class Bindings extends Facets {
           ...(opts.queryNow ? { now: opts.queryNow } : {}),
           ...(opts.logAccess ? { access: opts.logAccess } : {}),
           ...(opts.signal ? { signal: opts.signal } : {}),
+          // SQLite reads the log's file (query-engine/sqlite-log-lines.ts)
+          ...(!this.dialect.logs && opts.readLogFile
+            ? { readLogFile: opts.readLogFile }
+            : {}),
         },
       );
-      if (read.notRead) {
-        opts.approximations?.push(SQLITE_LOG_NOT_READ);
+      if (read.window) {
+        opts.approximations?.push(read.window);
       }
       return {
         values: read.values as JSONTypes.Value[],

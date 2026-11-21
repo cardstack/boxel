@@ -46,6 +46,13 @@ export const MAX_FACETS = 8;
 export const DEFAULT_FACET_SIZE = 50;
 export const MAX_FACET_SIZE = 1000;
 export const MAX_FACET_RANGES = 50;
+// On SQLite, which keeps no value store, facets are counted in JS over the
+// first SQLITE_FACET_ROWS matches' search docs, read SQLITE_FACET_CHUNK at a
+// time, stopping once counting has taken SQLITE_FACET_BUDGET_MS
+// (sqlite-facets.ts).
+export const SQLITE_FACET_ROWS = 5_000;
+export const SQLITE_FACET_CHUNK = 250;
+export const SQLITE_FACET_BUDGET_MS = 250;
 export const MAX_COLLAPSE_KEEP = 10;
 
 export function collapseBy(

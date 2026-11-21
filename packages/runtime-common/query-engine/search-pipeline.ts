@@ -1271,15 +1271,28 @@ export abstract class SearchPipeline extends StoreBlend {
 
       let extendedByFacet = new Map(
         [
-          ...(
-            await this.countFacets(
-              facetPlans,
-              opts,
-              facetConditionOf,
-              realmURL,
-              facetsFirst,
-              storeSetOf,
-            )
+          ...(this.dialect.valueStore
+            ? await this.countFacets(
+                facetPlans,
+                opts,
+                facetConditionOf,
+                realmURL,
+                facetsFirst,
+                storeSetOf,
+              )
+            : // SQLite counts them in JS over the search as asked
+              // (sqlite-facets.ts).
+              await this.countFacetsFromSearchDocs(
+                facetPlans,
+                {
+                  filter: beforeRewrite.filter,
+                  sort: beforeRewrite.sort,
+                  let: lets,
+                },
+                realmURL,
+                opts,
+                entryType,
+              )
           ).entries(),
         ].map(([plan, result]) => [plan.facet, result]),
       );
