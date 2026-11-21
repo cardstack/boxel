@@ -1,15 +1,6 @@
 {
   "main": [
     {
-      "run": 43488797797,
-      "at": "2026-11-13T19:05:05Z",
-      "minutes": 239.9,
-      "slowestShard": 18.5,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
       "run": 43515811330,
       "at": "2026-11-13T22:01:47Z",
       "minutes": 241.4,
@@ -359,27 +350,18 @@
       "shards": 16,
       "runsOn": true,
       "indexCache": false
+    },
+    {
+      "run": 44850238961,
+      "at": "2026-11-21T01:27:01Z",
+      "minutes": 242.6,
+      "slowestShard": 19.9,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": false
     }
   ],
   "pullRequest": [
-    {
-      "run": 43955398799,
-      "at": "2026-11-16T20:59:20Z",
-      "minutes": 171.7,
-      "slowestShard": 13.4,
-      "shards": 16,
-      "runsOn": false,
-      "indexCache": false
-    },
-    {
-      "run": 43965981080,
-      "at": "2026-11-16T22:01:51Z",
-      "minutes": 209,
-      "slowestShard": 18.3,
-      "shards": 16,
-      "runsOn": false,
-      "indexCache": false
-    },
     {
       "run": 43966237213,
       "at": "2026-11-16T22:03:21Z",
@@ -2960,6 +2942,24 @@
       "slowestShard": 16.6,
       "shards": 16,
       "runsOn": true,
+      "indexCache": false
+    },
+    {
+      "run": 44835968465,
+      "at": "2026-11-20T23:19:44Z",
+      "minutes": 239.3,
+      "slowestShard": 21,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": true
+    },
+    {
+      "run": 44843097335,
+      "at": "2026-11-21T00:19:56Z",
+      "minutes": 193,
+      "slowestShard": 14.9,
+      "shards": 16,
+      "runsOn": false,
       "indexCache": false
     }
   ]
