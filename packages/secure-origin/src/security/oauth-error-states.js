@@ -1,5 +1,5 @@
 // Which state the authorize page's error page shows, for each reason the
-// realm server gives a refused authorization request (its
+// realm server gives a refused or ended authorization request (its
 // `AUTHORIZATION_REFUSAL_REASONS`). The page picks its state by the reason,
 // never by the OAuth error code, which doesn't tell the states apart:
 // `invalid_target` is both a resource Boxel doesn't have and one the app may
@@ -20,6 +20,7 @@ export const ERROR_STATE_BY_REASON = Object.freeze({
   'unknown-scope': 'not-offered',
   'missing-scope': 'not-offered',
   openid: 'not-offered',
+  'unreadable-decision': 'cant-continue',
 });
 
 // The state for a reason this build doesn't know, from a newer server.

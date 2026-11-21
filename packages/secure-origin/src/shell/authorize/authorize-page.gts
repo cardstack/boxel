@@ -11,8 +11,10 @@
 //
 // An address carrying `error` is a flow the provider refused before consent,
 // and the page shows the error page (`error-page.gts`); it never starts
-// consent for it. An address whose interaction ID isn't one shows that the
-// request can't continue, without asking the realm server anything.
+// consent for it. An address whose interaction ID isn't one shows the error
+// page's state for a request that can't continue, without asking the realm
+// server anything. A flow that ends at consent shows the error page too, in
+// the state its refusal names (`endedError`).
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -23,9 +25,11 @@ import { Alert } from '@cardstack/pretui/components/alert';
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
 import BusyMessage from '../../components/busy-message.gts';
+import type { ErrorParam } from '../../security/oauth-errors.ts';
 import {
   authorizeRequest,
   cancelURL,
+  ConsentRefusal,
   consentDetails,
   decideConsent,
   finishURL,
@@ -47,7 +51,6 @@ import Consent from './consent.gts';
 import { appNameShown } from './copy.ts';
 import ErrorPage from './error-page.gts';
 import Outcome from './outcome.gts';
-import RequestEnded from './request-ended.gts';
 
 interface ConsentState {
   name: 'consent';
@@ -68,14 +71,42 @@ type State =
   | { name: 'unavailable' }
   | ConsentState
   | { name: 'leaving'; outcome: 'allowed' | 'denied'; details: ConsentDetails }
-  | { name: 'ended' }
-  | { name: 'error' };
+  // The error page. `error` is the error the page gives it, and without one
+  // it reads the error from the address.
+  | { name: 'error'; error?: ErrorParam };
 
-// A refusal that means the flow can't be answered here any more: it expired,
-// was already answered, or the request was never one the provider would take.
-// The page tells the app nothing then: an expired flow can't be finished, and
-// one answered elsewhere is finished by the window that answered it.
-const ENDED = new Set([400, 403, 404, 409]);
+// The error page's error for a refusal that means the flow can't be answered
+// here any more, by the code the provider answered, or undefined for any
+// other refusal.
+//
+// - 404: the flow expired, or never was. Its redirect URI went with it, so
+//   there is nothing to return to.
+// - 409: the flow was answered, usually in another window, which finishes it.
+//   The page sends the browser nowhere, and above all not to the cancel
+//   route, which would delete the decision the other window is finishing.
+// - 400: an answer the provider couldn't read. When the provider ended the
+//   flow and stored an error, the error page looks that up and offers
+//   "Return" where the provider does, which tells the app.
+// - 403: the request didn't come from the secure origin, which the provider
+//   checks before it knows who is asking, so it ends nothing and there is
+//   nothing to look up or return to.
+function endedError(e: unknown): ErrorParam | undefined {
+  let status = (e as { status?: unknown } | undefined)?.status;
+  switch (status) {
+    case 404:
+      return { kind: 'fixed', state: 'expired' };
+    case 409:
+      return { kind: 'fixed', state: 'answered' };
+    case 400:
+      return e instanceof ConsentRefusal && e.reference
+        ? { kind: 'ref', ref: e.reference }
+        : { kind: 'fixed', state: 'cant-continue' };
+    case 403:
+      return { kind: 'fixed', state: 'cant-continue' };
+    default:
+      return undefined;
+  }
+}
 
 export default class AuthorizePage extends Component {
   <template>
@@ -134,10 +165,12 @@ export default class AuthorizePage extends Component {
           >Try again</AuthButton>
         </div>
       </MessagePage>
-    {{else if (this.is 'ended')}}
-      <RequestEnded />
-    {{else if (this.is 'error')}}
-      <ErrorPage @config={{this.config}} @visit={{this.visit}} />
+    {{else if this.error}}
+      <ErrorPage
+        @config={{this.config}}
+        @visit={{this.visit}}
+        @error={{this.error.error}}
+      />
     {{else}}
       <AuthContainer>
         <BusyMessage @title='Loading…' data-test-authorize-loading />
@@ -175,8 +208,11 @@ export default class AuthorizePage extends Component {
       // The error page reports how its load ended.
       this.page.state = { name: 'error' };
     } else {
-      this.page.state = { name: 'ended' };
-      this.visit.loaded();
+      // The error page reports how its load ended.
+      this.page.state = {
+        name: 'error',
+        error: { kind: 'fixed', state: 'cant-continue' },
+      };
     }
   }
 
@@ -192,6 +228,11 @@ export default class AuthorizePage extends Component {
   }
 
   private is = (name: State['name']) => this.page.state.name === name;
+
+  private get error() {
+    let state = this.page.state;
+    return state.name === 'error' ? state : undefined;
+  }
 
   private get consent() {
     let state = this.page.state;
@@ -267,9 +308,12 @@ export default class AuthorizePage extends Component {
         this.visit.signedOut();
         return;
       }
-      this.page.state = ENDED.has(e.status)
-        ? { name: 'ended' }
-        : { name: 'unavailable' };
+      let error = endedError(e);
+      if (error) {
+        this.showError(error);
+      } else {
+        this.page.state = { name: 'unavailable' };
+      }
       this.visit.loadFailed(e);
       return;
     }
@@ -285,6 +329,17 @@ export default class AuthorizePage extends Component {
       error: undefined,
     };
     this.visit.loaded();
+  }
+
+  // Shows the error page for a flow that ended here. A stored error's
+  // reference replaces the address, so a reload looks the same error up, with
+  // its "Return", rather than asking for a flow that is gone.
+  private showError(error: ErrorParam) {
+    this.page.state = { name: 'error', error };
+    if (error.kind === 'ref') {
+      let address = new URLSearchParams({ error: error.ref });
+      history.replaceState(null, '', `${window.location.pathname}?${address}`);
+    }
   }
 
   private retry = () => {
@@ -375,8 +430,9 @@ export default class AuthorizePage extends Component {
           this.page.state = { name: 'sign-in', returned: 'ended' };
           return;
         }
-        if (ENDED.has(e.status)) {
-          this.page.state = { name: 'ended' };
+        let error = endedError(e);
+        if (error) {
+          this.showError(error);
           return;
         }
         this.updateConsent({
