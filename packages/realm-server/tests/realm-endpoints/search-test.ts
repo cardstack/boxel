@@ -331,22 +331,55 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.true(get.body.errors[0].message.includes('method must be QUERY'));
     });
 
-    test('select is refused with a 400 until its own row', async function (assert) {
+    test('select answers a table, as JSON or one row a line', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),
         select: ['firstName'],
       });
-      assert.strictEqual(response.status, 400, response.text);
-      assert.strictEqual(
-        response.body.errors[0].code,
-        'unknown-key',
-        response.text,
-      );
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.columns, ['id', 'firstName']);
+      assert.deepEqual(response.body.rows.map((r: unknown[]) => r[1]).sort(), [
+        'Jane',
+        'John',
+      ]);
+      assert.strictEqual(response.body.meta.page.total, 2);
+      for (let type of ['application/x-ndjson', 'application/jsonl']) {
+        let lines = await request
+          .post(searchPath)
+          .set('Accept', type)
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .send({ filter: personFilter(), select: ['firstName'] })
+          .buffer(true)
+          .parse((res, done) => {
+            let text = '';
+            res.on('data', (chunk: Buffer) => (text += chunk.toString()));
+            res.on('end', () => done(null, text));
+          });
+        assert.strictEqual(lines.status, 200, type);
+        assert.true(lines.headers['content-type'].startsWith(type), type);
+        let parsed = (lines.body as string)
+          .trim()
+          .split('\n')
+          .map((l) => JSON.parse(l));
+        assert.deepEqual(
+          parsed
+            .slice(0, -1)
+            .map((r) => r.firstName)
+            .sort(),
+          ['Jane', 'John'],
+          type,
+        );
+        assert.strictEqual(parsed.at(-1).meta.page.total, 2, type);
+      }
+      let noTable = await request
+        .post(searchPath)
+        .set('Accept', 'application/x-ndjson')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .send({ filter: personFilter() });
+      assert.strictEqual(noTable.status, 400, noTable.text);
       assert.true(
-        response.body.errors[0].message.includes(
-          'select (a table of values) is not answered yet',
-        ),
-        response.text,
+        noTable.text.includes('an NDJSON or JSONL answer is a table'),
+        noTable.text,
       );
     });
 

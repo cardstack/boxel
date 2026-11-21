@@ -464,23 +464,31 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
     });
 
-    test('select is refused with a 400 until its own row', async function (assert) {
-      let response = await postSearch({
-        filter: personFilter(),
+    test('select reads one realm: answered for one, refused across several', async function (assert) {
+      let one = await postSearch({
+        filter: {
+          'item.on': { module: `${testRealm.url}person`, name: 'Person' },
+        },
         realms: [testRealm.url],
+        select: ['firstName'],
+      });
+      assert.strictEqual(one.status, 200, one.text);
+      assert.deepEqual(one.body.columns, ['id', 'firstName'], one.text);
+      assert.strictEqual(one.body.rows.length, one.body.meta.page.total);
+      let several = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
         select: ['title'],
       });
-      assert.strictEqual(response.status, 400, response.text);
+      assert.strictEqual(several.status, 400, several.text);
       assert.strictEqual(
-        response.body.errors[0].code,
-        'unknown-key',
-        response.text,
+        several.body.errors[0].code,
+        'conflicting-members',
+        several.text,
       );
       assert.true(
-        response.body.errors[0].message.includes(
-          'select (a table of values) is not answered yet',
-        ),
-        response.text,
+        several.body.errors[0].message.includes('select reads one realm'),
+        several.text,
       );
     });
 
