@@ -334,6 +334,8 @@ export async function renderFileForIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} index visit prerender of ${url.href} threw: ${(err as Error)?.message}`,
     );
+    // A rejection the prerender client found transient carries its
+    // `markVisitRequestFailure` marker, which the error path records.
     throw err;
   }
 

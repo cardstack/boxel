@@ -132,6 +132,40 @@ module(basename(import.meta.filename), function (hooks) {
     return Number(row.id);
   }
 
+  test('a retry visits again a row whose render failed transiently, rather than resuming it', async function (assert) {
+    let seed = await createBatch();
+    await stageCard(seed, 'a');
+    await stageCard(seed, 'b');
+    await seed.done();
+
+    let retried = await insertJob('unfulfilled');
+    let attempt1 = await createBatch(jobInfo(retried, 1));
+    await stageCard(attempt1, 'a');
+    // b's render times out: the writer keeps its last good row, which reads as
+    // healthy, and stamps the failure.
+    await attempt1.updateEntry(new URL(url('b')), {
+      type: 'instance-error',
+      error: {
+        status: 504,
+        title: 'Render timeout',
+        message: 'Render timed-out after 60000 ms',
+        additionalErrors: null,
+        renderTimeout: true,
+      },
+    });
+    // No done(): the attempt's reservation lapses before its commit.
+
+    let attempt2 = await createBatch(jobInfo(retried, 2));
+    assert.true(
+      attempt2.resumedRows.has(url('a')),
+      'the retry resumes the healthy row',
+    );
+    assert.false(
+      attempt2.resumedRows.has(url('b')),
+      'and visits the transient failure again, its second chance',
+    );
+  });
+
   test('a retry resumes, in its own staging, what an earlier attempt of its job staged', async function (assert) {
     let retried = await insertJob('unfulfilled');
     let peerJob = await insertJob('unfulfilled');

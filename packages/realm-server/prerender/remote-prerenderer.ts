@@ -8,6 +8,7 @@ import {
   type RunCommandResponse,
   type CapturePrerenderResponse,
   logger,
+  markVisitRequestFailure,
 } from '@cardstack/runtime-common';
 import {
   isUndeliveredRequestError,
@@ -215,11 +216,15 @@ export function createRemotePrerenderer(
             : typeof attributes.command === 'string' && attributes.command
               ? ` command=${attributes.command}`
               : '';
-          throw new Error(
-            `Prerender request to ${endpoint.href} aborted after ${attemptTimeoutMs}ms ` +
-              `(requestId=${requestId}, attempt=${attempts}/${maxAttempts}, ` +
-              `affinity=${affinityTag}${subject}, elapsed=${elapsedMs}ms; ` +
-              `grep manager/prerender-server logs for requestId=${requestId} to locate the stall)`,
+          // Marked a transient request failure: the render never answered,
+          // which says nothing about what it was rendering.
+          throw markVisitRequestFailure(
+            new Error(
+              `Prerender request to ${endpoint.href} aborted after ${attemptTimeoutMs}ms ` +
+                `(requestId=${requestId}, attempt=${attempts}/${maxAttempts}, ` +
+                `affinity=${affinityTag}${subject}, elapsed=${elapsedMs}ms; ` +
+                `grep manager/prerender-server logs for requestId=${requestId} to locate the stall)`,
+            ),
           );
         }
         // Node.js fetch() wraps network errors in TypeError with the
@@ -259,7 +264,13 @@ export function createRemotePrerenderer(
                 `effects: ${e.message}`,
             );
           }
-          throw e;
+          // A failure of the prerender path itself (a 5xx, a draining server,
+          // a lost connection) is marked a transient request failure, so the
+          // visit loops keep the row's last good content and retry it. A
+          // request the path refused (a 4xx) or a response it could not read
+          // is a deterministic failure and goes unmarked: recorded as the
+          // row's error, it stays visible.
+          throw retryableUnderAnyFailure ? markVisitRequestFailure(e) : e;
         }
         let delayMs = Math.min(
           baseDelayMs * Math.pow(2, attempts - 1),
