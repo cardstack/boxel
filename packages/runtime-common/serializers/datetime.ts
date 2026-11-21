@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
 import type {
   BaseDefConstructor,
   BaseInstanceType,
@@ -6,9 +6,12 @@ import type {
 
 export const datetimeFormat = `yyyy-MM-dd'T'HH:mm`;
 
+// The search doc's `yyyy-MM-ddTHH:mm` (datetimeFormat), in UTC: a query
+// reads a zoneless date-time as UTC, and the host matcher runs in the
+// browser's zone, so the wall time must not depend on the process's.
 export function queryableValue(date: Date | undefined) {
   if (date) {
-    return format(date, datetimeFormat);
+    return date.toISOString().slice(0, 16);
   }
   return undefined;
 }
