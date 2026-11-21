@@ -12,6 +12,9 @@
 // guaranteed"); the client-side mirror is instance-filter-matcher.ts.
 
 import { refuse } from '../query-v2/query-refusals.ts';
+import { InvalidQueryError } from '../invalid-query-error.ts';
+import { parsePathSpecifier } from '../path-specifier.ts';
+import { RealmPaths } from '../paths.ts';
 import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
 import {
   type CardExpression,
@@ -19,6 +22,7 @@ import {
   addExplicitParens,
   any,
   currentFilterNow,
+  dbExpression,
   every,
   type FieldTest,
   fieldTest,
@@ -34,6 +38,7 @@ import {
   type LinkedFromFilter,
   type MatchesFilter,
   type NearFilter,
+  type PathsFilter,
   type PatternFilter,
   type RegexFilter,
   type TypeAheadFilter,
@@ -221,6 +226,11 @@ export abstract class FilterCompiler extends ExpressionResolver {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
         this.#linkedFromCondition(filter as LinkedFromFilter, context),
+      ]);
+    } else if ('paths' in filter) {
+      return every([
+        ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+        pathsCondition((filter as PathsFilter).paths, context.realmURL),
       ]);
     } else if (isCardIdentityFilter(filter)) {
       // Named cards by the row's own `url` (card-identity-filter.ts).
@@ -919,4 +929,73 @@ export abstract class FilterCompiler extends ExpressionResolver {
       realmBound: realmBound('ti', context),
     });
   }
+}
+
+// The rows stored under any of a path filter's prefixes in the realm at
+// `realmURL`. A row's `url` is its file's URL, so each prefix is turned into
+// the URL the realm stores a file at that path under, and compared with it: a
+// directory as a prefix of the URL, and a file as the whole URL. The
+// comparison is exact and case-sensitive, as a path specifier's matching is.
+// Postgres tests a prefix with `LIKE`, whose `%`, `_` and `\` are escaped, so
+// an index on `url` serves it. SQLite's `LIKE` ignores case, so it tests where
+// the prefix first appears instead. A filter with no prefixes, or with the
+// realm's root among them, has no path limit. A search with no realm to read
+// the prefixes against is refused.
+const PATHS_UNION_ORIGIN = 'https://paths.invalid/';
+
+function pathsCondition(
+  paths: string[],
+  realmURL: URL | undefined,
+): CardExpression {
+  let parsed = parsePathSpecifier(paths);
+  if (!parsed.ok) {
+    throw new InvalidQueryError(parsed.errors[0].message, 'invalid-value');
+  }
+  let { prefixes } = parsed.specifier;
+  if (
+    prefixes.length === 0 ||
+    prefixes.some((prefix) => prefix.segments.length === 0)
+  ) {
+    return ['true'];
+  }
+  if (!realmURL) {
+    // A search over several realms (a realm union): each row's prefixes are
+    // relative to that row's own realm, so the comparison reads `realm_url`.
+    let anyRealm = new RealmPaths(new URL(PATHS_UNION_ORIGIN));
+    return any(
+      prefixes.map((prefix): CardExpression => {
+        let rel = anyRealm
+          .fileURL(prefix.path)
+          .href.slice(PATHS_UNION_ORIGIN.length);
+        if (!prefix.directory) {
+          return ['i.url = i.realm_url ||', param(rel)];
+        }
+        return [
+          dbExpression({
+            pg: ['starts_with(i.url, i.realm_url ||', param(rel), ')'],
+            sqlite: ['instr(i.url, i.realm_url ||', param(rel), ') = 1'],
+          }),
+        ];
+      }),
+    );
+  }
+  let realm = new RealmPaths(realmURL);
+  return any(
+    prefixes.map((prefix): CardExpression => {
+      let href = realm.fileURL(prefix.path).href;
+      if (!prefix.directory) {
+        return ['i.url =', param(href)];
+      }
+      return [
+        dbExpression({
+          pg: [
+            'i.url LIKE',
+            param(`${escapeLikePattern(href)}%`),
+            `ESCAPE '\\'`,
+          ],
+          sqlite: ['instr(i.url,', param(href), ') = 1'],
+        }),
+      ];
+    }),
+  );
 }
