@@ -6,6 +6,7 @@ import net from 'net';
 import Koa from 'koa';
 import {
   CardError,
+  rri,
   SupportedMimeType,
   type RequestContext,
   type Realm,
@@ -20,6 +21,8 @@ import {
   WriteLockTimeoutError,
 } from '@cardstack/runtime-common/card-operations';
 import { Router } from '@cardstack/runtime-common/router';
+import { FilterRefersToNonexistentTypeError } from '@cardstack/runtime-common/definition-lookup';
+import { DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS } from '@cardstack/runtime-common/search-bounds';
 import { sendResponseForSystemError } from '../middleware/index.ts';
 
 // How a write that gave up waiting for its write locks is answered over HTTP.
@@ -103,6 +106,36 @@ module(basename(import.meta.filename), function () {
         response.headers.get('Retry-After'),
         String(WRITE_LOCK_RETRY_AFTER_SECONDS),
       );
+    });
+
+    test('answers a definition that could not be read as 503 definitions-unavailable', async function (assert) {
+      let response = await answer(
+        new FilterRefersToNonexistentTypeError(
+          {
+            module: rri('https://cardstack.com/base/card-api'),
+            name: 'CardInfoField',
+          },
+          { transient: true },
+        ),
+      );
+      assert.strictEqual(response.status, 503);
+      assert.strictEqual(
+        response.headers.get('Retry-After'),
+        String(DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS),
+      );
+      let body = await response.json();
+      assert.strictEqual(body.errors[0].meta?.code, 'definitions-unavailable');
+    });
+
+    test('still answers a type that does not exist as an unexpected exception', async function (assert) {
+      let response = await answer(
+        new FilterRefersToNonexistentTypeError({
+          module: rri('https://cardstack.com/base/card-api'),
+          name: 'Nope',
+        }),
+      );
+      assert.strictEqual(response.status, 500);
+      assert.strictEqual(response.headers.get('Retry-After'), null);
     });
 
     test('still answers any other refusal as an unexpected exception', async function (assert) {

@@ -567,15 +567,45 @@ export function assembledLinkResourceBudget(): number {
 
 // The HTTP statuses a bound violation maps to. 408 for the time budget so a
 // client reads it as "took too long — narrow the query / retry".
-export type SearchBoundStatus = 400 | 408;
+export type SearchBoundStatus = 400 | 408 | 503;
 
 export class SearchBoundError extends Error {
   status: SearchBoundStatus;
-  constructor(status: SearchBoundStatus, message: string) {
+  code: string | undefined;
+  constructor(status: SearchBoundStatus, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
     this.name = 'SearchBoundError';
   }
+}
+
+// A search that needs a type's definition and could not read it: its module's
+// prerender timed out or its server was unavailable, or a cached row records
+// that it did. Nothing about the type's cards follows from that, so the search
+// is refused as retryable (503, `definitions-unavailable`, with `Retry-After`)
+// rather than answered `ok, 0`, and — being a rejection — is never cached.
+// The time budget keeps its own 408.
+export const DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS = 5;
+export class DefinitionsUnavailableError extends SearchBoundError {
+  readonly retryAfterSeconds = DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS;
+  constructor(what: string, opts?: { cause?: unknown }) {
+    super(
+      503,
+      `the definition of ${what} is still loading; retry the search shortly`,
+      'definitions-unavailable',
+    );
+    if (opts?.cause !== undefined) {
+      (this as any).cause = opts.cause;
+    }
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export function isDefinitionsUnavailableError(
+  e: unknown,
+): e is DefinitionsUnavailableError {
+  return e instanceof DefinitionsUnavailableError;
 }
 
 // The card `@context` caps hold on the item leg only, so a genuinely large or

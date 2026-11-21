@@ -60,6 +60,7 @@ import {
   assembledLinkResourceBudget,
   runWithSearchTimeBudget,
   SearchBoundError,
+  isDefinitionsUnavailableError,
 } from './search-bounds.ts';
 import {
   LinkShapePolicy,
@@ -20321,10 +20322,17 @@ export class Realm {
     } catch (e) {
       if (e instanceof SearchBoundError) {
         return createResponse({
-          body: JSON.stringify(buildSearchErrorBody(e.message, e.status)),
+          body: JSON.stringify(
+            buildSearchErrorBody(e.message, e.status, e.code),
+          ),
           init: {
             status: e.status,
-            headers: { 'content-type': SupportedMimeType.CardJson },
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              ...(isDefinitionsUnavailableError(e)
+                ? { 'Retry-After': String(e.retryAfterSeconds) }
+                : {}),
+            },
           },
           requestContext,
         });
