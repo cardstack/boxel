@@ -100,6 +100,7 @@
     "yargs": "catalog:"
   },
   "scripts": {
+    "check-value-store": "NODE_NO_WARNINGS=1 PGDATABASE=${PGDATABASE:-boxel} PGPORT=${PGPORT:-5435} node scripts/check-value-store.ts",
     "test": "./tests/scripts/run-qunit-with-test-pg.sh",
     "test-module": "./tests/scripts/run-qunit-with-test-pg.sh --module ${TEST_MODULE}",
     "test:platform": "modules=$(node scripts/test-suites.cjs platform) && TEST_MODULES=\"$modules\" ./tests/scripts/run-qunit-with-test-pg.sh",
