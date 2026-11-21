@@ -20678,6 +20678,51 @@ export class Realm {
     return access ? async (url: string) => access(url) : undefined;
   }
 
+  // A `_search?validate` answer: the request's item query as the engine
+  // would receive it (type references resolved), under `meta.query`, or the
+  // 400 refusal a search would give. Checks that need the realm's
+  // definitions or data (a label's field, a `search: false` field, a log
+  // that is not synced) run only with the search.
+  #validateSearchResponse(
+    payload: unknown,
+    requestContext: RequestContext,
+  ): Response {
+    let refusal = (message: string, code?: string) =>
+      createResponse({
+        body: JSON.stringify(buildSearchErrorBody(message, 400, code)),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    try {
+      let parsed = realmEntryGrammar().parse(payload) as SearchEntryQuery;
+      return createResponse({
+        body: JSON.stringify({
+          meta: {
+            valid: true,
+            query: parsed.itemQuery,
+            ...(parsed.columns ? { select: parsed.columns } : {}),
+          },
+        }),
+        init: {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    } catch (e: unknown) {
+      if (e instanceof SearchRequestError) {
+        return refusal(e.message, e.queryCode);
+      }
+      if (e instanceof InvalidQueryError) {
+        return refusal(`Invalid query: ${e.message}`, e.code);
+      }
+      throw e;
+    }
+  }
+
   private async searchEntriesResponse(
     request: Request,
     requestContext: RequestContext,
@@ -20711,9 +20756,26 @@ export class Realm {
       });
     }
 
+    let validating = new URL(request.url).searchParams.has('validate');
     // A search over this realm's logs (`from: { log }` or `{ logs }`) is
     // answered from their line rows (`log-query.ts`, `searchLogLines`).
     if (isLogQuery(payload)) {
+      if (validating) {
+        return createResponse({
+          body: JSON.stringify(
+            buildSearchErrorBody(
+              '?validate checks a card query; a log query is checked when it runs',
+              400,
+              'invalid-value',
+            ),
+          ),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
       let declined = this.#coarseDeclined(requestContext) === 'all';
       let { status, body } = await this.searchLogLines(payload, {
         readsRealm: !declined,
@@ -20760,6 +20822,13 @@ export class Realm {
         },
         requestContext,
       });
+    }
+
+    // `?validate`: the query is lowered and checked as a search would, and
+    // not run. The answer is the query the engine would receive, or the
+    // refusal a search would give.
+    if (validating) {
+      return this.#validateSearchResponse(payload, requestContext);
     }
 
     // What a policy fragment is looked up by, for a caller this realm's ACL
