@@ -14,7 +14,7 @@ import {
   DefinitionsUnavailableError,
   SearchBoundError,
   definitionWaitMs,
-} from '../search-bounds.ts';
+} from '../query-v2/search-bounds.ts';
 import { InvalidQueryError } from '../invalid-query-error.ts';
 import { type CardExpression, type Expression, query } from '../expression.ts';
 import {

@@ -14,7 +14,10 @@ import {
   BXL_FORMULA_FUNCTIONS,
   unknownBxlFunctions,
 } from '@cardstack/bxl/compiler';
-import { COMPARE_TRUNCATED, withWarningOnce } from '../search-bounds.ts';
+import {
+  COMPARE_TRUNCATED,
+  withWarningOnce,
+} from '../query-v2/search-bounds.ts';
 import { nearApproximateWarning } from '../vector-query.ts';
 import type { CardExpression } from '../expression.ts';
 import type { CodeRef } from '../index.ts';

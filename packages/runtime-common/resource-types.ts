@@ -349,6 +349,22 @@ export interface EntryResource {
     // and re-rank across realms (the federated path concatenates per-realm
     // results without re-sorting).
     _matchRelevance?: number;
+    // Cosine similarity (-1–1, higher is nearer) between this entry's vector
+    // and the target of the query's first `near` sort. Present only on a
+    // near-sorted query, for an entry that has a vector at the sorted path.
+    // Comparable across realms, so the federated merge orders by it.
+    _nearSimilarity?: number;
+    // The fused score of the query's first `_blend` sort (reciprocal rank
+    // fusion; higher ranks first). Present only on a blend-sorted query.
+    // Ranks are per realm, so across realms it orders only approximately.
+    _blendScore?: number;
+    // Under `collapse`: how many matches this entry's group holds, itself
+    // and any other kept rows included. 1 when it stood alone.
+    _collapseSize?: number;
+    // For a federated merge only: the values this entry was sorted by, so
+    // the merge can order entries from several realms. Removed before the
+    // merged page goes out.
+    _sortValues?: unknown[];
   };
 }
 

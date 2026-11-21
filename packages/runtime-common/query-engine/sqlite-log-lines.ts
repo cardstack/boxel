@@ -25,7 +25,10 @@ import {
   type LogFileReader,
 } from '../log-line-index.ts';
 import { pageTotal } from './index-sql.ts';
-import { TOTAL_ESTIMATED, totalEstimatedMessage } from '../search-bounds.ts';
+import {
+  TOTAL_ESTIMATED,
+  totalEstimatedMessage,
+} from '../query-v2/search-bounds.ts';
 import { DEFAULT_FACET_SIZE } from '../query-v2/query-values.ts';
 import { localDateInZone } from '../query-v2/time-zone.ts';
 

@@ -1,0 +1,272 @@
+import { logger } from '../log.ts';
+import { ensureTrailingSlash } from '../paths.ts';
+import type { RequestTimings } from '../request-timings.ts';
+import { SupportedMimeType } from '../router.ts';
+import type { PrerenderedHtmlFormat } from '../prerendered-html-format.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
+
+export type SearchRequestErrorCode =
+  | 'missing-realms'
+  | 'invalid-json'
+  | 'unsupported-method'
+  | 'invalid-query'
+  | 'invalid-render'
+  | 'invalid-prerendered-html-format';
+
+export class SearchRequestError extends Error {
+  code: SearchRequestErrorCode;
+  // the query grammar's own code for the mistake, when it has one
+  queryCode?: string;
+
+  constructor(
+    code: SearchRequestErrorCode,
+    message: string,
+    queryCode?: string,
+  ) {
+    super(message);
+    this.code = code;
+    this.name = 'SearchRequestError';
+    if (queryCode) this.queryCode = queryCode;
+  }
+}
+
+export function parseRealmsParam(url: URL): string[] {
+  return url.searchParams
+    .getAll('realms')
+    .flatMap((value) => value.split(','))
+    .map((realm) => realm.trim())
+    .filter(Boolean)
+    .map((realm) => ensureTrailingSlash(realm));
+}
+
+export async function parseSearchRequestPayload(
+  request: Request,
+): Promise<unknown> {
+  let method = resolveSearchRequestMethod(request);
+  if (method !== 'QUERY') {
+    throw new SearchRequestError('unsupported-method', 'method must be QUERY');
+  }
+
+  try {
+    return await request.json();
+  } catch (e: any) {
+    throw new SearchRequestError(
+      'invalid-json',
+      `Request body is not valid JSON: ${e?.message ?? e}`,
+    );
+  }
+}
+
+// The parts of a VirtualNetwork `registeredRealmURL` reads.
+interface RealmURLNetwork {
+  isRegisteredPrefix(reference: string): boolean;
+  toURL(reference: string): URL;
+  mapURL(
+    url: string,
+    direction: 'virtual-to-real' | 'real-to-virtual',
+  ): URL | undefined;
+}
+
+// The URL a realm server registers a realm under, for a realm a federated
+// request names. A federated request may name a realm by its registered
+// prefix (`@cardstack/catalog/`), by the URL it is registered under, or by the
+// URL it is served from: the server's URL mappings run from each realm's
+// registered `--fromUrl` to the URL it is served at, so mapping a served URL
+// back names the realm it registered (the base realm is registered under
+// `https://cardstack.com/base/` and served elsewhere). Anything else comes
+// back unchanged, so an unknown realm is still reported as the caller named it.
+export function registeredRealmURL(
+  virtualNetwork: RealmURLNetwork,
+  realm: string,
+): string {
+  let href = virtualNetwork.isRegisteredPrefix(realm)
+    ? virtualNetwork.toURL(realm).href
+    : realm;
+  if (!href.startsWith('http://') && !href.startsWith('https://')) {
+    return href;
+  }
+  return virtualNetwork.mapURL(href, 'real-to-virtual')?.href ?? href;
+}
+
+// `canonicalize`, when given, rewrites each realm to the form the caller keys
+// realms by (see `registeredRealmURL`); the list is then deduped, first
+// spelling first, so a realm named twice is searched once.
+export function parseRealmsFromPayload(
+  payload: unknown,
+  canonicalize?: (realm: string) => string,
+): string[] {
+  let payloadRecord =
+    payload && typeof payload === 'object'
+      ? (payload as Record<string, unknown>)
+      : {};
+  if (
+    !('realms' in payloadRecord) ||
+    (Array.isArray(payloadRecord.realms) &&
+      payloadRecord.realms
+        .map((realm) => (typeof realm === 'string' ? realm.trim() : realm))
+        .filter(Boolean).length == 0)
+  ) {
+    throw new SearchRequestError(
+      'missing-realms',
+      'realms must be supplied in request body',
+    );
+  }
+  let realmsValue = payloadRecord.realms;
+  if (
+    !Array.isArray(realmsValue) ||
+    !realmsValue.every((realm) => typeof realm === 'string')
+  ) {
+    throw new SearchRequestError(
+      'missing-realms',
+      'realms must be an array of strings',
+    );
+  }
+  let realmList = realmsValue
+    .map((realm) => realm.trim())
+    .filter(Boolean)
+    .map((realm) => ensureTrailingSlash(realm));
+  if (!canonicalize) {
+    return realmList;
+  }
+  return [...new Set(realmList.map((realm) => canonicalize(realm)))];
+}
+
+export async function parseRealmsFromRequest(
+  request: Request,
+): Promise<string[]> {
+  let payload = await parseSearchRequestPayload(request);
+  return parseRealmsFromPayload(payload);
+}
+
+export function resolveSearchRequestMethod(request: Request): string {
+  let method = request.method.toUpperCase();
+  if (method === 'POST') {
+    // used for tests, supertest does not support HTTP QUERY
+    let override = request.headers.get('x-http-method-override');
+    if (override && override.toUpperCase() === 'QUERY') {
+      return 'QUERY';
+    }
+  }
+  return method;
+}
+
+// Shared opts contract for the federated-search path, kept in one place so
+// SearchableRealm.search, searchRealms, and Realm.search can't drift —
+// dropping a field here (e.g. priority) silently breaks the threading from
+// the realm-server handler down to searchCards.
+export type SearchOpts = {
+  cacheOnlyDefinitions?: boolean;
+  // The zone a query that names none is reckoned in, ahead of the realm's
+  // default (time-zone.ts). A federated search over several realms sets UTC.
+  timeZone?: string;
+  // Prerender searches set this so `searchCardsUncoalesced` skips the
+  // `loadLinks` relationship-assembly pass entirely (the host re-resolves
+  // every result from card+source and reads only `data[].id`). Live /
+  // external callers leave it unset and receive fully-assembled documents.
+  omitIncluded?: boolean;
+  // How much of each result's link graph the response carries, in the
+  // vocabulary an operation declares one in. Absent is `full`, the whole
+  // closure. `ids` answers each result's relationships and side-loads none of
+  // their targets, leaving the consumer to fetch the cards it displays; `none`
+  // answers each result's card with no relationship data at all.
+  //
+  // The endpoint settles it from its two sources — the link-shape policy,
+  // which asks for `ids` when the realm-server is shedding load, and the
+  // declaration of a named query — through `effectiveLinkStrategy`, so it is
+  // always the narrower of the two.
+  links?: LinkStrategy;
+  // Prerendered formats every row is served data-only for: the rows carry no
+  // markup for them, and a consumer renders those rows from their data. Set
+  // from the `html` declaration of a named query, and never on a render's own
+  // search, which keeps every format's markup. Absent or empty, every format's
+  // markup is served.
+  unshareableFormats?: PrerenderedHtmlFormat[];
+  priority?: number;
+  // Correlation id minted by the client — a prerendering host stamps
+  // `x-boxel-logging-correlation-id` on its `_federated-search` fetch, and so
+  // does a live browser whose client-telemetry instrument is armed — and read
+  // back out by the request handler into opts. When present, `searchRealms`
+  // instruments the server-side search pipeline and emits one
+  // `realm:search-timing` line keyed by this id, so a client-observed
+  // slow search can be joined to where the realm-server spent the time.
+  loggingCorrelationId?: string;
+  // Per-request wall-clock collector. `searchRealms` creates it when a
+  // `loggingCorrelationId` is present and threads it down through `Realm.search` →
+  // `searchCards` → `loadLinks` so each post-SQL stage stamps its
+  // elapsed time. Callers never supply this directly.
+  timings?: RequestTimings;
+  // Restrict the result set to this subset of card URLs. The query engine
+  // applies it as a SQL `i.url IN (...)` filter, so it must reach the engine
+  // opts — not only the cache key — for the subset to actually narrow results.
+  cardUrls?: string[];
+  // Cooperative-cancellation signal for the per-request time budget. When the
+  // search handler cuts an over-budget item-leg search off, this aborts so the
+  // engine's `loadLinks` fan-out stops promptly instead of running to
+  // completion. Threaded the same way as `timings`.
+  signal?: AbortSignal;
+  // A federated search's deadline for each realm (epoch ms; see
+  // `realmDeadlineWithin`): a realm that has not answered by then is cut off
+  // and reported as a timeout, and the search answers with the others.
+  realmDeadline?: number;
+  // Per realm URL, the time this request already spent on that realm before
+  // the fan-out reached it (mounting it), so `meta.realms[url].ms` reports the
+  // realm's whole part of the request.
+  realmPreparedMs?: Record<string, number>;
+};
+
+// Indirection so a host integration test can deterministically capture
+// the emitted timing line: loglevel rebinds a logger's methods on every
+// `setLevel`, so a test that monkeypatches a direct logger handle would
+// race the next `logger('realm:search-timing')` call. A settable sink
+// sidesteps that. Defaults to the `realm:search-timing` logger.
+let searchTimingSink: ((line: string) => void) | undefined;
+let searchTimingLog: ReturnType<typeof logger> | undefined;
+export function setSearchTimingSinkForTests(
+  sink: ((line: string) => void) | undefined,
+): void {
+  searchTimingSink = sink;
+}
+export function emitSearchTiming(line: string): void {
+  if (searchTimingSink) {
+    searchTimingSink(line);
+    return;
+  }
+  // Lazy: a module-load `logger()` call races the circular import that
+  // installs the logger factory. First emission happens well after boot.
+  (searchTimingLog ??= logger('realm:search-timing')).info(line);
+}
+
+export type SearchErrorBody = {
+  errors: { status: string; title: string; message: string; code?: string }[];
+};
+
+export function buildSearchErrorBody(
+  message: string,
+  status = 400,
+  code?: string,
+): SearchErrorBody {
+  return {
+    errors: [
+      {
+        status: String(status),
+        title: status === 503 ? 'Definitions Unavailable' : 'Invalid Query',
+        message,
+        ...(code ? { code } : {}),
+      },
+    ],
+  };
+}
+
+export function buildSearchErrorResponse(
+  message: string,
+  status = 400,
+  code?: string,
+): Response {
+  return new Response(
+    JSON.stringify(buildSearchErrorBody(message, status, code)),
+    {
+      status,
+      headers: { 'content-type': SupportedMimeType.CardJson },
+    },
+  );
+}

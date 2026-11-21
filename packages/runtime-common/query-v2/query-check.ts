@@ -6,7 +6,7 @@
 // more than one node.
 import { refuse, refuseLog } from './query-refusals.ts';
 import type { RefusalId, LogRefusalId } from './query-refusals.ts';
-import { MAX_COLUMNS } from '../search-bounds.ts';
+import { MAX_COLUMNS } from './search-bounds.ts';
 import { isEqual } from 'lodash-es';
 import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
 import qs from 'qs';
