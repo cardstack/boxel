@@ -412,20 +412,81 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
-  for (let [name, q] of Object.entries(searches)) {
+  // A paged html search lists error cards, so it reads with
+  // `includeErrors`; the shop holds two, neither of them a match for case 8
+  // (rating 3.5), so the page is read as the data search's is.
+  async function errorCards() {
+    let shop = await new IndexWriter(adapter).createBatch(
+      new URL(A),
+      network,
+      undefined,
+      { splitPrerenderHtml: false },
+    );
+    let urls = [0, 5].map(
+      (i) => new URL(`${A}Product/p${String(i).padStart(5, '0')}.json`),
+    );
+    await shop.invalidate(urls);
+    for (let url of urls) {
+      await shop.updateEntry(url, {
+        type: 'instance-error',
+        error: {
+          id: url.href,
+          status: 500,
+          title: 'broken',
+          message: 'a render that failed',
+          additionalErrors: null,
+          deps: [],
+        },
+      });
+    }
+    await shop.done();
+  }
+  const runs: [string, () => Promise<unknown>, boolean][] = [
+    ...Object.entries(searches).map(
+      ([name, q]) =>
+        [name, run(q), false] as [string, () => Promise<unknown>, boolean],
+    ),
+    [
+      'case 8 as a paged html search, in a realm with error cards',
+      () =>
+        engine.search(
+          new URL(A),
+          searches['a range-filtered re-rank with facets (case 8)'],
+          { includeErrors: true },
+          { kind: 'renderSet' },
+          'all',
+        ),
+      true,
+    ],
+  ];
+
+  for (let [name, search, withErrorCards] of runs) {
     test(`no-statistics gate: ${name}`, async function (assert) {
+      if (withErrorCards) {
+        await errorCards();
+      }
       await analyze();
-      let warm = await measured(run(q)); // caches warm, plans with statistics
-      let analyzed = await measured(run(q));
+      let warm = await measured(search); // caches warm, plans with statistics
+      let analyzed = await measured(search);
       await withholdStatistics();
-      await measured(run(q));
-      let withheld = await measured(run(q));
+      await measured(search);
+      let withheld = await measured(search);
       assert.strictEqual(
         withheld.length,
         analyzed.length,
         'the same statements run either way',
       );
       assert.ok(warm.length > 0);
+      if (withErrorCards) {
+        assert.true(
+          analyzed.some((m) =>
+            /json_object_agg\(r\.id, r\.realm_url\) FROM boxel_index_value_realms/.test(
+              m.sql,
+            ),
+          ),
+          'no error card matches, so the page reads through the value store',
+        );
+      }
       withheld.forEach((w, i) => {
         let a = analyzed[i];
         let budget = 10 * a.buffers + 1000;
