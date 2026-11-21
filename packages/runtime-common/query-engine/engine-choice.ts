@@ -49,7 +49,7 @@ const DEFAULTS: Readonly<Record<QueryEngineCaller, QueryEngineChoice>> =
     'realm-logs': 'v2',
     federated: 'v2',
     'query-fields': 'v2',
-    host: 'legacy',
+    host: 'v2',
   });
 
 export function queryEngineFor(
