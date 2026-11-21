@@ -58,16 +58,20 @@ routing.
 | `POST /_oauth-provider/token/revocation`               | an app                         | Revocation (RFC 7009); either token of a grant ends the whole grant                                                              |
 | `GET /_oauth-provider/connections`                     | Connected apps (not built yet) | The user's live grants whose code was exchanged; secure window session only                                                      |
 | `DELETE /_oauth-provider/connections/:grantId`         | Connected apps (not built yet) | Ends one of the user's live grants; secure window session only                                                                   |
+| `POST /mcp`                                            | an MCP client                  | The placeholder MCP endpoint, behind its controller: `initialize`, `ping`, `tools/list` (no tools); every tool call is refused   |
+| `GET`/`DELETE /mcp`                                    | an MCP client                  | `405`: the placeholder is stateless, with no event stream and no session; no token is looked at                                  |
 
 The resources an access token may be used at are listed in `registry.ts`
 (today the MCP endpoint, `<issuer>/mcp`). A resource's routes check the token
 through its controller (`resource.ts`), which calls the one lookup
-(`lookup.ts`). Tokens are issued for the MCP resource, but nothing serves
-`/mcp` yet and its scopes map no routes: only the resources tests add mount
-the controller. So in production today no call with an OAuth token reaches
-a resource, and an app's failing call isn't reaching an OAuth resource at
-all. The rest of the realm server doesn't accept an OAuth token either (the
-remediation file lists where): see the `realm-auth` skill.
+(`lookup.ts`). Both MCP scopes map `POST /mcp`, so a token with either
+reaches it. `/mcp` is a placeholder (`handlers/handle-mcp.ts`) that only
+proves a token reaches a resource, for tests and the staging run with MCP
+Inspector: stateless, plain JSON, no tools, so every `tools/call` is
+answered with a JSON-RPC "unknown tool" error. It is served wherever the
+provider is on, on the issuer's host only. The MCP server replaces it. The
+rest of the realm server doesn't accept an OAuth token (the remediation file
+lists where): see the `realm-auth` skill.
 
 Lifetimes (`provider.ts`, `grants.ts`): an interaction and the library's
 session last 10 minutes, a code 60 seconds. A grant lasts 30 days if the user
@@ -216,9 +220,9 @@ refused: <reason>` near the time. The user saw "Something went wrong" on
 <error>`. A code lasts 60 seconds, needs the same `redirect_uri` and the
    PKCE verifier that matches the challenge. The grant row has
    `exchanged_at` once it did.
-7. **Does the call fail?** No production resource serves calls yet (see
-   Routes). Where one does, `token refused: <reason>, resource …`. The
-   lookup checks the grant before the token:
+7. **Does the call fail?** Only `/mcp` serves calls (see Routes), and only
+   where the provider is on. A call it refuses logs `token refused:
+<reason>, resource …`. The lookup checks the grant before the token:
    - `unknown`: no such token. Usually its grant ended, which deletes its
      tokens: go to step 8. Suspect a token from another environment only
      when the user's grant is live.
@@ -303,7 +307,8 @@ private JWK with `kid`, `use: "sig"`, `alg: "RS256"`, as
 All in `packages/realm-server/tests/`, named `oauth-provider-*-test.ts`, one
 per endpoint or concern (registration, authorization, consent, finish,
 token, token-lookup, revocation, connections, cleanup, discovery, client
-checks, client metadata, mock client). `oauth-provider-secrecy-test.ts` is
+checks, client metadata, mock client, mcp). `oauth-provider-mcp-test.ts`
+covers the placeholder `/mcp` end to end, with the MCP SDK's own client. `oauth-provider-secrecy-test.ts` is
 the whole-connection secrecy check: every table at each step, the
 request log and the provider's channel at info level, and Sentry. `tests/helpers/oauth-provider-flow.ts`
 drives each step; `tests/helpers/oauth-provider-secrets.ts` captures logs and
