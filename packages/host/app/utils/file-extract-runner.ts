@@ -70,6 +70,7 @@ export async function runFileExtract({
   let fileDefCodeRef = renderOptions.fileDefCodeRef ?? baseFileRef;
   let contentHash: string | undefined = renderOptions.fileContentHash;
   let contentSize: number | undefined = renderOptions.fileContentSize;
+  let lineCount: number | undefined = renderOptions.fileLineCount;
   let lastModified: number | undefined = renderOptions.fileLastModified;
   let createdAt: number | undefined = renderOptions.fileCreatedAt;
   // This runs on the indexing path, so skill tool schemas are generated
@@ -89,6 +90,7 @@ export async function runFileExtract({
     baseFileDefCodeRef: baseFileRef,
     contentHash,
     contentSize,
+    lineCount,
     lastModified,
     createdAt,
     fileSizeLimitBytes,

@@ -752,9 +752,13 @@ function groupLines(
     else groups.set(id, { key, lines: [line] });
   }
   let rows = [...groups.values()].map(({ key, lines: held }) => {
-    let row: Record<string, unknown> = {
-      group: Object.fromEntries(by.map((path, i) => [path, key[i] ?? null])),
-    };
+    // Keyed by the caller's paths and names: with no prototype, a name such
+    // as `__proto__` or `toString` is a key like any other.
+    let row: Record<string, unknown> = Object.create(null);
+    row.group = Object.assign(
+      Object.create(null),
+      Object.fromEntries(by.map((path, i) => [path, key[i] ?? null])),
+    );
     for (let [name, spec] of aggregates) {
       let [op, path] = Object.entries(spec)[0];
       row[name] = aggregate(held, op, path);
@@ -847,9 +851,13 @@ export async function answerLogLines(
   let warnings: LogWarning[] = [];
   if (read < held) warnings.push(logWindowWarning(read, held));
   let kept = lines.filter(lineFilter(q.filter, ctx));
+  // keyed by the caller's paths, so no prototype (as a row)
   let facets = q.facets?.length
-    ? Object.fromEntries(
-        q.facets.map((f) => [f.by, facetCounts(kept, f, opts.zone)]),
+    ? Object.assign(
+        Object.create(null),
+        Object.fromEntries(
+          q.facets.map((f) => [f.by, facetCounts(kept, f, opts.zone)]),
+        ),
       )
     : undefined;
   let offset = number * size;
@@ -873,6 +881,8 @@ export async function answerLogLines(
         ...(many ? { file: l.url } : {}),
       };
       if (selected) {
+        // keyed by the caller's paths, so no prototype (as a grouped row)
+        row = Object.assign(Object.create(null), row);
         for (let path of selected) row[path] = lineValue(l, path) ?? null;
         return row;
       }

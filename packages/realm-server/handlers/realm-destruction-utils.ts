@@ -9,6 +9,7 @@ import {
 } from '@cardstack/runtime-common';
 import { hasVectorIndex } from '@cardstack/runtime-common/vector-index';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
+import { dropLogPartition } from '@cardstack/runtime-common/log-line-partitions';
 import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
 import { laneFamilyPredicate } from '@cardstack/runtime-common/jobs/lane-family';
 import fsExtra from 'fs-extra';
@@ -141,6 +142,10 @@ export async function removeRealmDatabaseArtifacts(args: {
     await q(statement);
   }
   await q([`DELETE FROM boxel_index_words WHERE realm_url =`, param(realmURL)]);
+  // The realm's partition of the log lines goes whole; a line written before
+  // the partition existed is deleted from the default one.
+  await dropLogPartition(dbAdapter, q, realmURL);
+  await q([`DELETE FROM boxel_log_files WHERE realm_url =`, param(realmURL)]);
   await q([
     `DELETE FROM prerendered_html_pending WHERE realm_url =`,
     param(realmURL),

@@ -1,5 +1,5 @@
 import FileJsonIcon from '@cardstack/boxel-icons/file-json';
-import StringField from './string';
+import { JsonField } from './json-field';
 import { bxl, operation, type OperationDeclaration } from './operations';
 import { TextFileDef } from './text-file-def';
 
@@ -15,6 +15,8 @@ export class JSONLFile extends TextFileDef {
   static icon = FileJsonIcon;
   static acceptTypes = '.jsonl,application/jsonl';
   static textExtensions: readonly string[] = ['.jsonl'];
+  // A log's file meta keeps its recent lines, not the whole log.
+  static contentTailBytes = 16 * 1024;
   static fileKind = 'JSON Lines';
 
   // The caller says what happened. The realm says when, and who.
@@ -29,7 +31,11 @@ export class JSONLFile extends TextFileDef {
   // that leaves the declared params in place beside the line it adds.
   @operation static record = {
     base: 'appendLine',
-    params: { what: StringField },
+    // Any JSON value: a structured event is stored as an object, so the
+    // line's fields are paths a log query reaches. Through a field declared
+    // `linksTo(JSONLFile, { of: LineType })` it is checked against LineType
+    // before it is sent (`log-lines.ts`).
+    params: { what: JsonField },
     input: bxl`. + { line: ({ at: TEXT(NOW(); "yyyy-mm-dd hh:mm:ss"), actor: actor(), what: params("what") } | tojson) }`,
   } satisfies OperationDeclaration;
 }

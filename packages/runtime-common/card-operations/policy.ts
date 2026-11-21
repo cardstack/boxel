@@ -39,7 +39,12 @@ import {
   type ModuleAccessRule,
 } from './policy-module-access.ts';
 import { classifyPredicateTiers } from './policy-tiers.ts';
-import { logBytesRefusal } from './log-line-policy.ts';
+import {
+  isOwnLinesPredicate,
+  LOG_LINE_GRANT_SHAPE,
+  logBytesRefusal,
+  logLineTypeOf,
+} from './log-line-policy.ts';
 import { elapsedMs, emitPolicyCompile, recordSafely } from './telemetry.ts';
 import {
   reachIssues,
@@ -180,6 +185,10 @@ export interface CompiledOperationGrant {
   // from judging those cards, and leaves the rest of the filter to. Absent
   // when no card of the realm reads a path differently.
   misreadingTypes?: { path: string; types: MisreadingType[] }[];
+  // On a `query` grant of a base log type (JSONLFile, LogFile): the grant
+  // admits a caller to the lines whose realm-stamped actor is them
+  // (`log-line-policy.ts`). Such a grant carries no card search filter.
+  logLines?: 'own';
 }
 
 // How a grant treats the callers who aren't signed in that its `where` admits.
@@ -1411,6 +1420,46 @@ async function compileDocument(
           `${grantPath}.operation`,
           "this grant doesn't name an operation",
         );
+        continue;
+      }
+      // A `query` on a base log type is a grant on the log's lines, judged
+      // per line on its realm-stamped actor (`log-line-policy.ts`). A file
+      // type carries no card search, so it is compiled here rather than as a
+      // search filter.
+      if (operation === 'query' && logLineTypeOf(resolved)) {
+        let lineWhere = readPredicate(grant?.where);
+        let lineOutcome =
+          lineWhere && lineWhere !== 'malformed'
+            ? await compilePredicate(lineWhere.source)
+            : undefined;
+        if (lineOutcome && 'problem' in lineOutcome) {
+          issue(lineOutcome.code, `${grantPath}.where`, lineOutcome.problem);
+          continue;
+        }
+        if (
+          !lineWhere ||
+          lineWhere === 'malformed' ||
+          !lineOutcome ||
+          !isOwnLinesPredicate(lineOutcome.canonical)
+        ) {
+          issue(
+            'policy-not-filterable',
+            `${grantPath}.where`,
+            `${asSentence(LOG_LINE_GRANT_SHAPE)} This grant admits no one.`,
+          );
+          continue;
+        }
+        grants.push({
+          operation,
+          path: grantPath,
+          where: {
+            source: lineWhere.source,
+            canonical: lineOutcome.canonical,
+            snapshot: false,
+            readsActor: true,
+          },
+          logLines: 'own',
+        });
         continue;
       }
       // A grant is matched on the name a caller invokes, so a name the type

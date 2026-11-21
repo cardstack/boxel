@@ -57,6 +57,7 @@
       "key-grant-rejection-test",
       "key-limits-test",
       "key-usage-test",
+      "log-policy-http-test",
       "oauth-connections-test",
       "policy-share-audit-test",
       "published-realm-shared-key-test",

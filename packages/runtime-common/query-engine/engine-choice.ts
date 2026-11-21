@@ -15,6 +15,9 @@ import { IndexQueryEngine } from './index-query-engine.ts';
 // Each production construction site builds its engine through
 // `indexQueryEngineFor`, naming its caller, so the override reaches it and
 // the guard (realm-server/tests/query-engine-choice-test.ts) can read it.
+// A caller that reads through no engine (a log search answers from the log
+// line rows, `log-query.ts`) asks `queryEngineFor('<caller>')` at each site
+// instead, and on 'legacy' answers as main does; the guard reads those too.
 // Temporary: `BOXEL_QUERY_ENGINE=legacy|v2` sends every caller to one engine,
 // for the differential and for rolling a deployment back. It is not a
 // product setting.
@@ -43,7 +46,7 @@ const DEFAULTS: Readonly<Record<QueryEngineCaller, QueryEngineChoice>> =
     'realm-search': 'v2',
     automations: 'legacy',
     'skill-validation': 'legacy',
-    'realm-logs': 'legacy',
+    'realm-logs': 'v2',
     federated: 'legacy',
     'query-fields': 'legacy',
     host: 'legacy',
