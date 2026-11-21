@@ -51,13 +51,24 @@ function stubUpdaterGates(
 ): () => void {
   let updater = realm.realmIndexUpdater as any;
   if (stubs.initiatedBy) {
-    updater.incrementalIndexingInitiatedBy = stubs.initiatedBy;
+    // The gate asks `ownPassesForRead` (scoped by card and budgeted per
+    // pass); these tests stub it per user, as before.
+    let initiatedBy = stubs.initiatedBy;
+    updater.ownPassesForRead = (
+      user: string,
+      _url: string,
+      budgetMs: number,
+      now = Date.now(),
+    ) => {
+      let pending = initiatedBy(user);
+      return pending ? { pending, deadline: now + budgetMs } : undefined;
+    };
   }
   if (stubs.all) {
     updater.incrementalIndexing = stubs.all;
   }
   return () => {
-    delete updater.incrementalIndexingInitiatedBy;
+    delete updater.ownPassesForRead;
     delete updater.incrementalIndexing;
   };
 }
