@@ -72,6 +72,7 @@ import {
   attributeSearchRequest,
   fetchRequestFromContext,
   releaseSearchAdmission,
+  searchRequestSignal,
   sendResponseForBadRequest,
   setContextResponse,
   withSearchConnectionTenant,
@@ -1132,8 +1133,13 @@ export default function handleSearch(opts: {
 
     // Lazy-mount inside runSearch so cache hits (304 / cached body) skip the
     // lazy-mount work entirely.
-    let runSearch = async () => {
-      let doRun = async (signal?: AbortSignal) => {
+    // `abandoned` aborts once nobody is waiting for this computation any more:
+    // the client went away (or, for a computation coalesced across requests,
+    // every client did). It stops the search like the time budget does, its
+    // SQL included.
+    let runSearch = async (abandoned?: AbortSignal) => {
+      let doRun = async (budgetSignal?: AbortSignal) => {
+        let signal = mergeAbortSignals(budgetSignal, abandoned);
         // Only the realms rows are read from are mounted: the caller reads
         // them, or their policy scopes the caller into them. A realm an
         // earlier step of the request already tried to mount is answered as
@@ -1308,6 +1314,12 @@ export default function handleSearch(opts: {
           ),
         );
         emitTelemetry();
+        return;
+      }
+      // The client went away and the search was stopped for it: there is no
+      // one to answer. Reported as 499 (client closed request).
+      if (searchRequestSignal(ctxt)?.aborted) {
+        emitTelemetry({ status: 499 });
         return;
       }
       // Koa answers an escaping throw with a 500 once the handler unwinds, so
@@ -1563,7 +1575,7 @@ async function respondWithJobScopedSearchCache(
     realms: string[];
     query: Query;
     opts: unknown;
-    runSearch: () => Promise<string>;
+    runSearch: (abandoned?: AbortSignal) => Promise<string>;
     emitTelemetry?: () => void;
     // Which cache, if any, answered — reported before the response is sent so
     // the telemetry emitted alongside it carries the outcome.
@@ -1614,6 +1626,9 @@ async function respondThroughSearchCaches(
   },
 ): Promise<void> {
   let { searchCache, jobId, consumingRealm, realms, query, runSearch } = args;
+  // Aborts when this request's client goes away before its response is
+  // written.
+  let abandoned = searchRequestSignal(ctxt);
 
   if (cacheable) {
     // Fold each realm's generation fingerprint (index + prerendered-HTML) into
@@ -1659,7 +1674,7 @@ async function respondThroughSearchCaches(
       realms,
       query,
       opts: keyOpts,
-      populate: runSearch,
+      populate: () => runSearch(abandoned),
       onOutcome: (decided) =>
         recordCacheOutcome(decided === 'hit' ? 'job-hit' : 'job-miss'),
     });
@@ -1710,6 +1725,9 @@ async function respondThroughSearchCaches(
       query,
       opts: { ...(args.opts as Record<string, unknown>), generations },
       populate: runSearch,
+      // A computation shared by several requests stops only when every one of
+      // them has gone (see `TtlResponseCache.getOrPopulate`).
+      ...(abandoned ? { signal: abandoned } : {}),
       // A joiner or a hit holds no result document of its own, so it stops
       // counting toward the search admission ceiling here rather than when
       // its response ends; the ceiling is then a bound on concurrent
@@ -1736,7 +1754,7 @@ async function respondThroughSearchCaches(
     return;
   }
 
-  let body = await runSearch();
+  let body = await runSearch(abandoned);
   await setContextResponse(
     ctxt,
     new Response(body, {

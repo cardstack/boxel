@@ -2401,4 +2401,172 @@ module('Integration | search-entries resource', function (hooks) {
         .hasText('1', "only the new realm's entries remain after the re-run");
     });
   });
+
+  module('aborting superseded searches', function () {
+    test('a superseded search has its request aborted and the final query wins', async function (assert) {
+      let calls: { status?: string; signal?: AbortSignal }[] = [];
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = (async (
+        query: SearchEntryWireQuery,
+        _realms?: string[],
+        opts?: { signal?: AbortSignal },
+      ) => {
+        let signal = opts?.signal;
+        let status = (query.filter as { eq?: { 'item.status'?: string } })
+          ?.eq?.['item.status'];
+        calls.push({ status, signal });
+        if (status === 'slow') {
+          // Answers only by aborting, like a fetch the server never finishes.
+          return await new Promise<SearchEntryResults>((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(signal.reason));
+          });
+        }
+        return entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango</div>',
+          },
+        ]);
+      }) as typeof storeService.searchEntries;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: {
+              filter: { 'item.on': bookRef, eq: { 'item.status': 'slow' } },
+              realms: [testRealmURL],
+            },
+          },
+        }));
+        // The resource is created on first read, which starts its search.
+        void search.isLoading;
+        // A run may be superseded by the next before it is seen, so the latest
+        // one is current.
+        await waitUntil(() => calls.some((c) => c.status === 'slow'));
+        let current = calls[calls.length - 1]!;
+        assert.ok(current.signal, 'the search carries an abort signal');
+        assert.false(
+          current.signal!.aborted,
+          'not aborted while it is current',
+        );
+
+        search.modify([], {
+          query: {
+            filter: { 'item.on': bookRef, eq: { 'item.status': 'ready' } },
+            realms: [testRealmURL],
+          },
+        });
+        await settled();
+
+        assert.true(
+          calls
+            .filter((c) => c.status === 'slow')
+            .every((c) => c.signal!.aborted),
+          'the superseded request was aborted',
+        );
+        assert.strictEqual(
+          calls.filter((c) => c.status === 'ready').length,
+          1,
+          'the new query searched once',
+        );
+        assert.deepEqual(
+          search.entries.map((e) => e.id),
+          [`${testRealmURL}books/1`],
+          "the final query's results are the ones held",
+        );
+        assert.strictEqual(
+          search.errors,
+          undefined,
+          'an abort is not an error',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+
+    test('query changes within one turn fetch only the last query', async function (assert) {
+      let statuses: (string | undefined)[] = [];
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = (async (query: SearchEntryWireQuery) => {
+        statuses.push(
+          (query.filter as { eq?: { 'item.status'?: string } })?.eq?.[
+            'item.status'
+          ],
+        );
+        return entryCollectionDoc([]);
+      }) as typeof storeService.searchEntries;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: {
+              filter: { 'item.on': bookRef, eq: { 'item.status': 'a' } },
+              realms: [testRealmURL],
+            },
+          },
+        }));
+        await search.loaded;
+        statuses = [];
+        for (let status of ['b', 'c', 'd']) {
+          search.modify([], {
+            query: {
+              filter: { 'item.on': bookRef, eq: { 'item.status': status } },
+              realms: [testRealmURL],
+            },
+          });
+        }
+        await settled();
+        assert.deepEqual(
+          statuses,
+          ['d'],
+          'only the last query of the burst fetched',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+
+    test('store.searchEntries passes its signal to fetch and rejects with an AbortError', async function (assert) {
+      let realmServer = getService('realm-server');
+      let original = realmServer.maybeAuthedFetchForRealms;
+      let seen: AbortSignal | undefined | null;
+      realmServer.maybeAuthedFetchForRealms = ((
+        _url: string,
+        _realms: string[],
+        init: RequestInit = {},
+      ) => {
+        seen = init.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(init.signal!.reason),
+          );
+        });
+      }) as typeof realmServer.maybeAuthedFetchForRealms;
+      try {
+        let controller = new AbortController();
+        let pending = storeService.searchEntries(
+          { filter: { 'item.on': bookRef } },
+          [testRealmURL],
+          { signal: controller.signal },
+        );
+        await waitUntil(() => seen !== undefined);
+        assert.strictEqual(seen, controller.signal, 'fetch got the signal');
+        controller.abort();
+        try {
+          await pending;
+          assert.ok(false, 'expected the search to reject');
+        } catch (err) {
+          assert.strictEqual(
+            (err as Error).name,
+            'AbortError',
+            'rejects with an AbortError',
+          );
+        }
+      } finally {
+        realmServer.maybeAuthedFetchForRealms = original;
+      }
+    });
+  });
 });

@@ -54,6 +54,7 @@ import {
   canonicalRealmIdentifier,
   dedupeRealmsByIdentity,
 } from '../lib/realm-utils';
+import { isAbortError } from '../lib/search-abort';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -565,7 +566,18 @@ export class SearchEntriesResource extends Resource<Args> {
     }
     let token = waiter.beginAsync();
     this.#refreshEpoch++;
+    // Owned by this run: aborted when the run ends, so a run cancelled by a
+    // restart (a newer query), by `cancelAll` (query cleared, teardown) or
+    // left behind for any other reason closes its `_federated-search` request
+    // and the realm server stops executing it. Aborting after the fetch has
+    // already completed is a no-op.
+    let controller = new AbortController();
     try {
+      // Coalesce a burst: several query changes in one turn (a slider drag,
+      // a re-render that modifies twice) each perform this restartable task,
+      // and this await is a cancellation point, so every run but the last is
+      // cancelled here, before it fetches. One microtask, so no added delay.
+      await Promise.resolve();
       // A prerender_html event queued a selective per-member refresh. Perform
       // the targeted card+html GETs when no index event is also pending (an
       // index event changes membership and supersedes it) and the query still
@@ -640,6 +652,7 @@ export class SearchEntriesResource extends Resource<Args> {
         let fetchEntries = (realms: string[]) =>
           this.runtimeStore.searchEntries(query, realms, {
             cardInitiated: this.#cardInitiated,
+            signal: controller.signal,
           });
         let doc = await fetchEntries(realmsToFetch);
         // A realm-subset answer that came back short of its own total is a
@@ -710,7 +723,8 @@ export class SearchEntriesResource extends Resource<Args> {
         this.realmsNeedingRefresh.clear();
         this._errors = undefined;
       } catch (err) {
-        if (didCancel(err)) {
+        if (didCancel(err) || isAbortError(err)) {
+          // A superseded or torn-down run: a silent cancel, never an error.
           throw err;
         }
         this.#log.error(`search-entries fetch failed`, err);
@@ -729,6 +743,7 @@ export class SearchEntriesResource extends Resource<Args> {
       // `isLoading` can go false. A cancelled run (superseded by a restart)
       // also lands here; the replacement run keeps `search.isRunning` true, so
       // `isLoading` stays true across the handoff regardless.
+      controller.abort();
       this.#hasSettled = true;
       waiter.endAsync(token);
     }
