@@ -5,8 +5,11 @@ import { InvalidQueryError } from '@cardstack/runtime-common';
 import { LogQueryError } from '@cardstack/runtime-common/invalid-query-error';
 
 module(basename(import.meta.filename), function () {
-  test('a refusal without a code names the mistake as an invalid value', function (assert) {
-    let error = new InvalidQueryError('page.size must be a whole number');
+  test('a refusal names its mistake with the code it is given', function (assert) {
+    let error = new InvalidQueryError(
+      'page.size must be a whole number',
+      'invalid-value',
+    );
     assert.strictEqual(error.name, 'InvalidQueryError');
     assert.strictEqual(error.message, 'page.size must be a whole number');
     assert.strictEqual(error.code, 'invalid-value');

@@ -1243,6 +1243,7 @@ export class IndexQueryEngine {
         if (matches.length === 0) {
           throw new InvalidQueryError(
             `sort by "${MATCH_RELEVANCE_SORT_KEY}" requires at least one positive \`matches\` filter`,
+            'invalid-value',
           );
         }
         relevanceColumn = [',', ...this.matchRelevanceExpression(matches)];
@@ -1658,6 +1659,7 @@ export class IndexQueryEngine {
           .join(
             ', ',
           )}; combine operators by nesting them under "every" or "any"`,
+        'invalid-value',
       );
     }
 
@@ -2930,7 +2932,7 @@ function escapeSqliteLikePattern(value: string): string {
 function pathsCondition(paths: string[], realmURL: URL): CardExpression {
   let parsed = parsePathSpecifier(paths);
   if (!parsed.ok) {
-    throw new InvalidQueryError(parsed.errors[0].message);
+    throw new InvalidQueryError(parsed.errors[0].message, 'invalid-value');
   }
   let { prefixes } = parsed.specifier;
   if (
