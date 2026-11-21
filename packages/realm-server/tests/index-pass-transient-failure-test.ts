@@ -39,6 +39,11 @@ import {
 // aborted) is not a fact about the file: the pass keeps the file's last good
 // row, and a card linking the file does not inherit the failure. A genuine
 // extract error still counts, and still reaches the card.
+//
+// A card's own file row is extracted in the same visit as the card's render,
+// so a render that kills the page leaves the file with no extract. The file
+// row takes the page's error: a timeout keeps its last good row as it does the
+// card's, and a crash is stored with its own message.
 
 const logName = 'Activity/p1/reactions.jsonl';
 const postName = 'Post/p1.json';
@@ -64,10 +69,23 @@ const genuineError: SerializedError = {
   additionalErrors: null,
 };
 
+const pageCrash: SerializedError = {
+  status: 500,
+  title: 'Error',
+  message: 'the post template threw',
+  additionalErrors: null,
+};
+
 // `aborts` is a prerender request that failed transiently, as the prerender
 // client throws it (marked); `refused` is one the prerender path refused, a
 // 4xx (unmarked).
 type LogOutcome = 'good' | 'times-out' | 'aborts' | 'refused' | 'broken';
+
+// The post's visit fuses its file extract into the card render, so a card
+// render that kills the page (a timeout, or a crash that wedges the tab)
+// leaves no page to extract on: the response carries the card's error and the
+// page's, and no extract.
+type PostOutcome = 'good' | 'page-times-out' | 'page-crashes';
 
 const postSource = JSON.stringify({
   data: {
@@ -120,6 +138,7 @@ function fileExtract(name: string) {
 
 function prerenderer(
   logOutcome: () => LogOutcome,
+  postOutcome: () => PostOutcome,
   virtualNetwork: VirtualNetwork,
 ): Prerenderer {
   return {
@@ -155,6 +174,32 @@ function prerenderer(
         }
         return {
           fileExtract: fileExtract(logName),
+        } as unknown as RenderVisitResponse;
+      }
+      let outcome = postOutcome();
+      if (outcome !== 'good') {
+        let pageError = {
+          type: 'instance-error',
+          error: outcome === 'page-times-out' ? renderTimeout : pageCrash,
+          evict: true,
+        };
+        return {
+          card: {
+            serialized: null,
+            searchDoc: null,
+            displayNames: null,
+            deps: null,
+            types: null,
+            isolatedHTML: null,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            iconHTML: null,
+            markdown: null,
+            error: pageError,
+          },
+          pageUnusableError: pageError,
         } as unknown as RenderVisitResponse;
       }
       // The post renders, consuming the log it links.
@@ -225,6 +270,7 @@ module(basename(import.meta.filename), function (hooks) {
   let adapter: PgAdapter;
   let virtualNetwork: VirtualNetwork;
   let logOutcome: LogOutcome;
+  let postOutcome: PostOutcome;
   let jobCounter = 3_000_000;
 
   hooks.beforeEach(async function () {
@@ -232,6 +278,7 @@ module(basename(import.meta.filename), function (hooks) {
     adapter = await createTestPgAdapter();
     virtualNetwork = new VirtualNetwork();
     logOutcome = 'good';
+    postOutcome = 'good';
   });
 
   hooks.afterEach(async function () {
@@ -259,12 +306,29 @@ module(basename(import.meta.filename), function (hooks) {
       },
       reader: reader(),
       indexWriter: new IndexWriter(adapter),
-      definitionLookup: {} as DefinitionLookup,
+      // A card's error path reads the module cache for its dependency
+      // errors; the post's module has none.
+      definitionLookup: {
+        async getCachedDefinitionsBatch() {
+          return {};
+        },
+      } as unknown as DefinitionLookup,
       virtualNetwork,
-      prerenderer: prerenderer(() => logOutcome, virtualNetwork),
+      prerenderer: prerenderer(
+        () => logOutcome,
+        () => postOutcome,
+        virtualNetwork,
+      ),
       auth: 'auth',
-      fetch: (async () => {
-        throw new Error('this pass fetches nothing');
+      // Only a card's error path fetches: the realm's info, to read the
+      // module cache for the card's dependency errors.
+      fetch: (async (input: string) => {
+        if (String(input) === `${testRealm}_info`) {
+          return new Response(
+            JSON.stringify({ data: { attributes: { visibility: 'public' } } }),
+          );
+        }
+        throw new Error('this pass fetches nothing but the realm info');
       }) as unknown as typeof globalThis.fetch,
       realmOwnerUserId: 'test_realm',
       writtenFileRereadDelaysMs: [],
@@ -559,5 +623,68 @@ module(basename(import.meta.filename), function (hooks) {
     let post = await row(postName, 'instance');
     assert.true(Boolean(post.has_error), 'the post inherits it, as before');
     assert.deepEqual(await searchPosts(), []);
+  });
+
+  test('a card whose page times out before its extract ran keeps the last good rows of its instance and its file', async function (assert) {
+    await pass(logName, postName);
+    assert.false(Boolean((await row(postName, 'file')).has_error));
+
+    postOutcome = 'page-times-out';
+    await pass(postName);
+
+    let instance = await row(postName, 'instance');
+    assert.false(Boolean(instance.has_error), 'the card is not errored');
+    let file = await row(postName, 'file');
+    assert.false(Boolean(file.has_error), 'nor is its file');
+    assert.strictEqual(file.error_doc, null);
+    assert.strictEqual(
+      file.pristine_doc?.attributes?.name,
+      postName,
+      'the file keeps its last good row',
+    );
+    assert.deepEqual(
+      file.diagnostics?.transientRenderFailure,
+      ['file'],
+      'the timeout is recorded in its diagnostics',
+    );
+    assert.strictEqual(
+      file.diagnostics?.transientRenderError?.message,
+      renderTimeout.message,
+    );
+    assert.deepEqual(await searchPosts(), [url('Post/p1')]);
+    assert.deepEqual(
+      await retriesDue(),
+      [url(postName)],
+      'the reconcile sweep re-indexes the card',
+    );
+  });
+
+  test('a card with no good rows whose page times out before its extract ran records the timeout on its file', async function (assert) {
+    postOutcome = 'page-times-out';
+    await pass(postName);
+    let file = await row(postName, 'file');
+    assert.true(
+      Boolean(file.has_error),
+      'with nothing to keep, the failure is visible on the file',
+    );
+    assert.strictEqual(file.error_doc?.message, renderTimeout.message);
+    assert.true(file.error_doc?.noGoodRowToKeep, 'marked as such');
+    assert.deepEqual(file.diagnostics?.transientRenderFailure, ['file']);
+    assert.deepEqual(await retriesDue(), [url(postName)], 'and retried');
+  });
+
+  test('a card whose page crashes before its extract ran records the crash on its file', async function (assert) {
+    await pass(logName, postName);
+    postOutcome = 'page-crashes';
+    await pass(postName);
+    let file = await row(postName, 'file');
+    assert.true(Boolean(file.has_error), 'the file is in error');
+    assert.strictEqual(
+      file.error_doc?.message,
+      pageCrash.message,
+      "the row records the page's error, not a missing message",
+    );
+    assert.notOk(file.diagnostics?.transientRenderFailure, 'not transient');
+    assert.deepEqual(await retriesDue(), [], 'and nothing retries it');
   });
 });
