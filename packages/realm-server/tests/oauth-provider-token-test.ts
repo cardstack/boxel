@@ -56,6 +56,7 @@ import {
   DEVICE_SWEEP_DELAY_MS,
   runDueDeviceSweeps,
 } from '../lib/secure-session.ts';
+import { BOXEL_CLI_CLIENT_ID } from '../lib/oauth-provider/pre-registered-clients.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
 const serverURL = OAUTH_TEST_SERVER_URL;
@@ -237,6 +238,40 @@ module(basename(import.meta.filename), function () {
           ],
           'both stored, the access token bound to the one resource',
         );
+      });
+
+      test('boxel-cli exchanges its code from a loopback port and refreshes, as Boxel registered it', async function (assert) {
+        let who = await user();
+        let redirectUri = 'http://127.0.0.1:51234/callback';
+        let code = await codeForOAuthClient(
+          server(),
+          BOXEL_CLI_CLIENT_ID,
+          who.session,
+          { redirectUri, confirmationCode: 'WDJB-MJHT' },
+        );
+        let exchanged = await exchangeOAuthCode(
+          server(),
+          BOXEL_CLI_CLIENT_ID,
+          code,
+          { redirectUri },
+        );
+        assert.strictEqual(exchanged.status, 200, exchanged.text);
+        let tokens = exchanged.body as OAuthTokenResponse;
+        assert.ok(tokens.refresh_token, 'a refresh token on a renewing grant');
+        let refreshed = await refreshOAuthTokens(
+          server(),
+          BOXEL_CLI_CLIENT_ID,
+          tokens.refresh_token!,
+        );
+        assert.strictEqual(refreshed.status, 200, refreshed.text);
+        let [grant] = (await db().execute(
+          `SELECT client_id, exchanged_at IS NOT NULL AS exchanged
+             FROM oauth_provider_grants`,
+        )) as { client_id: string; exchanged: boolean }[];
+        assert.deepEqual(grant, {
+          client_id: BOXEL_CLI_CLIENT_ID,
+          exchanged: true,
+        });
       });
 
       test('a grant that does not renew gets no refresh token, and an access token lasting up to an hour', async function (assert) {

@@ -30,6 +30,11 @@ import {
   startOAuthProvider,
 } from '../lib/oauth-provider/provider.ts';
 import {
+  BOXEL_CLI_CLIENT_ID,
+  PRE_REGISTERED_CLIENTS,
+  type PreRegisteredClients,
+} from '../lib/oauth-provider/pre-registered-clients.ts';
+import {
   buildRegistry,
   oauthIssuer,
   registryScopes,
@@ -336,6 +341,62 @@ module(basename(import.meta.filename), function () {
         secureOriginURL: testOAuthSecureOriginURL,
       });
       assert.strictEqual(provider.issuer, 'https://realms.example.test');
+    });
+
+    // The library checks a pre-registered client's metadata only when it
+    // first looks the client up, not when the provider is built. An entry it
+    // refuses would start the server and then fail every flow for that app.
+    test('the library accepts every pre-registered client', async function (assert) {
+      let { provider } = startOAuthProvider({
+        serverURL: new URL('https://realms.example.test/'),
+        config: testOAuthProviderConfig(),
+        dbAdapter: unusedDBAdapter,
+        secureOriginURL: testOAuthSecureOriginURL,
+      });
+      assert.true(
+        PRE_REGISTERED_CLIENTS.size > 0,
+        'there is a client to check',
+      );
+      for (let id of PRE_REGISTERED_CLIENTS.keys()) {
+        let client = await provider.Client.find(id);
+        assert.strictEqual(client?.clientId, id, `${id} is found`);
+      }
+    });
+
+    test('a pre-registered client the library refuses fails its lookup', async function (assert) {
+      let { metadata, place } =
+        PRE_REGISTERED_CLIENTS.get(BOXEL_CLI_CLIENT_ID)!;
+      // The library refuses a client with the device-code grant while the
+      // device flow is off.
+      let refused: PreRegisteredClients = new Map([
+        [
+          BOXEL_CLI_CLIENT_ID,
+          {
+            place,
+            metadata: {
+              ...metadata,
+              grant_types: [
+                ...(metadata.grant_types ?? []),
+                'urn:ietf:params:oauth:grant-type:device_code',
+              ],
+            },
+          },
+        ],
+      ]);
+      let provider = createOAuthProvider({
+        issuer: 'https://a.test',
+        config: testOAuthProviderConfig(),
+        registry: buildRegistry('https://a.test'),
+        preRegistered: refused,
+        adapter: () => {
+          throw new Error('a pre-registered client is never stored');
+        },
+      });
+      await assert.rejects(
+        provider.Client.find(BOXEL_CLI_CLIENT_ID),
+        (error: unknown) =>
+          error instanceof Error && error.name === 'InvalidClientMetadata',
+      );
     });
   });
 

@@ -20,6 +20,7 @@ import {
   testOAuthSecureOriginURL,
 } from './oauth-provider.ts';
 import type { CallerLimit } from '../../lib/oauth-provider/caller-limit.ts';
+import { CONFIRMATION_CODE_PARAM } from '@cardstack/secure-origin/security/confirmation-code.js';
 import type { OAuthResourceDefinition } from '../../lib/oauth-provider/registry.ts';
 import type { TokenLimit } from '../../lib/oauth-provider/token-limit.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
@@ -154,12 +155,15 @@ export async function startOAuthFlow(
     scope = 'boxel:read',
     resources = [OAUTH_TEST_MCP],
     codeChallenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+    confirmationCode,
   }: {
     // null leaves `redirect_uri` out, as a client with one registered may.
     redirectUri?: string | null;
     scope?: string;
     resources?: string[];
     codeChallenge?: string;
+    // The code a pre-registered app on the user's computer sends.
+    confirmationCode?: string;
   } = {},
 ): Promise<string> {
   let query = new URLSearchParams({
@@ -170,6 +174,9 @@ export async function startOAuthFlow(
     state: OAUTH_TEST_STATE,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
+    ...(confirmationCode
+      ? { [CONFIRMATION_CODE_PARAM]: confirmationCode }
+      : {}),
   });
   for (let resource of resources) {
     query.append('resource', resource);
@@ -271,18 +278,21 @@ export async function codeForOAuthClient(
     scope = 'boxel:read',
     resources,
     redirectUri,
+    confirmationCode,
   }: {
     renew?: boolean;
     scope?: string;
     resources?: string[];
     // null leaves `redirect_uri` out of the authorization request.
     redirectUri?: string | null;
+    confirmationCode?: string;
   } = {},
 ): Promise<string> {
   let browser = supertest.agent(server);
   let uid = await startOAuthFlow(browser, clientId, {
     scope,
     codeChallenge: OAUTH_TEST_CODE_CHALLENGE,
+    confirmationCode,
     ...(resources ? { resources } : {}),
     ...(redirectUri !== undefined ? { redirectUri } : {}),
   });
