@@ -3,7 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import type { IndexQueryEngine } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 import { testRealm } from './helpers/index.ts';
 import { setupTalkCorpus } from './helpers/talk-corpus.ts';
 

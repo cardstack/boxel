@@ -5,23 +5,23 @@ import { basename } from 'path';
 import {
   parseSearchEntryQueryFromPayload,
   searchEntryRealms,
+  searchEntryWireQueryFromQuery,
   type SearchEntryQuery,
-} from '@cardstack/runtime-common/query-v2/search-entry';
+} from '@cardstack/runtime-common/search-entry';
 import {
   VectorSerializer,
   type Definition,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { hasWarning } from '@cardstack/runtime-common/query-v2/search-bounds';
-import { parseRealmsFromPayload } from '@cardstack/runtime-common/query-v2/search-utils';
-import { searchEntryWireQueryFromQuery } from '@cardstack/runtime-common/query-v2/search-entry';
-import type { EntryCollectionDocument } from '@cardstack/runtime-common/query-v2/document-types';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import { parseRealmsFromPayload } from '@cardstack/runtime-common/search-utils';
+import type { EntryCollectionDocument } from '@cardstack/runtime-common/document-types';
+import type { Query } from '@cardstack/runtime-common/query';
 import {
   assertRealmsBound,
+  hasWarning,
   resetSearchBoundsForTests,
   setSearchBoundsForTests,
-} from '@cardstack/runtime-common/query-v2/search-bounds';
+} from '@cardstack/runtime-common/search-bounds';
 
 import {
   engineRealms as sharedEngineRealms,

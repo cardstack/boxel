@@ -14,7 +14,7 @@ import {
   DefinitionsUnavailableError,
   SearchBoundError,
   definitionWaitMs,
-} from '../query-v2/search-bounds.ts';
+} from '../search-bounds.ts';
 import { InvalidQueryError } from '../invalid-query-error.ts';
 import { type CardExpression, type Expression, query } from '../expression.ts';
 import {
@@ -36,7 +36,7 @@ import type {
   QueryResultsMeta,
   ReadContext,
 } from './types.ts';
-import type { Query } from '../query-v2/query.ts';
+import type { Query } from '../query.ts';
 import { VectorQuery, type VectorStatus } from '../vector-query.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import { coerceTypes } from '../index-structure.ts';

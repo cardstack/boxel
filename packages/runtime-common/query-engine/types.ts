@@ -18,7 +18,7 @@ import {
   type ResultExplanation,
   isExprSort,
   isRelevanceSort,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import type {
   BoxelIndexTable,
   PrerenderedHtmlTable,

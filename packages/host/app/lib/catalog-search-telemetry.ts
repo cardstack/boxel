@@ -107,7 +107,12 @@ export function recordCatalogSearch(
     services.clientTelemetry.recordEvent({
       event_type: 'catalog-search',
       tool,
-      query_text: boundText(collectPositiveMatchTerms(query.filter).join(' ')),
+      // Each term is a `matches` filter node; its text is the query text.
+      query_text: boundText(
+        collectPositiveMatchTerms(query.filter)
+          .map((term) => term.matches)
+          .join(' '),
+      ),
       query_type: filterTypeOf(query),
       total,
       returned,

@@ -22,7 +22,7 @@
 
 import type { DBAdapter } from '../db.ts';
 import { param, type Expression, type Param } from '../expression.ts';
-import { InvalidQueryError, type FacetInterval } from '../query-v2/query.ts';
+import { InvalidQueryError, type FacetInterval } from '../query.ts';
 import { CARD_TITLE_KEY } from '../search-doc-keys.ts';
 import { arrayElement, sqlTextArrayLiteral } from '../sql-literal.ts';
 import type { VectorStore } from '../vector-store.ts';

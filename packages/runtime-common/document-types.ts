@@ -1,5 +1,5 @@
 import type { RenderErrorSummary } from './error.ts';
-import type { QueryResultsMeta } from './index-query-engine.ts';
+import type { QueryResultsMeta } from './query-engine/index-query-engine.ts';
 import type { CardTypeSummary, RealmMetaValue } from './index-structure.ts';
 import {
   type CardResource,
@@ -79,6 +79,44 @@ export interface EntryCollectionDocument {
       // `page.total` can't tell a consumer how many rows one realm holds past
       // its page, which is what paging a single realm's results needs.
       realmTotals?: Record<string, number>;
+      // A federated search's shape: per realm (each realm pages on its own,
+      // sections in order of their best card) or merged (one global order
+      // and page). `path`, on a merged search, says how it was answered:
+      // `union`, one statement over every realm (they share this server's
+      // index database), exact; or `merge`, each realm searched on its own
+      // and the answers merged, where scores order only approximately.
+      federation?: {
+        results: 'byRealm' | 'merged';
+        path?: 'union' | 'merge';
+      };
+      // A merged search over several realms sorted by a score (blend,
+      // relevance, text relevance, near, expression) orders them only
+      // approximately, since each realm scores its own matches: it says so
+      // with the `approximate-order` warning in `meta.warnings`. Ties are
+      // still broken deterministically.
+      // Per value facet of a search over several realms: how far any count
+      // may be short of the true one, because a realm answered only its top
+      // values. 0 when every realm answered all of its values.
+      facetErrors?: Record<string, number>;
+      // Per realm, in the order `data` holds them: the realm, how many of
+      // its rows are on this page, and the section's score (its best card's,
+      // when the sort scores rows).
+      sections?: { realm: string; count: number; score?: number }[];
+      // How each realm asked for answered. `refused` carries the query
+      // grammar's code; `timeout` is a realm cut off by the time budget;
+      // `unavailable` is one that would not resolve or failed otherwise.
+      realms?: Record<
+        string,
+        {
+          status: 'ok' | 'refused' | 'timeout' | 'unavailable';
+          code?: string;
+          // This realm's total; a lower bound when the `total-estimated`
+          // warning names this realm (or names none, so every realm gave it).
+          total?: number;
+          // Whether this realm holds rows past the ones it answered with.
+          hasMore?: boolean;
+        }
+      >;
       // The realms whose rows here are the only ones of theirs the result may
       // hold, because the server decided them by more than the caller's query:
       // the caller does not read the realm outright, so what they see of it is

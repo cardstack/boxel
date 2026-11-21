@@ -3,7 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import type { CodeRef } from '@cardstack/runtime-common';
-import type { Filter } from '@cardstack/runtime-common/query-v2/query';
+import type { Filter } from '@cardstack/runtime-common/query';
 import { filterWithout } from '@cardstack/runtime-common/query-engine/facet-sql';
 
 // The filter an `own: 'ignore'` facet counts over: the query's filter

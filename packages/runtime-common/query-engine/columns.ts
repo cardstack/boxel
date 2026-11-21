@@ -16,7 +16,7 @@ import {
 } from './types.ts';
 import type { Definition } from '../definitions.ts';
 import type { Expression } from '../expression.ts';
-import type { Query } from '../query-v2/query.ts';
+import type { Query } from '../query.ts';
 import { CollapseCandidates } from './collapse-candidates.ts';
 import {
   getField,

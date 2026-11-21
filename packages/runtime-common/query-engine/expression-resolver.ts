@@ -43,7 +43,7 @@ import {
   assertRelativeDateWellFormed,
   relativeDateForField,
   spellsAnInstant,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import type * as JSONTypes from 'json-typescript';
 import type { RequestTimings } from '../request-timings.ts';
 import { arrayElement, jsonPathOfKeys } from '../sql-literal.ts';

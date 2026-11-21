@@ -53,14 +53,14 @@ import {
   isExprSort,
   lowerTitlePrefixMatches,
   lowerTitlePrefixMatchesInSort,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import { NearContext } from '../vector-query.ts';
 import { pageTotal } from './index-sql.ts';
 import {
   SEARCH_TOTAL_CAP,
   TOTAL_ESTIMATED,
   totalEstimatedMessage,
-} from '../query-v2/search-bounds.ts';
+} from '../search-bounds.ts';
 import {
   notEffectivelyErrored,
   prerenderedJoin,

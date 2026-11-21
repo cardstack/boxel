@@ -15,7 +15,7 @@
 // than the index read, which walks at least as many vectors, and the exact
 // comparison admits every card within the threshold.
 
-import type { Filter } from '../query-v2/query.ts';
+import type { Filter } from '../query.ts';
 import {
   type CardExpression,
   tableValuedFunctionsPlaceholder,

@@ -10,7 +10,7 @@ import {
   tableValuedFunctionsPlaceholder,
 } from '../expression.ts';
 import type { CodeRef } from '../index.ts';
-import type { Sort } from '../query-v2/query.ts';
+import type { Sort } from '../query.ts';
 import { prerenderedJoin, tableFromOpts } from './index-sql.ts';
 import { realmsOf } from '../realm-union.ts';
 import { Columns } from './columns.ts';

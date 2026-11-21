@@ -56,7 +56,7 @@ import {
   type Sort,
   isExprSort,
   isWhenSignal,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import { isNearSort, type NearContext } from '../vector-query.ts';
 import {
   type QueryOptions,

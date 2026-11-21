@@ -41,8 +41,7 @@ import type {
   RealmIdentifier,
 } from './realm-identifiers.ts';
 import { rri } from './realm-identifiers.ts';
-import type { Filter, Query } from './query.ts';
-import type { ResultExplanation } from './query-v2/query.ts';
+import type { Filter, Query, ResultExplanation } from './query.ts';
 import {
   type QueryOptions as V2QueryOptions,
   BLEND_SCORE_KEY,
@@ -92,6 +91,7 @@ import {
   scopedCssHrefsFromDeps,
 } from './search-resource-helpers.ts';
 import {
+  buildEntryResource,
   buildHtmlResource,
   buildIconResource,
   buildSparseItemResource,
@@ -101,18 +101,14 @@ import {
   resolveHtmlQuery,
   searchEntryWireQueryFromQuery,
   type RenderingCandidate,
+  type SearchColumnsDocument,
   type SearchEntryFieldset,
+  type SearchEntryQuery,
 } from './search-entry.ts';
 // Query V2's entry query, which both search routes parse. Its
 // entries carry the per-row values the newer grammar asks for (a merge's
 // sort values, a near similarity, a collapse size, an explanation).
-import {
-  buildEntryResource,
-  type SearchColumnsDocument,
-  type SearchEntryQuery,
-} from './query-v2/search-entry.ts';
 import { IndexQueryEngine } from './query-engine/index-query-engine.ts';
-import type { Query as V2Query } from './query-v2/query.ts';
 import { refuse } from './query-v2/query-refusals.ts';
 import type { FieldDefinition } from './definitions.ts';
 import { urlNamesFile } from './file-def-code-ref.ts';
@@ -480,7 +476,7 @@ export class RealmIndexQueryEngine {
     let run = () =>
       engine.searchColumns(
         new URL(this.#realm.url),
-        query as V2Query,
+        query as Query,
         engineOpts,
         plans,
       );

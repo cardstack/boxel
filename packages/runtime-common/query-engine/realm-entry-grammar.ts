@@ -6,9 +6,8 @@ import {
   parseSearchEntryQueryFromPayload as parseV2SearchEntryQuery,
   policyScopedQuery as v2PolicyScopedQuery,
   type SearchEntryQuery as V2SearchEntryQuery,
-} from '../query-v2/search-entry.ts';
-import { applyServerSearchPageBound as applyV2ServerSearchPageBound } from '../query-v2/search-bounds.ts';
-import type { EntryCollectionDocument as V2EntryCollectionDocument } from '../query-v2/document-types.ts';
+} from '../search-entry.ts';
+import { applyServerSearchPageBound } from '../search-bounds.ts';
 import type { TypeReferenceContext } from '../query-v2/type-reference.ts';
 
 // The entry grammar a realm's own `_search` reads a request with: Query V2's.
@@ -49,7 +48,7 @@ const V2_GRAMMAR: RealmEntryGrammar = {
   parse: (payload, typeReferences) =>
     parseV2SearchEntryQuery(payload, typeReferences),
   boundPage: (query) =>
-    applyV2ServerSearchPageBound(
+    applyServerSearchPageBound(
       query as V2SearchEntryQuery['itemQuery'],
     ) as RealmEntryQuery['itemQuery'],
   policyScopedQuery: (query, grantFilters, linkedGrants) =>
@@ -63,10 +62,7 @@ const V2_GRAMMAR: RealmEntryGrammar = {
       query as V2SearchEntryQuery,
     ) as unknown as EntryCollectionDocument,
   markPolicyScoped: (doc, realms) =>
-    v2MarkPolicyScoped(
-      doc as unknown as V2EntryCollectionDocument,
-      realms,
-    ) as unknown as EntryCollectionDocument,
+    v2MarkPolicyScoped(doc, realms) as unknown as EntryCollectionDocument,
 };
 
 export function realmEntryGrammar(): RealmEntryGrammar {

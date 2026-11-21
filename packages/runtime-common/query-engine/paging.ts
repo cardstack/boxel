@@ -17,7 +17,7 @@ import {
   separatedByCommas,
   tableValuedFunctionsPlaceholder,
 } from '../expression.ts';
-import type { Sort } from '../query-v2/query.ts';
+import type { Sort } from '../query.ts';
 import { prerenderedJoin, tableFromOpts } from './index-sql.ts';
 import { sortValuesOf } from './sort-sql.ts';
 

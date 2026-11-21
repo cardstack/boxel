@@ -8,7 +8,7 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import {
   hasWarning,
   SEARCH_TOTAL_CAP,
-} from '@cardstack/runtime-common/query-v2/search-bounds';
+} from '@cardstack/runtime-common/search-bounds';
 import {
   runLogQuery,
   type LogQuery,

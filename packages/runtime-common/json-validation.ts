@@ -1,4 +1,4 @@
-import { InvalidQueryError } from './invalid-query-error.ts';
+import { refuse } from './query-v2/query-refusals.ts';
 
 // Anything `JSON.parse` can produce, which is the same standard
 // `assertJSONValue` below holds a value to at run time.
@@ -33,10 +33,7 @@ export function assertJSONValue(v: any, pointer: string[]) {
       }
       return;
   }
-  throw new InvalidQueryError(
-    `${pointer.join('/')}: value not allowed in json`,
-    'invalid-value',
-  );
+  throw refuse('value-allowed-json', undefined, { value0: pointer.join('/') });
 }
 
 export function assertJSONPrimitive(p: any, pointer: string[]) {
@@ -49,11 +46,8 @@ export function assertJSONPrimitive(p: any, pointer: string[]) {
     case 'boolean':
       return;
     default:
-      throw new InvalidQueryError(
-        `${pointer.join(
-          '/',
-        )}: JSON primitive must be of type string, number, boolean, or null`,
-        'invalid-value',
-      );
+      throw refuse('json-primitive-must-type', undefined, {
+        value0: pointer.join('/'),
+      });
   }
 }

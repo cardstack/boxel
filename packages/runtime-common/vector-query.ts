@@ -14,7 +14,7 @@ import type {
   NearFilter,
   NearSortTarget,
   Sort,
-} from './query-v2/query.ts';
+} from './query.ts';
 import { vectorDimensions, vectorToSqlLiteral } from './serializers/vector.ts';
 import { VECTOR_INDEX_UNAVAILABLE_MESSAGE } from './vector-index.ts';
 import {

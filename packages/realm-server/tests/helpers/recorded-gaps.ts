@@ -17,8 +17,8 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { hasVectorIndex } from '@cardstack/runtime-common/vector-index';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
-import { parseSearchEntryQueryFromPayload } from '@cardstack/runtime-common/query-v2/search-entry';
+import type { Query } from '@cardstack/runtime-common/query';
+import { parseSearchEntryQueryFromPayload } from '@cardstack/runtime-common/search-entry';
 import {
   closeTestPgAdapter,
   createTestPgAdapter,

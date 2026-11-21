@@ -16,7 +16,7 @@ import {
   type ResolvedCodeRef,
   type SearchText,
 } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 import { assertQuery } from '@cardstack/runtime-common/query-v2/query-check';
 
 import {

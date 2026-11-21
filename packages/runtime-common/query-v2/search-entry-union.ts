@@ -17,7 +17,7 @@
 import type {
   EntryCollectionDocument,
   EntryIncludedResource,
-} from './document-types.ts';
+} from '../document-types.ts';
 import type { EntryResource } from '../resource-types.ts';
 import { isLogBinding } from './query-values.ts';
 import type { Realm } from '../realm.ts';
@@ -27,9 +27,9 @@ import {
   realmFailureStatus,
   withRealmDeadline,
   type SearchEntryQuery,
-} from './search-entry.ts';
-import { incompleteWarning, withWarningOnce } from './search-bounds.ts';
-import type { SearchOpts } from './search-utils.ts';
+} from '../search-entry.ts';
+import { incompleteWarning, withWarningOnce } from '../search-bounds.ts';
+import type { SearchOpts } from '../search-utils.ts';
 
 // One realm a federated search names, as the union reads it: one the caller
 // reads outright, one that contributes no rows, or one whose access could not

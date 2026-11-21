@@ -49,7 +49,7 @@ import {
   isReferenceFilterField,
   isTypeAheadFilter,
   matchesHoldsNoWord,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import {
   DEFAULT_FILTER_CONTEXT,
   type FilterContext,
