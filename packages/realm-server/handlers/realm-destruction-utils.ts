@@ -5,7 +5,9 @@ import {
   dbAdapterQuerier,
   param,
   separatedByCommas,
+  valueStoreRealmDeletes,
 } from '@cardstack/runtime-common';
+import { hasVectorIndex } from '@cardstack/runtime-common/vector-index';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
 import { laneFamilyPredicate } from '@cardstack/runtime-common/jobs/lane-family';
@@ -116,6 +118,29 @@ export async function removeRealmDatabaseArtifacts(args: {
     param(realmURL),
   ]);
   await q([`DELETE FROM boxel_index WHERE realm_url =`, param(realmURL)]);
+  // The realm's rows in the tables the index writer derives from its
+  // boxel_index rows (rows 22a-22c): kept, a realm later made at the same URL
+  // would find this one's vectors, passages, values and words.
+  if (await hasVectorIndex(dbAdapter)) {
+    await q([
+      `DELETE FROM boxel_index_vectors WHERE realm_url =`,
+      param(realmURL),
+    ]);
+    // The sidecar records go with the vectors: kept, a republish to the same
+    // URL would read its unchanged sidecars as already loaded and load none.
+    await q([
+      `DELETE FROM boxel_index_vector_sidecars WHERE realm_url =`,
+      param(realmURL),
+    ]);
+  }
+  await q([
+    `DELETE FROM boxel_index_passages WHERE realm_url =`,
+    param(realmURL),
+  ]);
+  for (let statement of valueStoreRealmDeletes(realmURL)) {
+    await q(statement);
+  }
+  await q([`DELETE FROM boxel_index_words WHERE realm_url =`, param(realmURL)]);
   await q([
     `DELETE FROM prerendered_html_pending WHERE realm_url =`,
     param(realmURL),
