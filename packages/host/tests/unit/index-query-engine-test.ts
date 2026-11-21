@@ -7,7 +7,7 @@ import {
   VirtualNetwork,
   baseRealm,
   baseRealmRRI,
-  IndexQueryEngine,
+  LegacyIndexQueryEngine as IndexQueryEngine,
   fetcher,
   maybeHandleScopedCSSRequest,
   internalKeyFor,
