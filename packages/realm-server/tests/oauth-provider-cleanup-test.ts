@@ -143,8 +143,10 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   async function ids(table: string, column: string): Promise<string[]> {
+    // In byte order, as the JavaScript sort the tests compare against: the
+    // test database's en_US collation would order the ids case-insensitively.
     let rows = (await dbAdapter.execute(
-      `SELECT ${column} AS id FROM ${table} ORDER BY ${column}`,
+      `SELECT ${column} AS id FROM ${table} ORDER BY ${column} COLLATE "C"`,
     )) as { id: string }[];
     return rows.map(({ id }) => id);
   }
