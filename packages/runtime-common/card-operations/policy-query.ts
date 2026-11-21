@@ -517,7 +517,12 @@ async function grantFilters(
         `a compiled query grant on "${operation}" lowered to no filter`,
       );
     }
-    let scoped = withoutMisreadings(policyFilterFromWire(bound.filter), grant);
+    // A grant compiles to a filter in the older spelling, which both filter
+    // types describe; the entry grammar types it as Query V2's.
+    let scoped = withoutMisreadings(
+      policyFilterFromWire(bound.filter) as Filter,
+      grant,
+    );
     filters.push({
       // A grant limited to some paths admits only the cards stored under
       // them, so its paths narrow its filter (ADR 038 §1.5). They travel in

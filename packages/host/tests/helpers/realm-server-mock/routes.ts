@@ -1,6 +1,5 @@
 import {
   applyFederatedRowBudget,
-  applyServerSearchPageBound,
   buildSearchErrorResponse,
   baseRealm,
   DURING_PRERENDER_HEADER,
@@ -33,6 +32,7 @@ import {
   searchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
 import { makeCardTypeSummaryDoc } from '@cardstack/runtime-common/document-types';
+import { applyServerSearchPageBound } from '@cardstack/runtime-common/query-v2/search-bounds';
 
 import ENV from '@cardstack/host/config/environment';
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
