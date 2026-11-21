@@ -118,16 +118,6 @@ export abstract class ExpressionResolver extends IndexRows {
                 typesContains(key, element.column),
               ]),
             ) as Expression;
-          // Built only by the old engine (index-query-engine.ts), whose
-          // expression.ts still has them; this engine never makes one. Gone
-          // with the old engine, when expression.ts narrows to this
-          // engine's kinds.
-          case 'field-value':
-          case 'json-contains-query':
-          case 'field-arity':
-            throw new Error(
-              `the query engine does not compile the old engine's ${element.kind} node`,
-            );
           default:
             throw assertNever(element);
         }
