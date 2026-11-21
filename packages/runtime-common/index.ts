@@ -2323,6 +2323,16 @@ export type getCards<T extends CardDef | FileDef = CardDef> = (
   instancesByRealm: { realm: string; cards: T[] }[];
   isLoading: boolean;
   meta: QueryResultsMeta;
+  // How many rows the query matches (`meta.page.total`); `undefined` when no
+  // count is known. Compare it with `instances.length` before reducing.
+  totalMatchCount: number | undefined;
+  // More rows match than `instances` holds: page on with
+  // `page: { size, number }` while it is true.
+  hasMore: boolean;
+  // The rows were cut short by a default page the query never asked for (a
+  // card search naming no page gets the first 100); `meta.warnings` then
+  // holds `default-page-truncated`.
+  isTruncated: boolean;
 };
 
 export interface CreateOptions {

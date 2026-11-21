@@ -48,6 +48,7 @@ import {
   type CodeRef,
   type MatchResult,
   type RealmResourceIdentifier,
+  DEFAULT_PAGE_TRUNCATED,
 } from '@cardstack/runtime-common';
 import type { Filter, Query, Sort } from '@cardstack/runtime-common/query';
 
@@ -1190,6 +1191,28 @@ export class SearchResource<
   get isPartial(): boolean {
     let total = this.totalMatchCount;
     return total != null && total > this._instances.length;
+  }
+
+  // Whether another page follows this one: the server's `meta.page.hasMore`,
+  // or, for an answer that does not carry it (a seed), whether the match count
+  // exceeds the rows held. Page on with `page: { size, number: n + 1 }` while
+  // it holds; unlike `isPartial`, it is false on the last page of a walk.
+  @cached
+  get hasMore(): boolean {
+    let hasMore = this._meta?.page?.hasMore;
+    return typeof hasMore === 'boolean' ? hasMore : this.isPartial;
+  }
+
+  // Whether rows were left out by a page the query never asked for (a card
+  // search naming no page gets the first 100, a `_search` request the first
+  // 500) rather than by one it did. The answer then carries
+  // `default-page-truncated` in `meta.warnings`. A template reducing over
+  // `instances` while this is true is reducing over a prefix.
+  @cached
+  get isTruncated(): boolean {
+    return (this._meta?.warnings ?? []).some(
+      (w) => w.code === DEFAULT_PAGE_TRUNCATED,
+    );
   }
 
   private async updateInstances(
