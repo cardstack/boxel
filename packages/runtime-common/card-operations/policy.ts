@@ -39,6 +39,7 @@ import {
   type ModuleAccessRule,
 } from './policy-module-access.ts';
 import { classifyPredicateTiers } from './policy-tiers.ts';
+import { logBytesRefusal } from './log-line-policy.ts';
 import { elapsedMs, emitPolicyCompile, recordSafely } from './telemetry.ts';
 import {
   reachIssues,
@@ -1442,6 +1443,15 @@ async function compileDocument(
       // Every other grant is left out without an issue, since the source's
       // own copy of the policy is where its author reads them.
       if (env.sharedKeyCallsOnly && !sendsOnlySharedKeys(granted)) {
+        continue;
+      }
+      // A log's bytes are granted to no one, nor any write but `record`
+      // (`log-line-policy.ts`): the gate refuses the rest on every log
+      // whatever a compiled policy holds. So a grant of one on a log type is
+      // recorded rather than kept as though it admitted something.
+      let logRefusal = logBytesRefusal(resolved, operation);
+      if (logRefusal) {
+        issue('grants-log-bytes', `${grantPath}.operation`, logRefusal);
         continue;
       }
       // Authorization infrastructure is outside the grant model, and the gate
