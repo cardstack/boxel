@@ -22,7 +22,7 @@ if ! wait_for_postgres; then
   exit 1
 fi
 
-# Force TCP to localhost inside the container: postgres:16.3's image does
+# Force TCP to localhost inside the container: the postgres image does
 # not always create the /var/run/postgresql unix socket, so a bare
 # `psql -U postgres` from inside the container fails with
 # `connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed`.
