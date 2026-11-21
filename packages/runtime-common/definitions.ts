@@ -9,10 +9,11 @@ import {
 } from './index.ts';
 import type { OperationDefinition } from './card-operations/types.ts';
 import type { SerializerName } from './serializers/index.ts';
-import type {
-  CardSearchIntent,
-  FieldSearchOption,
-  IndexFieldDeclarations,
+import {
+  cardSearchIntentOf,
+  type CardSearchIntent,
+  type FieldSearchOption,
+  type IndexFieldDeclarations,
 } from './search-intent.ts';
 import type { FieldType, Searchable } from '@cardstack/base/card-api';
 import type { BaseDef } from '@cardstack/base/card-api';
@@ -109,6 +110,40 @@ export interface Definition {
   indexFields?: IndexFieldDeclarations;
 }
 
+// The `indexFields` member a definition entry records for `def`.
+export function definitionIndexFields(
+  def: typeof BaseDef,
+): IndexFieldDeclarations | undefined {
+  // A field def is a value inside a card, with no index row of its own.
+  // (BaseDef itself, the root cards and files share, records them.)
+  if ((def as unknown as { isFieldDef?: boolean }).isFieldDef) {
+    return undefined;
+  }
+  let value = (def as unknown as { indexFields?: unknown }).indexFields;
+  return value && typeof value === 'object'
+    ? (JSON.parse(JSON.stringify(value)) as IndexFieldDeclarations)
+    : undefined;
+}
+
+// The `facetValue` member a definition entry records for `def`: a FieldDef's
+// own string `static facetValue`, inherited like any static.
+export function definitionFacetValue(def: typeof BaseDef): string | undefined {
+  if (definitionKind(def) !== 'field-def') {
+    return undefined;
+  }
+  let value = (def as unknown as { facetValue?: unknown }).facetValue;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+// The `search` member a definition entry records for `def`.
+export function definitionSearchIntent(
+  def: typeof BaseDef,
+): CardSearchIntent | undefined {
+  return cardSearchIntentOf(
+    def as unknown as { searchDefaults?: CardSearchIntent },
+  );
+}
+
 // Stable JSON serialization for content-keyed interning. Keys sorted at
 // every nesting level so logically-equal `FieldDefinition`s collapse to
 // the same string regardless of property iteration order.
@@ -167,6 +202,17 @@ export function getFieldDefinitions(
           : undefined,
       query: queryDefinition,
       searchable: field.searchable,
+      ...(() => {
+        // A link's target is a card, whose `searchDefaults` are card-level
+        // defaults, not a field intent.
+        let typeDefault =
+          field.fieldType === 'contains' || field.fieldType === 'containsMany'
+            ? (field.card as { searchDefaults?: FieldSearchOption })
+                .searchDefaults
+            : undefined;
+        let search = field.searchIntent ?? typeDefault;
+        return search !== undefined ? { search } : {};
+      })(),
     };
     fields[fieldName] = intern(def);
   }
@@ -181,11 +227,17 @@ export function getImmediateFieldDef(
   definition: Pick<Definition, 'fields' | 'fieldDefs'>,
   fieldName: string,
 ): FieldDefinition | undefined {
+  // Own names only: `constructor` or `toString` is no field of any type.
+  if (!Object.prototype.hasOwnProperty.call(definition.fields, fieldName)) {
+    return undefined;
+  }
   let id = definition.fields[fieldName];
   if (id === undefined) {
     return undefined;
   }
-  return definition.fieldDefs[id];
+  return Object.prototype.hasOwnProperty.call(definition.fieldDefs, id)
+    ? definition.fieldDefs[id]
+    : undefined;
 }
 
 // Resolve a (possibly dotted) field path on `definition`, traversing
