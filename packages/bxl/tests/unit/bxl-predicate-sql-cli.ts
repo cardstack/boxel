@@ -1,11 +1,10 @@
 import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert';
+import { parseBxlAst, type ReadableSchema } from '../../src/index.ts';
 import {
   BxlPredicateSqlError,
   compileBxlPredicateToSql,
-  parseBxlAst,
   type BxlPredicateSqlPathUsage,
-  type ReadableSchema,
-} from '../../src/index.ts';
+} from '../../src/sql.ts';
 
 const schema: ReadableSchema = {
   fields: [

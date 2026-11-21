@@ -10,6 +10,17 @@ const LEDGER = [
   { sku: 'D-4', category: 'Paint', region: 'North', qty: 1, total: 15 },
 ];
 
+// Sum-range values held as text, and values that are no number at all.
+const TEXT_TOTALS = [
+  { region: 'East', total: '12' },
+  { region: 'East', total: '12abc' },
+  { region: 'East', total: '' },
+  { region: 'East', total: 'abc' },
+  { region: 'East', total: true },
+  { region: 'East', total: [1, '2', ['3x']] },
+  { region: 'West', total: '100' },
+];
+
 export const formulaLookupCases: CoverageCase[] = [
   // Shape helpers. COL projects one key across row objects; COLUMNS reads
   // the width of the first row; ROWS is the outer length.
@@ -83,6 +94,15 @@ export const formulaLookupCases: CoverageCase[] = [
     source: 'SUMIFS_BY(., "total", { category: "Tools", region: "South" })',
     input: LEDGER,
     expected: 200,
+  },
+  // Only text that is a number throughout counts, as SUM reads it: "12" is
+  // 12, the nested list adds 1 and 2, and "12abc", "", "abc", true and "3x"
+  // add nothing.
+  {
+    covers: 'SUMIFS_BY/3',
+    source: 'SUMIFS_BY(., "total", { region: "East" })',
+    input: TEXT_TOTALS,
+    expected: 15,
   },
   {
     covers: 'AVERAGEIFS_BY/3',

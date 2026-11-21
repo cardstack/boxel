@@ -4,6 +4,9 @@
  * Readable BXL → canonical jq source. Does NOT pull in the evaluator or
  * formulajs. Keep this entry small for editor integrations that only need
  * to compile.
+ *
+ * SQL push-down (the predicate and score compilers, and the spreadsheet
+ * interpreter they agree with) is on '@cardstack/bxl/sql'.
  */
 
 import {
@@ -18,7 +21,10 @@ import {
   type BxlProfile,
 } from './bxl/ast/index.ts';
 
-export { compileReadableSyntax } from './bxl/compiler/readable-syntax.ts';
+export {
+  compileReadableSyntax,
+  BXL_FORMULA_FUNCTIONS,
+} from './bxl/compiler/readable-syntax.ts';
 
 export {
   assertValidBxlProfile,
@@ -43,12 +49,14 @@ export {
   classifyBxlProfileFunction,
 } from './bxl/profiles/function-safety.ts';
 
+export { queryExpressionIssues } from './bxl/profiles/query-expression.ts';
+
+// The functions an expression calls that BXL does not have: a check on the
+// expression's tokens, which a query's grammar runs before anything compiles.
 export {
-  BxlPredicateSqlError,
-  SQL_PREDICATE_MODULE,
-  compileBxlPredicateAstToSql,
-  compileBxlPredicateToSql,
-} from './bxl/sql/index.ts';
+  readScoreFormula,
+  unknownBxlFunctions,
+} from './bxl/profiles/score-functions.ts';
 
 export type {
   ReadableSchema,
@@ -75,16 +83,6 @@ export type {
   BxlProfileFunctionPolicy,
   BxlProfileFunctionSafety,
 } from './bxl/profiles/function-safety.ts';
-
-export type {
-  BxlPredicateSqlOptions,
-  BxlPredicateSqlPath,
-  BxlPredicateSqlPathUsage,
-  BxlPredicateSqlResult,
-  BxlPredicateSqlValue,
-  BxlSqlPredicateMapping,
-  BxlSqlPredicateModule,
-} from './bxl/sql/index.ts';
 
 export {
   bxlToStorageExpression,

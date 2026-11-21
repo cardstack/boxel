@@ -31,6 +31,26 @@ def ISNA(value):
   try (. as $xl_in | $xl_in | value | false) catch (. == "#N/A");
 def ISERR(value):
   try (. as $xl_in | $xl_in | value | false) catch (. != "#N/A");
+# Excel's value tests take an error value as an answer, not a failure:
+# ISNUMBER(SEARCH("x", "abc")) is FALSE, ISNONTEXT(1/0) is TRUE. The native
+# tests see only values, so an Excel error ("#VALUE!" and the like) raised
+# while computing the argument is caught here; any other error propagates.
+def _XL_IS_ERROR_CODE: type == "string" and startswith("#");
+def ISNUMBER(value):
+  try (. as $xl_in | ($xl_in | value) as $v | _XL_ISNUMBER($v))
+  catch (if _XL_IS_ERROR_CODE then false else error end);
+def ISTEXT(value):
+  try (. as $xl_in | ($xl_in | value) as $v | _XL_ISTEXT($v))
+  catch (if _XL_IS_ERROR_CODE then false else error end);
+def ISLOGICAL(value):
+  try (. as $xl_in | ($xl_in | value) as $v | _XL_ISLOGICAL($v))
+  catch (if _XL_IS_ERROR_CODE then false else error end);
+def ISBLANK(value):
+  try (. as $xl_in | ($xl_in | value) as $v | _XL_ISBLANK($v))
+  catch (if _XL_IS_ERROR_CODE then false else error end);
+def ISNONTEXT(value):
+  try (. as $xl_in | ($xl_in | value) as $v | _XL_ISNONTEXT($v))
+  catch (if _XL_IS_ERROR_CODE then true else error end);
 def ERROR_TYPE(value):
   (
     try (. as $xl_in | $xl_in | value | "__XL_NO_ERROR__")

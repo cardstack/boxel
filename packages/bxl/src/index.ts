@@ -7,6 +7,8 @@
  *   - '@cardstack/bxl/linter'       — parser-only diagnostics
  *   - '@cardstack/bxl/runtime'      — evaluator + default formula libraries
  *   - '@cardstack/bxl/runtime-bare' — evaluator without default formulas
+ * SQL push-down (the predicate and score compilers) is on its own entry,
+ * '@cardstack/bxl/sql', and not re-exported here.
  */
 
 import {
@@ -70,12 +72,6 @@ import {
   type BxlProfileValidationOptions,
 } from './bxl/ast/index.ts';
 import {
-  BxlPredicateSqlError,
-  SQL_PREDICATE_MODULE,
-  compileBxlPredicateAstToSql,
-  compileBxlPredicateToSql,
-} from './bxl/sql/index.ts';
-import {
   BXL_AGGREGATE_CALLS,
   BXL_AUTHORIZATION_CALLS,
   BXL_AUTHORIZATION_GRAPH_CALLS,
@@ -93,15 +89,6 @@ import {
   categoryForBxlFunction,
   classifyBxlProfileFunction,
 } from './bxl/profiles/function-safety.ts';
-import type {
-  BxlPredicateSqlOptions,
-  BxlPredicateSqlPath,
-  BxlPredicateSqlPathUsage,
-  BxlPredicateSqlResult,
-  BxlPredicateSqlValue,
-  BxlSqlPredicateMapping,
-  BxlSqlPredicateModule,
-} from './bxl/sql/index.ts';
 import type {
   BxlFunctionSafetyCategory,
   BxlFunctionSafetyDecision,
@@ -218,12 +205,9 @@ export {
   classifyBxlProfileFunction,
   compileReadableSyntax,
   assertValidBxlProfile,
-  SQL_PREDICATE_MODULE,
   bxlToJqExpression,
   bxlToStorageExpression,
   collapseBxlExpression,
-  compileBxlPredicateAstToSql,
-  compileBxlPredicateToSql,
   expandBxlExpression,
   jqToReadableBxlExpression,
   lintBxlExpression,
@@ -238,7 +222,6 @@ export {
   tokenizeNativeJq,
   validateBxlAst,
   visitBxlAst,
-  BxlPredicateSqlError,
 };
 
 export type {
@@ -256,13 +239,6 @@ export type {
   BxlProfile,
   BxlProfileIssue,
   BxlProfileValidationOptions,
-  BxlPredicateSqlOptions,
-  BxlPredicateSqlPath,
-  BxlPredicateSqlPathUsage,
-  BxlPredicateSqlResult,
-  BxlPredicateSqlValue,
-  BxlSqlPredicateMapping,
-  BxlSqlPredicateModule,
   BuiltinLibraryName,
   JqToReadableBxlResult,
   NativeRuntimeClock,
@@ -279,6 +255,13 @@ export type {
 };
 
 export { loadAllFormulaExtensions } from './bxl/bridge/lazy-formulas.ts';
+export { queryExpressionIssues } from './bxl/profiles/query-expression.ts';
+// Text that is a number throughout, as BXL reads text in arithmetic and in
+// an aggregate: a JavaScript regular expression and the same rule for SQL.
+export {
+  EXCEL_NUMERIC_TEXT,
+  EXCEL_NUMERIC_TEXT_SQL,
+} from './formulajs/common.ts';
 
 export {
   BXL_AUTHORIZATION_IR_SCHEMA,

@@ -164,8 +164,12 @@ export function excelDay(dateLike: unknown): number {
   return parseExcelDate(dateLike).getUTCDate();
 }
 
+// Whole calendar days from `start` to `end`, as Excel counts days between
+// serials: a time of day is dropped from each, never rounded up to a day.
 export function daysBetween(start: Date, end: Date): number {
-  return Math.ceil((end.getTime() - start.getTime()) / MS_PER_DAY);
+  return Math.round(
+    (startOfDay(end).getTime() - startOfDay(start).getTime()) / MS_PER_DAY,
+  );
 }
 
 function isLeapYear(year: number) {
@@ -287,6 +291,11 @@ export function yearFrac(
 // Date helper functions
 // ═══════════════════════════════════════════════════════════════
 
+// Whole days elapsed: a partial day does not count, as DATEDIF counts them.
+function wholeDaysBetween(start: Date, end: Date): number {
+  return Math.floor((end.getTime() - start.getTime()) / MS_PER_DAY);
+}
+
 export function excelDatedif(
   startLike: unknown,
   endLike: unknown,
@@ -316,7 +325,7 @@ export function excelDatedif(
       return months;
     }
     case 'D':
-      return daysBetween(start, end);
+      return wholeDaysBetween(start, end);
     case 'MD':
       return ed >= sd
         ? ed - sd
@@ -328,9 +337,9 @@ export function excelDatedif(
     }
     case 'YD': {
       const anniv = utcDate(ey, sm, sd);
-      if (anniv <= end) return daysBetween(anniv, end);
+      if (anniv <= end) return wholeDaysBetween(anniv, end);
       const prevAnniv = utcDate(ey - 1, sm, sd);
-      return daysBetween(prevAnniv, end);
+      return wholeDaysBetween(prevAnniv, end);
     }
     default:
       throwExcelError(EXCEL_ERROR.num);
