@@ -471,42 +471,35 @@ module(basename(import.meta.filename), function (hooks) {
     assert.false(all.rows.includes('hn/h1'), 'the other copy is collapsed');
   });
 
-  // Lean answers a realm read through its policy on the union path, under
-  // that realm's grants (the grant-aware union). The stack answers it by
-  // merge until that row lands (LEAN-CHANGES-NOT-IN-STACK), so this is a
-  // known gap, held as a todo.
-  test.todo(
-    'a realm read through its policy adds only what its grants admit',
-    async function (assert) {
-      let before = await federated(feed(0, 10), [HN, SHARED], 'merged');
-      let rows = reduce(before).rows;
-      assert.true(rows.includes('shared/s1'), 'the public video');
-      assert.false(rows.includes('shared/s2'), 'not the private one');
-      assert.deepEqual(before.meta.federation.path, 'union');
-      assert.deepEqual(before.meta.policyScopedRealms, [SHARED]);
-      assert.strictEqual(before.meta.realms[SHARED].total, 1);
-      // A private video that would move every count, rank and facet.
-      await realms[SHARED].write(
-        's3.json',
-        video(
-          'shared',
-          {
-            title: 'Rust rust rust',
-            youtubeId: 'y2',
-            channel: 'secret',
-            hnScore: 10_000,
-            published: 10_000,
-            taste: [1, 0, 0],
-            visibility: 'private',
-          },
-          '../hn/video',
-        ),
-      );
-      let after = await federated(feed(0, 10), [HN, SHARED], 'merged');
-      assertSame(assert, reduce(after), reduce(before), 'with a hidden row');
-      assert.deepEqual(after.meta.realms[SHARED].total, 1);
-    },
-  );
+  test('a realm read through its policy adds only what its grants admit', async function (assert) {
+    let before = await federated(feed(0, 10), [HN, SHARED], 'merged');
+    let rows = reduce(before).rows;
+    assert.true(rows.includes('shared/s1'), 'the public video');
+    assert.false(rows.includes('shared/s2'), 'not the private one');
+    assert.deepEqual(before.meta.federation.path, 'union');
+    assert.deepEqual(before.meta.policyScopedRealms, [SHARED]);
+    assert.strictEqual(before.meta.realms[SHARED].total, 1);
+    // A private video that would move every count, rank and facet.
+    await realms[SHARED].write(
+      's3.json',
+      video(
+        'shared',
+        {
+          title: 'Rust rust rust',
+          youtubeId: 'y2',
+          channel: 'secret',
+          hnScore: 10_000,
+          published: 10_000,
+          taste: [1, 0, 0],
+          visibility: 'private',
+        },
+        '../hn/video',
+      ),
+    );
+    let after = await federated(feed(0, 10), [HN, SHARED], 'merged');
+    assertSame(assert, reduce(after), reduce(before), 'with a hidden row');
+    assert.deepEqual(after.meta.realms[SHARED].total, 1);
+  });
 
   test('a search the union cannot run is merged', async function (assert) {
     // As if MINE read another database.

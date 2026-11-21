@@ -3,13 +3,18 @@
 // (`searchEntryRealms`) asks each realm for its top rows and orders their
 // union by the values each realm sorted by, this reads every realm's rows in
 // one statement over `realm_url IN (…)`, in one read snapshot, so scores,
-// totals, facets and collapse are the union's own: a union of realms A and B
-// answers exactly what one realm holding A's and B's cards would.
+// totals, facets, collapse and typo corrections are the union's own: a union
+// of realms A and B answers exactly what one realm holding A's and B's cards
+// would.
 //
-// The union reads only realms the caller reads outright. A search that names
-// a realm whose policy scopes the caller takes the merge, which composes that
-// realm's grants into its own search (`unionPathRefusal`); a union that reads
-// such a realm under its grants is a later row.
+// What the caller may read of each realm is decided per realm, as it is for
+// the merge: a realm they read outright contributes all its rows, a realm
+// reached only through its policy contributes the rows its grants admit, and
+// any other realm contributes none. The union reads under one admission
+// filter that says so (`realmAdmissionFilter`), applied to every read of the
+// search as its base condition, so nothing the search counts or ranks over
+// (totals, facets, typo corrections, bindings, comparison sets, near counts)
+// reaches a row the caller could not search for.
 //
 // The rows are then made entries by the realm each is in, exactly as that
 // realm's own search makes them (renderings, item, links).
@@ -19,11 +24,18 @@ import type {
   EntryIncludedResource,
 } from '../document-types.ts';
 import type { EntryResource } from '../resource-types.ts';
-import { isLogBinding } from './query-values.ts';
+import type { Filter } from '../query.ts';
+import { isLogBinding } from '../query.ts';
+import { mentionsPaths } from '../query-engine/paths-guard.ts';
 import type { Realm } from '../realm.ts';
-import { RealmUnion, realmOfCard } from '../realm-union.ts';
+import {
+  RealmUnion,
+  realmAdmissionFilter,
+  realmOfCard,
+} from '../realm-union.ts';
 import { resourceIdentity } from '../resource-identity.ts';
 import {
+  policyScopedQuery,
   realmFailureStatus,
   withRealmDeadline,
   type SearchEntryQuery,
@@ -32,10 +44,12 @@ import { incompleteWarning, withWarningOnce } from '../search-bounds.ts';
 import type { SearchOpts } from '../search-utils.ts';
 
 // One realm a federated search names, as the union reads it: one the caller
-// reads outright, one that contributes no rows, or one whose access could not
-// be judged (answered as a realm that did not answer).
+// reads outright, one reached through its policy (with the grants that admit
+// them), one that contributes no rows, or one whose access could not be
+// judged (answered as a realm that did not answer).
 export type UnionRealm =
   | { url: string; realm: Realm; access: 'readable' }
+  | { url: string; realm: Realm; access: 'scoped'; grants: Filter[] }
   | { url: string; access: 'none' }
   | { url: string; access: 'failed' };
 
@@ -44,21 +58,21 @@ export type UnionRealm =
 export function unionPathRefusal(
   query: SearchEntryQuery,
   realms: Array<
-    | { url: string; realm?: Realm | null; access: 'readable' | 'scoped' }
+    | {
+        url: string;
+        realm?: Realm | null;
+        access: 'readable' | 'scoped';
+        grants?: Filter[];
+      }
     | { url: string; access: 'none' | 'failed' }
   >,
 ): string | undefined {
   if (query.federation?.results !== 'merged') {
     return 'not merged';
   }
-  // A realm the caller reads through its policy answers through the merge,
-  // which searches it with its grants composed in (`policyScopedQuery`).
-  if (realms.some((r) => r.access === 'scoped')) {
-    return 'a realm is policy-scoped';
-  }
   let reading = realms.filter(
     (r): r is { url: string; realm?: Realm | null; access: 'readable' } =>
-      r.access === 'readable',
+      r.access === 'readable' || r.access === 'scoped',
   );
   if (reading.length === 0) {
     return 'no realm to read';
@@ -72,6 +86,14 @@ export function unionPathRefusal(
     return 'the realms do not share one index database';
   }
   let item = query.itemQuery;
+  // A path filter, or a realm a path-narrowed grant scopes, is answered by
+  // each realm's own search (paths-guard.ts).
+  if (
+    mentionsPaths(item) ||
+    realms.some((r) => r.access === 'scoped' && mentionsPaths(r.grants))
+  ) {
+    return 'a path filter or a path-narrowed grant';
+  }
   // A log binding reads one realm's log lines.
   if (Object.values(item.let ?? {}).some((b) => isLogBinding(b))) {
     return 'a binding reads a log';
@@ -79,6 +101,14 @@ export function unionPathRefusal(
   // Look-alikes read one realm's neighbor index.
   if (item.rerank?.compare?.near) {
     return 'a rerank compares look-alikes';
+  }
+  // Under a policy, a linkedFrom runs as a binding the merge composes per
+  // realm (`policyScopedQuery`).
+  if (
+    realms.some((r) => r.access === 'scoped') &&
+    JSON.stringify(item).includes('"linkedFrom":')
+  ) {
+    return 'linkedFrom under a realm policy';
   }
   return undefined;
 }
@@ -89,13 +119,14 @@ export async function searchEntryUnion(
   opts?: SearchOpts & { realmDeadline?: number },
 ): Promise<EntryCollectionDocument> {
   let reading = realms.filter(
-    (r): r is Extract<UnionRealm, { realm: Realm }> => r.access === 'readable',
+    (r): r is Extract<UnionRealm, { realm: Realm }> =>
+      r.access === 'readable' || r.access === 'scoped',
   );
   if (reading.length === 0) {
     throw new Error('a union search reads at least one realm');
   }
   // One zone for every realm, as the merge reckons them (searchEntryRealms).
-  let runOpts: (SearchOpts & { realmDeadline?: number }) | undefined = opts;
+  let runOpts: SearchOpts | undefined = opts;
   if (
     realms.length > 1 &&
     searchEntryQuery.itemQuery.timeZone === undefined &&
@@ -103,14 +134,42 @@ export async function searchEntryUnion(
   ) {
     runOpts = { ...opts, timeZone: 'UTC' };
   }
-  let query = searchEntryQuery;
-  // A union of one realm is that realm's own search, so a federated search
-  // over one realm reaches the database exactly as `_search` there does.
+  let scoped = reading.filter(
+    (r): r is Extract<UnionRealm, { access: 'scoped' }> =>
+      r.access === 'scoped',
+  );
+  let query: SearchEntryQuery = searchEntryQuery;
+  // A union of one realm is that realm's own search, composed as its own
+  // `_search` composes it, so a federated search over one realm reaches the
+  // database exactly as `_search` there does.
   let single = reading.length === 1 ? reading[0] : undefined;
-  let union = new RealmUnion(reading.map((r) => r.url));
+  if (single?.access === 'scoped') {
+    query = policyScopedQuery(searchEntryQuery, single.grants);
+  } else if (!single && scoped.length > 0) {
+    let admission = realmAdmissionFilter(
+      reading.filter((r) => r.access === 'readable').map((r) => r.url),
+      scoped.map((r) => ({ realm: r.url, grants: r.grants })),
+    );
+    query = {
+      ...searchEntryQuery,
+      // A union under a policy reads no log file through its bindings.
+      logAccess: () => 'none' as const,
+      grantFilter: admission,
+      labelFilter: admission,
+    };
+  }
+  // The typo word list is read only from realms the caller reads outright.
+  let union = new RealmUnion(
+    reading.map((r) => r.url),
+    scoped.length
+      ? {
+          typoRealms: reading
+            .filter((r) => r.access === 'readable')
+            .map((r) => r.url),
+        }
+      : undefined,
+  );
   let primary = reading[0].realm;
-  // A realm's status carries no timing: the body is cached and compared, and
-  // a timing would make two identical answers differ.
   let statuses: NonNullable<EntryCollectionDocument['meta']['realms']> = {};
   for (let r of realms) {
     if (r.access === 'failed') {
@@ -123,7 +182,7 @@ export async function searchEntryUnion(
   let doc: EntryCollectionDocument;
   try {
     // The whole statement shares one deadline: the per-realm deadline the
-    // merge gives each realm.
+    // merge gives each realm (QF-D10).
     doc = await withRealmDeadline(opts?.realmDeadline, runOpts, async (o) => {
       if (single) {
         let own = await single.realm.searchEntries(query, o);
@@ -187,10 +246,7 @@ export async function searchEntryUnion(
           included.push(resource);
         }
       }
-      // Query V2's engine reads a union and counts each realm's share.
-      let { realmTotals, ...rest } = meta as typeof meta & {
-        realmTotals?: Record<string, number>;
-      };
+      let { realmTotals, ...rest } = meta;
       let out: EntryCollectionDocument = {
         data,
         meta: {
@@ -224,7 +280,7 @@ export async function searchEntryUnion(
     );
     let status = realmFailureStatus(e);
     for (let r of reading) {
-      statuses[r.url] = status;
+      statuses[r.url] = { ...status };
     }
     incomplete = true;
     doc = {
