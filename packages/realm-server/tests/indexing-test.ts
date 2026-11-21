@@ -6386,6 +6386,43 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      // The pending tables have none of the columns the search tables'
+      // migrations added to boxel_index (the text columns, and the generated
+      // ones), so a row kept through a failed visit is restaged without them.
+      // It must come back as it was: the same search doc, the generated
+      // columns derived from it, the text columns empty until the writer
+      // fills them.
+      test('a kept last-known-good row comes back with the search columns as the database left them', async function (assert) {
+        await realm.write('mango.json', JSON.stringify(mangoDoc('Mango')));
+        let read = async () =>
+          (
+            (await testDbAdapter.execute(
+              `SELECT search_doc, title_sort,
+                      (search_keys IS NOT NULL) AS has_search_keys,
+                      (search_tsv IS NULL AND pattern_text IS NULL
+                        AND rank_tsv IS NULL AND search_title IS NULL) AS text_columns_empty
+               FROM boxel_index
+               WHERE url = '${testRealm}mango.json' AND type = 'instance'`,
+            )) as Record<string, unknown>[]
+          )[0];
+        let before = await read();
+        assert.ok(before, 'the card is indexed');
+
+        failVisitsFor = 'mango.json';
+        await realm.write('mango.json', JSON.stringify(mangoDoc('Mang-Mang')));
+        let kept = await read();
+        assert.deepEqual(kept, before, 'the kept row is the row it was');
+        let expectedTitleSort =
+          (kept.search_doc as { cardTitle?: string }).cardTitle ?? null;
+        assert.strictEqual(
+          kept.title_sort,
+          expectedTitleSort,
+          'title_sort is still derived from its search doc',
+        );
+        assert.true(kept.has_search_keys, 'so is search_keys');
+        assert.true(kept.text_columns_empty, 'the text columns stay empty');
+      });
+
       test('a failed visit for a brand-new card records an instance error via the source-parse fallback', async function (assert) {
         // A brand-new file has no prior index row, so the batch's
         // tombstoned-types oracle can't identify it as a card — this is
