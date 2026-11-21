@@ -295,6 +295,13 @@ export function typeCondition(ref: CodeRef, column?: string): TypeCondition {
 // `eq` and `in` against `values`, `like` and `pattern` against a prepared
 // operand, `range` against bounds, `missing` for no value, and `file` for a
 // file-backed card (`values[0]` says which way).
+// A search's record of the ranges the value store narrows that are
+// conjuncts of its whole filter: their candidates are one intersected set.
+export interface StoreBound {
+  narrowed: boolean;
+  ranges: { realm: string; path: string; range: Record<string, unknown> }[];
+}
+
 export interface FieldTest {
   kind: 'field-test';
   type: CodeRef;
@@ -311,6 +318,10 @@ export interface FieldTest {
   // The realm whose value store may narrow a positive range test on a
   // number field to the cards it holds in range (value-store-filter.ts).
   valueStoreRealm?: string;
+  // Marked when the store narrowed this test and it is a conjunct of the
+  // whole filter (FilterContext.storeBound); the test then leaves its
+  // narrowing to the condition (`ranges`, intersected).
+  storeBound?: StoreBound;
 }
 
 export function fieldTest(

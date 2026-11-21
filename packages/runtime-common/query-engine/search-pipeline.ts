@@ -19,6 +19,7 @@ import {
   param,
   separatedByCommas,
   tableValuedFunctionsPlaceholder,
+  type StoreBound,
 } from '../expression.ts';
 import { type CodeRef, baseCardRef } from '../index.ts';
 import { StoreBlend } from './store-blend.ts';
@@ -62,6 +63,7 @@ import {
   totalEstimatedMessage,
 } from '../search-bounds.ts';
 import {
+  INDEX_HAS_ERROR,
   notEffectivelyErrored,
   prerenderedJoin,
   prerenderedTableFromOpts,
@@ -77,7 +79,10 @@ import {
   storedPathOf,
 } from './facets.ts';
 import { type StoreFacetSet, storeFacetKeysCte } from './store-facets.ts';
-import { storedTypeCount } from './value-store-filter.ts';
+import {
+  storedRangesCandidates,
+  storedTypeCount,
+} from './value-store-filter.ts';
 import {
   liveAndNonLiveMatches,
   nonLiveRowsOf,
@@ -577,23 +582,29 @@ export abstract class SearchPipeline extends StoreBlend {
 
       // "not errored" spans both error channels (index + current render error),
       // matching the single-kind branches below — so a file row with a current
-      // render error is excluded from the mixed scope too.
-      let notErrored: CardExpression = [notEffectivelyErrored(opts)];
-      if (entryType === 'all') {
-        // Mixed scope. Instance rows follow `includeErrors` (their error
-        // markup is rendered through the html branch); file rows are only
-        // ever surfaced in a healthy state, so they always require
-        // `has_error` false regardless of `includeErrors`.
-        let instanceBranch: CardExpression = opts.includeErrors
-          ? ['i.type =', param('instance')]
-          : every([['i.type =', param('instance')], notErrored]);
-        let fileBranch = every([['i.type =', param('file')], notErrored]);
-        conditions.push(any([instanceBranch, fileBranch]));
-      } else if (opts.includeErrors) {
-        conditions.push(['i.type =', param(entryType)]);
-      } else {
-        conditions.push(every([['i.type =', param(entryType)], notErrored]));
-      }
+      // render error is excluded from the mixed scope too. Where the value
+      // store bounds the candidates (below), the store's own liveness stands
+      // in for the render-error probe, and only the row's own index error is
+      // tested.
+      let kindCondition = (live: string): CardExpression => {
+        let notErrored: CardExpression = [live];
+        if (entryType === 'all') {
+          // Mixed scope. Instance rows follow `includeErrors` (their error
+          // markup is rendered through the html branch); file rows are only
+          // ever surfaced in a healthy state, so they always require
+          // `has_error` false regardless of `includeErrors`.
+          let instanceBranch: CardExpression = opts.includeErrors
+            ? ['i.type =', param('instance')]
+            : every([['i.type =', param('instance')], notErrored]);
+          let fileBranch = every([['i.type =', param('file')], notErrored]);
+          return any([instanceBranch, fileBranch]);
+        } else if (opts.includeErrors) {
+          return ['i.type =', param(entryType)];
+        }
+        return every([['i.type =', param(entryType)], notErrored]);
+      };
+      let kindAt = conditions.length;
+      conditions.push(kindCondition(notEffectivelyErrored(opts)));
 
       // A card-instance `.json` is dual-indexed: an `instance` row and a
       // `file` row sharing the same `i.url`, distinguished only by `i.type`.
@@ -627,11 +638,17 @@ export abstract class SearchPipeline extends StoreBlend {
       // reads only live instances of one realm's promoted index: a range
       // filter may then narrow by it, and a whole type is counted from it
       // (value-store-filter.ts).
+      // A mixed search (`all`, a realm `_search` with no scope) of a card
+      // type reads only card instances too: a card type's chain is never a
+      // file row's.
       let storeRealm =
         this.dialect.valueStore &&
         !isRealmUnion(realmURL) &&
         tableFromOpts(opts) === 'boxel_index' &&
-        entryType === 'instance' &&
+        (entryType === 'instance' ||
+          (entryType === 'all' &&
+            filter !== undefined &&
+            (await this.#readsOnlyCards(filter)))) &&
         !opts.includeErrors
           ? realmURL.href
           : undefined;
@@ -750,7 +767,34 @@ export abstract class SearchPipeline extends StoreBlend {
             })());
         }
         await this.assertNearFilters(filter, baseCardRef, realmURL, nearCtx);
-        conditions = scopedFilterCondition(filter);
+        if (storeRealm) {
+          // The filter compiled now, so its range tests say whether the store
+          // bounded the candidates: a positive range on a number field that is
+          // a conjunct of the whole filter keeps only cards the store holds,
+          // and the store holds only live cards (value-store.ts), so the
+          // render-error probe would only re-prove what the store answered.
+          let storeBound: StoreBound = { narrowed: false, ranges: [] };
+          let compiled = await this.makeExpression(
+            this.filterCondition(
+              opts.grantFilter ? withGrants(filter, opts.grantFilter) : filter,
+              baseCardRef,
+              'positive',
+              { ...filterContext, storeBound },
+            ),
+            opts,
+          );
+          let bound = storedRangesCandidates(storeBound.ranges);
+          conditions = [
+            ...unscopedConditions,
+            compiled,
+            ...(bound ? [bound as CardExpression] : []),
+          ];
+          if (storeBound.narrowed) {
+            conditions[kindAt] = kindCondition(`(NOT ${INDEX_HAS_ERROR})`);
+          }
+        } else {
+          conditions = scopedFilterCondition(filter);
+        }
       }
 
       let everyCondition = every(conditions);
@@ -1788,6 +1832,32 @@ export abstract class SearchPipeline extends StoreBlend {
   // core (WHERE / GROUP BY url / ORDER / LIMIT); this method varies only the
   // SELECT list by projection. `searchCards` and `searchPrerendered` are thin
   // wrappers, each fixing one projection.
+
+  // Whether every match of `filter` is a card instance: the filter's own
+  // type, or the type of one of its top-level conjuncts (a node's `on` or
+  // `type` adds that type's test), is a card type.
+  async #readsOnlyCards(filter: Filter): Promise<boolean> {
+    let f = filter as unknown as Record<string, unknown>;
+    let refs: CodeRef[] = [];
+    let own = (f.on ?? f.type) as CodeRef | undefined;
+    if (own) {
+      refs.push(own);
+    }
+    for (let child of Array.isArray(f.every) ? f.every : []) {
+      let c = child as Record<string, unknown> | null;
+      let ref = c && typeof c === 'object' ? (c.on ?? c.type) : undefined;
+      if (ref) {
+        refs.push(ref as CodeRef);
+      }
+    }
+    for (let ref of refs) {
+      let definition = await this.getDefinition(ref).catch(() => undefined);
+      if (definition?.type === 'card-def') {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 // The type a filter admits every card of, and nothing else tested: a

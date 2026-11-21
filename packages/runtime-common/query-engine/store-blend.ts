@@ -72,6 +72,11 @@ import { formatQuery as booleanQuery } from '../serializers/boolean.ts';
 import { isRealmUnion } from '../realm-union.ts';
 import { UnionTotals } from './union-totals.ts';
 import type { StoreKeep } from './store-narrow.ts';
+import {
+  comparedPaths,
+  storedComparisonIds,
+  storedComparisonSet,
+} from './store-compare.ts';
 import type { StoreFacetSet } from './store-facets.ts';
 
 // A test the store decides for a card: a type test (the card's own type's
@@ -808,6 +813,90 @@ export abstract class StoreBlend extends UnionTotals {
     } as unknown as Filter;
   }
 
+  // A comparison set of one whole card type, read from the value store
+  // (store-compare.ts): when the search reads only the live cards of one
+  // realm's promoted index, with no grants, and each compared field and the
+  // group are primitive fields of the type, read through `contains` fields
+  // only. Undefined, so the set is read the general way, otherwise, and when
+  // a card holds a value the set reads only as a marker.
+  protected override async comparisonSetFromStore({
+    realmURL,
+    filter,
+    fields,
+    by,
+    limit,
+    opts,
+    entryType,
+  }: {
+    realmURL: URL;
+    filter: Filter | undefined;
+    fields: string[];
+    by: string | undefined;
+    limit: number;
+    opts: QueryOptions;
+    entryType: 'instance' | 'file' | 'all';
+  }): Promise<{ rows: Record<string, unknown>[]; total: number } | undefined> {
+    if (
+      !filter ||
+      !this.dialect.valueStore ||
+      isRealmUnion(realmURL) ||
+      tableFromOpts(opts) !== 'boxel_index' ||
+      entryType === 'file' ||
+      opts.includeErrors ||
+      opts.grantFilter ||
+      opts.pendingStagingId !== undefined
+    ) {
+      return undefined;
+    }
+    let type = wholeCardType(filter);
+    if (!type || (await this.#definitionOf(type))?.type !== 'card-def') {
+      return undefined;
+    }
+    for (let path of [...fields, ...(by ? [by] : [])]) {
+      let kind = await this.#fieldKind(type, path);
+      if (kind !== 'number' && kind !== 'text' && kind !== 'boolean') {
+        return undefined;
+      }
+    }
+    // The dictionary ids first, so the set's statement names them as
+    // values the planner has statistics for.
+    let [ids] = (await this.queryCards(
+      storedComparisonIds({
+        realm: realmURL.href,
+        typeKeys: await this.typeKeysFor(type),
+        paths: [...comparedPaths(fields, by)],
+      }),
+      opts.timings,
+      opts,
+    )) as Record<string, unknown>[];
+    if (ids?.realm == null) {
+      return undefined;
+    }
+    let rows = (await this.queryCards(
+      storedComparisonSet({
+        realmId: Number(ids.realm),
+        typeIds: ((ids.types as number[]) ?? []).map(Number),
+        pathIds: new Map(
+          Object.entries((ids.paths as Record<string, number>) ?? {}).map(
+            ([p, id]) => [p, Number(id)],
+          ),
+        ),
+        fields,
+        by,
+        limit,
+      }),
+      opts.timings,
+      opts,
+    )) as Record<string, unknown>[];
+    if (rows.some((row) => row.marked)) {
+      return undefined;
+    }
+    return {
+      rows: rows.map(({ marked: _marked, total: _total, ...row }) => row),
+      total: rows.length ? Number(rows[0].total) : 0,
+    };
+  }
+
   // The filter as tests the store decides, all of which must hold, or
   // undefined when it holds anything else. `negated` is under a `not`;
   // `perRow` is a `when` signal's filter, whose positive `in` the general
@@ -1009,4 +1098,30 @@ export abstract class StoreBlend extends UnionTotals {
     }
     return undefined;
   }
+}
+
+// The card type a filter matches the whole of: `{ type }`, `{ on, every: [] }`
+// or `{ every: [{ type }] }` (a query's top-level `type` with nothing else).
+function wholeCardType(filter: Filter): CodeRef | undefined {
+  let f = filter as unknown as Record<string, unknown>;
+  let keys = Object.keys(f);
+  if (keys.length === 1 && f.type) {
+    return f.type as CodeRef;
+  }
+  if (
+    keys.length === 2 &&
+    f.on &&
+    Array.isArray(f.every) &&
+    f.every.length === 0
+  ) {
+    return f.on as CodeRef;
+  }
+  if (keys.length === 1 && Array.isArray(f.every) && f.every.length === 1) {
+    let child = f.every[0] as Record<string, unknown>;
+    let childKeys = Object.keys(child ?? {});
+    if (childKeys.length === 1 && (child.type || child.on)) {
+      return (child.type ?? child.on) as CodeRef;
+    }
+  }
+  return undefined;
 }

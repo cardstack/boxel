@@ -42,6 +42,10 @@ export interface FilterSource<S> {
   anchor(filter: object, scope: S): { scope: S; conjuncts: CardExpression[] };
   // The scope inside an `any`.
   inAny?(scope: S): S;
+  // The scope of a `not`'s operand: a test there is no conjunct of the
+  // whole filter, whatever its polarity (a `not` of a conjunction is a
+  // disjunction).
+  inNot?(scope: S): S;
   eq(
     scope: S,
     path: string,
@@ -143,7 +147,12 @@ export function compileFilterTree<S>(
       [
         'NOT',
         ...addExplicitParens(
-          compileFilterTree(node.not, source, inner, flipPolarity(polarity)),
+          compileFilterTree(
+            node.not,
+            source,
+            source.inNot ? source.inNot(inner) : inner,
+            flipPolarity(polarity),
+          ),
         ),
       ],
     ]);
