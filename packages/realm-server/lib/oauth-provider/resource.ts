@@ -12,13 +12,16 @@
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
-import { resolveOAuthAccessToken, type OAuthCaller } from './lookup.ts';
-import type {
-  OAuthResource,
-  OAuthRoute,
-  OAuthRouteMethod,
-  OAuthScope,
-} from './registry.ts';
+import { resolveOAuthAccessToken } from './lookup.ts';
+import type { OAuthResource } from './registry.ts';
+import { admitsRoute } from '@cardstack/runtime-common/oauth-route-admission';
+
+// The route-map check is shared with the realm, so it lives in runtime-common
+// (ADR 021 §1.3).
+export {
+  admitsRoute,
+  type SelectedServerRoute,
+} from '@cardstack/runtime-common/oauth-route-admission';
 
 const log = logger('boxel:oauth-provider');
 
@@ -70,48 +73,6 @@ export function protectedResourceMetadataHandler(
     ctxt.set('Cache-Control', 'public, max-age=3600');
     ctxt.body = body;
   };
-}
-
-// The route a request reached, as its router registered it, after any method
-// override (§1.3). A HEAD request reaches the GET route registered for its
-// path.
-export interface SelectedServerRoute {
-  method: string;
-  path: string;
-}
-
-// The route-map check (§1.3): whether a scope the caller holds admits the
-// route its router selected. Besides the resource's scopes it takes only the
-// caller and that route, never the request. When the caller is refused,
-// `scopes` names the scopes that would admit the route, and is empty when
-// none does.
-export function admitsRoute(
-  scopes: readonly OAuthScope[],
-  caller: Pick<OAuthCaller, 'scopes'>,
-  route: SelectedServerRoute,
-): { admitted: true } | { admitted: false; scopes: string[] } {
-  let admitting = scopes
-    .filter((scope) =>
-      scope.routes.some((mapped) => matchesServerRoute(mapped, route)),
-    )
-    .map(({ name }) => name);
-  if (admitting.some((name) => caller.scopes.includes(name))) {
-    return { admitted: true };
-  }
-  return { admitted: false, scopes: admitting };
-}
-
-function matchesServerRoute(
-  mapped: OAuthRoute,
-  route: SelectedServerRoute,
-): boolean {
-  if (mapped.on !== 'server' || mapped.path !== route.path) {
-    return false;
-  }
-  let method = route.method.toUpperCase() as OAuthRouteMethod;
-  return (
-    mapped.method === method || (method === 'HEAD' && mapped.method === 'GET')
-  );
 }
 
 // The `WWW-Authenticate` challenge (RFC 6750 §3, RFC 9728 §5.1).
@@ -283,7 +244,7 @@ export function oauthResourceController({
 
 // Removes the `Authorization` header from the request: from its parsed
 // headers, and from its raw headers, which list each name and value in turn.
-function withoutAuthorization(req: Koa.Context['req']) {
+export function withoutAuthorization(req: Koa.Context['req']) {
   delete req.headers.authorization;
   let raw = req.rawHeaders;
   for (let i = raw.length - 2; i >= 0; i -= 2) {

@@ -112,16 +112,35 @@ scopes. It is checked in one place, `resolveOAuthAccessToken`
 (`lookup.ts`), which reads the token, its grant and the user on every request
 and caches nothing, and only a resource's controller (`resource.ts`) calls
 it: the token must come in the `Authorization` header, be for that resource,
-and carry a scope that maps the route. A token the lookup refuses, or one on
-a route no scope maps, is answered 401 `invalid_token` whatever the reason; a
-scope the grant lacks, 403 `insufficient_scope`; a token sent in the query
-string or a form body, 400; a form body too large to read, 413. No
-production resource mounts the controller yet: tokens are issued for the MCP
-resource, and nothing serves `/mcp`. The caller it yields never
-carries `secureSession` and is never turned into session claims. Nothing else
-accepts one yet: a realm (`Realm.#verifySession`), `jwtMiddleware` and
-`multiRealmAuthorization` refuse it as an invalid JWT (ADR 021's remediation
-file). Its revocation is its grant's: see "Revoking a user's sessions" below.
+and carry a scope that maps the route (`admitsRoute`, in
+`runtime-common/oauth-route-admission.ts`, shared by every controller). A
+token the lookup refuses, or one on a route no scope maps, is answered 401
+`invalid_token` whatever the reason; a scope the grant lacks, 403
+`insufficient_scope`; a token sent in the query string or a form body, 400; a
+form body too large to read, 413. The caller it yields never carries
+`secureSession` and is never turned into session claims.
+
+The **Boxel API** is the resource boxel-cli calls realm and realm-server routes
+with. Its identifier is the issuer itself, and only pre-registered clients get
+its tokens. Its controllers are the three session checks: `jwtMiddleware`,
+`multiRealmAuthorization` and a realm's request authentication
+(`Realm.#admitOAuthToken`, with the lookup and the realm-route part of the map
+handed to the realm as its `oauth` option). Each tells an OAuth token from a
+session JWT by its shape (`isOAuthAccessTokenShaped`: anything that isn't three
+dot-separated segments), looks it up once, checks the route its router
+selected, removes the `Authorization` header, and carries the caller on
+(`ctxt.state.oauthCaller`, read through `requestUser(ctxt)`, or
+`RequestContext.oauthCaller`). The caller is then judged as its user, with the
+user's effective permissions read fresh, never `isSessionRevoked`, and never
+the exact permission match. Its scopes cap what a realm requires of it
+(`boxel:read` reads, `boxel:write` reads and writes, nothing administers), and
+in a realm it can't change what a policy admits (ADR 021 §1.6). The map in
+`lib/oauth-provider/registry.ts` lists what each scope reaches; every other
+route refuses the token, including every key, secure-session, token-minting
+and permissions route. A route that checks a session token itself
+(`/_download-realm`, which shares `retrieveUserSessionClaim`) never calls the
+lookup and refuses it as an invalid JWT. Its revocation is its grant's: see
+"Revoking a user's sessions" below.
 
 ## What verification enforces
 
@@ -310,7 +329,11 @@ re-mint, while a legitimate device recovers without the user noticing.
 ## When changing any of this
 
 - Add a new endpoint behind `jwtMiddleware` or `multiRealmAuthorization` and the
-  revocation check comes with it. A handler that verifies its own token and
+  revocation check comes with it. It refuses OAuth tokens until a Boxel API
+  scope maps it in `lib/oauth-provider/registry.ts`; a handler a scope maps
+  reads its user through `requestUser(ctxt)`, since an OAuth caller has no
+  `ctxt.state.token`. Never map a key, secure-session, token-minting or
+  permissions route (ADR 021 §1.6). A handler that verifies its own token and
   acts as the user must call `retrieveUserSessionClaim`, which checks
   revocation and refuses a delegated session — `handle-download-realm` is the
   precedent. Calling `retrieveTokenClaim` alone accepts a delegated session as
