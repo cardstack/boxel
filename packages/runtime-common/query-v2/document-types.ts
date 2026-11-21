@@ -1,0 +1,400 @@
+import type { RenderErrorSummary } from '../error.ts';
+import type { QueryResultsMeta } from '../query-engine/index-query-engine.ts';
+import type { CardTypeSummary, RealmMetaValue } from '../index-structure.ts';
+import {
+  type CardResource,
+  type CssResource,
+  type FileMetaResource,
+  type HtmlQuery,
+  type HtmlResource,
+  type IconResource,
+  type Saved,
+  type EntryResource,
+  type Unsaved,
+  isCardResource,
+  isFileMetaResource,
+  isEntryResource,
+} from '../resource-types.ts';
+
+// What a response says about its own `included[]` when the assembled-resource
+// budget stopped the link walk short. It is the document's answer to a question
+// `included[]` cannot answer for itself: a short one is what a small graph and a
+// clipped large one both look like. The ceiling that applied is deliberately
+// absent — it is an operator's number, recorded in the realm-server log, while
+// the fact is what a consumer could act on. `meta.incomplete` does the same job
+// for a result set whose row count came up short.
+//
+// No consumer branches on this yet. A clipped link is already self-describing
+// to the client, which deserializes it to a not-loaded value and fetches the
+// card when something reads the field, so nothing has to consult the document
+// to behave correctly. It is here so that a caller assembling a total, or a
+// person reading a response, can tell a short `included[]` from a small graph.
+export interface DocumentClosureMeta {
+  linkClosureTruncated?: boolean;
+}
+
+// What a card's document says about its prerendered output: the error its
+// current render recorded, when that render failed while the index visit that
+// read the card's data succeeded. The document is the card's intact data
+// either way. A client that renders the card itself can ignore it; one that
+// shows the card's prerendered output (a search result, a published page)
+// gets that output's error treatment from the prerendered channel directly.
+export interface DocumentRenderMeta {
+  renderError?: RenderErrorSummary;
+}
+
+export interface SingleCardDocument<Identity extends Unsaved = Saved> {
+  data: CardResource<Identity>;
+  included?: (FileMetaResource | CardResource<Saved>)[];
+  meta?: DocumentClosureMeta & DocumentRenderMeta;
+}
+export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
+  data: CardResource<Identity>[];
+  included?: (FileMetaResource | CardResource<Saved>)[];
+  meta: QueryResultsMeta;
+}
+
+// The search response: heterogeneous `entry` resources in `data`,
+// with everything they compose — `html` renderings (plus their deduped `css`
+// stylesheets) and/or `card`/`file-meta` `item` serializations — riding in
+// `included`. Which branches appear per entry is governed by the query's
+// sparse fieldset (default: prefer `html`, fall back to `item`).
+export type EntryIncludedResource =
+  | HtmlResource
+  | CssResource
+  | IconResource
+  | CardResource<Saved>
+  | FileMetaResource;
+
+export interface EntryCollectionDocument {
+  data: EntryResource[];
+  included?: EntryIncludedResource[];
+  meta: QueryResultsMeta &
+    DocumentClosureMeta & {
+      // The applied (bound or defaulted) htmlQuery, echoed once at the document
+      // level — it cannot vary across entries, so it is never repeated per
+      // entry. Present whenever the fieldset puts the html branch in play.
+      htmlQuery?: HtmlQuery;
+      // Each answering realm's own match count, keyed by realm URL. The summed
+      // `page.total` can't tell a consumer how many rows one realm holds past
+      // its page, which is what paging a single realm's results needs.
+      realmTotals?: Record<string, number>;
+      // A federated search's shape: per realm (each realm pages on its own,
+      // sections in order of their best card) or merged (one global order
+      // and page). `path`, on a merged search, says how it was answered:
+      // `union`, one statement over every realm (they share this server's
+      // index database), exact; or `merge`, each realm searched on its own
+      // and the answers merged, where scores order only approximately.
+      federation?: {
+        results: 'byRealm' | 'merged';
+        path?: 'union' | 'merge';
+      };
+      // A merged search over several realms sorted by a score (blend,
+      // relevance, text relevance, near, expression) orders them only
+      // approximately, since each realm scores its own matches: it says so
+      // with the `approximate-order` warning in `meta.warnings`. Ties are
+      // still broken deterministically.
+      // Per value facet of a search over several realms: how far any count
+      // may be short of the true one, because a realm answered only its top
+      // values. 0 when every realm answered all of its values.
+      facetErrors?: Record<string, number>;
+      // Per realm, in the order `data` holds them: the realm, how many of
+      // its rows are on this page, and the section's score (its best card's,
+      // when the sort scores rows).
+      sections?: { realm: string; count: number; score?: number }[];
+      // How each realm asked for answered. `refused` carries the query
+      // grammar's code; `timeout` is a realm cut off by the time budget;
+      // `unavailable` is one that would not resolve or failed otherwise.
+      realms?: Record<
+        string,
+        {
+          status: 'ok' | 'refused' | 'timeout' | 'unavailable';
+          code?: string;
+          // This realm's total; a lower bound when the `total-estimated`
+          // warning names this realm (or names none, so every realm gave it).
+          total?: number;
+          // Whether this realm holds rows past the ones it answered with.
+          hasMore?: boolean;
+          ms?: number;
+        }
+      >;
+      // The realms whose rows here are the only ones of theirs the result may
+      // hold, because the server decided them by more than the caller's query:
+      // the caller does not read the realm outright, so what they see of it is
+      // their policy's to decide, or the query is a declared one the server
+      // resolved from its own definition. A client reconciling the result
+      // against cards it holds may drop one of these realms' rows that no
+      // longer matches, and may never add a row of theirs the server did not
+      // return.
+      //
+      // It names realms and nothing more. No filter, no rule and no count of
+      // what was withheld, since any of those tells the caller the shape of
+      // their own grant. Absent when no realm is scoped.
+      policyScopedRealms?: string[];
+    };
+}
+
+// The single-instance entry response (the card+html / file-meta+html GET): one
+// `entry` sourced by URL rather than by a query, with everything it composes
+// riding in `included`. The collection's document-level `meta` (page total,
+// htmlQuery echo) drops away — the single `entry` carries its own
+// `meta.generation`, and the caller named the format/renderType in the request.
+export interface EntrySingleDocument {
+  data: EntryResource;
+  included?: EntryIncludedResource[];
+  meta?: DocumentClosureMeta;
+}
+
+// The public-API name for the raw entry wire format a programmatic
+// `searchEntries` caller receives.
+export type SearchEntryResults = EntryCollectionDocument;
+
+export interface SingleFileMetaDocument {
+  data: FileMetaResource;
+  included?: (FileMetaResource | CardResource<Saved>)[];
+}
+export interface FileMetaCollectionDocument {
+  data: FileMetaResource[];
+  included?: (FileMetaResource | CardResource<Saved>)[];
+  meta: QueryResultsMeta;
+}
+
+export type CardDocument = SingleCardDocument | CardCollectionDocument;
+export type FileMetaDocument =
+  | SingleFileMetaDocument
+  | FileMetaCollectionDocument;
+export type LinkableDocument = CardDocument | FileMetaDocument;
+
+export function isCardDocument(doc: any): doc is CardDocument {
+  return isSingleCardDocument(doc) || isCardCollectionDocument(doc);
+}
+
+export function isCardDocumentString(maybeJsonString: string) {
+  try {
+    let doc = JSON.parse(maybeJsonString);
+    return isSingleCardDocument(doc) || isCardCollectionDocument(doc);
+  } catch (err) {
+    return false;
+  }
+}
+
+// Pure shape predicates for card documents live in `card-document-shape.ts`
+// so callers that only need to recognize a card document don't pull the
+// transitive runtime chain. Re-exported here for backward compat; the
+// local imports let the remainder of this file call them directly.
+import {
+  isSingleCardDocument,
+  isCardCollectionDocument,
+} from '../card-document-shape.ts';
+export { isSingleCardDocument, isCardCollectionDocument };
+
+export function isFileMetaCollectionDocument(
+  doc: any,
+): doc is FileMetaCollectionDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  if ('included' in doc) {
+    let { included } = doc;
+    if (!isIncluded(included)) {
+      return false;
+    }
+  }
+  return data.every((resource) => isFileMetaResource(resource));
+}
+
+export function isEntryCollectionDocument(
+  doc: any,
+): doc is EntryCollectionDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc) || !('meta' in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  // The guard runs on untrusted JSON: a present-but-malformed `included`
+  // would pass an unchecked guard and then throw in consumers that iterate
+  // it. Each member must be an identifiable resource; the four legal
+  // member types (`html` / `css` / `card` / `file-meta`) are not pinned
+  // individually so the wire can grow new included types compatibly.
+  if ('included' in doc && doc.included !== undefined) {
+    let { included } = doc;
+    if (!Array.isArray(included)) {
+      return false;
+    }
+    for (let resource of included) {
+      if (
+        typeof resource !== 'object' ||
+        resource == null ||
+        typeof resource.type !== 'string' ||
+        typeof resource.id !== 'string'
+      ) {
+        return false;
+      }
+    }
+  }
+  return data.every((resource) => isEntryResource(resource));
+}
+
+export function isEntrySingleDocument(doc: any): doc is EntrySingleDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc)) {
+    return false;
+  }
+  // Same untrusted-JSON discipline as the collection guard: a
+  // present-but-malformed `included` must fail rather than throw downstream.
+  if ('included' in doc && doc.included !== undefined) {
+    let { included } = doc;
+    if (!Array.isArray(included)) {
+      return false;
+    }
+    for (let resource of included) {
+      if (
+        typeof resource !== 'object' ||
+        resource == null ||
+        typeof resource.type !== 'string' ||
+        typeof resource.id !== 'string'
+      ) {
+        return false;
+      }
+    }
+  }
+  return isEntryResource(doc.data);
+}
+
+export type CardTypeSummaryKind = 'instance' | 'file';
+
+// JSON:API representation of one entry from `realm_meta.value`. Clients
+// partition the flat array by `kind` on read — see CardsGrid's
+// `loadFilterList`. Keeping a single resource shape with a discriminator
+// (rather than two parallel `data` arrays) preserves the existing contract for
+// callers that only care about one kind.
+export interface CardTypeSummaryEntry {
+  type: 'card-type-summary';
+  id: string;
+  attributes: {
+    displayName: string;
+    total: number;
+    iconHTML: string;
+    kind: CardTypeSummaryKind;
+  };
+}
+
+function summaryToEntry(
+  summary: CardTypeSummary,
+  kind: CardTypeSummaryKind,
+): CardTypeSummaryEntry {
+  return {
+    type: 'card-type-summary',
+    id: summary.code_ref,
+    attributes: {
+      displayName: summary.display_name,
+      total: summary.total,
+      iconHTML: summary.icon_html,
+      kind,
+    },
+  };
+}
+
+// Accepts either the partitioned RealmMetaValue (current shape) or a bare
+// CardTypeSummary[] (legacy callers that pre-filtered to instances). In both
+// cases the output is a flat list of entries discriminated by `kind`.
+export function makeCardTypeSummaryDoc(
+  summaries: RealmMetaValue | CardTypeSummary[],
+) {
+  let value: RealmMetaValue;
+  if (Array.isArray(summaries)) {
+    value = { instances: summaries, files: [] };
+  } else {
+    value = summaries;
+  }
+  let data: CardTypeSummaryEntry[] = [
+    ...value.instances.map((s) => summaryToEntry(s, 'instance')),
+    ...value.files.map((s) => summaryToEntry(s, 'file')),
+  ];
+  return { data };
+}
+
+export interface FederatedCardTypeSummaryEntry {
+  type: 'card-type-summary';
+  id: string;
+  attributes: {
+    displayName: string;
+    total: number;
+    iconHTML: string;
+    kind: CardTypeSummaryKind;
+  };
+  meta: {
+    realmURL: string;
+  };
+}
+
+export function makeFederatedCardTypeSummaryDoc(
+  entries: FederatedCardTypeSummaryEntry[],
+  total: number,
+) {
+  return {
+    data: entries,
+    meta: {
+      page: { total },
+    },
+  };
+}
+
+function isIncluded(
+  included: any,
+): included is (CardResource<Saved> | FileMetaResource)[] {
+  if (!Array.isArray(included)) {
+    return false;
+  }
+  for (let resource of included) {
+    if (typeof resource !== 'object' || !resource) {
+      return false;
+    }
+    if (
+      (!('id' in resource) || typeof resource.id !== 'string') &&
+      (!('lid' in resource) || typeof resource.lid !== 'string')
+    ) {
+      return false;
+    }
+    if (!isCardResource(resource) && !isFileMetaResource(resource)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function isSingleFileMetaDocument(
+  doc: any,
+): doc is SingleFileMetaDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (Array.isArray(data)) {
+    return false;
+  }
+  if ('included' in doc) {
+    let { included } = doc;
+    if (!isIncluded(included)) {
+      return false;
+    }
+  }
+  return isFileMetaResource(data);
+}

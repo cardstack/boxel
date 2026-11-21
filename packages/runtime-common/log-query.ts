@@ -71,7 +71,7 @@ import {
   PAGE_SIZE_CLAMPED,
   TOTAL_ESTIMATED,
   totalEstimatedMessage,
-} from './search-bounds.ts';
+} from './query-v2/search-bounds.ts';
 import { RealmPaths } from './paths.ts';
 import { arrayElement, sqlTextArrayLiteral } from './sql-literal.ts';
 import { isPrefixForm } from './realm-identifiers.ts';
