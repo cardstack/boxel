@@ -138,10 +138,17 @@ module(basename(import.meta.filename), function (hooks) {
     await closeTestPgAdapter(adapter);
   });
 
-  test('a lookup that does not ask reads the row every time', async function (assert) {
+  test('a lookup that does not ask holds the row too, until an invalidation', async function (assert) {
     await lookup.lookupDefinition(personRef());
     await lookup.lookupDefinition(personRef());
-    assert.strictEqual(reads.modules, 2, 'two lookups, two row reads');
+    assert.strictEqual(reads.modules, 1, 'two lookups, one row read');
+    await lookup.invalidate(moduleURL);
+    let before = reads.modules;
+    await lookup.lookupDefinition(personRef());
+    assert.true(
+      reads.modules > before,
+      'the lookup after an invalidation reads the row again',
+    );
   });
 
   test('a lookup that asks reads the row once per generation', async function (assert) {
