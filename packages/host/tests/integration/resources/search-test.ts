@@ -3909,6 +3909,23 @@ module(`Integration | search resource`, function (hooks) {
       );
     });
 
+    test('a card-initiated query in the newer spelling that names its type with "on" is refused', async function (assert) {
+      // Newer spelling (it asks for facets) with the type on the top filter's
+      // `on`, the older way: an author is told to move it to `type`.
+      let query = {
+        filter: {
+          on: { module: `${testRealmURL}person`, name: 'Person' },
+          eq: { firstName: 'x' },
+        },
+        facets: [{ by: 'firstName' }],
+      } as unknown as Query;
+      await assert.rejects(
+        storeService.search(query, [testRealmURL], { cardInitiated: true }),
+        (e: any) => e?.code === 'mixed-spelling',
+        'the query is refused with mixed-spelling before it is sent',
+      );
+    });
+
     test('the card-facing store defaults a no-realm search to the current realm', async function (assert) {
       // No explicit realms and no current realm → an empty realm set (no
       // results), never a fan-out to every visible realm.
