@@ -165,12 +165,21 @@ module('Unit | ai-function-generation-test', function (hooks) {
         'contains',
         'eq',
         'every',
+        'fields',
         'in',
+        'linkedFrom',
         'matches',
+        'near',
         'not',
         'on',
+        'pattern',
+        'prefix',
         'range',
+        'regex',
+        'scope',
         'type',
+        'typos',
+        'within',
       ],
       'every operator the query grammar accepts is declared',
     );
@@ -188,6 +197,101 @@ module('Unit | ai-function-generation-test', function (hooks) {
         '_matchRelevance',
       ),
       'the sort key description names _matchRelevance',
+    );
+    assert.deepEqual(
+      Object.keys(query.properties).sort(),
+      [
+        'collapse',
+        'facets',
+        'filter',
+        'let',
+        'page',
+        'sort',
+        'timeZone',
+        'type',
+      ],
+      'the query members the search tools carry are declared (re-ranking is a sort entry)',
+    );
+    assert.true(
+      /not as an 'on' on the top filter node/.test(
+        query.properties.type.description,
+      ),
+      'the type description steers a query to type, not a top-node on',
+    );
+    assert.true(
+      /mixed-spelling/.test(query.properties.type.description),
+      'the type description names the refusal a top-node on meets',
+    );
+    assert.true(
+      /top-level 'type'/.test(
+        query.properties.filter.properties.on.description,
+      ),
+      'the filter on description points at the top-level type',
+    );
+    assert.false(
+      /in UTC/.test(query.properties.filter.properties.range.description),
+      "a relative date's rounding is not described as UTC",
+    );
+    assert.true(
+      /query's time zone/.test(
+        query.properties.filter.properties.range.description,
+      ),
+      "a relative date's rounding is described as the query's zone",
+    );
+    assert.true(
+      query.properties.facets.description.includes('needs-declaration'),
+      'the facets description says a field must be declared a facet',
+    );
+    assert.deepEqual(
+      ['expression', 'top', 'compare'].filter(
+        (k) => !(k in query.properties.sort.items.properties),
+      ),
+      [],
+      'a sort entry takes expression, top and compare',
+    );
+    let sortRequired: string[] =
+      'required' in query.properties.sort.items
+        ? query.properties.sort.items.required
+        : [];
+    assert.notOk(
+      sortRequired.includes('by'),
+      'an expression sort entry needs no by',
+    );
+    assert.deepEqual(
+      query.properties.page.properties.total.enum,
+      ['capped', 'exact', 'none'],
+      'page.total takes the three total modes',
+    );
+    for (let [where, ref] of [
+      ['type', query.properties.type],
+      ['filter.type', query.properties.filter.properties.type],
+      ['filter.on', query.properties.filter.properties.on],
+      ['sort.on', query.properties.sort.items.properties.on],
+      ['collapse.on', query.properties.collapse.properties.on],
+    ]) {
+      assert.deepEqual(
+        ref.anyOf.map((s: any) => s.type),
+        ['string', 'object'],
+        `${where} takes the "<module>#<Name>" shorthand or { module, name }`,
+      );
+      let shorthand = new RegExp(ref.anyOf[0].pattern);
+      assert.true(
+        shorthand.test('$REALM/product#Product'),
+        `${where}'s shorthand pattern admits a realm-relative module and a name`,
+      );
+      assert.true(
+        shorthand.test('@cardstack/catalog/product#Product'),
+        `${where}'s shorthand pattern admits a package module and a name`,
+      );
+      assert.false(
+        shorthand.test('Product'),
+        `${where}'s shorthand pattern needs a module`,
+      );
+      assert.deepEqual(ref.anyOf[1].required, ['module', 'name']);
+    }
+    assert.ok(
+      query.description.includes('$REALM/'),
+      'the query description names realm-relative modules',
     );
   });
 

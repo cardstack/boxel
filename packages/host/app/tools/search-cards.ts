@@ -1,7 +1,12 @@
 import { service } from '@ember/service';
 
 import type { Filter } from '@cardstack/runtime-common';
-import { assertQuery } from '@cardstack/runtime-common';
+import {
+  assertAuthoredQuerySpelling,
+  assertQuery,
+  InvalidQueryError,
+  SearchBoundError,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
@@ -87,13 +92,26 @@ export class SearchCardsByQueryTool extends HostBaseTool<
   ): Promise<BaseToolModule.SearchCardsResult> {
     let query = pruneEmptyQueryParts(input.query);
     assertQuery(query);
+    // An author's query: one in the newer spelling names its type with a
+    // top-level `type`, never an `on` on its top filter node
+    // (`mixed-spelling`, with the rewrite).
+    assertAuthoredQuerySpelling(query);
     let realmUrls = this.realmServer.availableRealmIdentifiers;
     let instances: CardDef[] = [];
     try {
-      // store.search pins `scope: 'cards'`, so the raw query already resolves
-      // to card instances only.
+      // store.search pins `scope: 'cards'` for an untyped query, so the raw
+      // query resolves to card instances only; a query's type, at the top in
+      // the newer spelling, selects its own kind. The wire translator lowers
+      // a query in the newer spelling as it wires it.
       instances = await this.store.search(query, realmUrls);
     } catch (e) {
+      // A refused query (`mixed-spelling`, `unknown-field`, a page bound)
+      // goes back through the tool's error path with its code and rewrite,
+      // as search-entries reports one: answered as an empty result, it would
+      // read to the assistant as a genuine zero-match.
+      if (e instanceof InvalidQueryError || e instanceof SearchBoundError) {
+        throw e;
+      }
       console.error(`Error searching in realms:`, e, query);
     }
 

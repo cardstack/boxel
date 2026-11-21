@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import { cloneDeep, mergeWith } from 'lodash-es';
 
 import {
+  assertAuthoredQuerySpelling,
   assertQuery,
   clearReplacedArrayFieldMeta,
   coerceErrorMessage,
@@ -2774,6 +2775,9 @@ class RealmFsSession {
     }
     let query = pruneEmptyQueryParts(raw as Query);
     assertQuery(query);
+    // An author's query: a top-node `on` beside a newer member is refused
+    // (`mixed-spelling`, with the rewrite).
+    assertAuthoredQuerySpelling(query);
     let requested = query.page?.size;
     let size =
       typeof requested === 'number' && Number.isFinite(requested)
