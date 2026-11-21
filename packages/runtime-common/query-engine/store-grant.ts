@@ -52,6 +52,7 @@
 //   indexed, the search keeps the general read.
 
 import stringify from 'safe-stable-stringify';
+import { mentionsPaths } from './paths-guard.ts';
 
 import {
   type Expression,
@@ -218,6 +219,10 @@ function exclusionIdsOf(node: unknown): string[] | undefined {
 // The grant a policy-scoped search's `grantFilter` composes, where it is one
 // the value store carries; undefined for any other filter.
 export function storeGrantOf(grantFilter: unknown): StoreGrant | undefined {
+  // A grant narrowed by realm path is never carried (paths-guard.ts).
+  if (mentionsPaths(grantFilter)) {
+    return undefined;
+  }
   if (
     !isPlainObject(grantFilter) ||
     !hasExactly(grantFilter, ['any']) ||
