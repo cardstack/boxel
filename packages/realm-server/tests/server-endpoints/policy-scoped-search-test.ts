@@ -2192,10 +2192,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         let coarse = await ask([COARSE]);
         let enumerable = await ask([ENUMERABLE]);
         assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+        // A realm the caller reads only through its policy is read on the
+        // union path, under its grants (row 28g), so the realms are answered
+        // as one realm holding both would answer them.
         assert.strictEqual(
           response.body.meta.federation?.path,
-          'merge',
-          'answered by the merge',
+          'union',
+          'answered by the union',
         );
         assert.deepEqual(
           ids(response).sort(),
@@ -2234,7 +2237,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         let response = await ask([COARSE, ENUMERABLE], 'closed');
         let coarse = await ask([COARSE], 'closed');
         assert.strictEqual(response.status, 200, JSON.stringify(response.body));
-        assert.strictEqual(response.body.meta.federation?.path, 'merge');
+        assert.strictEqual(response.body.meta.federation?.path, 'union');
         assert.deepEqual(
           ids(response).sort(),
           ids(coarse).sort(),
