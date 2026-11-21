@@ -20,6 +20,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { setupDB } from './helpers/index.ts';
+import { syncSeededValueStore } from './helpers/seed-index-rows.ts';
 
 // An `ORDER BY` sort direction reaches SQL as a keyword, and a keyword has no
 // bind form — `ORDER BY x $1` is a syntax error. So the renderer enumerates
@@ -82,13 +83,20 @@ const entryDef: Definition = {
   type: 'card-def',
   codeRef: entryRef,
   displayName: 'Entry',
-  fields: { title: 'f0' },
+  fields: { title: 'f0', rank: 'f1' },
   fieldDefs: {
     f0: {
       type: 'contains',
       isPrimitive: true,
       isComputed: false,
       fieldOrCard: stringRef,
+    },
+    f1: {
+      type: 'contains',
+      isPrimitive: true,
+      isComputed: false,
+      fieldOrCard: ref('@cardstack/base/number', 'default'),
+      serializerName: 'number',
     },
   },
 };
@@ -152,7 +160,9 @@ async function seedEntry(dbAdapter: PgAdapter, url: string) {
     `,`,
     param(JSON.stringify({ id: url, type: 'card' })),
     `::jsonb,`,
-    param(JSON.stringify({ title: titles.get(url) })),
+    param(
+      JSON.stringify({ title: titles.get(url), rank: lastModified.get(url) }),
+    ),
     `::jsonb,`,
     `'[]'::jsonb,`,
     `'[]'::jsonb,`,
@@ -165,38 +175,26 @@ async function seedEntry(dbAdapter: PgAdapter, url: string) {
     param(Date.now()),
     `)`,
   ]);
+  await syncSeededValueStore(dbAdapter, testRealmURL, [url]);
 }
 
-// The outer-wrapped projection — the one that exposes each sort value as an
-// inner aliased column and applies the ORDER BY against those aliases — is
-// reached only through `_search`'s `conditionalLiveDoc` branch, which no
-// public entry point selects, so the tests below drive `_search` directly.
-// The inner projection supplies what that branch requires of its caller: the
-// live serialization aliased `pristine_doc_fallback` and the markup aliased
-// `html`.
-const WRAPPED_PROJECTION =
-  'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.pristine_doc) as pristine_doc_fallback, ANY_VALUE(ph.isolated_html) as html';
-
+// A paged, faceted search. Facets are counted by their own statement over
+// the value store, so the page itself is the plain ordered LIMIT (`plainTopN`),
+// which renders the direction into its ORDER BY like every other path. (The
+// wrapped order, a materialized match set ordered by inner sort aliases, is
+// now taken only by a page that ranks: relevance, near, blend or an
+// expression.) The facet is an index field (`_realm`), which needs no card
+// definition; these rows record no type.
 function wrappedSearch(engine: IndexQueryEngine, sort: unknown) {
-  return (
-    engine as unknown as {
-      _search(
-        realmURL: URL,
-        query: { sort: unknown },
-        opts: Record<string, never>,
-        selectClauseExpression: string[],
-        entryType: 'instance',
-        conditionalLiveDoc: boolean,
-      ): Promise<{ results: { url?: unknown }[] }>;
-    }
-  )._search(
-    new URL(testRealmURL),
-    { sort },
-    {},
-    [WRAPPED_PROJECTION],
-    'instance',
-    true,
-  );
+  return engine
+    .searchCards(new URL(testRealmURL), {
+      sort: sort as Sort,
+      page: { number: 0, size: 10 },
+      facets: [{ by: '_realm' }],
+    })
+    .then(({ cards }) => ({
+      results: cards.map((card) => ({ url: card.id })),
+    }));
 }
 
 module(basename(import.meta.filename), function () {
@@ -294,6 +292,8 @@ module(basename(import.meta.filename), function () {
         for (let url of SEED_ORDER) {
           await seedEntry(dbAdapter, url);
         }
+        // the seeding's own statements are not the engine's
+        executedSql = [];
       },
     });
 
@@ -351,7 +351,38 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(
           results.map((row) => String(row.url)),
           expected,
-          `${direction} orders the rows by the inner sort alias`,
+          `${direction} orders the rows`,
+        );
+        let sql = orderBySql();
+        assert.ok(
+          new RegExp(`\\s${direction}\\s+NULLS LAST`).test(sql),
+          `${direction} reaches the ORDER BY as the keyword:\n${sql}`,
+        );
+      }
+    });
+
+    test('a ranked page orders by its inner sort alias in both directions', async function (assert) {
+      // An expression sort ranks, so the page takes the wrapped order: a
+      // materialized match set ordered by its inner sort aliases.
+      for (let direction of ['asc', 'desc'] as const) {
+        let expected = direction === 'asc' ? urls : [...urls].reverse();
+        executedSql = [];
+        let { results } = await wrappedSearch(engine, [
+          { by: '_expr', expr: 'rank', on: entryRef, direction },
+        ]);
+        assert.deepEqual(
+          results.map((row) => String(row.url)),
+          expected,
+          `${direction} orders the rows`,
+        );
+        let sql = orderBySql();
+        assert.true(
+          /WITH m AS MATERIALIZED/.test(sql),
+          `the wrapped order ran:\n${sql}`,
+        );
+        assert.true(
+          new RegExp(`_sort_0"?\\s+${direction}`, 'i').test(sql),
+          `${direction} reaches the outer ORDER BY on the inner alias:\n${sql}`,
         );
       }
     });
@@ -456,7 +487,7 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('the wrapped projection refuses a direction that bypassed the grammar', async function (assert) {
+    test('a faceted page refuses a direction that bypassed the grammar', async function (assert) {
       await assert.rejects(
         wrappedSearch(engine, [
           { by: 'lastModified', direction: SUBQUERY_DIRECTION },
@@ -468,7 +499,16 @@ module(basename(import.meta.filename), function () {
         executedSql.some((sql) => sql.includes('realm_user_permissions')),
         'no SQL carrying the direction was executed',
       );
-      assert.strictEqual(orderBySql(), '', 'no ORDER BY was executed at all');
+      // The facet's plan reads which types hold its field first (ordered by
+      // type, no sort direction of the query's); the page's own ORDER BY
+      // never ran.
+      assert.strictEqual(
+        executedSql
+          .filter((sql) => /ORDER BY/.test(sql) && !/AS type_key/.test(sql))
+          .join('\n'),
+        '',
+        "the page's ORDER BY was never executed",
+      );
     });
   });
 });

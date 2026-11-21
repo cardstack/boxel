@@ -91,6 +91,13 @@ module('Unit | canonicalQuerySignature', function (hooks) {
       },
     };
     assert.strictEqual(sig(urlForm), sig(prefixForm));
+    let otherCard: Query = {
+      filter: {
+        on: { module: rri('@scope/realm/defs'), name: 'Pet' },
+        eq: { id: '@scope/realm/Pet/paper' },
+      },
+    };
+    assert.notStrictEqual(sig(prefixForm), sig(otherCard));
   });
 
   test('non-reference filter values are not collapsed', function (assert) {

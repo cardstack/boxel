@@ -10,6 +10,7 @@ import {
   prepareTestDB,
   testRealm,
 } from './helpers/index.ts';
+import { syncSeededValueStore } from './helpers/seed-index-rows.ts';
 
 // What an incremental pass spends finding the cards a change reaches, on
 // graphs shaped like the ones that make it expensive: a module many cards
@@ -142,6 +143,10 @@ module(basename(import.meta.filename), function (hooks) {
         { bind: [template] },
       );
       await adapter.execute(`ANALYZE ${table}`);
+    }
+    // The neighbours' value-store rows, as an index pass writes them.
+    for (let n = 0; n < 40; n++) {
+      await syncSeededValueStore(adapter, `http://neighbour-${n}.test/`);
     }
     if (process.env.INVALIDATION_COST_VACUUMED) {
       for (let index of gin) {

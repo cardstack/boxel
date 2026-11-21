@@ -44,6 +44,13 @@ import {
 } from '@cardstack/runtime-common/card-operations';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
+// Each realm's entry in a response's meta carries how long it took, which
+// differs between any two calls; the rest of the body is compared byte for
+// byte.
+function withoutTimings(text: string): string {
+  return text.replace(/"ms":\s*\d+/g, '"ms":0');
+}
+
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm-specific Endpoints | _search', function (hooks) {
     let testRealm: Realm;
@@ -454,6 +461,64 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
+    test('a default page that leaves matches out says so: default-page-truncated, hasMore and the total', async function (assert) {
+      // The page bound fills a page the request never named, and a short
+      // answer from it must not read as a short match set.
+      setSearchBoundsForTests({ serverMaxPageSize: 1 });
+      try {
+        let unpaged = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+        });
+        assert.strictEqual(unpaged.status, 200);
+        assert.strictEqual(unpaged.body.data.length, 1, 'the default page');
+        assert.strictEqual(unpaged.body.meta.page.total, 2, 'the total');
+        assert.true(unpaged.body.meta.page.hasMore, 'hasMore');
+        let notice = (unpaged.body.meta.warnings ?? []).find(
+          (w: { code: string }) => w.code === 'default-page-truncated',
+        );
+        assert.deepEqual(
+          notice,
+          {
+            code: 'default-page-truncated',
+            message:
+              'Returned the first 1 of 2 matches; pass page.size or page through the results',
+          },
+          'the notice names the rows returned and the match count',
+        );
+
+        // A page the request named is the page it asked for: no notice, and
+        // none of `page-size-clamped` either, since it is within the maximum.
+        let named = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+          page: { size: 1 },
+        });
+        assert.strictEqual(named.body.data.length, 1);
+        assert.true(named.body.meta.page.hasMore);
+        assert.deepEqual(
+          (named.body.meta.warnings ?? []).map((w: { code: string }) => w.code),
+          [],
+          'a named page carries no notice',
+        );
+      } finally {
+        resetSearchBoundsForTests();
+      }
+
+      // A default page that holds every match leaves nothing out.
+      let whole = await postSearch({
+        filter: personFilter(),
+        fields: { entry: ['item'] },
+      });
+      assert.strictEqual(whole.body.data.length, 2);
+      assert.false(
+        (whole.body.meta.warnings ?? []).some(
+          (w: { code: string }) => w.code === 'default-page-truncated',
+        ),
+        'no notice when the default page holds every match',
+      );
+    });
+
     test('the prerendered (html) leg is held to the same page bounds', async function (assert) {
       // A row's markup can run to tens of KB, so the HTML leg is bounded like
       // the item leg: no page takes the default, an explicit page is clamped to
@@ -674,8 +739,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         let grantsNothing = await search(STRANGER);
         assert.strictEqual(grantsNothing.status, 200);
         assert.strictEqual(
-          noPolicy.text,
-          grantsNothing.text,
+          withoutTimings(noPolicy.text),
+          withoutTimings(grantsNothing.text),
           'the two answers are byte for byte alike',
         );
       });
@@ -699,8 +764,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           on: person,
         });
         assert.strictEqual(
-          undeclared.text,
-          declared.text,
+          withoutTimings(undeclared.text),
+          withoutTimings(declared.text),
           'an operation the type does not declare is answered byte for byte as the declared one is',
         );
 
@@ -709,8 +774,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           on: { module: `${realmHref}no-such-module`, name: 'Nothing' },
         });
         assert.strictEqual(
-          missingType.text,
-          declared.text,
+          withoutTimings(missingType.text),
+          withoutTimings(declared.text),
           'and so is a type the realm does not hold',
         );
 

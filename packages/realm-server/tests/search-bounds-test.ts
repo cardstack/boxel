@@ -5,13 +5,22 @@ import {
   applyFederatedRowBudget,
   applySearchPageBound,
   applyServerSearchPageBound,
+  pageSizeClampWarning,
+  withPageSizeClampWarning,
+  takesDefaultPage,
+  defaultPageTruncationWarning,
+  withDefaultPageTruncation,
   assertRealmsBound,
   runWithSearchTimeBudget,
   setSearchBoundsForTests,
   resetSearchBoundsForTests,
   SearchBoundError,
+  InvalidQueryError,
+  DEFAULT_SEARCH_PAGE_SIZE,
   MAX_SEARCH_PAGE_SIZE,
+  QUERY_FIELD_DEFAULT_PAGE_SIZE,
   SERVER_MAX_SEARCH_PAGE_SIZE,
+  normalizeQueryDefinition,
   SERVER_ABSOLUTE_MAX_PAGE_SIZE,
   MAX_REALMS_PER_SEARCH_REQUEST,
   type Query,
@@ -27,13 +36,23 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('applySearchPageBound', function () {
-    test('an absent page is clamped to the max (mandatory pagination)', function (assert) {
+    test('an absent page gets the default page (mandatory pagination)', function (assert) {
       let bounded = applySearchPageBound({ filter: { eq: {} } } as Query);
       assert.deepEqual(
         bounded.page,
-        { size: MAX_SEARCH_PAGE_SIZE },
+        { size: DEFAULT_SEARCH_PAGE_SIZE },
         'a default page size is injected',
       );
+      assert.strictEqual(
+        DEFAULT_SEARCH_PAGE_SIZE,
+        MAX_SEARCH_PAGE_SIZE,
+        'a card search with no page gets the cap, as it always has',
+      );
+    });
+
+    test('an explicit page under the cap is honored', function (assert) {
+      let query = { page: { size: MAX_SEARCH_PAGE_SIZE - 1 } } as Query;
+      assert.strictEqual(applySearchPageBound(query), query);
     });
 
     test('a page at or under the max passes through unchanged', function (assert) {
@@ -47,8 +66,8 @@ module(basename(import.meta.filename), function (hooks) {
       } as unknown as Query);
       assert.deepEqual(
         bounded.page,
-        { number: 0, size: MAX_SEARCH_PAGE_SIZE },
-        'the cap is injected and page.number is preserved',
+        { number: 0, size: DEFAULT_SEARCH_PAGE_SIZE },
+        'the default is injected and page.number is preserved',
       );
     });
 
@@ -63,8 +82,8 @@ module(basename(import.meta.filename), function (hooks) {
         let bounded = applySearchPageBound({ page: { size: bad } } as Query);
         assert.strictEqual(
           bounded.page?.size,
-          MAX_SEARCH_PAGE_SIZE,
-          `size ${bad} is clamped to the cap`,
+          DEFAULT_SEARCH_PAGE_SIZE,
+          `size ${bad} takes the default`,
         );
       }
     });
@@ -101,6 +120,89 @@ module(basename(import.meta.filename), function (hooks) {
       );
       let clamped = applySearchPageBound({} as Query);
       assert.deepEqual(clamped.page, { size: 10 });
+    });
+  });
+
+  module('query-backed field pages', function () {
+    let normalize = (queryDefinition: Record<string, unknown>) =>
+      normalizeQueryDefinition({
+        fieldDefinition: {
+          type: 'linksToMany',
+          isPrimitive: false,
+          isComputed: false,
+          fieldOrCard: { module: 'https://test/person', name: 'Person' },
+        } as any,
+        queryDefinition: queryDefinition as any,
+        realmURL: new URL('https://test/'),
+        fieldName: 'people',
+        resolvePathValue: () => undefined,
+        relativeTo: new URL('https://test/Host/1') as any,
+      })!.query;
+
+    test('a field naming no page takes the field default, not the search default', function (assert) {
+      assert.deepEqual(normalize({ filter: { eq: { name: 'x' } } }).page, {
+        size: QUERY_FIELD_DEFAULT_PAGE_SIZE,
+        number: 0,
+        total: 'exact',
+      });
+      assert.true(QUERY_FIELD_DEFAULT_PAGE_SIZE > DEFAULT_SEARCH_PAGE_SIZE);
+    });
+
+    test('a field keeps the page it declares', function (assert) {
+      assert.deepEqual(
+        normalize({ filter: { eq: { name: 'x' } }, page: { size: 7 } }).page,
+        { size: 7, number: 0, total: 'exact' },
+      );
+    });
+
+    test('the field default is explicit, so the server default never shrinks it', function (assert) {
+      let query = normalize({ filter: { eq: { name: 'x' } } });
+      assert.strictEqual(applyServerSearchPageBound(query), query);
+    });
+
+    test("a field's query is refused for the engine's internal sort keys, on every leg", function (assert) {
+      // The indexer runs a field's query in-process and the client sends it
+      // over the wire; both normalize it here, so both refuse it alike.
+      for (let sort of [
+        [{ by: '_blend', of: [{ by: 'name' }] }],
+        [{ by: '_expr', expr: 'rating * 2' }],
+        [{ by: '_blend', of: [{ by: '_when', when: { eq: { name: 'x' } } }] }],
+        [{ by: '_relevance' }],
+      ]) {
+        assert.throws(
+          () => normalize({ filter: { eq: { name: 'x' } }, sort }),
+          (e: unknown) =>
+            e instanceof InvalidQueryError &&
+            e.code === 'unknown-key' &&
+            /is not a sort key/.test(e.message),
+          JSON.stringify(sort),
+        );
+      }
+      assert.ok(
+        normalize({
+          filter: { eq: { name: 'x' } },
+          sort: [{ blend: [{ by: 'name' }] }],
+        }),
+        'the public spelling is read',
+      );
+    });
+
+    test('a field sorting by _matchRelevance, as saved queries do, is read', function (assert) {
+      for (let by of ['_matchRelevance', 'item._matchRelevance']) {
+        assert.ok(
+          normalize({ filter: { matches: 'x' }, sort: [{ by }] }),
+          `${by} is accepted`,
+        );
+      }
+    });
+
+    test('the override lowers the field default', function (assert) {
+      setSearchBoundsForTests({ queryFieldPageSize: 3 });
+      assert.deepEqual(normalize({ filter: { eq: { name: 'x' } } }).page, {
+        size: 3,
+        number: 0,
+        total: 'exact',
+      });
     });
   });
 
@@ -144,6 +246,112 @@ module(basename(import.meta.filename), function (hooks) {
         size: SERVER_ABSOLUTE_MAX_PAGE_SIZE,
         number: 3,
       });
+    });
+
+    test('a clamped page carries a page-size-clamped notice; a page at the maximum, or one that took the default, carries none', function (assert) {
+      let ask = (size: unknown) => ({ page: { size } }) as unknown as Query;
+      let over = ask(SERVER_ABSOLUTE_MAX_PAGE_SIZE + 1);
+      let notice = pageSizeClampWarning(over, applyServerSearchPageBound(over));
+      assert.strictEqual(notice?.code, 'page-size-clamped');
+      assert.true(
+        notice?.message.includes(String(SERVER_ABSOLUTE_MAX_PAGE_SIZE + 1)),
+        'the notice names the size asked for',
+      );
+      for (let size of [SERVER_ABSOLUTE_MAX_PAGE_SIZE, undefined, -1, 'lots']) {
+        let asked = ask(size);
+        assert.strictEqual(
+          pageSizeClampWarning(asked, applyServerSearchPageBound(asked)),
+          undefined,
+          `page.size ${JSON.stringify(size)}: no notice`,
+        );
+      }
+      let doc = withPageSizeClampWarning(
+        {
+          data: [],
+          meta: { page: { total: 0 }, warnings: [{ code: 'x', message: 'y' }] },
+        },
+        notice,
+      );
+      assert.deepEqual(
+        doc.meta.warnings.map((w) => w.code),
+        ['x', 'page-size-clamped'],
+        'added beside the warnings already there',
+      );
+    });
+
+    test('a default page that left matches out carries a default-page-truncated notice, distinct from page-size-clamped', function (assert) {
+      let ask = (page: unknown) => ({ page }) as unknown as Query;
+      assert.true(takesDefaultPage({} as Query), 'no page');
+      assert.true(
+        takesDefaultPage(ask({ number: 2 })),
+        'a page naming no size',
+      );
+      assert.true(
+        takesDefaultPage(ask({ size: 'lots' })),
+        'an unreadable size',
+      );
+      assert.true(takesDefaultPage(ask({ size: -1 })), 'a negative size');
+      assert.false(takesDefaultPage(ask({ size: 0 })), 'counts-only');
+      assert.false(takesDefaultPage(ask({ size: 10 })), 'a named size');
+
+      let notice = defaultPageTruncationWarning({ size: 100 }, 100, {
+        total: 2596,
+        hasMore: true,
+      });
+      assert.deepEqual(notice, {
+        code: 'default-page-truncated',
+        message:
+          'Returned the first 100 of 2,596 matches; pass page.size or page through the results',
+      });
+      assert.strictEqual(
+        defaultPageTruncationWarning(
+          { size: 100 },
+          100,
+          { total: 1000, hasMore: true },
+          [{ code: 'total-estimated' }],
+        )?.message,
+        'Returned the first 100 of >= 1,000 matches; pass page.size or page through the results',
+        'a capped total is a lower bound',
+      );
+      assert.strictEqual(
+        defaultPageTruncationWarning({ size: 100 }, 100, { total: 100 }),
+        undefined,
+        'every match is on the page',
+      );
+      assert.strictEqual(
+        defaultPageTruncationWarning(undefined, 100, { total: 2596 }),
+        undefined,
+        'a page the caller named is never a default truncation',
+      );
+      assert.true(
+        defaultPageTruncationWarning({ size: 10, number: 1 }, 10, {
+          total: 30,
+        })?.message.startsWith('Returned rows 11-20 of 30 matches'),
+        'a later default page names its rows',
+      );
+
+      type Doc = {
+        data: unknown[];
+        meta: {
+          page: { total: number; hasMore?: boolean };
+          warnings?: { code: string; message: string }[];
+        };
+      };
+      let doc = withDefaultPageTruncation(
+        { data: [1, 2], meta: { page: { total: 5 } } } as Doc,
+        { size: 2 },
+      );
+      assert.true(doc.meta.page.hasMore, 'hasMore is set');
+      assert.deepEqual(
+        doc.meta.warnings?.map((w) => w.code),
+        ['default-page-truncated'],
+      );
+      let whole = { data: [1, 2], meta: { page: { total: 2 } } };
+      assert.strictEqual(
+        withDefaultPageTruncation(whole, { size: 2 }),
+        whole,
+        'unchanged when nothing was left out',
+      );
     });
 
     test('the input query is left unmutated when clamped', function (assert) {
