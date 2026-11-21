@@ -1,5 +1,8 @@
 import type Koa from 'koa';
-import { isLogQuery } from '@cardstack/runtime-common/log-query';
+import {
+  isLogQuery,
+  type LogAccess,
+} from '@cardstack/runtime-common/log-query';
 import { queryEngineFor } from '@cardstack/runtime-common/query-engine/engine-choice';
 import { deferredSelectRefusal } from '@cardstack/runtime-common/query-engine/deferred-select';
 import { isLogBinding } from '@cardstack/runtime-common/query-v2/query-values';
@@ -437,6 +440,7 @@ export default function handleSearch(opts: {
       ? {
           readable: new Set(),
           scoped: new Map(),
+          logAccess: new Map(),
           grantsForType: new Map(),
           realms: new Map(),
           judgedFor: new Map(),
@@ -528,6 +532,7 @@ export default function handleSearch(opts: {
     let access: RealmAccess = {
       readable,
       scoped: new Map(),
+      logAccess: new Map(),
       grantsForType: new Map(),
       realms: new Map(),
       judgedFor: new Map(),
@@ -581,6 +586,17 @@ export default function handleSearch(opts: {
             return;
           }
           access.scoped.set(url, scope.filters);
+          // What a card query's log binding reads of this realm's logs: what
+          // the caller's log-line grants here admit, as on the realm's own
+          // `_search`. A caller not signed in reads none.
+          access.logAccess.set(
+            url,
+            await realm.logAccessUnderPolicy(
+              principal?.kind === 'user' && !caller
+                ? principal.user
+                : undefined,
+            ),
+          );
           // What a linked card read for this search (a link facet's label, a
           // `linkedFrom` card) faces: its own type's grants, judged for the
           // same caller, as on the realm's own `_search`.
@@ -852,19 +868,29 @@ export default function handleSearch(opts: {
       // `_search`. Main's grammar reads none.
       let grantsFor = access.grantsForType.get(realm);
       let mounted = access.realms.get(realm);
+      let scoped: SearchEntryQuery;
       if (grammar === V2_ENTRY_GRAMMAR && grantsFor && mounted) {
         let own = linkedFromInRealm(parsed, mounted.url);
-        scopedQueries.set(realm, {
+        scoped = {
           ...grammar.policyScopedQuery(
             own,
             filters,
             await mounted.linkedFromGrants(own.itemQuery, grantsFor),
           ),
           grantsForType: grantsFor,
-        });
+        };
       } else {
-        scopedQueries.set(realm, grammar.policyScopedQuery(parsed, filters));
+        scoped = grammar.policyScopedQuery(parsed, filters);
       }
+      // Query V2's grammar binds logs: the realm's line grants decide what
+      // the binding reads, as on that realm's own `_search`.
+      let logAccess = access.logAccess.get(realm);
+      scopedQueries.set(
+        realm,
+        grammar === V2_ENTRY_GRAMMAR && logAccess
+          ? { ...scoped, logAccess }
+          : scoped,
+      );
     }
     // Whether any realm this search names is one the caller does not read.
     // Where none is, the search is the one it would be with no policy
@@ -1285,6 +1311,8 @@ interface RealmAccess {
   // The realms the caller reaches through their policy, with the grant
   // filters composed into the query each runs.
   scoped: Map<string, Filter[]>;
+  // For each of those, what a card query's log binding reads of its logs.
+  logAccess: Map<string, (url: string) => Promise<LogAccess>>;
   // For each of those, the grants a linked card of a given type faces (null
   // where none admits the caller), and the mounted realm.
   grantsForType: Map<string, (type: CodeRef) => Promise<Filter[] | null>>;

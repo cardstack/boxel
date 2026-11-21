@@ -95,6 +95,7 @@
       "realm-policy-row-reach-test",
       "realm-policy-school-example-test",
       "realm-policy-search-infrastructure-test",
+      "realm-policy-search-scope-test",
       "realm-policy-snapshot-test",
       "realm-policy-source-read-test",
       "realm-policy-validate-test",

@@ -78,9 +78,12 @@ import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import { InvalidQueryError } from './invalid-query-error.ts';
 import { deferredSelectRefusal } from './query-engine/deferred-select.ts';
+import {
+  realmEntryGrammar,
+  type RealmEntryQuery,
+} from './query-engine/realm-entry-grammar.ts';
 import type { SearchEntryQuery as V2SearchEntryQuery } from './query-v2/search-entry.ts';
 import {
-  applyServerSearchPageBound,
   assembledLinkResourceBudget,
   runWithSearchTimeBudget,
   SearchBoundError,
@@ -160,13 +163,9 @@ import {
   type CardJsonAssembly,
 } from './card-document-cache.ts';
 import {
-  emptySearchEntryDocument,
   fieldsetFromParam,
   htmlQueryFormats,
   htmlQueryFromParams,
-  markPolicyScoped,
-  parseSearchEntryQueryFromPayload,
-  policyScopedQuery,
   policyScopedRealms,
   type SearchEntryFieldset,
   type SearchEntryQuery,
@@ -9562,6 +9561,37 @@ export class Realm {
   // the ACL declined takes its batch options from here.
   #mintPosture(coarseDeclined: CoarseDeclined): { mintIds?: true } {
     return coarseDeclined === 'all' ? { mintIds: true } : {};
+  }
+
+  // The grants a direct read of a card of a given type would face, for a
+  // caller this realm's policy scopes; null where none admits them. Cached
+  // per type for the one search.
+  #grantsForType(
+    invocation: SearchInvocation | undefined,
+    requestContext: RequestContext,
+  ): (type: CodeRef) => Promise<Filter[] | null> {
+    let cache = new Map<string, Promise<Filter[] | null>>();
+    return (type) => {
+      let key = `${type && 'module' in type ? type.module : ''}#${type && 'name' in type ? type.name : ''}`;
+      let known = cache.get(key);
+      if (!known) {
+        known = (async () => {
+          if (!invocation) return null;
+          try {
+            let scope = await this.#policyQueryScope(
+              { ...invocation, types: [type] },
+              requestContext,
+            );
+            return scope.kind === 'scoped' ? scope.filters : null;
+          } catch (err: unknown) {
+            if (isOperationFailure(err)) return null;
+            throw err;
+          }
+        })();
+        cache.set(key, known);
+      }
+      return known;
+    };
   }
 
   // What this realm's policy contributes to one search, for a caller its ACL
@@ -20234,7 +20264,7 @@ export class Realm {
   // for a single row and none of what an answer carries: no rendering, no
   // item and no links. Error rows count exactly where the search itself
   // would return them, which is where it asks for renderings.
-  async #answersWithARow(searchEntryQuery: SearchEntryQuery): Promise<boolean> {
+  async #answersWithARow(searchEntryQuery: RealmEntryQuery): Promise<boolean> {
     let probe = await this.#realmIndexQueryEngine.searchEntries(
       {
         ...searchEntryQuery,
@@ -20547,6 +20577,16 @@ export class Realm {
   // What a caller the ACL declined may read of this realm's logs, per log,
   // or undefined when nothing: a realm policy's log-line grants (see
   // `log-line-policy.ts`).
+  // What a caller a policy scopes reads of a log a card query's binding
+  // names: what its log-line grants admit, or nothing. A realm's own
+  // `_search` and a federated search naming this realm both ask it.
+  async logAccessUnderPolicy(
+    user: string | undefined,
+  ): Promise<(url: string) => Promise<LogAccess>> {
+    let lines = await this.#logLineAccess(user);
+    return lines ?? (async () => 'none' as const);
+  }
+
   async #logLineAccess(
     user: string | undefined,
   ): Promise<((url: string) => Promise<LogAccess>) | undefined> {
@@ -20694,7 +20734,17 @@ export class Realm {
       if (deferredSelect) {
         throw deferredSelect;
       }
-      let searchEntryQuery = parseSearchEntryQueryFromPayload(payload);
+      // Query V2's grammar, or main's under `BOXEL_QUERY_ENGINE=legacy`
+      // (realm-entry-grammar.ts).
+      let grammar = realmEntryGrammar();
+      // A `$REALM/` module resolves against this realm, and a card id in
+      // prefix form to the URL the index keys the card by, where the request
+      // arrives, so the policy lookup and the engine read one spelling.
+      let searchEntryQuery = grammar.parse(payload, {
+        realm: this.url,
+        canonicalize: (url) => this.#virtualNetwork.unresolveURL(url),
+        resolveCardId: (id) => this.#virtualNetwork.toURLHref(id),
+      });
       let duringPrerender = isDuringPrerenderRequest(request);
       // What this realm's policy contributes, for a caller its ACL declined.
       // A caller it allows is never asked: a policy widens what the ACL
@@ -20747,23 +20797,16 @@ export class Realm {
         readable: () => policyScope === undefined,
         resolvedByServer,
       });
-      // The answer a search matching nothing gives: the engine says whether
-      // more follow on every paged search, and the page bound below gives
-      // every search a page.
-      let noMatchesDocument = () => {
-        let doc = emptySearchEntryDocument(searchEntryQuery);
-        let bounded = applyServerSearchPageBound(searchEntryQuery.itemQuery);
-        return bounded.page
-          ? {
-              ...doc,
-              meta: { ...doc.meta, page: { ...doc.meta.page, hasMore: false } },
-            }
-          : doc;
-      };
       let noRows = () =>
         createResponse({
           body: JSON.stringify(
-            markPolicyScoped(noMatchesDocument(), scopedRealms),
+            grammar.markPolicyScoped(
+              grammar.emptySearchEntryDocument({
+                ...searchEntryQuery,
+                itemQuery: grammar.boundPage(searchEntryQuery.itemQuery),
+              }),
+              scopedRealms,
+            ),
             null,
             2,
           ),
@@ -20782,10 +20825,34 @@ export class Realm {
         // Composed before the page is applied below, so the page the engine
         // fills is a page of rows the policy admits rather than a page of the
         // caller's rows with some removed.
-        searchEntryQuery = policyScopedQuery(
+        // A linked card the query reads (a link facet's label, a `linkedFrom`
+        // card) shows under its own type's grants, as a direct read of it
+        // would, on this route and on the federated one alike.
+        let grantsForType = this.#grantsForType(invocation, requestContext);
+        searchEntryQuery = grammar.policyScopedQuery(
           searchEntryQuery,
           policyScope.filters,
+          grammar.v2
+            ? await this.linkedFromGrants(
+                searchEntryQuery.itemQuery,
+                grantsForType,
+              )
+            : undefined,
         );
+        // A card query that binds a log (`let … from: { log }`) reads of it
+        // what this caller's log-line grants admit, or nothing: the grant
+        // decides, on this route and on the federated one alike.
+        if (grammar.v2) {
+          searchEntryQuery = {
+            ...searchEntryQuery,
+            grantsForType,
+            logAccess: await this.logAccessUnderPolicy(
+              requestContext.realmAuthority
+                ? undefined
+                : requestContext.authenticatedUser,
+            ),
+          } as RealmEntryQuery;
+        }
         // An archived realm answers a caller it reaches only through its
         // policy with its seal where this search would answer them with a
         // row, and with no rows where it would answer none, as it does while
@@ -20816,7 +20883,7 @@ export class Realm {
       // marks a render is set by the caller. Clamp an absent page to the
       // default so the query carries a LIMIT, and an over-maximum explicit one
       // to the maximum (logged, so a short page has an explanation somewhere).
-      searchEntryQuery.itemQuery = applyServerSearchPageBound(
+      searchEntryQuery.itemQuery = grammar.boundPage(
         searchEntryQuery.itemQuery,
       );
       // Classified from the page the query will actually run with — the clamp
@@ -20854,7 +20921,7 @@ export class Realm {
         });
       // Cut an over-budget live search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
-      let doc = markPolicyScoped(
+      let doc = grammar.markPolicyScoped(
         timeBudgeted
           ? await runWithSearchTimeBudget(runSearch)
           : await runSearch(),

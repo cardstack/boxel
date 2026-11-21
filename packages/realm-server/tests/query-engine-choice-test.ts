@@ -46,6 +46,10 @@ const CONSTRUCTION_SITES: Readonly<Record<string, QueryEngineCaller[]>> = {
     'realm-logs',
     'federated',
   ],
+  // The entry grammar a realm's own `_search` is read with.
+  'packages/runtime-common/query-engine/realm-entry-grammar.ts': [
+    'realm-search',
+  ],
   'packages/runtime-common/automation-index-hook.ts': ['automations'],
   'packages/runtime-common/automation-run-limits.ts': ['automations'],
   'packages/realm-server/handlers/handle-skill-validation.ts': [
