@@ -136,6 +136,15 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', auth(user));
     }
 
+    function homePageCheck(user = OWNER) {
+      return request
+        .get(
+          `/_host-urls/home-page-check?realm=${encodeURIComponent(REALM_URL)}`,
+        )
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Authorization', auth(user));
+    }
+
     function setCanonical(id: string, user = OWNER) {
       return request
         .patch(`/_host-urls/${id}`)
@@ -447,6 +456,48 @@ module(basename(import.meta.filename), function () {
         'the error names the home card',
       );
       assert.strictEqual((await list()).body.data.length, 0);
+    });
+
+    test('reports whether a visitor who is not signed in can view the realm’s home page', async function (assert) {
+      let response = await homePageCheck();
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.body.data.type, 'home-page-check');
+      assert.strictEqual(response.body.data.id, REALM_URL);
+      let report = response.body.data.attributes;
+      assert.strictEqual(report.homeCardId, `${REALM_URL}index`);
+      assert.true(report.homeCardReadable, 'the home card is readable');
+      assert.deepEqual(report.unloadableModules, []);
+      assert.true(report.anonymousCanView, 'the realm can be mounted');
+    });
+
+    test('the home page check names what a visitor who is not signed in can’t view', async function (assert) {
+      await query(dbAdapter, [
+        `DELETE FROM realm_user_permissions WHERE username = '*' AND realm_url =`,
+        param(REALM_URL),
+      ]);
+
+      let response = await homePageCheck();
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let report = response.body.data.attributes;
+      assert.false(report.homeCardReadable, 'the home card is not readable');
+      assert.notStrictEqual(report.homeCardStatus, 200);
+      assert.true(
+        report.unloadableModules.some(
+          ({ url }: { url: string }) => url === `${REALM_URL}home`,
+        ),
+        'the report names the home card’s module',
+      );
+      assert.false(report.anonymousCanView, 'the realm can’t be mounted');
+    });
+
+    test('only a direct writer of the realm may ask for the home page check', async function (assert) {
+      assert.strictEqual((await homePageCheck(WRITER)).status, 200);
+      assert.strictEqual((await homePageCheck(READER)).status, 403);
+      let noRealm = await request
+        .get('/_host-urls/home-page-check')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(noRealm.status, 400, 'a realm URL is required');
     });
 
     test('deleting a realm removes its host URLs and frees their site names', async function (assert) {

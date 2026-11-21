@@ -45,6 +45,8 @@ import {
 // (ADR 033 §1.3).
 //
 //   GET    /_host-urls?realm=<realm URL>  the realm's host URLs
+//   GET    /_host-urls/home-page-check?realm=<realm URL>
+//                                         whether the realm can be mounted
 //   POST   /_host-urls                    mount: add a host URL
 //   PATCH  /_host-urls/:id                mark a host URL canonical
 //   DELETE /_host-urls/:id                unmount: remove a host URL
@@ -109,6 +111,49 @@ export function handleListHostURLs(
       });
     } catch (error) {
       log.error('Error listing host URLs:', error);
+      await sendResponseForSystemError(ctxt, 'Internal server error', error);
+    }
+  };
+}
+
+// The anonymous home page check (`lib/anonymous-home-page.ts`) for a realm,
+// as a `home-page-check` resource whose attributes are the check's report. A
+// realm can be mounted only when `anonymousCanView` is true, so a client asks
+// for this before it offers a mount, and shows a writer what is missing.
+export function handleHostURLHomePageCheck(
+  args: CreateRoutesArgs,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  return async function (ctxt: Koa.Context) {
+    try {
+      let rawRealmURL = ctxt.query.realm;
+      let realmURL =
+        typeof rawRealmURL === 'string' ? normalizeRealmURL(rawRealmURL) : null;
+      if (!realmURL) {
+        await sendResponseForBadRequest(
+          ctxt,
+          'The realm query parameter must be a realm URL',
+        );
+        return;
+      }
+      let realm = await administeredRealm(ctxt, args, realmURL.href);
+      if (!realm) {
+        return;
+      }
+      let mounted = await args.reconciler.lookupOrMount(realm.url);
+      if (!mounted) {
+        await sendResponseForNotFound(ctxt, `Realm not found: ${realm.url}`);
+        return;
+      }
+      let report = await checkAnonymousHomePage(mounted);
+      if (report.temporarilyRefused) {
+        await sendCheckUnavailable(ctxt, report);
+        return;
+      }
+      await sendDocument(ctxt, 200, {
+        data: { type: 'home-page-check', id: realm.url, attributes: report },
+      });
+    } catch (error) {
+      log.error('Error checking the home page of a realm:', error);
       await sendResponseForSystemError(ctxt, 'Internal server error', error);
     }
   };
@@ -194,6 +239,10 @@ export function handleMountHostURL(
         return;
       }
       let report = await checkAnonymousHomePage(mounted);
+      if (report.temporarilyRefused) {
+        await sendCheckUnavailable(ctxt, report);
+        return;
+      }
       if (!report.anonymousCanView) {
         await sendResponseForUnprocessableEntity(ctxt, homePageRefusal(report));
         return;
@@ -615,6 +664,25 @@ async function isPublishedRealmAddress(
 
 // Names what keeps a visitor who isn't signed in from seeing the realm's
 // home page.
+// The answer when the realm turned the home page check's reads away for now
+// (see `temporarilyRefused`): a 503 the client can retry, with the realm's own
+// `Retry-After` when it named one, rather than a report that would ask a
+// writer to open what the realm may already open.
+async function sendCheckUnavailable(
+  ctxt: Koa.Context,
+  report: AnonymousHomePageReport,
+) {
+  await sendResponseForError(
+    ctxt,
+    503,
+    'Service Unavailable',
+    "The realm turned the home page check away for now, so it can't say whether visitors may read the home page. Try again shortly.",
+  );
+  if (report.retryAfterSeconds !== undefined) {
+    ctxt.set('Retry-After', String(report.retryAfterSeconds));
+  }
+}
+
 function homePageRefusal(report: AnonymousHomePageReport): string {
   if (report.redirectTo) {
     return `The realm can't be mounted: its root redirects to ${report.redirectTo}, so it serves no home page.`;
