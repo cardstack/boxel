@@ -46,12 +46,19 @@ export interface RequestDefinitionLookup extends OperationDefinitionLookup {
 // retryable `definition-not-ready` 503 instead of holding the request open. The
 // render is left running, so the definition it populates is there for the
 // retry.
+//
+// And a request's reads `remember` the module's definitions row
+// (`DefinitionLookupOptions.remember`): a realm's policy judges every search a
+// visitor sends by the definitions of the queried type and its adoption chain,
+// and remembered, those rows are read once per definition generation instead
+// of once per request. The lookup context, and the realm permissions it reads,
+// is still built on every read.
 export function requestDefinitionLookup(
   lookup: RequestPathLookup,
   opts: { deadlineMs?: number } = {},
 ): RequestDefinitionLookup {
   let deadlineMs = opts.deadlineMs ?? REQUEST_DEFINITION_DEADLINE_MS;
-  let options = { priority: userInitiatedPriority };
+  let options = { priority: userInitiatedPriority, remember: true };
   return {
     lookupDefinition: (codeRef) =>
       withinDeadline(
