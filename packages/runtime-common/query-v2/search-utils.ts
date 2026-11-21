@@ -1,4 +1,3 @@
-import { logger } from '../log.ts';
 import { ensureTrailingSlash } from '../paths.ts';
 import type { RequestTimings } from '../request-timings.ts';
 import { SupportedMimeType } from '../router.ts';
@@ -194,27 +193,13 @@ export type SearchOpts = {
   realmDeadline?: number;
 };
 
-// Indirection so a host integration test can deterministically capture
-// the emitted timing line: loglevel rebinds a logger's methods on every
-// `setLevel`, so a test that monkeypatches a direct logger handle would
-// race the next `logger('realm:search-timing')` call. A settable sink
-// sidesteps that. Defaults to the `realm:search-timing` logger.
-let searchTimingSink: ((line: string) => void) | undefined;
-let searchTimingLog: ReturnType<typeof logger> | undefined;
-export function setSearchTimingSinkForTests(
-  sink: ((line: string) => void) | undefined,
-): void {
-  searchTimingSink = sink;
-}
-export function emitSearchTiming(line: string): void {
-  if (searchTimingSink) {
-    searchTimingSink(line);
-    return;
-  }
-  // Lazy: a module-load `logger()` call races the circular import that
-  // installs the logger factory. First emission happens well after boot.
-  (searchTimingLog ??= logger('realm:search-timing')).info(line);
-}
+// The timing sink is main's search-utils.ts's, one module state for both
+// grammars, so a test that installs a sink through the package captures the
+// lines Query V2's search emits.
+export {
+  emitSearchTiming,
+  setSearchTimingSinkForTests,
+} from '../search-utils.ts';
 
 export type SearchErrorBody = {
   errors: { status: string; title: string; message: string; code?: string }[];

@@ -6,7 +6,6 @@ import { mkdirSync, writeFileSync } from 'fs';
 import { basename, dirname, join } from 'path';
 import { dirSync } from 'tmp';
 import {
-  applyServerSearchPageBound,
   archiveRealm,
   composePolicyScopedFilter,
   expressionToSql,
@@ -32,6 +31,7 @@ import {
   type NamedQueryAdmittingNothing,
   type ResolvedNamedQuery,
 } from '@cardstack/runtime-common/card-operations';
+import { applyServerSearchPageBound } from '@cardstack/runtime-common/query-v2/search-bounds';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';

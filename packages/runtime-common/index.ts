@@ -1996,15 +1996,6 @@ export * from './search-resource-helpers.ts';
 import type { SearchEntryScope } from './search-entry.ts';
 
 export * from './search-entry.ts';
-// A caller translating a `Query` to the entry wire grammar (the host's store
-// and search panel, card lists, card operations) uses Query V2's translators,
-// which carry facets, explain, timeZone, rerank, let, collapse and select and
-// refuse what they cannot spell; main's carried filter, sort and page only and
-// dropped the rest without a word.
-export {
-  searchEntryWireQueryFromQuery,
-  wireFilterFromFilter,
-} from './query-v2/search-entry.ts';
 export * from './realm-union.ts';
 export * from './search-bounds.ts';
 export * from './link-shape-policy.ts';
