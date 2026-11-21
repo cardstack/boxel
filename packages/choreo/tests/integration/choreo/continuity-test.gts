@@ -251,6 +251,99 @@ module('Integration | choreo | continuity', function (hooks) {
     await animationsSettled();
   });
 
+  test('a translate-only flight is carried on translate-only, even when the sprite changed size', async function (assert) {
+    // The assistant transcript's shape: messages move translate only, so a
+    // message that grows takes its new size at once. A pass that leaves a
+    // flying message unnamed while it also grows must not finish the flight
+    // by scaling it from its old size to its new one: the text in it would
+    // squash and stretch. The size change is a reflow; only the travel was
+    // being driven.
+    class Grow extends Component {
+      @tracked low = false;
+      @tracked tall = false;
+      @tracked scored = true;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        grow = this;
+      }
+      <template>
+        <Choreo
+          class='stage'
+          style='position:relative;width:400px;height:400px'
+          as |c|
+        >
+          <div style='padding-top:{{if this.low "200px" "0px"}}'>
+            <div
+              id='cc-grow'
+              style='width:80px;height:{{if
+                this.tall
+                "120px"
+                "40px"
+              }};background:#0af'
+              {{motion id='cc-grow' role='cc'}}
+            ></div>
+          </div>
+          {{#if this.scored}}
+            <c.Move @of={{c.moved 'cc'}} @duration={{0.6}} @size={{false}} />
+          {{/if}}
+        </Choreo>
+      </template>
+    }
+    let grow: Grow | undefined;
+    await render(<template><Grow /></template>);
+    await animationsSettled();
+
+    grow!.low = true;
+    await settled();
+    await nextFrame();
+    await nextFrame();
+    await nextFrame();
+    const flying = el('#cc-grow').getBoundingClientRect();
+    const stage = el('.stage').getBoundingClientRect();
+    assert.true(
+      flying.top - stage.top < 180,
+      `the card is still on its way down (${Math.round(flying.top - stage.top)})`,
+    );
+
+    // one pass: the score un-renders, and the card grows
+    const scales: number[] = [];
+    const tops: number[] = [];
+    let stop = false;
+    const watch = () => {
+      if (stop) {
+        return;
+      }
+      const m = new DOMMatrixReadOnly(
+        getComputedStyle(el('#cc-grow')).transform,
+      );
+      scales.push(m.d);
+      tops.push(el('#cc-grow').getBoundingClientRect().top - stage.top);
+      requestAnimationFrame(watch);
+    };
+    grow!.scored = false;
+    grow!.tall = true;
+    await settled();
+    requestAnimationFrame(watch);
+    await animationsSettled();
+    stop = true;
+
+    const worst = Math.min(...scales);
+    assert.true(
+      scales.every((d) => Math.abs(d - 1) < 0.001),
+      `the card is never scaled (smallest scaleY ${worst.toFixed(3)})`,
+    );
+    assert.true(
+      tops.length > 0 && tops[0]! < 190,
+      `the flight is carried on from where it was painted, not dropped (${Math.round(tops[0] ?? -1)})`,
+    );
+    const rest = el('#cc-grow').getBoundingClientRect();
+    assert.true(
+      Math.abs(rest.top - (stage.top + 200)) < 2 &&
+        Math.abs(rest.height - 120) < 1,
+      `and it lands at its rest, at its new size (${Math.round(rest.top - stage.top)}, ${Math.round(rest.height)})`,
+    );
+  });
+
   test('a fade-in cut short by a pass that only moves the sprite still ends opaque', async function (assert) {
     class Feed extends Component {
       @tracked shown = false;

@@ -1,0 +1,497 @@
+{
+  "version": 1,
+  "description": "a reply calls a tool, then the answer streams in below it while the reader follows the end",
+  "source": {
+    "env": "synthetic",
+    "anonymized": false,
+    "notes": [
+      "synthetic: the shape of the turn in the bug this harness was built for (a tool call whose result lands, then a long answer streamed while the reader follows)",
+      "streaming made up from each reply's final edit, a preview every 250 ms"
+    ]
+  },
+  "events": [
+    {
+      "at": 0,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e1",
+      "sender": "user",
+      "content": {
+        "msgtype": "m.text",
+        "body": "Can you sketch the agenda for the planning week?"
+      }
+    },
+    {
+      "at": 1500,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e2",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": false,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          }
+        }
+      }
+    },
+    {
+      "at": 3500,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e3",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "Here is a first pass at the planning week.\n\n- **Monday:** goals review and the roadmap walk-through, with time set aside for questions from each team.\n- **Tuesday:** working sessions by area, then a short readout at the end of the day.\n- **Wednesday:** customer interviews in the morning and synthesis in the afternoon.\n\nI kept Thursday and Friday open so the plan can absorb whatever the interviews turn up.",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": true,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          },
+          "usage": {
+            "promptTokens": 9000,
+            "completionTokens": 220,
+            "costUsd": 0.03
+          }
+        },
+        "m.relates_to": {
+          "rel_type": "m.replace",
+          "event_id": "$e2"
+        }
+      }
+    },
+    {
+      "at": 5000,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e4",
+      "sender": "user",
+      "content": {
+        "msgtype": "m.text",
+        "body": "Who should run the Tuesday readout?"
+      }
+    },
+    {
+      "at": 6500,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e5",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": false,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          }
+        }
+      }
+    },
+    {
+      "at": 8500,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e6",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "The readout works best with one host per area, so each team presents its own findings. Pick someone who joined the working sessions, since they can answer follow-up questions without handing off. If you want a single facilitator to keep time, the person running the planning week is the natural choice, and they can introduce each area in a sentence or two.",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": true,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          },
+          "usage": {
+            "promptTokens": 9000,
+            "completionTokens": 220,
+            "costUsd": 0.03
+          }
+        },
+        "m.relates_to": {
+          "rel_type": "m.replace",
+          "event_id": "$e5"
+        }
+      }
+    },
+    {
+      "at": 10000,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e7",
+      "sender": "user",
+      "content": {
+        "msgtype": "m.text",
+        "body": "Add a reminder the day before each session."
+      }
+    },
+    {
+      "at": 11500,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e8",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": false,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          }
+        }
+      }
+    },
+    {
+      "at": 13500,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e9",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "Done. Each session now has a reminder at 9:00 AM the day before, sent to everyone invited. The Monday reminder goes out on Friday, since nobody reads email on Sunday. You can change the time on any single reminder without touching the others.",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": true,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          },
+          "usage": {
+            "promptTokens": 9000,
+            "completionTokens": 220,
+            "costUsd": 0.03
+          }
+        },
+        "m.relates_to": {
+          "rel_type": "m.replace",
+          "event_id": "$e8"
+        }
+      }
+    },
+    {
+      "at": 15000,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e10",
+      "sender": "user",
+      "content": {
+        "msgtype": "m.text",
+        "body": "What is still open?"
+      }
+    },
+    {
+      "at": 16500,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e11",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": false,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          }
+        }
+      }
+    },
+    {
+      "at": 18500,
+      "kind": "room",
+      "phase": "history",
+      "id": "$e12",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "Three things are still open:\n\n1. The room for the Wednesday interviews, which needs to seat eight.\n2. Whether the readout is recorded for people who cannot attend.\n3. The lunch order for Tuesday, which needs a headcount by Monday noon.\n\nEverything else on the plan has an owner and a date.",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": true,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          },
+          "usage": {
+            "promptTokens": 9000,
+            "completionTokens": 220,
+            "costUsd": 0.03
+          }
+        },
+        "m.relates_to": {
+          "rel_type": "m.replace",
+          "event_id": "$e11"
+        }
+      }
+    },
+    {
+      "at": 20000,
+      "kind": "room",
+      "id": "$e13",
+      "sender": "user",
+      "content": {
+        "msgtype": "m.text",
+        "body": "Also: add the team offsite on Thursday at 10am at the north office.\n\nAnd\n\nThe follow-up review on Friday at 2pm, in the large meeting room on the third floor."
+      }
+    },
+    {
+      "at": 20700,
+      "kind": "room",
+      "id": "$e14",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": false,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          }
+        }
+      }
+    },
+    {
+      "at": 20950,
+      "kind": "preview",
+      "parent": "$e14",
+      "body": "I'll"
+    },
+    {
+      "at": 21200,
+      "kind": "preview",
+      "parent": "$e14",
+      "body": "I'll add both"
+    },
+    {
+      "at": 21450,
+      "kind": "preview",
+      "parent": "$e14",
+      "body": "I'll add both to the"
+    },
+    {
+      "at": 21700,
+      "kind": "preview",
+      "parent": "$e14",
+      "body": "I'll add both to the planning"
+    },
+    {
+      "at": 21950,
+      "kind": "preview",
+      "parent": "$e14",
+      "body": "I'll add both to the planning week and"
+    },
+    {
+      "at": 22200,
+      "kind": "preview",
+      "parent": "$e14",
+      "body": "I'll add both to the planning week and give"
+    },
+    {
+      "at": 22450,
+      "kind": "preview",
+      "parent": "$e14",
+      "body": "I'll add both to the planning week and give the two"
+    },
+    {
+      "at": 22700,
+      "kind": "preview",
+      "parent": "$e14",
+      "body": "I'll add both to the planning week and give the two reviews"
+    },
+    {
+      "at": 22950,
+      "kind": "preview",
+      "parent": "$e14",
+      "body": "I'll add both to the planning week and give the two reviews distinct"
+    },
+    {
+      "at": 23200,
+      "kind": "room",
+      "id": "$e15",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "I'll add both to the planning week and give the two reviews distinct titles.",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": true,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          }
+        },
+        "m.relates_to": {
+          "rel_type": "m.replace",
+          "event_id": "$e14"
+        },
+        "app.boxel.toolRequests": [
+          {
+            "id": "call-add-events",
+            "name": "patchCardInstance",
+            "arguments": "{\"description\":\"Add the offsite and the follow-up review, and give the two reviews distinct titles\",\"attributes\":{\"cardId\":\"http://test-realm/test/PlanningWeek/1\",\"patch\":{\"attributes\":{\"sessions\":[{\"date\":\"2026-11-19\",\"title\":\"Team offsite\",\"detail\":\"North office, 10:00 AM. Bring the roadmap printouts and the interview notes from Wednesday.\"},{\"date\":\"2026-11-20\",\"title\":\"Follow-up review\",\"detail\":\"Large meeting room, third floor, 2:00 PM. Each area brings its three open questions.\"}]}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "at": 24700,
+      "kind": "room",
+      "id": "$e16",
+      "sender": "user",
+      "type": "app.boxel.toolResult",
+      "content": {
+        "msgtype": "app.boxel.toolResultWithNoOutput",
+        "commandRequestId": "call-add-events",
+        "m.relates_to": {
+          "rel_type": "app.boxel.toolAnnotation",
+          "key": "applied",
+          "event_id": "$e14"
+        },
+        "data": {}
+      }
+    },
+    {
+      "at": 25600,
+      "kind": "room",
+      "id": "$e17",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": false,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          }
+        }
+      }
+    },
+    {
+      "at": 25850,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week"
+    },
+    {
+      "at": 26100,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at"
+    },
+    {
+      "at": 26350,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is"
+    },
+    {
+      "at": 26600,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a"
+    },
+    {
+      "at": 26850,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up"
+    },
+    {
+      "at": 27100,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large"
+    },
+    {
+      "at": 27350,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large meeting room on the third floor.\n\nI"
+    },
+    {
+      "at": 27600,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large meeting room on the third floor.\n\nI also renamed the earlier review to"
+    },
+    {
+      "at": 27850,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large meeting room on the third floor.\n\nI also renamed the earlier review to \"Readout review (Tuesday)\" so it is"
+    },
+    {
+      "at": 28100,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large meeting room on the third floor.\n\nI also renamed the earlier review to \"Readout review (Tuesday)\" so it is easy to tell apart from the Friday"
+    },
+    {
+      "at": 28350,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large meeting room on the third floor.\n\nI also renamed the earlier review to \"Readout review (Tuesday)\" so it is easy to tell apart from the Friday one, and changed the order so"
+    },
+    {
+      "at": 28600,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large meeting room on the third floor.\n\nI also renamed the earlier review to \"Readout review (Tuesday)\" so it is easy to tell apart from the Friday one, and changed the order so sessions without a time sit at the"
+    },
+    {
+      "at": 28850,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large meeting room on the third floor.\n\nI also renamed the earlier review to \"Readout review (Tuesday)\" so it is easy to tell apart from the Friday one, and changed the order so sessions without a time sit at the bottom, which you did not ask"
+    },
+    {
+      "at": 29100,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large meeting room on the third floor.\n\nI also renamed the earlier review to \"Readout review (Tuesday)\" so it is easy to tell apart from the Friday one, and changed the order so sessions without a time sit at the bottom, which you did not ask for.\n\nThe reminder rule only covers"
+    },
+    {
+      "at": 29350,
+      "kind": "preview",
+      "parent": "$e17",
+      "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large meeting room on the third floor.\n\nI also renamed the earlier review to \"Readout review (Tuesday)\" so it is easy to tell apart from the Friday one, and changed the order so sessions without a time sit at the bottom, which you did not ask for.\n\nThe reminder rule only covers sessions with a time. Do you want a"
+    },
+    {
+      "at": 29600,
+      "kind": "room",
+      "id": "$e18",
+      "sender": "bot",
+      "content": {
+        "msgtype": "app.boxel.message",
+        "body": "Both are on the planning week now:\n\n- **Team offsite:** Thursday at 10:00 AM in the north office. It is listed last until the agenda has a time for it.\n- **Follow-up review:** Friday at 2:00 PM in the large meeting room on the third floor.\n\nI also renamed the earlier review to \"Readout review (Tuesday)\" so it is easy to tell apart from the Friday one, and changed the order so sessions without a time sit at the bottom, which you did not ask for.\n\nThe reminder rule only covers sessions with a time. Do you want a reminder for the offsite once it has one?",
+        "format": "org.matrix.custom.html",
+        "isStreamingFinished": true,
+        "data": {
+          "context": {
+            "agentId": "reader-tab"
+          },
+          "usage": {
+            "promptTokens": 12000,
+            "completionTokens": 310,
+            "costUsd": 0.04
+          }
+        },
+        "m.relates_to": {
+          "rel_type": "m.replace",
+          "event_id": "$e17"
+        }
+      }
+    }
+  ]
+}

@@ -1175,7 +1175,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           )
           .map((c) => c.sprite.node),
       );
-      for (const [node, transition] of this.run.midflight()) {
+      for (const [node, { shape, transition }] of this.run.midflight()) {
         if (scored.has(node)) {
           continue;
         }
@@ -1183,7 +1183,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         if (!s) {
           continue;
         }
-        const cue = continuation(s, changeset, transition);
+        const cue = continuation(s, changeset, transition, shape);
         if (cue) {
           cues.push(cue);
         }
