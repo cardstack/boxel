@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import pg from 'pg';
 const { module, test } = QUnit;
 import { basename } from 'path';
 
@@ -338,6 +339,52 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(value[0].length > 0, 'the misspelling is corrected');
     assert.ok(checked >= 3, `statements explained: ${checked}`);
     assert.deepEqual(compiled, [], 'none would compile');
+  });
+
+  // The title-scoped term's subquery: a term of words is unfenced, so the IN
+  // can be planned as a hashed semi-join instead of running the term's index
+  // lookup again for each candidate card; a phrase keeps its `OFFSET 0`
+  // (text-search.ts, `#titleScopedMatchCondition`).
+  test('a title-scoped word is planned unfenced, a phrase fenced', async function (assert) {
+    let proto = pg.Client.prototype as any;
+    let original = proto.query;
+    let titleStatements: string[] = [];
+    proto.query = function (this: pg.Client, config: any, ...rest: unknown[]) {
+      let text = typeof config === 'string' ? config : config?.text;
+      if (typeof text === 'string' && text.includes('ts_filter(')) {
+        titleStatements.push(text.replace(/\s+/g, ' '));
+      }
+      return original.call(this, config, ...rest);
+    };
+    let fenced = (sql: string) =>
+      /ts_filter\([^)]*'\{a\}'\) @@ (?:(?!SELECT).)*? OFFSET 0\)/.test(sql);
+    try {
+      assert.deepEqual(
+        await ids({ filter: { on, scope: 'title', matches: 'ownership' } }),
+        ['rust.json'],
+        'a word in the title',
+      );
+      assert.ok(
+        titleStatements.length > 0,
+        'the term reached the title subquery',
+      );
+      assert.false(titleStatements.some(fenced), 'a word: no fence');
+      titleStatements = [];
+      assert.deepEqual(
+        await ids({
+          filter: { on, scope: 'title', matches: '"ownership in practice"' },
+        }),
+        ['rust.json'],
+        'a phrase in the title',
+      );
+      assert.ok(
+        titleStatements.length > 0,
+        'the phrase reached the title subquery',
+      );
+      assert.true(titleStatements.every(fenced), 'a phrase: fenced');
+    } finally {
+      proto.query = original;
+    }
   });
 
   test('a word still being typed takes corrections only from five letters', async function (assert) {
