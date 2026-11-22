@@ -231,6 +231,52 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a realm that answers fewer rows than the merged page needs says so', async function (assert) {
+      // Each realm is asked for its top offset + size rows. One that clips its
+      // answer below that while its total counts more cannot have handed the
+      // merge every row that belongs on the page.
+      let clipping = (url: string, rows: Row[]) => {
+        let inner = realm(url, rows);
+        return {
+          url,
+          searchEntries: async (q: SearchEntryQuery) => {
+            let doc = await inner.searchEntries(q);
+            return { ...doc, data: doc.data.slice(0, 1) };
+          },
+        };
+      };
+      let doc = await searchEntryRealms(
+        [clipping(A, rowsA), realm(B, rowsB)],
+        byPrice('asc', { number: 0, size: 4 }),
+      );
+      assert.true(
+        hasWarning(doc.meta, 'approximate-order'),
+        'the short realm is named in the warnings, not passed off as exact',
+      );
+      assert.true(doc.meta.page.hasMore, 'the page has a next one');
+      assert.strictEqual(
+        doc.meta.page.total,
+        7,
+        'the total counts every match',
+      );
+
+      let exact = await searchEntryRealms(
+        [realm(A, rowsA), realm(B, rowsB)],
+        byPrice('asc', { number: 0, size: 4 }),
+      );
+      assert.false(
+        hasWarning(exact.meta, 'approximate-order'),
+        'realms that answer what was asked leave the page exact',
+      );
+
+      // A realm that holds fewer rows than were asked is not short.
+      let small = await searchEntryRealms(
+        [realm(A, rowsA.slice(0, 1)), realm(B, rowsB)],
+        byPrice('asc', { number: 0, size: 4 }),
+      );
+      assert.false(hasWarning(small.meta, 'approximate-order'));
+    });
+
     test('a score sort marks the merged order approximate', async function (assert) {
       let doc = await searchEntryRealms(
         [realm(A, rowsA), realm(B, rowsB)],

@@ -324,10 +324,13 @@ function registerSearchRoutes() {
       // counts the realms that contribute rows; whether a permission-checking
       // realm contributes is known here only once it answers, so this counts
       // every realm the request names.
-      parsed.itemQuery = applyFederatedRowBudget(
-        parsed.itemQuery,
-        new Set(realmList).size,
-      );
+      // Merged results are one page across every realm, so no share is taken.
+      if (parsed.federation?.results !== 'merged') {
+        parsed.itemQuery = applyFederatedRowBudget(
+          parsed.itemQuery,
+          new Set(realmList).size,
+        );
+      }
 
       // Mirror the realm-server's `handle-search`: read the client's
       // correlation id off the request and thread it into searchEntryRealms,

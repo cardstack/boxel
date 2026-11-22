@@ -12,6 +12,7 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import {
+  applyFederatedRowBudget,
   archiveRealm,
   baseCardRef,
   rri,
@@ -1024,6 +1025,129 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
           2,
           'a single realm keeps the whole default page',
         );
+      } finally {
+        resetSearchBoundsForTests();
+      }
+    });
+
+    test('merged results keep the asked page: one page across the realms, held to the maximum', async function (assert) {
+      // The bound is rows per response. Results by realm are each realm's own
+      // page side by side, so they share the maximum; merged results are one
+      // page across every realm, so they keep the size and number asked.
+      setSearchBoundsForTests({
+        serverMaxPageSize: 3,
+        serverAbsoluteMaxPageSize: 3,
+      });
+      let codes = (body: any) =>
+        (body.meta.warnings ?? []).map((w: { code: string }) => w.code);
+      try {
+        let realms = [testRealm.url, secondaryRealm.url];
+        let merged = await postSearch({
+          filter: personFilter(),
+          realms,
+          federation: { results: 'merged' },
+          page: { size: 3 },
+        });
+        assert.strictEqual(merged.status, 200, 'HTTP 200 status');
+        assert.strictEqual(merged.body.data.length, 3, 'the size asked');
+        assert.strictEqual(merged.body.meta.page.total, 4);
+        assert.true(merged.body.meta.page.hasMore);
+
+        let byRealm = await postSearch({
+          filter: personFilter(),
+          realms,
+          page: { size: 3 },
+        });
+        assert.strictEqual(
+          byRealm.body.data.length,
+          2,
+          'by realm, each of the two realms answers its share of the three',
+        );
+
+        let next = await postSearch({
+          filter: personFilter(),
+          realms,
+          federation: { results: 'merged' },
+          page: { size: 3, number: 1 },
+        });
+        assert.strictEqual(next.body.data.length, 1, 'the page number asked');
+        assert.deepEqual(
+          [...merged.body.data, ...next.body.data]
+            .map((e: { id: string }) => e.id)
+            .sort(),
+          [
+            ...new Set(
+              [...merged.body.data, ...next.body.data].map(
+                (e: { id: string }) => e.id,
+              ),
+            ),
+          ].sort(),
+          'the two pages repeat no row',
+        );
+
+        let over = await postSearch({
+          filter: personFilter(),
+          realms,
+          federation: { results: 'merged' },
+          page: { size: 5 },
+        });
+        assert.strictEqual(
+          over.body.data.length,
+          3,
+          'a merged response never holds more than the maximum',
+        );
+        assert.true(codes(over.body).includes('page-size-clamped'));
+      } finally {
+        resetSearchBoundsForTests();
+      }
+    });
+
+    test("main's share at two realms and at five", function (assert) {
+      let at = (size: number, realms: number) =>
+        (applyFederatedRowBudget({ page: { size } } as any, realms).page as any)
+          .size;
+      assert.strictEqual(at(500, 1), 500, 'one realm keeps its page');
+      assert.strictEqual(at(2000, 2), 1000, 'two realms share 2,000');
+      assert.strictEqual(at(500, 2), 500, 'a page within the share is kept');
+      assert.strictEqual(at(500, 4), 500);
+      assert.strictEqual(at(500, 5), 400, 'the default page shrinks at five');
+    });
+
+    test('the page warnings fire on either leg', async function (assert) {
+      setSearchBoundsForTests({
+        serverMaxPageSize: 1,
+        serverAbsoluteMaxPageSize: 1,
+      });
+      let codes = (body: any) =>
+        (body.meta.warnings ?? []).map((w: { code: string }) => w.code);
+      try {
+        for (let entry of [['item'], ['html']]) {
+          let unpaged = await postSearch({
+            filter: personFilter(),
+            realms: [testRealm.url],
+            fields: { entry },
+          });
+          assert.strictEqual(unpaged.status, 200);
+          assert.strictEqual(
+            unpaged.body.data.length,
+            1,
+            `${entry}: the default page`,
+          );
+          assert.true(
+            codes(unpaged.body).includes('default-page-truncated'),
+            `${entry}: default-page-truncated`,
+          );
+          let asked = await postSearch({
+            filter: personFilter(),
+            realms: [testRealm.url],
+            fields: { entry },
+            page: { size: 5 },
+          });
+          assert.true(
+            codes(asked.body).includes('page-size-clamped'),
+            `${entry}: page-size-clamped`,
+          );
+        }
       } finally {
         resetSearchBoundsForTests();
       }
