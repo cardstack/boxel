@@ -36,7 +36,7 @@ import type { BaseDef, CardDef } from '@cardstack/base/card-api';
 const log = logger('host-route-links');
 
 // What an HTML visit read of its realm's routes. `routes` is `undefined`
-// when the realm is not served at a host URL, or the read got none. `key`
+// when the read got none. `key`
 // says which read it was; see `routesReadKey`. `failure` is set when the
 // read itself failed (the endpoint answered a server error, or the network
 // failed). That is a failure to reach the routes, never a state of them: the
@@ -58,19 +58,19 @@ type RenderGlobals = {
 // so this service registers itself on the global the runtime declares
 // (`getHostRouteLinks`).
 //
-// A routed address opens only where a host URL serves the realm, so a link
-// gets one only in a render for such a realm:
+// A link gets its routed address wherever the realm has routes, whether or
+// not a host URL serves the realm (ADR 036 §1.7): the routed path is the
+// same either way, and only the URL it is on differs, which the response
+// boundary translates (ADR 033 §1.5). The routes come from:
 //
-// - On a page served on a host URL, from the routes the realm server put in
-//   the page's config.
-// - In an HTML visit for a realm that is served at a host URL, from the
-//   realm's routes endpoint. The endpoint's answer says whether the realm is
-//   served at one (`servedAtHostURL`), which only the realm knows.
+// - On a page served on a host URL, the routes the realm server put in the
+//   page's config.
+// - In an HTML visit, the realm's routes endpoint. The stored HTML carries
+//   the address on the realm's own URL.
 //
-// Everywhere else there are no routes, and links fall back as in a realm
-// with none: in the app (interact mode, code mode, host submode), where a
-// routed address on a workspace's URL opens nothing, and in an HTML visit
-// for a realm that is not served at a host URL.
+// In the app (interact mode, code mode, host submode) there are no routes
+// yet, and links keep card URLs: the app doesn't open a routed address on a
+// workspace's URL.
 //
 // The endpoint serves routes the realm already validated, so nothing here
 // validates them again. An HTML visit reads once for each indexing job.
@@ -85,9 +85,7 @@ type RenderGlobals = {
 // failure seldom passes within one render, and the prerender runs a visit
 // that failed this way again. The link throws an error marked as a gateway
 // failure, so the HTML that is stored stays as it was and the visit is tried
-// again. A realm that is not served at a host URL
-// answers a render's request without reading its routes, so its visits never
-// meet this failure.
+// again.
 export default class HostRouteLinksService
   extends Service
   implements HostRouteLinks
@@ -243,14 +241,9 @@ export default class HostRouteLinksService
         },
       });
       let body = response.ok
-        ? ((await response.json()) as {
-            routes?: unknown;
-            servedAtHostURL?: unknown;
-          })
+        ? ((await response.json()) as { routes?: unknown })
         : undefined;
-      if (body && body.servedAtHostURL !== true) {
-        log.debug(`${realmURL} is not served at a host URL: no host routes`);
-      } else if (Array.isArray(body?.routes)) {
+      if (Array.isArray(body?.routes)) {
         routes = {
           realmURL: new URL(realmURL),
           routes: body.routes as HostRoute[],

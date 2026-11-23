@@ -50,9 +50,9 @@ export interface UnresolvedHostRouteLink {
 }
 
 export interface HostRouteLinkOptions {
-  // `undefined` when the render has no routes to give addresses from: no
-  // host URL serves the realm, the render is in the app, or none were read
-  // yet. Links then fall back as for a realm with no routes.
+  // `undefined` when the render has no routes to give addresses from: the
+  // render is in the app, or none were read yet. Links then fall back as for
+  // a realm with no routes.
   routes: HostRouteLinkRoutes | undefined;
   api: CardAPIForMatching;
   // The loaded card for an id, or `undefined` when it isn't loaded. It asks

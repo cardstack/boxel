@@ -340,7 +340,7 @@ module('Integration | hrefTo', function (hooks) {
     }
   }
 
-  test('an HTML visit for a realm that no host URL serves keeps card URLs', async function (assert) {
+  test('an HTML visit for a realm that no host URL serves gets routed addresses on the realm URL', async function (assert) {
     let links = getService('host-route-links');
     let store = getService('store');
     let author = (await store.get(`${testRealmURL}Author/jane`)) as Author;
@@ -349,26 +349,27 @@ module('Integration | hrefTo', function (hooks) {
     await inHTMLVisit(
       (request) => {
         requests.push(request);
-        // The realm answers: it is not a published realm.
+        // The realm answers: it is not a published realm, so no host URL
+        // serves it.
         return null;
       },
       async () => {
         links.routes();
         await getService('render-store').loaded();
-        assert.strictEqual(
-          links.routes(),
-          undefined,
-          'the visit has no routes, and no failure',
+        assert.deepEqual(
+          links.routes()?.routes.map((route) => route.fullPath),
+          ['/people/:id'],
+          'the visit has the routes the realm stored',
         );
         assert.strictEqual(
           hrefTo(author),
-          `${testRealmURL}Author/jane`,
-          'a card that a route of the realm serves keeps its own URL',
+          `${testRealmURL}people/jane`,
+          'a card that a route of the realm serves gets its routed address',
         );
         assert.strictEqual(
           hrefTo(author, { route: 'people' }),
-          undefined,
-          'a route name gives no address',
+          `${testRealmURL}people/jane`,
+          'and so does a route name',
         );
       },
     );
@@ -376,7 +377,7 @@ module('Integration | hrefTo', function (hooks) {
     assert.strictEqual(requests.length, 1, 'the visit asked the realm once');
   });
 
-  test('an HTML visit for a realm that a host URL serves gets routed addresses', async function (assert) {
+  test('an HTML visit gets routed addresses from the routes endpoint', async function (assert) {
     let links = getService('host-route-links');
     let store = getService('store');
     let author = (await store.get(`${testRealmURL}Author/jane`)) as Author;
@@ -386,10 +387,10 @@ module('Integration | hrefTo', function (hooks) {
     await inHTMLVisit(
       (request) => {
         requests.push(request);
-        return new Response(
-          JSON.stringify({ routes: validatedRoutes(), servedAtHostURL: true }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
+        return new Response(JSON.stringify({ routes: validatedRoutes() }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
       },
       async () => {
         assert.strictEqual(links.routes(), undefined, 'the read is under way');

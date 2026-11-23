@@ -153,12 +153,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
       assert.deepEqual(
         Object.keys(response.body),
-        ['routes', 'servedAtHostURL'],
-        'the answer holds the routes, whether a host URL serves the realm, and nothing else',
-      );
-      assert.false(
-        response.body.servedAtHostURL,
-        'no host URL serves a realm that is not published',
+        ['routes'],
+        'the answer holds the routes and nothing else',
       );
       let { routes } = await testRealm.getHostRoutes();
       assert.deepEqual(
@@ -229,29 +225,20 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(stranger.body.routes, undefined, 'and no routes');
     });
 
-    test('answers a render without reading the routes, because no host URL serves the realm', async function (assert) {
-      let getHostRoutes = testRealm.getHostRoutes;
-      let reads = 0;
-      testRealm.getHostRoutes = async function (this: Realm) {
-        reads++;
-        return await getHostRoutes.call(this);
-      };
-      try {
-        let response = await hostRoutes(ownerUserId).set(
-          DURING_PRERENDER_HEADER,
-          '1',
-        );
+    test('answers a render the routes, although no host URL serves the realm', async function (assert) {
+      // A routed address doesn't depend on whether a host URL serves the
+      // realm, so an HTML visit gets the routes either way.
+      let response = await hostRoutes(ownerUserId).set(
+        DURING_PRERENDER_HEADER,
+        '1',
+      );
 
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.deepEqual(
-          response.body,
-          { servedAtHostURL: false },
-          'the answer says only that no host URL serves the realm',
-        );
-        assert.strictEqual(reads, 0, 'the routes were not read');
-      } finally {
-        testRealm.getHostRoutes = getHostRoutes;
-      }
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(
+        response.body.routes,
+        JSON.parse(JSON.stringify((await testRealm.getHostRoutes()).routes)),
+        'with its routes',
+      );
     });
   });
 
@@ -278,13 +265,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         .set(DURING_PRERENDER_HEADER, '1');
     }
 
-    test('answers a render the routes, and that a host URL serves the realm', async function (assert) {
+    test('answers a render the routes of a published realm', async function (assert) {
       // The routes are the tree the index stored, so a render's request
       // doesn't wait for a type's definition.
       let response = await hostRoutesForRender();
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      assert.true(response.body.servedAtHostURL, 'a host URL serves it');
       assert.deepEqual(
         response.body.routes,
         JSON.parse(JSON.stringify((await testRealm.getHostRoutes()).routes)),
@@ -316,11 +302,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         .set('Accept', SupportedMimeType.JSON);
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      assert.deepEqual(
-        response.body,
-        { routes: [], servedAtHostURL: false },
-        'no routes',
-      );
+      assert.deepEqual(response.body, { routes: [] }, 'no routes');
     });
   });
 });
