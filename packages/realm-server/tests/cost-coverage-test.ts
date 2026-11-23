@@ -9,6 +9,7 @@ import {
   spendCredits,
   type CostCoverage,
 } from '@cardstack/billing/billing-queries';
+import { spendUsageCost } from '@cardstack/billing/ai-billing';
 import { insertUser, setupDB } from './helpers/index.ts';
 import {
   chargeMetered,
@@ -437,6 +438,48 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(ai.charges, 1, 'a spend with no kind reads as AI');
     assert.strictEqual(ai.credits, 7);
     assert.strictEqual(ai.pricedCharges, 0);
+  });
+
+  test("prices an AI charge at its provider's cost, whatever pricing version it records", async function (assert) {
+    await recordPricing(dbAdapter, pricing);
+    let since = Math.floor(Date.now() / 1000) - 1;
+    await spendUsageCost(dbAdapter, PAYER, 0.004, {
+      kind: 'ai',
+      pricingVersion: pricing.version,
+    });
+    // A version no process recorded: an AI charge needs none of its rates.
+    await spendUsageCost(dbAdapter, PAYER, 0.003, {
+      kind: 'ai',
+      pricingVersion: 'pv-unrecorded',
+    });
+    // An AI charge that records no version.
+    await spendUsageCost(dbAdapter, PAYER, 0.002);
+    await dateChargesAfter(since, IN_PERIOD);
+
+    let report = await getCostCoverage(dbAdapter, { from: FROM, to: TO });
+
+    for (let [version, credits] of [
+      [pricing.version, 4],
+      ['pv-unrecorded', 3],
+      [null, 2],
+    ] as const) {
+      let line = lineFor(report, 'ai', version);
+      assert.strictEqual(line.charges, 1, `one AI charge at ${version}`);
+      assert.strictEqual(line.credits, credits);
+      assert.strictEqual(
+        line.pricedCharges,
+        1,
+        `the charge at ${version} is priced`,
+      );
+      assert.ok(
+        Math.abs(line.costUsd * CREDITS_PER_USD - credits) < 1e-9,
+        `its cost is the provider's (${line.costUsd})`,
+      );
+      assert.ok(
+        Math.abs(line.coverage! - 1) < 1e-9,
+        `with no margin (${line.coverage})`,
+      );
+    }
   });
 
   test('counts one charge once across the credit buckets it drew on', async function (assert) {

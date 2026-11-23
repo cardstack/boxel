@@ -101,6 +101,7 @@ import {
 } from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
 import { checkPricingAtStartup } from './lib/pricing.ts';
+import { recordCurrentPricing } from './lib/metered-charge.ts';
 import { transpilerIdentity } from './lib/transpiler-identity.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
@@ -705,6 +706,11 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let queue = new PgQueuePublisher(dbAdapter);
   await reportPlaintextCensus(dbAdapter);
   await reportSealedCensus(dbAdapter, secretsKeyring());
+  // The AI charges this process writes record its pricing version, so it
+  // records what the version stands for, as every worker does. Not awaited, so
+  // a slow or failing insert never holds up the start; `recordCurrentPricing`
+  // logs any failure.
+  void recordCurrentPricing(dbAdapter, 'realm-server');
   // DB-backed job-scoped search cache, shared across replicas via Postgres.
   // One instance per process, shared between the request handlers (via
   // RealmServer → createRoutes) and the JobsFinishedListener so a

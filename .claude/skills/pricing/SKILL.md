@@ -119,11 +119,12 @@ packages/observability/scripts/tail-logs.sh --env staging --service worker \
   --regex 'pricing check' --since 1h --no-follow
 ```
 
-**The record of a version.** Every worker process also records its version
-in the database at startup (`recordCurrentPricing` in
+**The record of a version.** The realm-server and every worker process also
+record their version in the database at startup (`recordCurrentPricing` in
 `packages/realm-server/lib/metered-charge.ts`), once per version, since
-workers write the metered charges. `pricing_versions` holds the
-version and its margin, `pricing_version_values` every value by its variable
+every charge they write records it: workers write the metered and batched AI
+charges, and the realm-server the AI charges for the calls it forwards.
+`pricing_versions` holds the version and its margin, `pricing_version_values` every value by its variable
 name, and `pricing_version_rates` the USD one unit of each metered usage
 costs at those values, keyed by the `credit_charge_usage` unit. A version is a
 hash of its values, so a row is never changed. Nothing reads these rows to
@@ -498,8 +499,10 @@ differs in who pays and what the ledger row names:
 `admitRunForward` (`packages/realm-server/lib/run-token-forward.ts`) admits
 the request for the run, and the handler passes the run's charge,
 `{ kind: 'ai', realm, runId }`, to `withBillableCall`
-(`packages/realm-server/lib/billable-call.ts`), which hands it to the credit
-strategy's `spendUsageCost` when it records the cost. The request is held to
+(`packages/realm-server/lib/billable-call.ts`), which adds the realm-server's
+pricing version and hands it to the credit strategy's `spendUsageCost` when it
+records the cost. Every AI call `withBillableCall` bills records that version,
+a person's own included. The request is held to
 the person's credits like any AI request (the minimum balance to start one,
 and the per-user in-flight limit), and also to the run's caps: it counts as
 one of the run's `resolveCalls` just before it is sent, and its worst case at
@@ -640,8 +643,10 @@ never answers for can't hold back the rest), a pass reads `GET /api/v1/batches/<
 status, and settles it once it has ended (`completed`, `failed`, `expired`
 or `cancelled`):
 
-1. **The charge.** One `batched_ai` charge naming the batch, its run and
-   its realm, to `acts_as`, at 1,000 credits to the dollar with no margin,
+1. **The charge.** One `batched_ai` charge naming the batch, its run, its
+   realm and the worker's pricing version (none when the worker has no
+   prices, which never holds a batch back), to `acts_as`, at 1,000 credits
+   to the dollar with no margin,
    rounded to the nearest credit (`chargeAIBatch` in
    `packages/billing/ai-billing.ts`). It bills what OpenRouter reported in
    `usage.cost`, recorded as `ai_provider_usd` usage. **The expired-batch
@@ -823,7 +828,7 @@ each row says what it paid for (ADR 029 §1.6):
 | `batch_id`        | the AI provider's batch id, for `batched_ai`                                                         |
 | `automation_id`   | the automation card's identifier, for `storage`                                                      |
 | `charge_day`      | the UTC day, for `storage`                                                                           |
-| `pricing_version` | the pricing version that priced it, on `run`, `run_indexing` and `storage`                           |
+| `pricing_version` | the pricing version: what priced a `run`, `run_indexing` or `storage` row; the writer's for AI rows  |
 
 The `credits_ledger_charge_reference_check` constraint holds each kind to
 the reference it needs, so a `run` row without a run or a pricing version,
@@ -1093,7 +1098,12 @@ GROUP BY 1, 2 ORDER BY 1, 2 NULLS FIRST;
   that has no rate at its version. Read their versions from the line and look
   for the `pricing check passed` line that named them.
 - A null `pricing_version` is an AI line: the ledger requires a version on
-  every run, run-indexing and storage charge.
+  every run, run-indexing and storage charge. An AI or batched AI charge
+  records the version of the process that wrote it, so its line sits beside
+  the metered lines of the same prices, and has none when that process had no
+  prices (the AI bot's charges, a process whose check failed) or when the
+  charge was written without one. Either way it is priced at its provider's
+  cost, which needs no rate from the version.
 - **The batched AI gap.** A batch that ended with no reported cost is billed
   at its estimate, the most it could cost. Its charge is priced at that
   estimate and marked `cost_estimated` in the view; `getCostCoverage` counts
