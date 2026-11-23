@@ -458,7 +458,7 @@ made up; they don't fire this alert, but they come from the same lost jobs.
 
 A process whose startup pricing check fails has no prices: it admits no new
 automation run (admission `pricing-unavailable`), submits no batch, and
-writes no charge (`charged` with `result: "no-prices"`) until its `PRICING_*`
+writes no metered charge (`charged` with `result: "no-prices"`) until its `PRICING_*`
 variables are fixed and it restarts. The failing line names every bad
 variable and its problem. The alert resolves 10 minutes after the line while
 the process has no prices, so a resolved alert says nothing about
