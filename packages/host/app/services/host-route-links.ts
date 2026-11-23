@@ -80,10 +80,11 @@ type RenderGlobals = {
 // them, because the endpoint answers a gateway status or the network fails.
 // That is a transport failure, not a state of the routes, which the realm
 // always answers whole. The links would otherwise be stored with card URLs
-// that nothing corrects later. The visit doesn't ask again, because the
-// realm may be waiting on this visit's own tab. The link throws an error
-// marked as a gateway failure, so the HTML that is stored stays as it was
-// and the visit is tried again. A realm that is not served at a host URL
+// that nothing corrects later. The visit doesn't ask again: a transport
+// failure seldom passes within one render, and the prerender runs a visit
+// that failed this way again. The link throws an error marked as a gateway
+// failure, so the HTML that is stored stays as it was and the visit is tried
+// again. A realm that is not served at a host URL
 // answers a render's request without reading its routes, so its visits never
 // meet this failure.
 export default class HostRouteLinksService
