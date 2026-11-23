@@ -552,19 +552,17 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       return true;
     };
 
-    // The realm's host routes for this request, read at most once. Reading
-    // them may wait for a module visit of a field-match route's type, so a
-    // script's fetch and a request for a file of the realm never read them:
-    // the prerender server imports a route type's module, and each module it
-    // imports, with a generic Accept header, and that import must not wait
-    // for the validation that is visiting the module.
+    // The realm's host routes for this request, read at most once. They are
+    // the tree the realm's last index validated and stored, so reading them
+    // never waits for a type's definition.
     let requestHostRoutes: Promise<HostRoutesValidation> | undefined;
     let hostRoutesFor = (realm: Realm) =>
       (requestHostRoutes ??= realm.getHostRoutes());
-    // For a generic-Accept request of a path that is no card's own, no
-    // fixed route's and no file of the realm: whether a dynamic route answers
-    // it, with a card, a redirect or an error, so it gets what a browser
-    // gets.
+    // For a generic-Accept request of a path that is no card's own and no
+    // fixed route's: whether a dynamic route answers it, with a card, a
+    // redirect or an error, so it gets what a browser gets. A path that
+    // names a file of the realm (a module import asks for one this way) is
+    // left to the realm.
     let dynamicRouteAnswers = async () => {
       let realm = await findOrMountRealm(requestURL, routingDeps);
       if (
@@ -574,7 +572,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         return false;
       }
       let { routes } = await hostRoutesFor(realm);
-      if (!hasDynamicHostRoutes(routes)) {
+      if (
+        !hasDynamicHostRoutes(routes) ||
+        (await isRealmFilePath(requestURL, routingDeps))
+      ) {
         return false;
       }
       let resolution = (await resolveDynamic(realm, routes))?.resolution;
@@ -639,18 +640,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       if (!isIndexRequest) {
         let cardURL = requestURL;
         if (!(await isCardPath(cardURL))) {
-          // A script's fetch never asks for a host page: the browser stamps
-          // it `Sec-Fetch-Dest: empty`, which page code can't change, where
-          // a navigation says `document` and a crawler sends none. It and a
-          // file of the realm are left to the realm before any route is read
-          // (see `hostRoutesFor`), so a module import, of a file or of a path
-          // with none, never waits on the routes.
-          if (
-            ctxt.get('sec-fetch-dest') === 'empty' ||
-            (await isRealmFilePath(requestURL, routingDeps))
-          ) {
-            return next();
-          }
           // A bare routed sub-path (e.g. /pricing) is not itself an indexed
           // card instance — its host routing rule maps it to a card that
           // lives elsewhere (e.g. /pages/pricing). Only fall through to the

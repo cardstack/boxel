@@ -69,9 +69,11 @@ import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import { parsePathSpecifier } from './path-specifier.ts';
 import { RealmPaths } from './paths.ts';
+import type { HostRoutesValidation } from './host-routes.ts';
 import {
   coerceTypes,
   normalizeRealmMetaValue,
+  storedHostRoutes,
   type BoxelIndexTable,
   type PrerenderedHtmlTable,
   type RealmMetaValue,
@@ -1585,6 +1587,24 @@ export class IndexQueryEngine {
     ] as Expression)) as { value: unknown }[];
 
     return normalizeRealmMetaValue(results[0]?.value);
+  }
+
+  // The validated host routes the realm's current index stored, or undefined
+  // for an index written before the index stored them.
+  async fetchHostRoutes(
+    realmURL: URL,
+  ): Promise<HostRoutesValidation | undefined> {
+    let results = (await this.#query([
+      `SELECT rm.value
+       FROM realm_meta rm
+       JOIN realm_generations rg
+         ON rg.realm_url = rm.realm_url
+        AND rg.current_generation = rm.generation
+       WHERE`,
+      ...every([['rm.realm_url =', param(realmURL.href)]]),
+      `LIMIT 1`,
+    ] as Expression)) as { value: unknown }[];
+    return storedHostRoutes(results[0]?.value);
   }
 
   // `realmURL` is the realm the search reads, which a path filter's prefixes

@@ -130,9 +130,6 @@ export type HostRouteNoAddressReason =
   | 'not-member'
   // The number of arguments doesn't fit the route.
   | 'wrong-argument-count'
-  // A route that comes first, and may fit, is unavailable: its type's
-  // definition can't be read now (`HostUnavailableRoute`).
-  | 'route-unavailable'
   // The lookup threw. `error` on the result holds what it threw.
   | 'internal-error';
 
@@ -226,22 +223,6 @@ class Lookup {
     let misses: Miss[] = [];
     for (let chain of canonicalCandidateChains(this.options.routes)) {
       let route = chain[chain.length - 1]!;
-      if (route.kind === 'unavailable') {
-        // Only a card of its type may fit it, and whether that one does isn't
-        // known. A card that isn't loaded may be of its type.
-        let card = cards[cards.length - 1]!;
-        if (
-          typeof card !== 'string' &&
-          matchInstanceAgainstFilter(
-            card,
-            { type: route.type },
-            this.options.api,
-          ) !== 'match'
-        ) {
-          continue;
-        }
-        return { ok: false, reason: 'route-unavailable', route };
-      }
       if (route.kind === 'fixed-card') {
         if (
           cards.length === 1 &&
@@ -285,14 +266,6 @@ class Lookup {
     let invalid: HostRoute | undefined;
     for (let chain of indexOf(this.options.routes).chains) {
       let route = chain[chain.length - 1]!;
-      if (
-        route.kind === 'unavailable' &&
-        route.statusCode !== 301 &&
-        refs.some((ref) => this.sameType(ref, route.type)) &&
-        !chain.slice(0, -1).some(isDynamicHostRoute)
-      ) {
-        return { ok: false, reason: 'route-unavailable', route };
-      }
       if (
         route.kind !== 'field-match' ||
         route.statusCode === 301 ||
@@ -346,9 +319,6 @@ class Lookup {
       return { ok: false, reason: 'no-route' };
     }
     let route = chain[chain.length - 1]!;
-    if (route.kind === 'unavailable') {
-      return { ok: false, reason: 'route-unavailable', route };
-    }
     if (route.pattern === undefined) {
       // A top-level fixed route or redirect whose path the parser rejects
       // routes at its path as written.

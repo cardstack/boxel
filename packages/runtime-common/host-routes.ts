@@ -20,7 +20,6 @@
 
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { Definition, FieldDefinition } from './definitions.ts';
-import type { RawHostRoutingRule } from './realm.ts';
 import { assertQuery, type Filter } from './query.ts';
 import { isClientEvaluable } from './instance-filter-matcher.ts';
 import { RealmPaths } from './paths.ts';
@@ -40,6 +39,78 @@ import {
   type CardIdPattern,
   type RoutePathPattern,
 } from './route-pattern.ts';
+
+// One host routing rule as the indexed realm.json's search document holds it,
+// before any validation: a value can have any shape a hand-edited realm.json
+// gives it. Fields the rule leaves unset are absent. Two fields differ from
+// what realm.json says: `instance` is the linked card as the search document
+// flattens it (`{ id, ...its searchable fields }`, `id` absolute), and `type`
+// is a code ref whose module is absolute (the search document stores it as
+// one `module/name` string, which the read splits back). Any other field the
+// search document holds comes through under its own name.
+export interface RawHostRoutingRule {
+  [field: string]: unknown;
+  path?: unknown;
+  name?: unknown;
+  card?: unknown;
+  type?: unknown;
+  where?: unknown;
+  match?: unknown;
+  parent?: unknown;
+  instance?: unknown;
+  redirectTo?: unknown;
+  statusCode?: unknown;
+  routes?: RawHostRoutingRule[];
+}
+
+// Reads the `hostRoutingRules` of a RealmConfig search document, child routes
+// included, in authored order. Anything that isn't an object is skipped.
+export function readRawHostRoutingRules(
+  searchDoc: Record<string, unknown> | null | undefined,
+): RawHostRoutingRule[] {
+  return readRawRoutingRuleList(searchDoc?.hostRoutingRules);
+}
+
+function readRawRoutingRuleList(value: unknown): RawHostRoutingRule[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((rule) =>
+    rule && typeof rule === 'object' && !Array.isArray(rule)
+      ? [readRawRoutingRule(rule as Record<string, unknown>)]
+      : [],
+  );
+}
+
+function readRawRoutingRule(rule: Record<string, unknown>): RawHostRoutingRule {
+  let raw: RawHostRoutingRule = {};
+  for (let [key, value] of Object.entries(rule)) {
+    if (value != null && key !== 'type' && key !== 'routes') {
+      raw[key] = value;
+    }
+  }
+  let type = rule.type;
+  if (typeof type === 'string') {
+    let slash = type.lastIndexOf('/');
+    raw.type =
+      slash > 0 && slash < type.length - 1
+        ? { module: type.slice(0, slash), name: type.slice(slash + 1) }
+        : type;
+  } else if (type != null) {
+    raw.type = type;
+  }
+  let routes = readRawRoutingRuleList(rule.routes);
+  if (routes.length > 0) {
+    raw.routes = routes;
+  }
+  return raw;
+}
+
+// The URL the index keys a realm's RealmConfig card by: its realm.json,
+// without the extension.
+export function realmConfigCardURL(realmURL: URL): URL {
+  return new URL('realm', realmURL);
+}
 
 // The most dynamic routes a realm may have. Routes after the limit, in
 // depth-first authored order, are dropped.
@@ -247,27 +318,11 @@ export type HostRouteParentLink =
     }
   | { field: string; side: 'unverified'; inferred: false };
 
-// A field-match route whose type's definition couldn't be read for a reason
-// that may pass: its module's render timed out, or a server couldn't be
-// reached. The route stays in the tree, so a path it matches answers as a
-// failed lookup does (ADR 036 §1.4) rather than falling through to a later
-// route or to not-found, and the walk that works out a card's address stops
-// at it. Its child routes aren't validated without its type, so it has none:
-// it matches every path that starts with its own.
-export interface HostUnavailableRoute extends HostRouteBase {
-  kind: 'unavailable';
-  pattern: RoutePathPattern;
-  type: ResolvedCodeRef;
-  // As on a field-match route: an alias is never canonical.
-  statusCode: 301 | undefined;
-}
-
 export type HostRoute =
   | HostFixedCardRoute
   | HostRedirectRoute
   | HostCardIdRoute
-  | HostFieldMatchRoute
-  | HostUnavailableRoute;
+  | HostFieldMatchRoute;
 
 export type HostRouteWarningCode =
   // The route has no usable `path`, or it doesn't parse.
@@ -309,10 +364,9 @@ export type HostRouteWarningCode =
   | 'invalid-type'
   // `type` isn't a card type the index knows.
   | 'not-card-type'
-  // The module of `type` has an error or can't be found.
-  | 'type-unreadable'
-  // The definition of `type` can't be read now. The route is kept as
-  // unavailable (`HostUnavailableRoute`), not dropped.
+  // The definition of `type` couldn't be read when the realm was indexed:
+  // its module has an error or can't be found, its render timed out, or a
+  // server couldn't be reached. The next index reads it again.
   | 'type-unavailable'
   // `match` is missing or malformed, or doesn't match each `:name` of the
   // route's own path with exactly one field.
@@ -358,33 +412,24 @@ export interface HostRoutesValidation {
   warnings: readonly HostRouteWarning[];
 }
 
-// What the resolver ends with, and the canonical address walk rejects with,
-// at an unavailable route (`HostUnavailableRoute`).
-export class HostRouteUnavailableError extends Error {
-  readonly position: readonly number[];
-
-  constructor(route: HostUnavailableRoute) {
-    super(
-      `The host route ${route.fullPath} is unavailable: the definition of ${route.type.name} from ${route.type.module} can't be read now`,
-    );
-    this.name = 'HostRouteUnavailableError';
-    this.position = route.position;
-    Object.setPrototypeOf(this, new.target.prototype);
-  }
-}
+// The definitions of the types a realm's field-match routes name, by
+// `typeLookupKey`, as `ValidateHostRoutesOptions.lookupType` answers for
+// each.
+export type HostRouteTypes = ReadonlyMap<
+  string,
+  HostRouteTypeInfo | 'unavailable' | undefined
+>;
 
 export interface ValidateHostRoutesOptions {
   // The URL the realm is served at, ending with `/`. A fixed route's card
   // must be in it.
   realmURL: URL;
   // The definition of a type a field-match route names. `undefined` when
-  // there is no such type and `'unreadable'` when the type's module has an
-  // error or can't be found: either drops its routes. `'unavailable'` when
-  // the definition can't be read now, which keeps the route as an
-  // unavailable one.
+  // there is no such type; `'unavailable'` when its definition couldn't be
+  // read, which drops its routes like any other invalid route.
   lookupType: (
     type: ResolvedCodeRef,
-  ) => HostRouteTypeInfo | 'unreadable' | 'unavailable' | undefined;
+  ) => HostRouteTypeInfo | 'unavailable' | undefined;
   // Defaults to `MAX_DYNAMIC_HOST_ROUTES`.
   maxDynamicRoutes?: number;
 }
@@ -780,27 +825,11 @@ class Validator {
         return drop('invalid-type', 'type must name a module and an export');
       }
       let found = this.options.lookupType(type);
-      if (found === 'unreadable') {
-        return drop(
-          'type-unreadable',
-          `The definition of ${type.name} from ${type.module} could not be read`,
-        );
-      }
       if (found === 'unavailable') {
-        this.warn(
+        return drop(
           'type-unavailable',
-          `The definition of ${type.name} from ${type.module} can't be read now; a path this route matches answers with an error until it can`,
-          position,
-          displayPath,
-          false,
+          `The definition of ${type.name} from ${type.module} could not be read when the realm was indexed`,
         );
-        return {
-          ...base,
-          kind: 'unavailable',
-          pattern: pattern!,
-          type,
-          statusCode: this.aliasStatusCode(rule, position, displayPath),
-        };
       }
       typeInfo = found;
       if (!typeInfo || !typeInfo.isCardType) {
@@ -1106,7 +1135,8 @@ class Validator {
         if (route.kind === 'field-match') {
           let info = this.options.lookupType(route.type);
           if (
-            typeof info === 'object' &&
+            info &&
+            info !== 'unavailable' &&
             info.types.some((key) => standaloneTypes.has(key))
           ) {
             return;
@@ -1271,11 +1301,7 @@ function isLinkType(
 }
 
 function isDynamicCardRoute(route: HostRoute): boolean {
-  return (
-    route.kind === 'card-id' ||
-    route.kind === 'field-match' ||
-    route.kind === 'unavailable'
-  );
+  return route.kind === 'card-id' || route.kind === 'field-match';
 }
 
 function isDynamic(route: HostRoute): boolean {

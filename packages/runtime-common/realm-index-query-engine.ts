@@ -905,6 +905,12 @@ export class RealmIndexQueryEngine {
     return results;
   }
 
+  async fetchHostRoutes() {
+    return await this.#indexQueryEngine.fetchHostRoutes(
+      new URL(this.#realm.url),
+    );
+  }
+
   async getCardDependencies(url: URL): Promise<string[]> {
     let instance = await this.instance(url);
     if (!instance) {

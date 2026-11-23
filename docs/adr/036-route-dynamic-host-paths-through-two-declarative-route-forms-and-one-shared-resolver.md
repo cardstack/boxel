@@ -89,21 +89,15 @@ own path and a realm file MUST still be served there.
 
 The server MUST read routes only through `validateHostRoutes`
 (`Realm.getHostRoutes`), as ADR 015 §1.2 requires. A route that fails
-validation MUST be dropped with a warning, with its child routes. A field
-match's type MUST be read through the definitions cache
-(`lookupDefinitionEntry`), as a search reads it. A request that needs the
-routes waits for the read. On a cache miss, the read is a module visit in
-the prerender server, which ADR 015 §1.1 allows while a request waits. A
-script's fetch (`Sec-Fetch-Dest: empty`) and a request for a file of the
-realm MUST NOT read the routes, so the module visit's own imports never wait
-for them. A type whose module has an error,
-can't be found or has no such export makes its route invalid. A read that
-may pass when tried again (a render timeout, a server that can't be reached)
-MUST keep the route as an unavailable route, which covers its child routes,
-and the tree MUST NOT be cached. A path an unavailable route matches MUST
-answer as a failed lookup does (§1.4), and the address walk MUST stop at it
-(§1.7). Every other route MUST be served as usual. A reader MUST get the whole
-validated tree, with no flag that marks it incomplete.
+validation MUST be dropped with a warning, with its child routes. The
+routes MUST be validated when the realm is indexed, and the validated tree
+MUST be stored with the index. A field match's type MUST be read then,
+through the definitions cache, which renders a module it doesn't hold. A
+type that can't be read, for any reason (a module error, a missing export,
+a render timeout, a server that can't be reached), MUST make its route
+invalid, and the next index MUST read it again. A reader MUST read the
+stored tree, and MUST NOT read a type to answer a request, so a reader
+always gets the whole validated tree and never a "not ready" answer.
 Validation MUST drop each
 dynamic route past `MAX_DYNAMIC_HOST_ROUTES`, with a warning. Validation
 SHOULD warn when a literal or fixed route takes a path that a dynamic sibling
@@ -111,7 +105,8 @@ matches.
 
 ### 1.6. Every renderer gets the server's routes
 
-The server MUST put the validated route tree into the page's host config as `hostDynamicRoutes`. For a dynamically routed page it
+The server MUST put the validated route tree into the page's host config
+as `hostDynamicRoutes`. For a dynamically routed page it
 MUST also add a serve rule for exactly the requested path to
 `hostRoutingMap`. A realm MUST also serve its validated route tree from a
 read-only endpoint, which HTML visits and interact mode read once per
@@ -126,7 +121,7 @@ A link's routed address MUST be worked out when the card renders, at
 HTML visit and in the browser, by `hostRouteAddress`. It MUST be synchronous
 over cards already loaded, and MUST NOT load a card or search. It MUST stop
 at the first route in canonical order that it can't decide yet (a card,
-parent or value not loaded, or an unavailable route, §1.5) and give no address, instead of trying a later
+parent or value not loaded) and give no address, instead of trying a later
 route. When a link needs a card that isn't loaded, the link helper MUST ask
 the store for it and give the card's own URL until it arrives, then the
 address. The HTML visit MUST wait for those loads before it stores the HTML.

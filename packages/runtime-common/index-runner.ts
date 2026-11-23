@@ -34,8 +34,21 @@ import {
   type Stats,
   type Diagnostics,
   type SearchIndexEntry,
+  internalKeyFor,
+  type ResolvedCodeRef,
 } from './index.ts';
-import { moduleFrom } from './code-ref.ts';
+import {
+  hostRouteTypeInfo,
+  hostRouteTypeRefs,
+  readRawHostRoutingRules,
+  realmConfigCardURL,
+  typeLookupKey,
+  type HostRouteTypeInfo,
+  type HostRouteTypes,
+  type RawHostRoutingRule,
+} from './host-routes.ts';
+import { canonicalURL } from './index-runner/dependency-url.ts';
+import { moduleFrom, type CodeRef } from './code-ref.ts';
 import { baseRRI } from './constants.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
@@ -269,6 +282,9 @@ export class IndexRunner {
   // as missing re-reads it while the realm's record says it just created the
   // file, and a file the realm has removed is visited as gone at once.
   #visitRereads: WrittenFileRereads | undefined;
+  // The search document of the realm.json this pass staged, when it staged
+  // one: the routing rules the pass's commit publishes.
+  #stagedRealmConfigSearchDoc: Record<string, unknown> | undefined;
 
   constructor({
     realmURL,
@@ -526,8 +542,10 @@ export class IndexRunner {
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
       );
       let finalizeStart = Date.now();
+      let hostRouteTypes = await current.#readHostRouteTypes();
       let { totalIndexEntries, ...commit } = await current.batch.done({
         fullRealm: true,
+        hostRouteTypes,
         validation: current.#commitValidation(
           new Set(discoverResult.deletedUrls),
           {
@@ -800,7 +818,9 @@ export class IndexRunner {
       visitLoopMs = Date.now() - loopStart;
 
       let finalizeStart = Date.now();
+      let hostRouteTypes = await current.#readHostRouteTypes();
       let { totalIndexEntries, ...commit } = await current.batch.done({
+        hostRouteTypes,
         validation: current.#commitValidation(
           new Set(
             [...operations]
@@ -1662,7 +1682,122 @@ export class IndexRunner {
   // (and its neighbors, coalesced into a multi-row upsert) drains. The batch
   // times the physical writes; the job result reads `batch.writeMs`.
   async #writeEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
+    if (
+      entry.type === 'instance' &&
+      url.href === realmConfigCardURL(this.#realmURL).href
+    ) {
+      this.#stagedRealmConfigSearchDoc = entry.searchData;
+    }
     await this.batch.bufferEntry(url, entry);
+  }
+
+  // The definitions of the types the realm's field-match routes name, which
+  // the commit validates the routes with and stores the validated tree with
+  // (`Batch.done`), so no reader of the routes reads a type when a request
+  // comes. Read through the definitions cache, which renders a module it
+  // doesn't hold; the index renders the realm's modules anyway. The rules
+  // are those this pass leaves: the realm.json it staged, else the one the
+  // index holds. A type that can't be read, for any reason, is
+  // `'unavailable'`: its route is dropped with a warning, and the next index
+  // reads it again.
+  async #readHostRouteTypes(): Promise<HostRouteTypes> {
+    let types = new Map<
+      string,
+      HostRouteTypeInfo | 'unavailable' | undefined
+    >();
+    let rules: RawHostRoutingRule[];
+    try {
+      rules = readRawHostRoutingRules(
+        this.#stagedRealmConfigSearchDoc ??
+          (await this.batch.realmConfigSearchDoc()),
+      );
+    } catch (e) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} could not read the host routing rules of ${this.#realmURL.href}: ${e}`,
+      );
+      return types;
+    }
+    for (let ref of hostRouteTypeRefs(rules)) {
+      types.set(typeLookupKey(ref), await this.#readHostRouteType(ref));
+    }
+    return types;
+  }
+
+  async #readHostRouteType(
+    ref: ResolvedCodeRef,
+  ): Promise<HostRouteTypeInfo | 'unavailable' | undefined> {
+    let keyFor = (codeRef: CodeRef) =>
+      internalKeyFor(codeRef, undefined, this.#virtualNetwork);
+    try {
+      let moduleURL = canonicalURL(ref.module, undefined, this.#virtualNetwork);
+      let context = await this.#moduleCacheContextFor(moduleURL);
+      let entry = await this.#definitionLookup.populateDefinitionCacheEntry({
+        moduleURL,
+        ...context,
+        priority: this.#jobPriority,
+      });
+      if (!entry || entry.error) {
+        throw new Error(
+          entry?.error?.error.message ?? 'the module has no definitions',
+        );
+      }
+      let found =
+        entry.definitions[keyFor(ref)] ??
+        entry.definitions[
+          keyFor({ ...ref, module: moduleURL as RealmResourceIdentifier })
+        ];
+      if (!found) {
+        // The module has no such export: not a card type.
+        return undefined;
+      }
+      if (found.type !== 'definition') {
+        throw new Error(found.error.message ?? 'the definition has an error');
+      }
+      return hostRouteTypeInfo(found, keyFor);
+    } catch (e) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} could not read the definition of ${ref.name} from ${ref.module} for a host route of ${this.#realmURL.href}: ${e}`,
+      );
+      return 'unavailable';
+    }
+  }
+
+  // The cache context a module's definition is read under: this realm's, or,
+  // for a module of another realm, that realm's, which the module's own
+  // response names.
+  async #moduleCacheContextFor(moduleURL: string): Promise<{
+    realmURL: string;
+    resolvedRealmURL: string;
+    cacheScope: CacheScope;
+    cacheUserId: string;
+    prerenderUserId: string;
+  }> {
+    let realmURL = this.#realmURL;
+    if (!this.#realmPaths.inRealm(new URL(moduleURL))) {
+      let response = await this.#fetch(moduleURL, { method: 'HEAD' });
+      let header = response.headers.get('x-boxel-realm-url');
+      if (!response.ok || !header) {
+        throw new Error(
+          `${moduleURL} answered ${response.status} with no realm URL`,
+        );
+      }
+      realmURL = new URL(header);
+    }
+    let { resolvedRealmURL, cacheScope, authUserId } =
+      realmURL.href === this.#realmURL.href
+        ? await this.getModuleCacheContext()
+        : await resolveModuleCacheContext({
+            fetch: this.#fetch,
+            realmURL,
+            realmOwnerUserId: this.#realmOwnerUserId,
+          });
+    return {
+      realmURL: realmURL.href,
+      resolvedRealmURL,
+      cacheScope,
+      cacheUserId: authUserId,
+      prerenderUserId: this.#realmOwnerUserId,
+    };
   }
 }
 

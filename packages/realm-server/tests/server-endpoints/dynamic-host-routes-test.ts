@@ -221,6 +221,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       },
     });
 
+    function hostConfig(text: string) {
+      let match = text.match(
+        /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)"/,
+      );
+      if (!match) {
+        throw new Error('the page has no config meta tag');
+      }
+      return JSON.parse(decodeURIComponent(match[1]));
+    }
+
     hooks.beforeEach(async function () {
       await testRealm.indexing();
       // Cache the field-match types first, so most tests don't wait for a
@@ -474,9 +484,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('on a published realm, the first request after the definitions cache is cleared serves the page', async function (assert) {
-      // The prerender imports the route type's module with a generic Accept
-      // header, so the import must not wait for the validation that renders
-      // the module.
+      // The page reads the routes the index stored, so neither the page nor
+      // the prerender's import of a route type's module waits on a type.
       await markRealmPublished(dbAdapter, realmURL);
       await definitionLookup.clearRealmDefinitions(realmURL.href);
       testRealm.clearRealmIndexCaches();
@@ -489,10 +498,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.true(response.text.includes('Served Post A'), 'serves Post A');
     });
 
-    test('while a route type is read, a module import does not wait for it, and a page does', async function (assert) {
+    test('no request reads a route type: the routes come from the index', async function (assert) {
       await markRealmPublished(dbAdapter, realmURL);
-      // The definitions cache holds no route type, so each one needs a
-      // module visit, which the lookup below holds back.
+      // The definitions cache holds no route type, and every read of one
+      // would wait until the test ends.
       await definitionLookup.clearRealmDefinitions(realmURL.href);
       testRealm.clearRealmIndexCaches();
       let release!: () => void;
@@ -507,73 +516,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         await held;
         return await lookup.apply(this, args);
       };
-      let generic = (path: string) =>
-        request.get(`${realmPath}${path}`).set('Accept', '*/*');
       try {
-        let module = await generic('site');
-        assert.strictEqual(module.status, 200, 'a module import does not wait');
-        assert.false(
-          module.text.includes('<meta name="@cardstack'),
-          'and gets the module',
-        );
-
-        // What a route type's module that imports a path with no file sends.
-        let missingImport = await generic('posts/no-such-module').set(
-          'Sec-Fetch-Dest',
-          'empty',
-        );
-        assert.strictEqual(
-          missingImport.status,
-          404,
-          'a script fetch of a path with no file does not wait either',
-        );
-
-        let waitingCrawler = generic('posts/hello').then(
-          (response) => response,
-        );
-        let waitingBrowser = page('posts/hello').then((response) => response);
-        release();
-        let [crawler, browser] = await Promise.all([
-          waitingCrawler,
-          waitingBrowser,
-        ]);
-        assert.strictEqual(
-          crawler.status,
-          200,
-          'a generic-Accept request waits',
-        );
-        assert.strictEqual(browser.status, 200, 'a browser waits');
-        assert.true(browser.text.includes('Served Post A'), 'serves Post A');
-      } finally {
-        release();
-        definitionLookup.lookupDefinitionEntryForRealm = lookup;
-      }
-    });
-
-    test('while a route type read may pass, that route answers 503, the rest is served, and the next request is served', async function (assert) {
-      await definitionLookup.clearRealmDefinitions(realmURL.href);
-      testRealm.clearRealmIndexCaches();
-      let lookup = definitionLookup.lookupDefinitionEntryForRealm;
-      definitionLookup.lookupDefinitionEntryForRealm = async () => {
-        throw new Error('the prerender server could not be reached');
-      };
-      try {
-        let failed = await page('posts/hello');
-        assert.strictEqual(failed.status, 503, 'not a 404, and not a page');
         let fixed = await page('fixed');
         assert.strictEqual(fixed.status, 200, 'a fixed route is served');
-        let person = await page('people/robin');
-        assert.strictEqual(
-          person.status,
-          200,
-          'a route that needs no type is served',
+        let config = hostConfig(fixed.text);
+        assert.true(
+          config.hostDynamicRoutes?.routes.some(
+            (route: { kind: string }) => route.kind === 'field-match',
+          ),
+          'with the whole tree, field-match routes included',
+        );
+        let module = await request.get(`${realmPath}site`).set('Accept', '*/*');
+        assert.strictEqual(module.status, 200, 'a module import is served');
+        assert.false(
+          module.text.includes('<meta name="@cardstack'),
+          'as the module',
         );
       } finally {
+        release();
         definitionLookup.lookupDefinitionEntryForRealm = lookup;
       }
-      let served = await page('posts/hello');
-      assert.strictEqual(served.status, 200, 'nothing was cached');
-      assert.true(served.text.includes('Served Post A'), 'serves Post A');
     });
 
     test('a file of the realm a route pattern covers is served as before', async function (assert) {
@@ -734,7 +696,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     let request: SuperTest<Test>;
     let testRealm: Realm;
     let definitionLookup: CachingDefinitionLookup;
-    let dbAdapter: PgAdapter;
 
     // Aliases (`statusCode: 301`) in front of a nested field match, a field
     // match with a `where`, and a card id template the `where` sends drafts
@@ -870,7 +831,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         request = args.request;
         testRealm = args.testRealm;
         definitionLookup = serverDefinitionLookup(args.testRealmServer);
-        dbAdapter = args.dbAdapter;
       },
     });
 
@@ -1028,49 +988,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         new URL(response.headers.location).pathname,
         `${aliasRealmPath}posts/hello`,
       );
-    });
-
-    test('while a route type is read, every request at an alias waits for it', async function (assert) {
-      await markRealmPublished(dbAdapter, aliasRealmURL);
-      await definitionLookup.clearRealmDefinitions(aliasRealmURL.href);
-      testRealm.clearRealmIndexCaches();
-      let release!: () => void;
-      let held = new Promise<void>((resolve) => (release = resolve));
-      let lookup = definitionLookup.lookupDefinitionEntryForRealm;
-      definitionLookup.lookupDefinitionEntryForRealm = async function (
-        this: CachingDefinitionLookup,
-        ...args: Parameters<
-          CachingDefinitionLookup['lookupDefinitionEntryForRealm']
-        >
-      ) {
-        await held;
-        return await lookup.apply(this, args);
-      };
-      try {
-        let waitingCrawler = request
-          .get(`${aliasRealmPath}a/hello`)
-          .set('Accept', '*/*')
-          .then((response) => response);
-        let waitingBrowser = page('a/hello').then((response) => response);
-        release();
-        let [crawler, browser] = await Promise.all([
-          waitingCrawler,
-          waitingBrowser,
-        ]);
-        for (let [name, response] of [
-          ['a generic-Accept request', crawler],
-          ['a browser', browser],
-        ] as const) {
-          assert.strictEqual(response.status, 301, `${name} waits`);
-          assert.strictEqual(
-            new URL(response.headers.location).pathname,
-            `${aliasRealmPath}posts/hello`,
-          );
-        }
-      } finally {
-        release();
-        definitionLookup.lookupDefinitionEntryForRealm = lookup;
-      }
     });
 
     test('an alias whose canonical address serves another card with the same value serves its own card', async function (assert) {

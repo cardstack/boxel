@@ -217,8 +217,7 @@ export function hostRoutingRuleFor(
 }
 
 // Whether a realm's validated host routes hold any route the fixed routing
-// map leaves out: a card id template, a field match (an unavailable one
-// included), a route or redirect
+// map leaves out: a card id template, a field match, a route or redirect
 // with `:name` segments, or a child route. Only such a realm needs the
 // resolver when no fixed route matches.
 export function hasDynamicHostRoutes(routes: readonly HostRoute[]): boolean {
@@ -226,7 +225,6 @@ export function hasDynamicHostRoutes(routes: readonly HostRoute[]): boolean {
     (route) =>
       route.kind === 'card-id' ||
       route.kind === 'field-match' ||
-      route.kind === 'unavailable' ||
       route.paramNames.length > 0 ||
       route.routes.length > 0,
   );

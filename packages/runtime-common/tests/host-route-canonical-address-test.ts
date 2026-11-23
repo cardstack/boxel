@@ -5,7 +5,6 @@ import {
 import { hostRouteAddress } from '../host-route-address.ts';
 import type { HostRouteLoadRequest } from '../host-route-resolver.ts';
 import {
-  HostRouteUnavailableError,
   validateHostRoutes,
   type HostRoute,
   type HostRouteTypeInfo,
@@ -231,51 +230,6 @@ const tests: SharedTests<unknown> = Object.freeze({
       );
     }
   },
-
-  'hostRouteCanonicalAddress: an unavailable route ends the walk only for a card of its type':
-    async (assert) => {
-      let { routes } = validateHostRoutes(
-        [
-          {
-            path: '/posts/:slug',
-            type: type('Post'),
-            match: { slug: ':slug' },
-          },
-          {
-            path: '/c/:slug',
-            type: type('Category'),
-            match: { slug: ':slug' },
-          },
-        ],
-        {
-          realmURL: new URL(REALM),
-          lookupType: (ref) =>
-            ref.name === 'Post' ? 'unavailable' : TYPES[ref.name],
-        },
-      );
-      let index = new FakeIndex({
-        ...POSTS,
-        'Category/shoes': { type: 'Category', values: { slug: 'shoes' } },
-      });
-      let walk = (id: string) =>
-        hostRouteCanonicalAddress(`${REALM}${id}`, {
-          routes,
-          realmURL: new URL(REALM),
-          load: index.load,
-          findCard: index.findCard,
-        });
-      let category = await walk('Category/shoes');
-      assert.strictEqual(
-        category?.address,
-        '/c/shoes',
-        'a card of another type gets its address past the unavailable route',
-      );
-      await assert.rejects(
-        walk('Post/hello'),
-        HostRouteUnavailableError,
-        'a card of its type may fit it, so the walk ends there',
-      );
-    },
 
   'hostRouteCanonicalAddress: a field match reads its values from the index':
     async (assert) => {

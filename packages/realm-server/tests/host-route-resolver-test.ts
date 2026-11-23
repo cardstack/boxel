@@ -40,9 +40,6 @@ module(basename(import.meta.filename), function () {
   test('resolveHostRoute: a failed lookup is an error, not a miss', async function (assert) {
     await runSharedTest(hostRouteResolverTests, assert, {});
   });
-  test('resolveHostRoute: an unavailable route is an error, not a miss', async function (assert) {
-    await runSharedTest(hostRouteResolverTests, assert, {});
-  });
 
   test('resolveHostRoute: a lookup that returns an identifier, not a served URL, is an error', async function (assert) {
     await runSharedTest(hostRouteResolverTests, assert, {});

@@ -631,35 +631,4 @@ module('Unit | host-route-address', function (hooks) {
       'a value skips the where check',
     );
   });
-
-  test('an unavailable route ends the walk only for a card of its type', function (assert) {
-    let { routes: withUnavailable } = validateHostRoutes(
-      [
-        { path: '/posts/:slug', type: ref('Post'), match: { slug: ':slug' } },
-        { path: '/c/:slug', type: ref('Category'), match: { slug: ':slug' } },
-      ],
-      {
-        realmURL,
-        lookupType: (type) =>
-          type.name === 'Post' ? 'unavailable' : typeInfo[type.name],
-      },
-    );
-    let walk = (card: CardDef) =>
-      outcome(
-        hostRouteAddress(
-          { kind: 'cards', cards: [card] },
-          { routes: withUnavailable, realmURL, api },
-        ),
-      );
-    assert.deepEqual(
-      walk(make('Category', 'Category/shoes', { slug: 'shoes' })),
-      { address: '/c/shoes', route: '/c/:slug' },
-      'a card of another type gets its address past the unavailable route',
-    );
-    assert.deepEqual(
-      walk(make('Post', 'Post/hello', { slug: 'hello' })),
-      { reason: 'route-unavailable', route: '/posts/:slug' },
-      'a card of its type may fit it, so the walk ends there',
-    );
-  });
 });

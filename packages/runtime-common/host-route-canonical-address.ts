@@ -33,7 +33,7 @@ import {
   type HostRouteWalkAnswer,
 } from './host-route-address.ts';
 import type { HostRouteLoad } from './host-route-resolver.ts';
-import { HostRouteUnavailableError, type HostRoute } from './host-routes.ts';
+import type { HostRoute } from './host-routes.ts';
 import { RealmPaths } from './paths.ts';
 import type { Filter } from './query.ts';
 import { matchCardIdPattern, type RouteParams } from './route-pattern.ts';
@@ -96,9 +96,7 @@ export interface HostRouteCanonicalAddress {
 /**
  * The canonical address of the card served at `cardHref` (a served URL, as
  * an `href`), from the index, or `undefined` when no candidate route fits
- * the card. Rejects with what a lookup rejects with, and with
- * `HostRouteUnavailableError` when an unavailable route that the card's type
- * may fit comes before the route that fits.
+ * the card. Rejects with what a lookup rejects with.
  */
 export async function hostRouteCanonicalAddress(
   cardHref: string,
@@ -112,21 +110,6 @@ export async function hostRouteCanonicalAddress(
   let walk = new CanonicalWalk(options);
   for (let chain of canonicalCandidateChains(options.routes)) {
     let route = chain[chain.length - 1]!;
-    if (route.kind === 'unavailable') {
-      // Only a card of its type may fit it, and whether that one does isn't
-      // known.
-      let ofType = await options.findCard({
-        cardHref: cardURL.href,
-        type: route.type,
-        where: undefined,
-        valueFields: [],
-        linkFields: [],
-      });
-      if (!ofType) {
-        continue;
-      }
-      throw new HostRouteUnavailableError(route);
-    }
     if (route.kind === 'fixed-card') {
       if (sameHref(route.cardHref, cardURL.href)) {
         let address = fixedHostRouteChainAddress(chain);

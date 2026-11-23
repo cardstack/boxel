@@ -1,6 +1,7 @@
 import type { CardResource } from './resource-types.ts';
 import type { SerializedError } from './error.ts';
 import type { PgPrimitive } from './expression.ts';
+import type { HostRoutesValidation } from './host-routes.ts';
 
 export interface BoxelIndexTable {
   url: string;
@@ -243,6 +244,10 @@ export interface CardTypeSummary {
 export interface RealmMetaValue {
   instances: CardTypeSummary[];
   files: CardTypeSummary[];
+  // The realm's host routes as the pass validated them, with the type
+  // definitions it read (`IndexWriter`'s `done`). Absent from a value written
+  // before the index stored them.
+  hostRoutes?: HostRoutesValidation;
 }
 
 export interface RealmMetaTable {
@@ -288,6 +293,24 @@ export function isPartitionedRealmMetaValue(
   }
   let value = raw as Partial<RealmMetaValue>;
   return Array.isArray(value.instances) && Array.isArray(value.files);
+}
+
+// The host routes a `realm_meta.value` holds, or undefined when it holds none.
+export function storedHostRoutes(
+  raw: unknown,
+): HostRoutesValidation | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  let hostRoutes = (raw as Partial<RealmMetaValue>).hostRoutes;
+  if (
+    !hostRoutes ||
+    !Array.isArray(hostRoutes.routes) ||
+    !Array.isArray(hostRoutes.warnings)
+  ) {
+    return undefined;
+  }
+  return { routes: hostRoutes.routes, warnings: hostRoutes.warnings };
 }
 
 export const coerceTypes = Object.freeze({

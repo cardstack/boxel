@@ -201,37 +201,6 @@ const tests: SharedTests<unknown> = Object.freeze({
     );
   },
 
-  'hostRouteAddress: an unavailable route that comes first ends the search':
-    async (assert) => {
-      let { routes } = validateHostRoutes(
-        [
-          {
-            path: '/later/:slug',
-            name: 'later',
-            type: { module: `${REALM}pending`, name: 'Pending' },
-            match: { slug: ':slug' },
-          },
-          ...PEOPLE,
-        ],
-        { realmURL: new URL(REALM), lookupType: () => 'unavailable' },
-      );
-      let lookupIn = (target: HostRouteAddressTarget) =>
-        hostRouteAddress(target, {
-          routes,
-          realmURL: new URL(REALM),
-          api: API,
-        });
-      assert.deepEqual(
-        outcome(lookupIn(cards('Person/robin'))),
-        { reason: 'route-unavailable', route: '/later/:slug' },
-        'it may be the canonical route',
-      );
-      assert.deepEqual(outcome(lookupIn(named('later', 'x'))), {
-        reason: 'route-unavailable',
-        route: '/later/:slug',
-      });
-    },
-
   'hostRouteAddress: a fixed route gives its card its path': async (assert) => {
     let rules: RawHostRoutingRule[] = [
       { path: '/about/', instance: instance('Page/about') },

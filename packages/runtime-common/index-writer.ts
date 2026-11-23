@@ -47,12 +47,22 @@ import { unwrittenTransientAttempts } from './prerender-html-reconcile.ts';
 import type { DBAdapter } from './db.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
+import {
+  hostRouteTypeRefs,
+  readRawHostRoutingRules,
+  realmConfigCardURL,
+  typeLookupKey,
+  validateHostRoutes,
+  type HostRouteTypes,
+  type HostRoutesValidation,
+} from './host-routes.ts';
 import type { FileMetaResource } from './resource-types.ts';
 import type { DeclaredCaptureError, Diagnostics } from './index.ts';
 import {
   ALL_TYPES_KEY,
   coerceTypes,
   isPartitionedRealmMetaValue,
+  storedHostRoutes,
   type BoxelIndexTable,
   type CardTypeSummary,
   type PrerenderedHtmlTable,
@@ -833,6 +843,11 @@ export class Batch {
   // of the round in progress. Stamped as `diagnostics.validationRound` on
   // every row the round writes.
   #validationRound = 0;
+  // The definitions of the types the realm's field-match routes name, as
+  // this pass read them, by `typeLookupKey`. Set by `done`. `undefined` for a
+  // commit that didn't read them, which keeps the routes the last pass
+  // stored.
+  #hostRouteTypes: HostRouteTypes | undefined;
   // Allocated inside the swap's transaction, while the commit lock is held, so
   // generations follow commit order. Set on every attempt of the transaction;
   // `#committedGeneration` is set only once one of them has committed.
@@ -2588,7 +2603,13 @@ export class Batch {
     // commit accounts for its peers only through the adoption chains
     // `recordPeerCommittedTypes` reads.
     validation?: CommitValidation;
+    // The definitions of the types the realm's field-match routes name, as
+    // the pass read them (`readHostRouteTypes`). The commit validates the
+    // routes the realm.json it publishes holds with them, and stores the
+    // tree with `realm_meta`. Without them the commit keeps the stored tree.
+    hostRouteTypes?: HostRouteTypes;
   }): Promise<BatchDoneResult> {
+    this.#hostRouteTypes = opts?.hostRouteTypes;
     // Drain any rows the visit loop left buffered before the swap reads the
     // pending table. A no-op for a prerenderHtmlOnly batch (which never
     // buffers) and for a pass whose last write already forced a flush.
@@ -3530,6 +3551,16 @@ export class Batch {
     };
   }
 
+  // The search document of the realm's RealmConfig card as the index holds it
+  // now, or undefined when it holds none.
+  async realmConfigSearchDoc(): Promise<Record<string, unknown> | undefined> {
+    let row = await this.getProductionVersion(
+      realmConfigCardURL(this.realmURL),
+      'instance',
+    );
+    return row?.search_doc ?? undefined;
+  }
+
   private async getLastKnownGoodDeps(
     url: URL,
     expectedType: BoxelIndexTable['type'],
@@ -3565,7 +3596,58 @@ export class Batch {
   private async updateRealmMeta() {
     let value =
       (await this.scopedRealmMetaValue()) ?? (await this.fullRealmMetaValue());
-    await this.writeRealmMeta(value);
+    let hostRoutes = await this.hostRoutesForCommit();
+    await this.writeRealmMeta(hostRoutes ? { ...value, hostRoutes } : value);
+  }
+
+  // The host routes this commit stores: the rules of the realm.json it
+  // publishes, validated with the type definitions the pass read. Readers
+  // read only this tree, so none reads a type when a request comes. A
+  // commit without type definitions keeps the stored tree, and so does one
+  // whose rules name a type the pass didn't read: another pass published
+  // those rules, and validated them with the types it read.
+  private async hostRoutesForCommit(): Promise<
+    HostRoutesValidation | undefined
+  > {
+    let types = this.#hostRouteTypes;
+    let prior = async () =>
+      storedHostRoutes(await this.currentRealmMetaValue());
+    if (!types) {
+      return await prior();
+    }
+    let realmConfig = await this.getProductionVersion(
+      realmConfigCardURL(this.realmURL),
+      'instance',
+    );
+    let rules = readRawHostRoutingRules(realmConfig?.search_doc);
+    if (
+      hostRouteTypeRefs(rules).some((ref) => !types.has(typeLookupKey(ref)))
+    ) {
+      let stored = await prior();
+      if (stored) {
+        return stored;
+      }
+    }
+    let validation = validateHostRoutes(rules, {
+      realmURL: this.realmURL,
+      lookupType: (ref) => {
+        let key = typeLookupKey(ref);
+        return types.has(key) ? types.get(key) : 'unavailable';
+      },
+    });
+    // Logged when they change, not on every pass.
+    let stored = await prior();
+    if (
+      JSON.stringify(stored?.warnings ?? []) !==
+      JSON.stringify(validation.warnings)
+    ) {
+      for (let warning of validation.warnings) {
+        this.#log.warn(
+          `${this.realmURL.href}: ${warning.dropped ? 'dropping' : 'warning for'} host routing rule for path "${warning.path}": ${warning.message}`,
+        );
+      }
+    }
+    return validation;
   }
 
   private async fullRealmMetaValue(): Promise<RealmMetaValue> {

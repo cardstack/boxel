@@ -21,11 +21,7 @@
 
 import type { ResolvedCodeRef } from './code-ref.ts';
 import type { RedirectStatusCode } from './host-routing-validation.ts';
-import {
-  HostRouteUnavailableError,
-  type HostRoute,
-  type HostRouteParentLink,
-} from './host-routes.ts';
+import type { HostRoute, HostRouteParentLink } from './host-routes.ts';
 import { RealmPaths } from './paths.ts';
 import type { Filter } from './query.ts';
 import {
@@ -313,18 +309,6 @@ class Resolver {
         outcome: 'miss',
       };
       this.trace.push(step);
-
-      if (route.kind === 'unavailable') {
-        // Its type can't be read now, so whether it would answer the path
-        // isn't known: an error, as for a lookup that failed.
-        step.outcome = 'error';
-        return {
-          kind: 'error',
-          error: new HostRouteUnavailableError(route),
-          position: route.position,
-          trace: this.trace,
-        };
-      }
 
       if (route.kind === 'redirect') {
         let redirect = this.redirect(route, allParams);
@@ -669,11 +653,6 @@ function rankThrough(
   let own = route.pattern.segments.map((s) => s.kind === 'literal');
   if (match.end === segments.length) {
     return own;
-  }
-  if (route.kind === 'unavailable') {
-    // Its child routes aren't known, so it may cover any rest of the path,
-    // ranked as `:name` segments would be.
-    return [...own, ...segments.slice(match.end).map(() => false)];
   }
   let best: SegmentRank | undefined;
   for (let child of route.routes) {

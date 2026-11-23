@@ -1,10 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import {
-  isFilterRefersToNonexistentTypeError,
-  rri,
-} from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import type {
   HostFieldMatchRoute,
   LooseSingleCardDocument,
@@ -270,6 +267,14 @@ function makeUnavailableTypeFixture(): Record<
             {
               path: '/broken/:slug',
               type: { module: './broken', name: 'Broken' },
+              match: { slug: ':slug' },
+            },
+            {
+              path: '/away/:slug',
+              type: {
+                module: 'http://127.0.0.1:9/unreachable-realm/thing',
+                name: 'Thing',
+              },
               match: { slug: ':slug' },
             },
           ],
@@ -597,19 +602,17 @@ module(basename(import.meta.filename), function () {
   });
 
   module(
-    'Realm.getHostRoutes with a type that fails to load',
+    'Realm.getHostRoutes with a type that can not be read at index time',
     function (hooks) {
       let realmURL = new URL('http://127.0.0.1:4444/routing-unavailable/');
       let testRealm: Realm;
-      let definitionLookup: CachingDefinitionLookup;
 
       setupPermissionedRealmCached(hooks, {
         realmURL,
         permissions: { '*': ['read'] },
         fileSystem: makeUnavailableTypeFixture(),
-        onRealmSetup({ testRealm: realm, testRealmServer }) {
+        onRealmSetup({ testRealm: realm }) {
           testRealm = realm;
-          definitionLookup = serverDefinitionLookup(testRealmServer);
         },
       });
 
@@ -617,24 +620,26 @@ module(basename(import.meta.filename), function () {
         await testRealm.indexing();
       });
 
-      test('drops a route whose type fails to load with a warning, and serves the rest of the tree', async function (assert) {
+      test('drops each route whose type can not be read, with a warning, and serves the rest', async function (assert) {
         let first = await testRealm.getHostRoutes();
         assert.deepEqual(
           first.routes.map((route) => [route.kind, route.fullPath]),
           [['fixed-card', '/']],
-          'the routes whose types load are served',
+          'the routes whose types were read are served',
         );
         assert.deepEqual(
           first.warnings.map((w) => [w.code, w.path, w.dropped]),
           [
-            ['type-unreadable', '/later/:slug', true],
-            ['type-unreadable', '/broken/:slug', true],
+            ['type-unavailable', '/later/:slug', true],
+            ['type-unavailable', '/broken/:slug', true],
+            ['type-unavailable', '/away/:slug', true],
           ],
+          'a module that does not exist, a module that fails, and a realm that can not be reached',
         );
         assert.strictEqual(
           await testRealm.getHostRoutes(),
           first,
-          'the tree is final until the next index',
+          'the stored tree is read once until the next index',
         );
         let map = await testRealm.getHostRoutingMap();
         assert.deepEqual(map, [{ path: '/', id: `${realmURL.href}home` }]);
@@ -644,53 +649,20 @@ module(basename(import.meta.filename), function () {
           'the fixed routing map is cached with it',
         );
       });
-
-      test('a module whose cached render failed makes its route invalid', async function (assert) {
-        let ref = {
-          module: rri(`${realmURL.href}broken`),
-          name: 'Broken',
-        };
-        let scoped = definitionLookup.forRealm(testRealm);
-        try {
-          await scoped.lookupDefinition(ref);
-          assert.ok(false, 'the module was expected to fail');
-        } catch {
-          assert.ok(true, 'the module fails to render');
-        }
-        assert.deepEqual(
-          await scoped.lookupCachedDefinitionEntry(ref),
-          { status: 'module-error' },
-          'the definitions cache holds the failed render',
-        );
-        testRealm.clearRealmIndexCaches();
-        let { routes, warnings } = await testRealm.getHostRoutes();
-        assert.deepEqual(
-          routes.map((route) => route.fullPath),
-          ['/'],
-        );
-        assert.deepEqual(
-          warnings
-            .filter((w) => w.path === '/broken/:slug')
-            .map((w) => [w.code, w.dropped]),
-          [['type-unreadable', true]],
-        );
-      });
     },
   );
 
   module('Realm.getHostRoutes with cached type definitions', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-cached-types/');
     let testRealm: Realm;
-    let dbAdapter: PgAdapter;
     let definitionLookup: CachingDefinitionLookup;
 
     setupPermissionedRealmCached(hooks, {
       realmURL,
       permissions: { '*': ['read'] },
       fileSystem: makeCachedTypesFixture(),
-      onRealmSetup({ testRealm: realm, testRealmServer, dbAdapter: adapter }) {
+      onRealmSetup({ testRealm: realm, testRealmServer }) {
         testRealm = realm;
-        dbAdapter = adapter;
         definitionLookup = serverDefinitionLookup(testRealmServer);
       },
     });
@@ -722,37 +694,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a type read that may pass keeps the route as unavailable and caches nothing', async function (assert) {
-      let { lookupDefinitionEntryForRealm } = definitionLookup;
-      definitionLookup.lookupDefinitionEntryForRealm = async () => {
-        throw new Error('the prerender server could not be reached');
-      };
-      let unavailable;
-      try {
-        testRealm.clearRealmIndexCaches();
-        unavailable = await testRealm.getHostRoutes();
-      } finally {
-        definitionLookup.lookupDefinitionEntryForRealm =
-          lookupDefinitionEntryForRealm;
-      }
-      assert.deepEqual(
-        unavailable.routes.map((route) => [route.kind, route.fullPath]),
-        [
-          ['unavailable', '/cities/:city'],
-          ['unavailable', '/nope/:slug'],
-        ],
-        'each route whose type can not be read now is kept as unavailable',
-      );
-      let next = await testRealm.getHostRoutes();
-      assert.notStrictEqual(next, unavailable, 'the tree was not cached');
-      assert.deepEqual(
-        next.routes.map((route) => [route.kind, route.fullPath]),
-        [['field-match', '/cities/:city']],
-        'the next read validates the whole tree',
-      );
-    });
-
-    test('concurrent calls share one validation', async function (assert) {
+    test('concurrent calls share one read', async function (assert) {
       let [a, b] = await Promise.all([
         testRealm.getHostRoutes(),
         testRealm.getHostRoutes(),
@@ -760,7 +702,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(a, b);
     });
 
-    test('a validation that an index overtakes is not cached', async function (assert) {
+    test('a read that an index overtakes is not cached', async function (assert) {
       let inFlight = testRealm.getHostRoutes();
       // What an index does when it lands while the rules are being read.
       testRealm.clearRealmIndexCaches();
@@ -774,97 +716,12 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a cached definition is found when its row also has an error', async function (assert) {
-      // A row can hold the module's definitions and an error_doc together.
-      let rows = (await dbAdapter.execute(
-        `UPDATE modules
-            SET error_doc = $1::jsonb
-          WHERE url LIKE $2
-         RETURNING url`,
-        {
-          bind: [
-            JSON.stringify({
-              type: 'module-error',
-              error: {
-                message: 'a dependency failed',
-                status: 500,
-                additionalErrors: null,
-              },
-            }),
-            `${realmURL.href}places%`,
-          ],
-        },
-      )) as { url: string }[];
-      assert.ok(rows.length > 0, 'the definitions cache holds the module');
-      let ref = { module: rri(`${realmURL.href}places`), name: 'City' };
-      let scoped = definitionLookup.forRealm(testRealm);
-      let definition = await scoped.lookupCachedDefinition(ref);
-      assert.strictEqual(
-        definition?.type,
-        'card-def',
-        'lookupCachedDefinition answers with the definition',
-      );
-      let entry = await scoped.lookupCachedDefinitionEntry(ref);
-      assert.strictEqual(entry.status, 'found');
-      let missing = await scoped.lookupCachedDefinitionEntry({
-        module: rri(`${realmURL.href}places`),
-        name: 'Nope',
-      });
-      assert.strictEqual(
-        missing.status,
-        'module-error',
-        'the error may explain an export the row lacks',
-      );
-      testRealm.clearRealmIndexCaches();
-      let { routes, warnings } = await testRealm.getHostRoutes();
-      assert.ok(
-        routes.some((route) => route.fullPath === '/cities/:city'),
-        'the route uses the definition',
-      );
-      assert.deepEqual(
-        warnings.map((w) => [w.code, w.path, w.dropped]),
-        [['type-unreadable', '/nope/:slug', true]],
-        'the export the row lacks is dropped with a warning',
-      );
-    });
-
-    test('a type whose cached render failed is rendered again once its error row expires', async function (assert) {
-      // A failed render of the module, as the definitions cache holds it
-      // (no definitions), old enough that its error row has expired.
-      let rows = (await dbAdapter.execute(
-        `UPDATE modules
-            SET error_doc = $1::jsonb, created_at = $2::bigint,
-                definitions = '{}'::jsonb
-          WHERE url LIKE $3
-         RETURNING url`,
-        {
-          bind: [
-            JSON.stringify({
-              type: 'module-error',
-              error: {
-                message: 'the render failed',
-                status: 500,
-                additionalErrors: null,
-              },
-            }),
-            String(Date.now() - 10 * 60 * 1000),
-            `${realmURL.href}places%`,
-          ],
-        },
-      )) as { url: string }[];
-      assert.ok(rows.length > 0, 'the definitions cache holds the module');
-
-      let { routes } = await testRealm.getHostRoutes();
-      assert.deepEqual(
-        routes.map((route) => route.fullPath),
-        ['/cities/:city'],
-      );
-    });
-
-    test('reads a type that is not cached through the cache', async function (assert) {
-      // The server clears the definitions cache when it starts, and a realm
-      // that boots on its existing index doesn't render its modules again.
+    test('serves the stored routes when the definitions cache is empty', async function (assert) {
+      // The server clears the definitions cache when it starts, and a realm that
+      // boots on its existing index doesn't render its modules again. The
+      // routes come from the index, so no type is read.
       await definitionLookup.clearRealmDefinitions(realmURL.href);
+      testRealm.clearRealmIndexCaches();
 
       let validation = await testRealm.getHostRoutes();
       assert.deepEqual(
@@ -887,15 +744,13 @@ module(basename(import.meta.filename), function () {
     function (hooks) {
       let realmURL = new URL('http://127.0.0.1:4444/routing-other-realm-type/');
       let testRealm: Realm;
-      let definitionLookup: CachingDefinitionLookup;
 
       setupPermissionedRealmCached(hooks, {
         realmURL,
         permissions: { '*': ['read'] },
         fileSystem: makeOtherRealmTypeFixture(),
-        onRealmSetup({ testRealm: realm, testRealmServer }) {
+        onRealmSetup({ testRealm: realm }) {
           testRealm = realm;
-          definitionLookup = serverDefinitionLookup(testRealmServer);
         },
       });
 
@@ -903,50 +758,13 @@ module(basename(import.meta.filename), function () {
         await testRealm.indexing();
       });
 
-      test('a type in a realm whose server cannot be reached is a read that may pass', async function (assert) {
-        let ref = {
-          module: rri('http://127.0.0.1:9/unreachable-realm/thing'),
-          name: 'Thing',
-        };
-        try {
-          await definitionLookup.forRealm(testRealm).lookupDefinitionEntry(ref);
-          assert.ok(false, 'the read was expected to fail');
-        } catch (e) {
-          assert.true(
-            isFilterRefersToNonexistentTypeError(e),
-            'the read fails as a missing type',
-          );
-          assert.true(
-            (e as { transient?: boolean }).transient,
-            'the failure is transient, so the host route is kept as unavailable rather than dropped',
-          );
-        }
-      });
-
-      test('reuses the validation only while the definition generation holds', async function (assert) {
-        let first = await testRealm.getHostRoutes();
+      test('validates a route whose type is in another realm when the realm is indexed', async function (assert) {
+        let { routes, warnings } = await testRealm.getHostRoutes();
         assert.deepEqual(
-          first.routes.map((route) => [route.kind, route.fullPath]),
+          routes.map((route) => [route.kind, route.fullPath]),
           [['field-match', '/cards/:name']],
         );
-        assert.strictEqual(
-          await testRealm.getHostRoutes(),
-          first,
-          'reused while no definition changed',
-        );
-
-        // A change to another realm's module doesn't reindex this realm; it
-        // only moves the definition generation.
-        definitionLookup.bumpGlobalGeneration();
-
-        let second = await testRealm.getHostRoutes();
-        assert.notStrictEqual(second, first, 'validated again');
-        assert.deepEqual(second.routes, first.routes);
-        assert.strictEqual(
-          await testRealm.getHostRoutes(),
-          second,
-          'the new validation is reused in turn',
-        );
+        assert.deepEqual(warnings, []);
       });
     },
   );
