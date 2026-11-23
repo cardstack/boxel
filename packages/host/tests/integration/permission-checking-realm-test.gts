@@ -463,17 +463,6 @@ module('Integration | a realm that checks permissions', function (hooks) {
       .dom(`[data-test-stack-card="${NIGHTLY}"] [data-test-automation-status]`)
       .doesNotExist('the view shows no server state to a non-direct-writer');
 
-    await settleRealmRenders();
-    let status = await getService('network').authedFetch(
-      `${SCHOOL}_automation-status?automation=${encodeURIComponent(NIGHTLY)}`,
-      { headers: { Accept: 'application/json' } },
-    );
-    assert.deepEqual(
-      [status.status, await status.json()],
-      [200, { data: null, meta: { directWriter: false } }],
-      'the realm tells the user that they aren’t a direct writer',
-    );
-
     await school.write(
       'classrooms/room-206.json',
       JSON.stringify(classroom('Room 206', [TEST_USER])),
@@ -495,6 +484,17 @@ module('Integration | a realm that checks permissions', function (hooks) {
     assert
       .dom(`[data-test-stack-card="${NIGHTLY}"] [data-test-automation]`)
       .exists('and the automation is still open');
+
+    await settleRealmRenders();
+    let status = await getService('network').authedFetch(
+      `${SCHOOL}_automation-status?automation=${encodeURIComponent(NIGHTLY)}`,
+      { headers: { Accept: 'application/json' } },
+    );
+    assert.deepEqual(
+      [status.status, await status.text()],
+      [200, JSON.stringify({ data: null, meta: { directWriter: false } })],
+      'the realm tells the user that they aren’t a direct writer',
+    );
   });
 
   test('the AI context tells a user who can only read the realm what its policy grants', async function (assert) {

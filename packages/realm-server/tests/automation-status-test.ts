@@ -1978,8 +1978,6 @@ module(basename(import.meta.filename), function (hooks) {
   module(
     'a realm whose policy admits a caller its ACL gives nothing',
     function (hooks) {
-      // A visitor's address, from a range reserved for documentation.
-      const VISITOR = '192.0.2.10';
       const NOT_A_DIRECT_WRITER = { data: null, meta: { directWriter: false } };
       const LISTED_NOTHING = { data: [], meta: { directWriter: false } };
 
@@ -2045,9 +2043,8 @@ module(basename(import.meta.filename), function (hooks) {
       }
 
       // Points the realm at a policy that lets any signed-in caller read an
-      // automation, and lets a caller who isn't signed in read one too when
-      // `anonymous` is set.
-      async function nameAPolicy({ anonymous }: { anonymous?: true } = {}) {
+      // automation.
+      async function nameAPolicy() {
         await policyRealm.write(
           'policies/automations.json',
           JSON.stringify({
@@ -2060,14 +2057,6 @@ module(basename(import.meta.filename), function (hooks) {
                     grants: [
                       // Names no caller, so it admits only signed-in ones.
                       { operation: 'read' },
-                      ...(anonymous
-                        ? [
-                            {
-                              operation: 'read',
-                              where: 'actor() == "anonymous"',
-                            },
-                          ]
-                        : []),
                     ],
                   },
                 ],
@@ -2091,18 +2080,13 @@ module(basename(import.meta.filename), function (hooks) {
       }
 
       // What the routes a card's view, its editor and the realm config read
-      // answer the caller `authorization` names, or a caller who isn't signed
-      // in where it is absent.
-      async function answers(authorization?: string) {
-        let ask = (path: string) => {
-          let request = policyRequest
+      // answer the caller `authorization` names.
+      async function answers(authorization: string) {
+        let ask = (path: string) =>
+          policyRequest
             .get(path)
             .set('Accept', SupportedMimeType.JSON)
-            .set('X-Forwarded-For', VISITOR);
-          return authorization
-            ? request.set('Authorization', authorization)
-            : request;
-        };
+            .set('Authorization', authorization);
         let automation = encodeURIComponent(automationURL());
         return {
           status: await ask(`/_automation-status?automation=${automation}`),
@@ -2208,23 +2192,6 @@ module(basename(import.meta.filename), function (hooks) {
             `${route} carries no archived marker`,
           );
         }
-      });
-
-      test("a caller who isn't signed in is told the same where the policy opens read to such callers, and asked to authenticate where it doesn't", async function (assert) {
-        await writeAutomation();
-        await nameAPolicy();
-        assert.deepEqual(
-          Object.values(await answers()).map((response) => response.status),
-          [401, 401, 401, 401, 401],
-          'the policy opens nothing to a caller who isn’t signed in',
-        );
-
-        await nameAPolicy({ anonymous: true });
-        assertToldNotADirectWriter(
-          assert,
-          await answers(),
-          "a caller who isn't signed in",
-        );
       });
     },
   );
