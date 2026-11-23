@@ -55,6 +55,10 @@ export class RunLogSink implements FlushableRunProgressSink {
   #fetch: typeof globalThis.fetch;
   #onError: (message: string) => void;
   #timeoutMs: number;
+  // The realm refused a batch that carried tasks as a body it can't read: a
+  // realm server that predates tasks, reached while a deploy rolls out. The
+  // run's later batches leave their tasks out, so the rest of the log lands.
+  #tasksRefused = false;
 
   constructor({
     realmURL,
@@ -173,20 +177,39 @@ export class RunLogSink implements FlushableRunProgressSink {
     });
   }
 
-  async #post(events: RunProgressEvent[]): Promise<void> {
+  async #post(batch: RunProgressEvent[]): Promise<void> {
+    let events = this.#tasksRefused
+      ? batch.filter((event) => event.kind !== 'task')
+      : batch;
+    if (events.length === 0) {
+      return;
+    }
     let controller = new AbortController();
     let timer = setTimeout(() => controller.abort(), this.#timeoutMs);
     try {
-      let response = await this.#fetch(this.#url, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.api+json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.#runToken}`,
-        },
-        body: JSON.stringify({ events }),
-        signal: controller.signal,
-      });
+      let send = (body: RunProgressEvent[]) =>
+        this.#fetch(this.#url, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.api+json',
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.#runToken}`,
+          },
+          body: JSON.stringify({ events: body }),
+          signal: controller.signal,
+        });
+      let response = await send(events);
+      if (
+        response.status === 400 &&
+        events.some((event) => event.kind === 'task')
+      ) {
+        this.#tasksRefused = true;
+        events = events.filter((event) => event.kind !== 'task');
+        if (events.length === 0) {
+          return;
+        }
+        response = await send(events);
+      }
       if (!response.ok) {
         this.#onError(
           `The run's log refused ${events.length} lines (${response.status}): ${await response.text().catch(() => '')}`,

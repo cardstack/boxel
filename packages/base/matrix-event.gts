@@ -666,8 +666,9 @@ export interface UpdateRealmEventContent {
 }
 
 // An automation run moved: its state, its step or its run milestone changed,
-// or its script reported a task inside a milestone. It goes only to the session rooms of the realm's direct writers, never into
-// the realm's own room, and it names no person: who the run acts as, who
+// or its script reported a task inside a milestone. It goes only to the
+// session rooms of the realm's direct writers, never into the realm's own
+// room, and it names no person: who the run acts as, who
 // canceled it and why it ended are read from the realm's routes, which check
 // who is asking. A subscriber treats it as a cue to read the run again, since
 // a later change can overtake an earlier event.

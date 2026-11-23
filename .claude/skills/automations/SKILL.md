@@ -1372,10 +1372,10 @@ realm.progress.milestone('Fetch issues');
 // …
 realm.progress.task(`Fetched ${issues.length} open issues`);
 realm.progress.milestone('Group by label');
-for (let label of labels) {
-  // …
-  realm.progress.task(`Grouped the ${label} label`);
-}
+// …
+realm.progress.task(
+  `Grouped ${issues.length} issues under ${labels.size} labels`,
+);
 ```
 
 They reach the realm server as the run's `plan`, `milestone` and `task` log lines. `appendRunLog` hands each batch to `recordRunMilestones` (`packages/runtime-common/automation-run-milestones.ts`) under the run row's lock, before it checks the log's cap, so a run whose log is full still records where it got to and what it did:
@@ -1391,6 +1391,8 @@ They reach the realm server as the run's `plan`, `milestone` and `task` log line
 A milestone lasts until the next one starts, or until the run ends (`finished_at`). A milestone the plan doesn't name is recorded like any other and reads as unplanned; one marked twice is two rows. A task belongs to the milestone the run is in when the script reports the task. The surface throws on a task before the script's first milestone, so the realm server ignores one that arrives anyway. An attempt that takes a run from another attempt (`startAutomationRunAttempt`, before the commit is claimed) clears the run's plan, milestones and tasks, since the script runs again from its start.
 
 `realm.progress.count(done, total)` records nothing. The surface keeps the method, so a script written for counts runs on, and the run's first call logs one `warn` console line that names `realm.progress.task`. A `count` line from a tab whose host still sends one is stored in the log and recorded on no milestone. The `count_done` and `count_total` columns of `automation_run_milestones` hold nothing new, and no code reads them.
+
+A realm server that reads no `task` line refuses a whole batch that carries one with a 400. A deploy publishes the host before the realm servers roll, so a tab can reach such a server mid-rollout. `RunLogSink` then sends the batch again without its tasks, and the run's later batches leave tasks out, so the run's milestones and console lines still land.
 
 **Reading them.** `readRunMilestones(dbAdapter, runId)` answers a run's `plan`, its `milestones` in order (`name`, `planned`, `startedAt`, `endedAt`, `ms`, and `tasks`, each `{ text, at }` in the order reported), `current` (the milestone a running run is in), `ahead` (the plan's milestones it hasn't reached), `failedIn` (for a run that ended with an error, the milestone it was in), `dropped` and `tasksDropped`. `readLastRunMilestones(dbAdapter, automationId)` answers the same for the automation's last run that started and has ended, leaving Previews out: what the card shows, through `_automation-status`'s `lastRun`. `readRunMilestonesFor` reads a page of runs in three queries.
 
@@ -1442,9 +1444,11 @@ step or its run milestone changes. The event is `JobEventContent` in
   takes a run over from another clears `admitted_at`, so the retry's own
   admission reads as `admission` again.
 - **`milestone`** is the name of the run's last `automation_run_milestones`
-  row, or `null` before its first. A task the script reports inside a
-  milestone sends the event too, with the same `milestone`, so a subscriber
-  reads the run again and shows the new task.
+  row, or `null` before its first. A `/_run-log` request that records a
+  task inside a milestone sends the event too, with the same `milestone`, so
+  a subscriber reads the run again and shows the new tasks: one event a
+  request, however many tasks the request carries, and the realm event line
+  merges a run's queued events.
 - **`automation`** is the card's identifier in RRI form (ADR 002 §1.3), the
   spelling the card's own id has, so a card matches the event against its id.
 - **No person is in it.** Who the run acts as, who canceled it, and its error
@@ -1616,7 +1620,7 @@ Host tests mount a virtual-network handler that answers the route (`tests/accept
 
 ## The run list
 
-The Automation card's isolated view lists the automation's runs in a **Runs** section, for the realm's direct writers alone. The section starts closed, with the number of runs beside its title, so a long history doesn't bury the rest of the card. Open, it shows one page of 20 runs, newest first, with a pager when there are more. A run is listed from the moment a trigger fires, or someone previews or runs the automation by hand. Each row has what started the run, the run's state, how far the run got through the script's milestones (the milestone a running run is in with the last task the script reported there, the one a failed run failed in), and why a run that didn't complete ended as it did; a row opens to the run's milestone timeline, with each milestone's tasks. A running run's new tasks show without a reload: each task sends a `job` event (_Run milestones and tasks_). A waiting run says what it waits for: the automation's running run (an automation's runs go one at a time) or, with none running, a Boxel worker. A run in its admission checks says so. A slot of a schedule that joined a run before the run started (_skipped_, _The tick_) shows as its own row above that run, naming the run. The section reads `GET <realm>/_automation-runs` through the host's `authed-fetch` tool, and reads the page shown again on every `job` and `automation` realm event naming the automation.
+The Automation card's isolated view lists the automation's runs in a **Runs** section, for the realm's direct writers alone. The section starts closed, with the number of runs beside its title, so a long history doesn't bury the rest of the card. Open, it shows one page of 20 runs, newest first, with a pager when there are more. A run is listed from the moment a trigger fires, or someone previews or runs the automation by hand. Each row has what started the run, the run's state, how far the run got through the script's milestones (the milestone a running run is in with the last task the script reported there, the one a failed run failed in), and why a run that didn't complete ended as it did; a row opens to the run's milestone timeline, with each milestone's tasks. A running run's new tasks show without a reload: each `/_run-log` request that records a task sends one `job` event (_Run milestones and tasks_). A waiting run says what it waits for: the automation's running run (an automation's runs go one at a time) or, with none running, a Boxel worker. A run in its admission checks says so. A slot of a schedule that joined a run before the run started (_skipped_, _The tick_) shows as its own row above that run, naming the run. The section reads `GET <realm>/_automation-runs` through the host's `authed-fetch` tool, and reads the page shown again on every `job` and `automation` realm event naming the automation.
 
 ### The run list route
 

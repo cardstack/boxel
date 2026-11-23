@@ -609,7 +609,7 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-milestones-lead]')
       .hasText(
-        'The milestones the script reported on the last run, which ended with an error. Boxel didn’t record 2 more tasks the script reported: a run records at most 200 tasks.',
+        'The milestones the script reported on the last run, which ended with an error. Boxel didn’t record 2 more tasks the script reported: a run records at most 200 tasks, and none inside a milestone Boxel didn’t record.',
       );
     let milestones = text('[data-test-automation-milestones]') ?? '';
     for (let expected of [
@@ -661,7 +661,7 @@ module('Acceptance | automation view', function (hooks) {
     );
   });
 
-  test('a milestone lists the latest five tasks, and a button shows the earlier ones', async function (assert) {
+  test('a milestone lists the latest five tasks, and a toggle shows and hides the earlier ones, keeping focus', async function (assert) {
     let tasks = Array.from({ length: 8 }, (_, i) => ({
       text: `Grouped label ${i + 1}`,
       at: '2030-01-01T08:59:10.000Z',
@@ -711,20 +711,23 @@ module('Acceptance | automation view', function (hooks) {
       .dom(
         '[data-test-automation-milestones] [data-test-automation-milestone-earlier-tasks]',
       )
-      .hasText('Show 3 earlier tasks');
-    await click(
-      '[data-test-automation-milestones] [data-test-automation-milestone-earlier-tasks]',
-    );
+      .hasText('Show 3 earlier tasks')
+      .hasAttribute('aria-expanded', 'false');
+    let toggle =
+      '[data-test-automation-milestones] [data-test-automation-milestone-earlier-tasks]';
+    await click(toggle);
     assert.deepEqual(
       shown(),
       tasks.map(({ text }) => text),
       'every task, in the order reported',
     );
     assert
-      .dom(
-        '[data-test-automation-milestones] [data-test-automation-milestone-earlier-tasks]',
-      )
-      .doesNotExist();
+      .dom(toggle)
+      .hasText('Hide 3 earlier tasks')
+      .hasAttribute('aria-expanded', 'true')
+      .isFocused('the toggle stays where it was, with focus on it');
+    await click(toggle);
+    assert.strictEqual(shown().length, 5, 'the earlier tasks hide again');
   });
 
   test('a run in progress shows the milestone it is in as running, the ones before it done and the ones after it not started', async function (assert) {
@@ -1229,6 +1232,10 @@ module('Acceptance | automation view', function (hooks) {
     assert.true(
       /(^|\D)2 of 4(\D|$)/.test(embedded),
       "counts the run's milestones, the one the plan didn't list included",
+    );
+    assert.false(
+      embedded.includes('Grouped the bug label'),
+      "the embedded track's narrow columns leave the milestones' tasks out",
     );
     assert.dom('[data-test-automation-embedded-last="error"]').exists();
     assert.dom('[data-test-automation-embedded-next]').exists();

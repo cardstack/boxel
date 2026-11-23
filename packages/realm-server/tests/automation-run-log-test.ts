@@ -1238,6 +1238,11 @@ module(basename(import.meta.filename), function (hooks) {
       let cleared = await milestonesOf(run.id);
       assert.deepEqual(cleared.plan, []);
       assert.deepEqual(cleared.milestones, []);
+      assert.strictEqual(cleared.tasksDropped, 0);
+      let [{ n }] = (await dbAdapter.execute(
+        `SELECT count(*)::int AS n FROM automation_run_tasks WHERE run_id = '${run.id}'`,
+      )) as { n: number }[];
+      assert.strictEqual(n, 0, "the retry clears the run's tasks too");
 
       await appendRunLog(dbAdapter, run.id, [
         {
