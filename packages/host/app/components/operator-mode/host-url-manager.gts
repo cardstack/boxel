@@ -34,6 +34,7 @@ import type {
   HostURLKind,
   HostURLList,
 } from '@cardstack/host/services/realm-server';
+import { hostAndPath } from '@cardstack/host/utils/host-urls';
 
 // Host Mode v2's publish dialog. It lists the addresses a realm is mounted at
 // (its host URLs), mounts it at more, marks one canonical and unmounts them
@@ -62,14 +63,6 @@ interface Signature {
 // to the full URL.
 function displayURL(url: string): string {
   return url.replace(/^https?:\/\//, '');
-}
-
-// A URL's host and path, which name an address whatever its scheme. The
-// manager builds `https://` URLs, and the realm server gives a host URL the
-// scheme it is served with.
-function hostAndPath(url: string): string {
-  let parsed = new URL(url);
-  return `${parsed.host}${ensureTrailingSlash(parsed.pathname)}`;
 }
 
 const CANONICAL_EXPLANATION =
