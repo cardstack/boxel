@@ -355,7 +355,7 @@ _Prerender run capacity_, which reads Loki.
 | How many runs hold prerender tabs, and does any server queue runs?   | _Runs in flight_ (Postgres, every server together): runs claimed and not yet ended, an upper bound on tabs in use, since a claimed run also counts during admission, while waiting for a tab and while committing; the collapsed _Prerender capacity (Loki)_ row shows each server's running and queued runs from the `capacity` events, over the last 15 minutes |
 | What did runs write, call and download?                              | _Writes and calls_ (writes, callApi calls, resolve calls); _Downloaded and prerender time_, the two quantities a run's own charge prices                                                                                                                                                                                                                          |
 | What did an automation or a run cost? (step 7)                       | _Credits charged_ and _AWS cost_ stats; _Credits charged by kind_ and _AWS cost by kind_; credits charged and AWS cost per automation (_Automations_) and per run with the run's pricing version (_Runs_)                                                                                                                                                         |
-| Which pricing version priced the charges?                            | _Pricing versions_ stat and table: each version's margin, the time a process first recorded the version, and the charges, credits charged and cost at the version                                                                                                                                                                                                 |
+| Which pricing version priced the charges?                            | _Pricing versions_ stat and table: per version and charge kind, the margin (1 for an AI kind, which records the writing process's version), the time a process first recorded the version, and the charges, credits charged and cost                                                                                                                              |
 | Does the margin cover our cost, and which kind charges too little?   | _Cost coverage_: the pricing skill's cost coverage report over the dashboard's time range, with the margin in credits beside coverage                                                                                                                                                                                                                             |
 
 The cost panels attribute charges the way step 7 does: `run`, `run_indexing`
@@ -462,7 +462,7 @@ made up; they don't fire this alert, but they come from the same lost jobs.
 
 A process whose startup pricing check fails has no prices: it admits no new
 automation run (admission `pricing-unavailable`), submits no batch, and
-writes no charge (`charged` with `result: "no-prices"`) until its `PRICING_*`
+writes no metered charge (`charged` with `result: "no-prices"`) until its `PRICING_*`
 variables are fixed and it restarts. The failing line names every bad
 variable and its problem. The alert resolves 10 minutes after the line while
 the process has no prices, so a resolved alert says nothing about
