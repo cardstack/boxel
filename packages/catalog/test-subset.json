@@ -51,6 +51,7 @@
       "direct-writer-queries-test",
       "google-service-account-keys-test",
       "google-service-account-rejection-test",
+      "host-url-pages-test",
       "interactive-bindings-test",
       "key-bindings-test",
       "key-grant-rejection-test",

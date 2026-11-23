@@ -38,6 +38,10 @@ import {
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { realmEventDispatcher } from '../realm-event-dispatcher.ts';
 import { retireRealmEventRoom } from '../realm-event-rooms.ts';
+import {
+  announceHostURLChanges,
+  deleteRealmHostURLs,
+} from '../lib/realm-host-urls.ts';
 
 interface DeleteRealmJSON {
   data: {
@@ -48,6 +52,7 @@ interface DeleteRealmJSON {
 
 export default function handleDeleteRealm({
   dbAdapter,
+  hostURLResolver,
   matrixClient,
   realmsRootPath,
   sendEvent,
@@ -160,6 +165,9 @@ export default function handleDeleteRealm({
       // actually deleted (no TOCTOU window between a pre-lock SELECT and
       // the in-tx DELETE).
       let publishedRealms: { url: string; disk_id: string }[] = [];
+      // The hosts of the realm's host URLs, announced once the delete is
+      // stored, so every process stops serving them (ADR 033 §1.3).
+      let hostURLHosts: string[] = [];
 
       // Serialize concurrent writers for this source realm. Lock is on the
       // source URL — a concurrent unpublish of one of the associated
@@ -203,9 +211,16 @@ export default function handleDeleteRealm({
           });
         }
 
-        // The realm's site-name claims, found by its registry id. They are
-        // marked removed before the registry row goes, because deleting the
-        // row clears their realm id.
+        // The realm's host URLs. Deleting the registry row would delete them
+        // too, but this keeps their hosts to announce.
+        hostURLHosts = await deleteRealmHostURLs(
+          txQuerier ?? dbAdapterQuerier(dbAdapter),
+          sourceRow[0].id,
+        );
+
+        // The realm's site-name claims, found by its registry id, so their
+        // site names are free again. They are marked removed before the
+        // registry row goes, because deleting the row clears their realm id.
         let { nameExpressions, valueExpressions } = asExpressions({
           removed_at: Math.floor(Date.now() / 1000),
         });
@@ -295,6 +310,7 @@ export default function handleDeleteRealm({
         await notifyAllFileChanges(dbAdapter, publishedRealm.url);
       }
       await notifyAllFileChanges(dbAdapter, realmURL);
+      await announceHostURLChanges(dbAdapter, hostURLResolver, hostURLHosts);
 
       await setContextResponse(
         ctxt,

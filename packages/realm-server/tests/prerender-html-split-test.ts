@@ -6,6 +6,7 @@ import {
   IndexWriter,
   VirtualNetwork,
   getQueueJobCoalesceHandler,
+  markVisitRequestFailure,
   renderScopeFor,
   systemInitiatedPrerenderHtmlPriority,
   systemInitiatedPriority,
@@ -1256,7 +1257,12 @@ module(basename(import.meta.filename), function () {
       async function writeError(
         generation: number,
         url: string,
-        opts: { diagnostics?: Diagnostics; message?: string } = {},
+        opts: {
+          diagnostics?: Diagnostics;
+          message?: string;
+          // The marker the fetch boundary stamps on the error itself.
+          gatewayFailureMarker?: boolean;
+        } = {},
       ) {
         let batch = await makeBatch(generation);
         await batch.seedPrerenderedHtmlInvalidations([
@@ -1268,11 +1274,56 @@ module(basename(import.meta.filename), function () {
             message: opts.message ?? 'Gateway or network failure',
             status: 502,
             additionalErrors: null,
+            ...(opts.gatewayFailureMarker ? { gatewayFailure: true } : {}),
           },
           ...(opts.diagnostics ? { diagnostics: opts.diagnostics } : {}),
         } as any);
         await batch.done();
       }
+
+      test('a withheld gateway failure takes its own lane alone, not the transient one beside it', async function (assert) {
+        let url = `${testRealm}gateway-one-lane.json`;
+        await writeInstance(1, url, '<div>good</div>');
+
+        await writeError(2, url, {
+          diagnostics: { gatewayFailure: ['instance'] } as Diagnostics,
+          gatewayFailureMarker: true,
+        });
+
+        let row = await productionRow(url);
+        let diagnostics = row.diagnostics as Diagnostics | null;
+        assert.strictEqual(row.error_doc, null, 'withheld');
+        assert.strictEqual(
+          diagnostics?.gatewayFailureRenders,
+          1,
+          'the gateway lane counts it',
+        );
+        assert.notOk(
+          diagnostics?.transientRenderFailure,
+          'the transient verdict is not stamped beside it',
+        );
+      });
+
+      test('a gateway failure with no render to keep is the row’s error, retried by the transient lane', async function (assert) {
+        let url = `${testRealm}gateway-nothing-kept.json`;
+
+        await writeError(1, url, {
+          diagnostics: { gatewayFailure: ['instance'] } as Diagnostics,
+          gatewayFailureMarker: true,
+        });
+
+        let row = await productionRow(url);
+        assert.ok(row.error_doc, 'with nothing to keep, the failure surfaces');
+        assert.true(
+          (row.error_doc as Record<string, unknown> | null)?.noGoodRowToKeep,
+          'and counts as the row’s error',
+        );
+        assert.deepEqual(
+          (row.diagnostics as Diagnostics | null)?.transientRenderFailure,
+          ['instance'],
+          'the transient lane, which retries error rows, takes it',
+        );
+      });
 
       test('a covered verdict keeps the published render and writes no error', async function (assert) {
         let url = `${testRealm}gateway-withheld.json`;
@@ -2490,8 +2541,12 @@ module(basename(import.meta.filename), function () {
         return {
           async prerenderVisit(args) {
             if (args.url.includes(failUrlSubstring)) {
-              throw new Error(
-                'Prerender request to http://prerender-manager/prerender-visit aborted after 120000ms (requestId=test-abort)',
+              // As the prerender client throws it: marked a transient
+              // request failure.
+              throw markVisitRequestFailure(
+                new Error(
+                  'Prerender request to http://prerender-manager/prerender-visit aborted after 120000ms (requestId=test-abort)',
+                ),
               );
             }
             return renderedVisitResponse('rendered');
@@ -2550,14 +2605,23 @@ module(basename(import.meta.filename), function () {
           2,
           'the error row carries the batch generation, so the reconcile sweep reads the failure as this generation’s recorded outcome',
         );
+        // A request failure is transient: with a good render to keep, it is
+        // withheld rather than published as the card's render error.
+        assert.strictEqual(
+          instanceRow.error_doc,
+          null,
+          'the request failure is not the card’s current render error',
+        );
         assert.ok(
-          instanceRow.error_doc?.message?.includes('aborted after 120000ms'),
-          'the instance error doc carries the underlying request failure',
+          (
+            instanceRow.diagnostics as Diagnostics | null
+          )?.transientRenderError?.message?.includes('aborted after 120000ms'),
+          'its diagnostics carry the underlying request failure',
         );
         assert.strictEqual(
           instanceRow.isolated_html,
           '<h1>good</h1>',
-          'the last-known-good HTML is preserved beneath the error',
+          'the last-known-good HTML is kept',
         );
         assert.false(Boolean(instanceRow.is_deleted));
 
@@ -2657,8 +2721,15 @@ module(basename(import.meta.filename), function () {
         });
 
         let instanceRow = await productionRow(url);
+        assert.strictEqual(
+          instanceRow.error_doc,
+          null,
+          'the request failure is withheld over the kept render',
+        );
         assert.ok(
-          instanceRow.error_doc?.message?.includes('aborted after'),
+          (
+            instanceRow.diagnostics as Diagnostics | null
+          )?.transientRenderError?.message?.includes('aborted after'),
           'the previously-live instance row records the failure instead of staying tombstoned',
         );
         assert.false(Boolean(instanceRow.is_deleted));

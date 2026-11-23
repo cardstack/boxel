@@ -487,7 +487,7 @@ export async function releaseAutomationRunCreditHold(
 export const UNRELEASED_RUN_HOLD_SECONDS = 60 * 60;
 
 // The credits held by admitted runs whose holds haven't been released, other
-// than `excludeRunId`: those of `actsAs` (the balance check), or those of
+// than `excludeRunId` when one is named: those of `actsAs` (the balance check), or those of
 // `automationId`'s runs that aren't Previews or Run nows (the credit caps).
 //
 // A run holds its cost ceiling, less what the ledger has charged it for AI
@@ -502,7 +502,7 @@ export async function creditsHeldByRunsInFlight(
   filter: (
     | { actsAs: string; automationId?: undefined }
     | { automationId: RealmResourceIdentifier; actsAs?: undefined }
-  ) & { excludeRunId: string },
+  ) & { excludeRunId?: string },
 ): Promise<number> {
   let [row] = await querier([
     'SELECT COALESCE(SUM(GREATEST(r.cost_ceiling_credits - COALESCE(ai.charged, 0), 0)), 0) AS held',
@@ -520,8 +520,10 @@ export async function creditsHeldByRunsInFlight(
         ]) as Expression),
     'AND (r.finished_at IS NULL OR r.finished_at > now() - make_interval(secs =>',
     param(UNRELEASED_RUN_HOLD_SECONDS),
-    ')) AND r.id <>',
-    param(filter.excludeRunId),
+    '))',
+    ...((filter.excludeRunId !== undefined
+      ? ['AND r.id <>', param(filter.excludeRunId)]
+      : []) as Expression),
   ] as Expression);
   return Number(row?.held ?? 0);
 }

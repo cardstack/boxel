@@ -19,6 +19,7 @@ import {
   OAUTH_TEST_ISSUER,
   OAUTH_TEST_SERVER_URL,
   decideOAuthFlow,
+  inProcessProviderTransport,
   interactionUid,
   landOAuthFlow,
   startOAuthProviderServer,
@@ -34,7 +35,6 @@ import {
   EXAMPLE_AI_APP_NAME,
   EXAMPLE_AI_APP_WEB_ORIGIN,
   EXAMPLE_AI_APP_WEB_REDIRECT_URI,
-  type ProviderTransport,
   type RegistrationMode,
 } from './support/mock-oauth-client/client.ts';
 import {
@@ -56,37 +56,6 @@ function start(args: {
   return startOAuthProviderServer(args, 'realm_server_oauth_mock_client', {
     documentOrigins,
   });
-}
-
-// The app's requests to the provider, sent to the test's realm server in
-// process, as the issuer's host.
-function inProcessTransport(server: () => Server): ProviderTransport {
-  let pathOf = (url: string) => {
-    let parsed = new URL(url);
-    return `${parsed.pathname}${parsed.search}`;
-  };
-  let answer = (response: supertest.Response) => ({
-    status: response.status,
-    body: response.type === 'application/json' ? response.body : undefined,
-  });
-  return {
-    async get(url) {
-      return answer(
-        await supertest(server())
-          .get(pathOf(url))
-          .set('Host', OAUTH_TEST_SERVER_URL.host),
-      );
-    },
-    async post(url, contentType, body) {
-      return answer(
-        await supertest(server())
-          .post(pathOf(url))
-          .set('Host', OAUTH_TEST_SERVER_URL.host)
-          .set('Content-Type', contentType)
-          .send(body),
-      );
-    },
-  };
 }
 
 // The app's result page, read by its `data-test-*` hooks.
@@ -151,7 +120,7 @@ module(basename(import.meta.filename), function (hooks) {
     running = await startExampleAIApp({
       mode,
       issuer: OAUTH_TEST_ISSUER,
-      transport: inProcessTransport(() => server!),
+      transport: inProcessProviderTransport(() => server!),
     });
     documentOrigins.set(EXAMPLE_AI_APP_WEB_ORIGIN, running.origin);
     return running;
@@ -431,7 +400,7 @@ module(basename(import.meta.filename), function (hooks) {
       startExampleAIApp({
         mode: 'loopback',
         issuer: 'http://127.0.0.1:1',
-        transport: inProcessTransport(() => server!),
+        transport: inProcessProviderTransport(() => server!),
       }),
       new RegExp(
         `names the issuer ${OAUTH_TEST_ISSUER.replace(/[.]/g, '\\.')}$`,
