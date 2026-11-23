@@ -2230,8 +2230,8 @@ module('Acceptance | automation view', function (hooks) {
         });
       }
 
-      // Each marker of the opened run, in order: the run's steps, with the
-      // script's milestones between the script's step and the commit.
+      // Each marker of the opened run's timeline, in order: admission, the
+      // script's milestones, then the commit.
       function markers(id: string) {
         return [
           ...document.querySelectorAll(
@@ -2332,21 +2332,20 @@ module('Acceptance | automation view', function (hooks) {
 
         assert.deepEqual(
           markers('live'),
-          [
-            'reached',
-            'running',
-            'reached',
-            'running',
-            'not-started',
-            'not-started',
-          ],
-          'admission is done and the script runs, inside the second milestone; the commit has not started',
+          ['reached', 'reached', 'running', 'not-started', 'not-started'],
+          'admission is done, the run is in the second of the script’s milestones, and the third and the commit have not started',
         );
         let detail = text('[data-test-automation-run-timeline="live"]') ?? '';
         assert.true(
-          detail.includes('Waited 5 s to start'),
-          'admission says how long the run waited',
+          detail.includes('Waited 5 s'),
+          'admission says when the run started and how long the run waited',
         );
+        assert
+          .dom('[data-test-automation-run-time-zone]')
+          .includesText(
+            Intl.DateTimeFormat().resolvedOptions().timeZone,
+            'the log names the viewer’s time zone, which every time reads in',
+          );
         assert
           .dom('[data-test-automation-run-milestones]')
           .includesText('Running for 4 s · Last run took 9 s');
@@ -2463,14 +2462,17 @@ module('Acceptance | automation view', function (hooks) {
         );
         await openRun('done', 'Complete');
 
-        assert.deepEqual(markers('done'), [
-          'reached',
-          'reached',
-          'reached',
-          'reached',
-          'reached',
-          'reached',
-        ]);
+        assert.deepEqual(
+          markers('done'),
+          ['reached', 'reached', 'reached', 'reached', 'reached'],
+          'admission, each milestone and the commit are done',
+        );
+        assert.true(
+          (text('[data-test-automation-run-timeline="done"]') ?? '').includes(
+            '55 s in all',
+          ),
+          'the row where the run ended says how long the run took',
+        );
 
         await showTab('Calls');
         assert
@@ -2484,8 +2486,10 @@ module('Acceptance | automation view', function (hooks) {
           .includesText('Refused', 'a call Boxel refused names no status');
         assert
           .dom('[data-test-automation-run-resolve="5"]')
-          .includesText('anthropic/claude-haiku')
-          .includesText('$0.0021');
+          .includesText('anthropic/claude-haiku');
+        assert
+          .dom('[data-test-automation-run-calls]')
+          .doesNotIncludeText('$', 'an AI request shows no unit cost');
 
         await showTab('Writes');
         assert
@@ -2495,12 +2499,11 @@ module('Acceptance | automation view', function (hooks) {
           .dom('[data-test-automation-run-saved]')
           .exists({ count: 2 }, 'each saved file is listed');
 
-        await showTab('Cost and timings');
+        await showTab('Cost');
         let cost = text('[data-test-automation-run-cost]') ?? '';
         assert.true(cost.includes('Credits in all 3'), cost);
         assert.true(cost.includes('Compute and network 1'), cost);
         assert.true(cost.includes('AI requests 2'), cost);
-        assert.true(cost.includes('Ran for 55 s'), cost);
       });
 
       test('a failed run names the milestone the run failed in', async function (assert) {
@@ -2537,7 +2540,6 @@ module('Acceptance | automation view', function (hooks) {
 
         assert.deepEqual(markers('failed'), [
           'reached',
-          'failed',
           'reached',
           'failed',
           'not-started',
