@@ -2042,7 +2042,11 @@ module('Acceptance | automation view', function (hooks) {
           },
         },
       ]);
-      assert.dom('[data-test-automation-switch-on-screen]').doesNotExist();
+      // A closed dialog keeps its content in the page; what closes is the
+      // dialog element.
+      assert
+        .dom('dialog[open] [data-test-automation-switch-on-screen]')
+        .doesNotExist('the screen closes');
     });
 
     test('a missing monthly limit is refused before anything is sent', async function (assert) {
@@ -2230,7 +2234,9 @@ module('Acceptance | automation view', function (hooks) {
         .dom('[data-test-automation-switch-on-failure]')
         .includesText('Boxel didn’t turn the automation on')
         .includesText('the automation card sets no monthly credit cap');
-      assert.dom('[data-test-automation-switch-on-screen]').exists();
+      assert
+        .dom('dialog[open] [data-test-automation-switch-on-screen]')
+        .exists('the screen stays open');
     });
   });
 });
