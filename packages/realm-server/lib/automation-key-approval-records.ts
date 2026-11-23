@@ -1,4 +1,8 @@
-import { param, type Querier } from '@cardstack/runtime-common';
+import {
+  param,
+  type Expression,
+  type Querier,
+} from '@cardstack/runtime-common';
 import {
   versionKeyOf,
   type AutomationVersion,
@@ -48,7 +52,7 @@ export async function writeAutomationKeyApprovalsIn(
 
 // Ends every automation approval of the bindings `bindingIds`: each binding
 // came to send another share or key than the one its approvals were given
-// for.
+// for (`waitForKeyApprovalOfBindingsIn` moves their automations first).
 export async function endAutomationKeyApprovalsIn(
   txQuery: Querier,
   bindingIds: string[],
@@ -56,13 +60,48 @@ export async function endAutomationKeyApprovalsIn(
   if (bindingIds.length === 0) {
     return;
   }
+  let selected = bindingIdList(bindingIds);
+  await waitForKeyApprovalOfBindingsIn(txQuery, selected);
   await txQuery([
     'DELETE FROM automation_key_approvals WHERE binding_id IN (',
-    ...bindingIds.flatMap((id, i) => [
-      ...(i ? [','] : []),
-      param(id),
-      '::uuid',
-    ]),
+    ...selected,
     ')',
+  ]);
+}
+
+// Moves each automation an approval of the bindings `bindings` selects
+// (an expression yielding binding ids) serves to *waiting for key approval*,
+// with no next run, when it is active, *done* or waiting for credits: the
+// approval is about to end. Every such automation's row is locked first,
+// whatever its state and in `automation_id` order, so a re-check of its
+// approvals that holds the row commits before this reads it, and one that
+// comes later reads the approval as gone. A pending run of a moved
+// automation is refused at admission (`waiting-for-key-approval`).
+export async function waitForKeyApprovalOfBindingsIn(
+  txQuery: Querier,
+  bindings: Expression,
+): Promise<void> {
+  let served: Expression = [
+    'SELECT automation_id FROM automation_key_approvals WHERE binding_id IN (',
+    ...bindings,
+    ')',
+  ];
+  await txQuery([
+    'SELECT automation_id FROM automations WHERE automation_id IN (',
+    ...served,
+    ') ORDER BY automation_id FOR UPDATE',
+  ]);
+  await txQuery([
+    "UPDATE automations SET state = 'waiting-for-key-approval', next_run = NULL, updated_at = now() WHERE state IN ('active', 'done', 'waiting-for-credits') AND automation_id IN (",
+    ...served,
+    ')',
+  ]);
+}
+
+function bindingIdList(bindingIds: string[]): Expression {
+  return bindingIds.flatMap((id, i) => [
+    ...(i ? [','] : []),
+    param(id),
+    '::uuid',
   ]);
 }

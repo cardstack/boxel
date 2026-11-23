@@ -219,6 +219,7 @@ import {
   type RunTokenClaim,
 } from './run-token.ts';
 import { automationRef } from './automation-declaration.ts';
+import { MANUAL_RUN_TRIGGER } from './automation-declaration.ts';
 import {
   addAutomationRunCounts,
   automationRunForCall,
@@ -264,7 +265,6 @@ import {
   subjectOfRefusal,
 } from './card-operations/call-api.ts';
 import {
-  RUN_ADMISSION_KIND_PARAM,
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
 } from './automation-admission-route.ts';
@@ -14845,7 +14845,7 @@ export class Realm {
   // answers the first refusal, or none (see `automation-admission-route.ts`).
   // A refused credential that ends the run is recorded on its row.
   private async admitRunOperations(
-    request: Request,
+    _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
     let respond = (status: number, body: unknown) =>
@@ -14917,14 +14917,13 @@ export class Realm {
     if (refusal) {
       return answer({ refusal });
     }
-    // A run of the automation's triggers also needs each binding's approval
-    // for this automation, matching it as its card and script read now
-    // (ADR 039 §1.7). The worker says which kind of run asks; a Preview, a
-    // Run now or a batch's follow-up needs no automation approval.
-    if (
-      new URL(request.url).searchParams.get(RUN_ADMISSION_KIND_PARAM) ===
-      'trigger'
-    ) {
+    // A run of the automation's triggers, or a batch's follow-up of one,
+    // also needs each binding's approval for this automation, matching it as
+    // its card and script read now (ADR 039 §1.7). The run's own row says
+    // which kind it is; only a Preview or a Run now needs no automation
+    // approval.
+    let run = await getAutomationRun(this.#dbAdapter, call.runId);
+    if (run && run.trigger !== MANUAL_RUN_TRIGGER) {
       let read = await readRunDeclaration({
         dbAdapter: this.#dbAdapter,
         definitionLookup: this.#definitionLookup,

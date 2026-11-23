@@ -5,6 +5,7 @@ import {
   type Querier,
 } from '@cardstack/runtime-common';
 import type { SecureSessionClient } from './secure-session.ts';
+import { waitForKeyApprovalOfBindingsIn } from './automation-key-approval-records.ts';
 
 // Revokes the bindings `where` selects: each is removed, and its history gains
 // a `revoked` row carrying the request as it was last approved, so the owner
@@ -34,14 +35,9 @@ export async function revokeBindingsIn(
     via: SecureSessionClient | null;
   },
 ): Promise<string[]> {
-  await txQuery([
-    `UPDATE automations SET state = 'waiting-for-key-approval', next_run = NULL, updated_at = NOW()
-      WHERE state IN ('active', 'done', 'waiting-for-credits')
-        AND automation_id IN (
-          SELECT automation_id FROM automation_key_approvals
-           WHERE binding_id IN (SELECT id FROM key_bindings WHERE `,
+  await waitForKeyApprovalOfBindingsIn(txQuery, [
+    'SELECT id FROM key_bindings WHERE ',
     ...where,
-    `))`,
   ]);
   let rows = await txQuery([
     `WITH gone AS (DELETE FROM key_bindings WHERE `,

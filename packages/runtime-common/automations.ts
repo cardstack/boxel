@@ -1374,7 +1374,12 @@ export async function syncAutomationWithCard(
           automation: await pause(txQuery, changes, automationId, raised),
         };
       }
-      let schedule = startSchedule(declaration, now, automation.triggerRuns);
+      // An edit made while the card didn't read can change what a key's
+      // owner approved, so the automation resumes waiting when it did.
+      let schedule = awaitingKeyApproval(
+        startSchedule(declaration, now, automation.triggerRuns),
+        (await options.keyApprovalsMatch?.(automation, declaration)) !== false,
+      );
       let [row] = await txQuery([
         'UPDATE automations SET state =',
         param(schedule.state),

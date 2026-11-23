@@ -15,10 +15,14 @@ import {
   ri,
   rri,
   type AutomationRun,
+  type DefinitionLookup,
   type Realm,
   type SpendCharge,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { getAutomation } from '@cardstack/runtime-common/automations';
+import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
+import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
 import {
   appendRunLog,
   type RunLogLine,
@@ -157,6 +161,7 @@ module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
   let dbAdapter: PgAdapter;
   let request: SuperTest<Test>;
+  let virtualNetwork: VirtualNetwork;
 
   let pricedBefore = currentPricing() !== undefined;
   hooks.before(function () {
@@ -289,6 +294,7 @@ module(basename(import.meta.filename), function (hooks) {
       realm = args.testRealm;
       dbAdapter = args.dbAdapter;
       request = args.request;
+      virtualNetwork = args.virtualNetwork;
     },
   });
 
@@ -931,6 +937,21 @@ module(basename(import.meta.filename), function (hooks) {
       return approved;
     }
 
+    // Runs the index hook over the keyed card, as the pass after an edit
+    // does, and answers what it did to the automation.
+    async function syncAfterEdit() {
+      let synced = await syncAutomationsAfterIndex({
+        dbAdapter,
+        definitionLookup: {} as DefinitionLookup,
+        virtualNetwork,
+        realmURL: realm.url,
+        touched: [`${cardURL(KEYED)}.json`],
+        readFile: async (url) =>
+          url === `${cardURL(KEYED)}-script.js` ? `return 'ok';` : undefined,
+      });
+      return synced.get(automationId(KEYED));
+    }
+
     test('an automation that needs no key switches on active, its operations all approved', async function (assert) {
       let response = await switchOn(OWNER, DAILY);
       assert.strictEqual(response.body.data.attributes.state, 'active');
@@ -1074,6 +1095,27 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('an approval shown at one callApiCalls cap is refused once the card raises the cap', async function (assert) {
+      let shown = (await switchOn(OWNER, KEYED)).body.meta.keyApprovals;
+      await editCard(KEYED, (attributes) => {
+        let caps = attributes.caps as Record<string, number>;
+        attributes.caps = { ...caps, callApiCalls: caps.callApiCalls + 100 };
+      });
+      let key = await addKey(OWNER);
+      let approved = await approveOperation(
+        OWNER,
+        'list',
+        { keyId: key.id },
+        { id: cardURL(KEYED), version: shown.version },
+      );
+      assert.strictEqual(approved.status, 409, approved.text);
+      let [{ n }] = await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS n FROM automation_key_approvals WHERE automation_id = $1`,
+        { bind: [automationId(KEYED)] },
+      );
+      assert.strictEqual(n, 0, 'no approval is recorded at a cap never shown');
+    });
+
     test('an approval lasts for the life of the automation: a pause and a resume by the same payer need no approval again', async function (assert) {
       await fund(OWNER);
       await switchOnApproved();
@@ -1144,12 +1186,63 @@ module(basename(import.meta.filename), function (hooks) {
           seconds: caps.seconds - 1,
         };
       });
+      // The index hook's own comparison, run here so the assertion doesn't
+      // race the pass's hook.
+      let synced = await syncAfterEdit();
+      assert.strictEqual(synced?.kind, 'recomputed');
       let row = await getAutomation(dbAdapter, automationId(KEYED));
       assert.strictEqual(row?.state, 'active', 'the automation keeps running');
       let approvals = await keyApprovalsOf(KEYED);
       assert.true(
         approvals.approved,
         'a lower callApiCalls cap and a lower time limit still match the approval',
+      );
+    });
+
+    test('a change to a trigger’s run count moves the automation back to waiting for key approval', async function (assert) {
+      await switchOnApproved();
+      await editCard(KEYED, (attributes) => {
+        attributes.triggers = [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+            count: 3,
+          },
+        ];
+      });
+      let row = await reachesState(KEYED, 'waiting-for-key-approval');
+      assert.strictEqual(row.nextRun, null);
+    });
+
+    test('an approval a former payer gave with their own key doesn’t hold the automation back once a new payer approves theirs', async function (assert) {
+      await fund(OWNER);
+      await fund(WRITER);
+      await switchOnApproved();
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(KEYED) }))
+          .status,
+        200,
+      );
+      let resumed = await resume(WRITER, KEYED);
+      assert.strictEqual(
+        resumed.body.data.attributes.state,
+        'waiting-for-key-approval',
+      );
+      await approveOwnKey(WRITER, resumed.body.meta.keyApprovals.version);
+      await reachesState(KEYED, 'active');
+      // An edit that asks for no more: the former payer's approval, still
+      // recorded beside the new one, is for a binding no run uses now.
+      await editCard(KEYED, (attributes) => {
+        let caps = attributes.caps as Record<string, number>;
+        attributes.caps = { ...caps, seconds: caps.seconds - 1 };
+      });
+      let synced = await syncAfterEdit();
+      assert.strictEqual(synced?.kind, 'recomputed');
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'active',
       );
     });
 
@@ -1180,12 +1273,21 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('an approval that ended after switch-on is caught by a run’s admission in the realm', async function (assert) {
       await switchOnApproved();
-      let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER, {
-        automation: KEYED,
-      });
-      let ask = async (kind: string) => {
+      let ask = async ({ manual = false }: { manual?: boolean } = {}) => {
+        let { token, run } = await createAutomationRunToken(
+          dbAdapter,
+          realm,
+          OWNER,
+          { automation: KEYED },
+        );
+        if (manual) {
+          await dbAdapter.execute(
+            `UPDATE automation_runs SET trigger = $1 WHERE id = $2`,
+            { bind: [MANUAL_RUN_TRIGGER, run.id] },
+          );
+        }
         let response = (await realm.handleAutomation(
-          new Request(`${realm.url}_run-admission?kind=${kind}`, {
+          new Request(`${realm.url}_run-admission`, {
             headers: {
               Accept: 'application/vnd.api+json',
               Authorization: `Bearer ${token}`,
@@ -1194,17 +1296,17 @@ module(basename(import.meta.filename), function (hooks) {
         ))!;
         return (await response.json()).data.attributes;
       };
-      assert.deepEqual(await ask('trigger'), { refusal: null, operations: 1 });
+      assert.deepEqual(await ask(), { refusal: null, operations: 1 });
 
       await dbAdapter.execute(
         `DELETE FROM automation_key_approvals WHERE automation_id = $1`,
         { bind: [automationId(KEYED)] },
       );
-      let refused = await ask('trigger');
+      let refused = await ask();
       assert.strictEqual(refused.refusal?.code, 'key-approval-ended');
       assert.strictEqual(refused.refusal?.operation, 'list');
       assert.deepEqual(
-        await ask('manual'),
+        await ask({ manual: true }),
         { refusal: null, operations: 1 },
         'a run started by hand needs no automation approval',
       );

@@ -77,6 +77,7 @@ import {
   writeAutomationKeyApprovalsIn,
 } from './automation-key-approval-records.ts';
 import {
+  confirmationOf,
   versionKeyOf,
   type AutomationVersion,
 } from '@cardstack/runtime-common/automation-key-approval';
@@ -405,8 +406,9 @@ export interface ApprovedBinding {
 // A confirmation that names an automation (`automation`) also approves that
 // automation to use each binding it writes, at the automation's version as
 // it is now (`current`). It names the version its approver was shown
-// (`expectedVersion`, a `versionKey`), and is refused when the automation has
-// changed since.
+// (`expectedVersion`, as `confirmationOf` spells it, so the `callApiCalls`
+// cap is part of it), and is refused when the automation, its cap included,
+// has changed since.
 export async function approveBindings(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -448,7 +450,7 @@ export async function approveBindings(
   }
   if (
     automation &&
-    (await versionKeyOf(automation.current)).versionKey !==
+    confirmationOf(await versionKeyOf(automation.current)) !==
       automation.expectedVersion
   ) {
     throw new UserKeyError(

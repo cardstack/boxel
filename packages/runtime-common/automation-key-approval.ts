@@ -3,8 +3,8 @@
 // of the automation is compared with it.
 //
 // An automation's *version* is what the key's owner can judge: who pays, the
-// operations it declares, its script, its triggers (each one's label and
-// timing), its params, and its `callApiCalls` cap. An approval *matches* the
+// operations it declares, its script, its triggers (each one's label,
+// timing, run count and webhook), its params, and its `callApiCalls` cap. An approval *matches* the
 // automation when every part but the cap is the same, and the cap is no
 // higher than the approved one: a lower cap spends less, so it asks nothing
 // again. A version that changes back to the approved one matches again.
@@ -28,8 +28,16 @@ export interface AutomationVersion {
   operations: string[];
   // The SHA-256 of the script file's content, in hex.
   scriptHash: string;
-  // Each trigger's label and timing (`triggerTiming`), sorted by label.
-  triggers: { label: string; timing: string }[];
+  // Each trigger's label, timing (`triggerTiming`), run count (null when
+  // unbounded) and webhook (null for a scheduled trigger), sorted by label.
+  // A changed count asks again, even a lower one: the count is part of what
+  // the key's owner judged, unlike the cap, which only ever bounds a run.
+  triggers: {
+    label: string;
+    timing: string;
+    count: number | null;
+    webhookPath: string | null;
+  }[];
   params: Record<string, string>;
   callApiCalls: number;
 }
@@ -39,6 +47,13 @@ export interface AutomationVersion {
 export interface AutomationVersionKey {
   versionKey: string;
   callApiCalls: number;
+}
+
+// What a confirmation names as the version its approver was shown: the
+// version and the cap together, so a confirmation is refused when either has
+// changed since, and never records a cap its approver didn't see.
+export function confirmationOf(version: AutomationVersionKey): string {
+  return `${version.versionKey}.${version.callApiCalls}`;
 }
 
 // Who can give an approval an automation is missing:
@@ -141,6 +156,11 @@ export async function automationVersion(
       .map((trigger) => ({
         label: trigger.label,
         timing: triggerTiming(trigger),
+        count:
+          'count' in trigger && typeof trigger.count === 'number'
+            ? trigger.count
+            : null,
+        webhookPath: trigger.kind === 'webhook' ? trigger.webhookPath : null,
       }))
       .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0)),
     params: Object.fromEntries(
@@ -181,14 +201,50 @@ export function approvalMatches(
   );
 }
 
-// The versions the automation's approvals record, one per binding it uses.
+// The versions recorded by the automation's approvals of the bindings its
+// declaration could use now: a binding in the automation's realm for one of
+// the operations it declares, either a share's or one of `payer`'s own keys.
+// An approval of any other binding (one a former payer approved with their
+// own key, or one for an operation the card no longer declares) serves none
+// of its runs, so it says nothing about whether the automation is approved.
+// `modules` are the declared operations' modules as bindings spell them: the
+// served URL with no executable extension.
 export async function readApprovedVersions(
   querier: Querier,
-  automationId: string,
+  {
+    automationId,
+    realmURL,
+    payer,
+    operations,
+  }: {
+    automationId: string;
+    realmURL: string;
+    payer: string;
+    operations: { module: string; name: string; operation: string }[];
+  },
 ): Promise<AutomationVersionKey[]> {
+  if (operations.length === 0) {
+    return [];
+  }
   let rows = await querier([
-    'SELECT version_key, call_api_calls FROM automation_key_approvals WHERE automation_id =',
+    'SELECT a.version_key, a.call_api_calls FROM automation_key_approvals a JOIN key_bindings b ON b.id = a.binding_id WHERE a.automation_id =',
     param(automationId),
+    'AND b.realm_url =',
+    param(realmURL),
+    'AND (b.key_id IS NULL OR b.approved_by =',
+    param(payer),
+    ') AND (',
+    ...operations.flatMap(({ module, name, operation }, i) => [
+      ...(i ? ['OR'] : []),
+      '(b.definition_url =',
+      param(module),
+      'AND b.export_name =',
+      param(name),
+      'AND b.operation_name =',
+      param(operation),
+      ')',
+    ]),
+    ')',
   ]);
   return rows.map((row) => ({
     versionKey: String(row.version_key),
@@ -196,36 +252,51 @@ export async function readApprovedVersions(
   }));
 }
 
-// Whether every approval the automation has still matches it, where
-// `declaration` and `script` are its card and script as read now and
-// `payer` its payer. False when one doesn't; undefined when it has no
-// approval to compare, which says nothing about whether it needs one.
-// `readScript` is asked only when there is an approval, and its undefined
-// (the script can't be read) matches no approval.
+// Whether every approval the automation's declaration could use
+// (`readApprovedVersions`) still matches it, where `declaration` and `script`
+// are its card and script as read now and `payer` its payer. False when one
+// doesn't. Undefined when there is no such approval to compare, which says
+// nothing about whether the automation needs one, or when the script can't be
+// read, which a run's admission refuses on its own (`missing-script`).
+// `readScript` is asked only when there is an approval.
 export async function approvalsStillMatch(
   querier: Querier,
   {
     automationId,
+    realmURL,
     declaration,
     payer,
+    moduleOf,
     readScript,
   }: {
     automationId: string;
+    realmURL: string;
     declaration: Pick<
       AutomationDeclaration,
       'operations' | 'triggers' | 'params' | 'caps'
     >;
     payer: string;
+    // A declared operation's module as bindings spell it.
+    moduleOf: (module: string) => string;
     readScript: () => Promise<string | undefined>;
   },
 ): Promise<boolean | undefined> {
-  let approved = await readApprovedVersions(querier, automationId);
+  let approved = await readApprovedVersions(querier, {
+    automationId,
+    realmURL,
+    payer,
+    operations: declaration.operations.map(({ targetType, operation }) => ({
+      module: moduleOf(String(targetType.module)),
+      name: targetType.name,
+      operation,
+    })),
+  });
   if (approved.length === 0) {
     return undefined;
   }
   let script = await readScript();
   if (script === undefined) {
-    return false;
+    return undefined;
   }
   let current = await versionKeyOf(
     await automationVersion(declaration, { payer, script }),

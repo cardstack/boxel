@@ -154,7 +154,7 @@ function glanceText(automation: Automation): string | undefined {
     case 'waiting-for-credits':
       return 'The payer has no credits left, so Boxel holds every run';
     case 'waiting-for-key-approval':
-      return 'Boxel holds every run until each key owner approves the automation';
+      return 'Boxel holds every run until someone approves the automation’s use of each key';
     case 'done':
       return 'No runs left on any trigger';
     default:

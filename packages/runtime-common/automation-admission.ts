@@ -41,11 +41,11 @@
 //    resolves the declared type and reads its definition as the realm does.
 //    A refusal ends the run with its code, such as `binding-not-approved`,
 //    `share-suspended`, `binding-needs-reapproval` or `credential-rejected`;
-//    a realm that can't be asked refuses it (`run-admission-failed`). For a
-//    run of the automation's triggers, the realm also checks each binding's
-//    automation approval against the automation's version as the card and
-//    script read now (ADR 039 §1.7), and refuses one that ended or no longer
-//    matches (`key-approval-ended`). When a run that acts as the payer is
+//    a realm that can't be asked refuses it (`run-admission-failed`). For any
+//    run but a Preview or a Run now (as the run's row says), the realm also
+//    checks each binding's automation approval against the automation's
+//    version as the card and script read now (ADR 039 §1.7), and refuses one
+//    that ended or no longer matches (`key-approval-ended`). When a run that acts as the payer is
 //    refused for a key approval (`KEY_APPROVAL_REFUSAL_REASONS`), the
 //    automation moves to *waiting for key approval*: an approval it was
 //    switched on with ended or stopped matching after switch-on.
@@ -65,7 +65,6 @@
 // one `admission` line saying which.
 
 import {
-  RUN_ADMISSION_KIND_PARAM,
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
 } from './automation-admission-route.ts';
@@ -371,7 +370,7 @@ export async function admitRunOperations(
 ): Promise<
   { ok: true; operations: number } | ({ ok: false } & AdmissionRefusal)
 > {
-  let asked = await askRealm(ctx, realmURL, token, kind);
+  let asked = await askRealm(ctx, realmURL, token);
   if ('failure' in asked) {
     return refuse(
       'run-admission-failed',
@@ -556,11 +555,8 @@ async function askRealm(
   ctx: AdmissionContext,
   realmURL: string,
   token: string,
-  kind: AdmittedRunKind,
 ): Promise<{ answer: RunAdmissionAnswer } | { failure: string }> {
-  let asking = new URL(RUN_ADMISSION_PATH.replace(/^\//, ''), realmURL);
-  asking.searchParams.set(RUN_ADMISSION_KIND_PARAM, kind);
-  let url = asking.href;
+  let url = new URL(RUN_ADMISSION_PATH.replace(/^\//, ''), realmURL).href;
   let redact = (text: string) => text.split(token).join('[REDACTED]');
   try {
     let response = await ctx.virtualNetwork.fetch(url, {

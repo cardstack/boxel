@@ -47,8 +47,8 @@ one `callApi` operation in one realm to send a chosen key in one credential
 slot. An _automation approval_ is a key owner's approval for one automation,
 named by its card, to use one binding. An automation's _version_ is its
 payer, its declared operations, the SHA-256 hash of its script file's
-content, its triggers (each one's label and timing), its params, and its
-`callApiCalls` cap. An approval _matches_ when the automation's version
+content, its triggers (each one's label, timing, run count and webhook), its
+params, and its `callApiCalls` cap. An approval _matches_ when the automation's version
 equals the approval's, except that a `callApiCalls` cap below the approved
 one still matches.
 

@@ -24,6 +24,7 @@ import {
 } from './automations.ts';
 import type { DBAdapter } from './db.ts';
 import { dbAdapterQuerier } from './expression.ts';
+import { trimExecutableExtension } from './executable-extensions.ts';
 import type { DefinitionLookup } from './definition-lookup.ts';
 import { internalKeyFor } from './index.ts';
 import { IndexQueryEngine } from './index-query-engine.ts';
@@ -125,8 +126,11 @@ export async function syncAutomationsAfterIndex({
                 keyApprovalsMatch: (automation, declaration) =>
                   approvalsStillMatch(querier, {
                     automationId,
+                    realmURL,
                     declaration,
                     payer: automation.payer,
+                    moduleOf: (module) =>
+                      trimExecutableExtension(virtualNetwork.toURLHref(module)),
                     readScript: () =>
                       readFile(virtualNetwork.toURLHref(declaration.script)),
                   }),

@@ -51,6 +51,7 @@ import {
 import { switchOnNotices } from '@cardstack/runtime-common/automation-webhooks';
 import { admitPayer } from '@cardstack/runtime-common/automation-admission';
 import {
+  confirmationOf,
   KEY_APPROVAL_REFUSAL_REASONS,
   type AutomationKeyApprovals,
 } from '@cardstack/runtime-common/automation-key-approval';
@@ -350,12 +351,12 @@ async function keyApprovalsOf(
 }
 
 // Key approvals as a route answers them: whether every one is there, the
-// version (`versionKey`) a confirmation approving the rest names, and each
-// operation's state.
+// version a confirmation approving the rest names (`confirmationOf`: the
+// version and its `callApiCalls` cap), and each operation's state.
 function serializeKeyApprovals(approvals: AutomationKeyApprovals) {
   return {
     approved: approvals.approved,
-    version: approvals.version.versionKey,
+    version: confirmationOf(approvals.version),
     operations: approvals.operations,
   };
 }
