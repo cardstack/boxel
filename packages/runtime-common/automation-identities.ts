@@ -29,18 +29,22 @@ const MATRIX_ID = /@[a-z0-9._=/+-]+:[a-z0-9.-]+(?::\d+)?/gi;
 
 // `text` with every Matrix id in it that `viewer` may not see (see
 // `shownIdentity`) replaced by "someone". A run's error message can name the
-// person the run acts as or the automation's payer, whichever wrote it.
+// person the run acts as or the automation's payer, whichever wrote it. A
+// read that names many people passes its own `show`, one that remembers each
+// person's answer, so a person named by many messages is looked up once.
 export async function withHiddenIdentities(
   dbAdapter: DBAdapter,
   viewer: string,
   text: string | null,
+  show: (person: string) => Promise<string | null> = (person) =>
+    shownIdentity(dbAdapter, viewer, person),
 ): Promise<string | null> {
   if (text === null) {
     return null;
   }
   let hidden = new Set<string>();
   for (let id of new Set(text.match(MATRIX_ID) ?? [])) {
-    if ((await shownIdentity(dbAdapter, viewer, id)) === null) {
+    if ((await show(id)) === null) {
       hidden.add(id);
     }
   }

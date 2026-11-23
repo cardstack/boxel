@@ -156,6 +156,7 @@ function run(id: string, attributes: Record<string, unknown> = {}): Run {
     errorReason: null,
     errorMessage: null,
     scriptLine: null,
+    cap: null,
     canceledBy: null,
     canceledByAPerson: false,
     viewerCanceled: false,
@@ -1498,6 +1499,7 @@ module('Acceptance | automation view', function (hooks) {
           state: 'error',
           errorReason: 'hit-a-cap',
           errorMessage: 'The run hit its writes cap',
+          cap: 'writes',
         }),
         run('call', {
           state: 'error',

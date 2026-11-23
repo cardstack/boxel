@@ -25,6 +25,8 @@ import {
   type RunMilestones,
 } from './automation-run-milestones.ts';
 import {
+  capInErrorText,
+  HIT_A_CAP_REASON,
   listActiveRuns,
   listAutomationRuns,
   type AutomationRun,
@@ -93,6 +95,9 @@ export interface AutomationRunItemAttributes {
   errorMessage: string | null;
   // The line of the script a `script-error` points at, when known.
   scriptLine: number | null;
+  // The cap a `hit-a-cap` run reached, by the caps' own names (`writes`,
+  // `aiCredits`, …), read from the message `capErrorText` wrote.
+  cap: string | null;
   // Who canceled the run, when a person did and the viewer may see who;
   // `canceledByAPerson` and `viewerCanceled` say as much as the viewer may
   // know when the id is hidden.
@@ -288,7 +293,7 @@ export async function answerAutomationRunList({
           state: run.state,
           step: automationRunStep(run),
           errorReason: run.errorReason,
-          ...(await shownError(dbAdapter, viewer, run)),
+          ...(await shownError(dbAdapter, viewer, run, show)),
           canceledBy: await show(run.canceledBy),
           canceledByAPerson: run.canceledBy !== null,
           viewerCanceled: run.canceledBy === viewer,
@@ -337,13 +342,33 @@ async function shownError(
   dbAdapter: DBAdapter,
   viewer: string,
   run: AutomationRun,
-): Promise<Pick<AutomationRunItemAttributes, 'errorMessage' | 'scriptLine'>> {
-  let message = await withHiddenIdentities(dbAdapter, viewer, run.errorMessage);
-  if (message === null || run.errorReason !== 'script-error') {
-    return { errorMessage: message, scriptLine: null };
+  show: (person: string) => Promise<string | null>,
+): Promise<
+  Pick<AutomationRunItemAttributes, 'errorMessage' | 'scriptLine' | 'cap'>
+> {
+  let message = await withHiddenIdentities(
+    dbAdapter,
+    viewer,
+    run.errorMessage,
+    show,
+  );
+  if (message === null) {
+    return { errorMessage: null, scriptLine: null, cap: null };
   }
-  let { line, message: text } = scriptErrorLine(message);
-  return { errorMessage: text, scriptLine: line ?? null };
+  switch (run.errorReason) {
+    case 'script-error': {
+      let { line, message: text } = scriptErrorLine(message);
+      return { errorMessage: text, scriptLine: line ?? null, cap: null };
+    }
+    case HIT_A_CAP_REASON:
+      return {
+        errorMessage: message,
+        scriptLine: null,
+        cap: capInErrorText(message),
+      };
+    default:
+      return { errorMessage: message, scriptLine: null, cap: null };
+  }
 }
 
 function iso(value: unknown): string {

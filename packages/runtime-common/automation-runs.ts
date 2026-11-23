@@ -954,8 +954,22 @@ export async function countAutomationRunCall(
 // The error reason of a run that a call past one of its caps ended.
 export const HIT_A_CAP_REASON = 'hit-a-cap';
 
+// The message a run past one of its caps ends with, naming the cap.
+// `endAutomationRunAtCap` writes it and `capInErrorText` reads the cap back,
+// so the run list's `cap` and the stored message share one format.
+export function capErrorText(cap: string): string {
+  return `The run hit its ${cap} cap`;
+}
+
+const CAP_ERROR_TEXT = /^The run hit its (\w+) cap$/;
+
+// The cap `capErrorText` named in `text`, or null for any other message.
+export function capInErrorText(text: string): string | null {
+  return CAP_ERROR_TEXT.exec(text)?.[1] ?? null;
+}
+
 // Ends a run that a call past one of its caps stopped: an error with reason
-// `hit-a-cap`, whose message names the cap. Owner only, like any finish; a
+// `hit-a-cap`, whose message names the cap (`capErrorText`). Owner only, like any finish; a
 // run that already finished, or that another attempt took over, is left as
 // it is.
 export async function endAutomationRunAtCap(
@@ -967,7 +981,7 @@ export async function endAutomationRunAtCap(
   return await finishAutomationRun(dbAdapter, id, attempt, {
     state: 'error',
     reason: HIT_A_CAP_REASON,
-    message: `The run hit its ${cap} cap`,
+    message: capErrorText(cap),
   });
 }
 

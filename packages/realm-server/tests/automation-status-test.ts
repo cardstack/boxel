@@ -1069,7 +1069,7 @@ module(basename(import.meta.filename), function (hooks) {
         assert.deepEqual(complete.joined, []);
       });
 
-      test("an error lists its reason and message, and a script's error the line it points at", async function (assert) {
+      test("an error lists its reason and message, a script's error the line it points at, and a capped run its cap", async function (assert) {
         await writeAutomation();
         let threw = await made('nightly', '2026-11-08T08:30:00.000Z', 50);
         await ended(threw.id, {
@@ -1106,6 +1106,7 @@ module(basename(import.meta.filename), function (hooks) {
             a.errorReason,
             a.errorMessage,
             a.scriptLine,
+            a.cap,
           ]),
           [
             [
@@ -1114,6 +1115,7 @@ module(basename(import.meta.filename), function (hooks) {
               'insufficient-credits',
               `${PAYER} has 2 credits, less than the run's minimum of 5`,
               null,
+              null,
             ],
             [
               'error',
@@ -1121,12 +1123,14 @@ module(basename(import.meta.filename), function (hooks) {
               'hit-a-cap',
               'The run hit its writes cap',
               null,
+              'writes',
             ],
             [
               'error',
               'script',
               'timed-out',
               'The run reached its 300-second time limit',
+              null,
               null,
             ],
             [
@@ -1135,6 +1139,7 @@ module(basename(import.meta.filename), function (hooks) {
               'script-error',
               'TypeError: feed.items is undefined',
               7,
+              null,
             ],
           ],
           'a run admission refused stays at the admission step: its script never started',
