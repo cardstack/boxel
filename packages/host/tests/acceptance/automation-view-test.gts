@@ -2384,7 +2384,7 @@ module('Acceptance | automation view', function (hooks) {
           .dom('[data-test-automation-run-time-zone]')
           .includesText(
             Intl.DateTimeFormat().resolvedOptions().timeZone,
-            'the log names the viewer’s time zone, which every time reads in',
+            'one line names the viewer’s time zone, which every time reads in',
           );
         assert
           .dom('[data-test-automation-run-milestones]')
