@@ -438,12 +438,11 @@ function snapshotEvery() {
     try {
       region.snapshotAhead(snapshotRound);
     } catch {
-      // Reaching a region ahead of the render evaluates its arguments
-      // early, including those of a region this render tears down, whose
-      // arguments may no longer evaluate. A region that throws here takes
-      // its own snapshot when the render reaches it, so an error that is
-      // really its own surfaces there, and one the render never reaches
-      // doesn't break another region's render.
+      // A region measured ahead of the render may be one this render tears
+      // down. A region that throws here takes its own snapshot when the
+      // render reaches it, so an error that is really its own surfaces
+      // there, and one the render never reaches doesn't break another
+      // region's render.
     }
   }
 }
@@ -499,6 +498,23 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private rootSnapshot?: DOMRect;
   /** the `snapshotRound` this region's snapshot was taken ahead in, if any */
   private snapshotTakenIn = 0;
+  /**
+   * The arguments the snapshot reads, as this region's own render hook last
+   * read them. A snapshot taken ahead runs inside another region's render
+   * hook, and evaluating this region's arguments there would consume them
+   * before Glimmer reaches this region. An argument derived from an `{{#each}}`
+   * index or item is then updated after it was read in the same render: a
+   * message whose index shifts when a message is inserted above it. Glimmer
+   * rejects that update. So the ahead snapshot works from this record, and
+   * only the region's own render hook evaluates its arguments.
+   */
+  private renderedArgs: {
+    idle: boolean;
+    inView: boolean;
+    inViewMargin: number | undefined;
+  } = { idle: true, inView: false, inViewMargin: undefined };
+  /** set while a snapshot is taken ahead, so it reads `renderedArgs` */
+  private aheadOfRender = false;
   private passPending = false;
   private rendered = false;
   run?: ChoreoRun;
@@ -623,13 +639,23 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   /** the `@inViewMargin` the current observer was made with */
   private viewMarginUsed?: number;
 
+  private get inView() {
+    return this.aheadOfRender
+      ? this.renderedArgs.inView
+      : Boolean(this.args.inView);
+  }
+
   private get viewMargin() {
-    return this.args.inViewMargin ?? 1;
+    return (
+      (this.aheadOfRender
+        ? this.renderedArgs.inViewMargin
+        : this.args.inViewMargin) ?? 1
+    );
   }
 
   private watchView(node: ChoreoNode) {
     const el = node.element;
-    if (!this.args.inView || !el) {
+    if (!this.inView || !el) {
       return;
     }
     if (!this.viewObserver) {
@@ -668,7 +694,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    */
   private syncViewWatch() {
     if (
-      this.args.inView &&
+      this.inView &&
       this.viewObserver &&
       this.viewMarginUsed !== this.viewMargin
     ) {
@@ -678,7 +704,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       this.viewObserver = undefined;
       this.nearView.clear();
     }
-    if (this.args.inView && !this.viewObserver) {
+    if (this.inView && !this.viewObserver) {
       for (const node of this.participants) {
         this.watchView(node);
       }
@@ -691,7 +717,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           }
         }
       }
-    } else if (!this.args.inView && this.viewObserver) {
+    } else if (!this.inView && this.viewObserver) {
       this.viewObserver.disconnect();
       this.viewObserver = undefined;
       this.viewRoot = null;
@@ -739,7 +765,12 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // (`layout` / `layoutId`) snapshot here too, so `{{motion layout=true}}`
     // works inside a <Choreo> without a <LayoutGroup> wrapped around it.
     snapshotOnRender();
-    if (this.args.idle) {
+    this.renderedArgs = {
+      idle: Boolean(this.args.idle),
+      inView: Boolean(this.args.inView),
+      inViewMargin: this.args.inViewMargin,
+    };
+    if (this.renderedArgs.idle) {
       this.slept = true;
       // a snapshot taken ahead of this render is not this region's to keep
       this.snapshotTakenIn = 0;
@@ -760,7 +791,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         snapshotEvery();
       }
       if (this.snapshotTakenIn !== snapshotRound) {
-        // mounted after that snapshot, or idle when it was taken
+        // mounted after that snapshot, or idle at its last render
         this.syncViewWatch();
         this.snapshot();
       }
@@ -776,13 +807,23 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    * Take this region's "before" as the first region of the render takes its
    * own (see `regions`). The region still joins the pass from its own render
    * hook, so the cast and its order are what they were.
+   *
+   * It reads the arguments as the region's last render left them
+   * (`renderedArgs`), never the arguments themselves. A region idle at its
+   * last render is skipped. If it wakes in this render, it takes its own
+   * snapshot when the render reaches it.
    */
   snapshotAhead(round: number) {
-    if (!this.element || this.passPending || this.args.idle) {
+    if (!this.element || this.passPending || this.renderedArgs.idle) {
       return;
     }
-    this.syncViewWatch();
-    this.snapshot();
+    this.aheadOfRender = true;
+    try {
+      this.syncViewWatch();
+      this.snapshot();
+    } finally {
+      this.aheadOfRender = false;
+    }
     this.snapshotTakenIn = round;
   }
 
@@ -800,7 +841,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     this.shownAnimations = this.element
       ? readAnimations(this.element)
       : new Map();
-    const wired = this.args.inView ? this.nearView : undefined;
+    const wired = this.inView ? this.nearView : undefined;
     for (const node of this.participants) {
       const el = node.element;
       if (
