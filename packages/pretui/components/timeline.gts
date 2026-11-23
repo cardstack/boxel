@@ -216,12 +216,16 @@ export class Timeline extends Component<TimelineSignature> {
           min-width: 0;
           padding-bottom: 2px;
         }
+        /* As tall as the marker at least, with its contents centred, so the
+           title, its status and its time sit on the marker's centre line
+           rather than above it. */
         .pretui-timeline-head {
           display: flex;
           align-items: center;
           flex-wrap: wrap;
           gap: 6px;
           min-width: 0;
+          min-height: var(--_rail);
         }
         .pretui-timeline-title {
           font-size: var(--text-ui-md, 12.5px);
