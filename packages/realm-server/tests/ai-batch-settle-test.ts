@@ -30,6 +30,7 @@ import {
   insertUser,
   setupDB,
   setupSecretsKeyring,
+  testPricing,
 } from './helpers/index.ts';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import { settleAIBatches } from '../lib/ai-batch-settle.ts';
@@ -258,17 +259,19 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function batchCharges(batchId = 'batch_123') {
     return (await dbAdapter.execute(
-      `SELECT l.charge_id, l.realm, l.run_id, -SUM(l.credit_amount)::int AS credits,
+      `SELECT l.charge_id, l.realm, l.run_id, l.pricing_version,
+         -SUM(l.credit_amount)::int AS credits,
          (SELECT json_object_agg(u.unit, u.quantity::float) FROM credit_charge_usage u
            WHERE u.charge_id = l.charge_id) AS usage
        FROM credits_ledger l
        WHERE l.charge_kind = 'batched_ai' AND l.batch_id = $1
-       GROUP BY l.charge_id, l.realm, l.run_id`,
+       GROUP BY l.charge_id, l.realm, l.run_id, l.pricing_version`,
       { bind: [batchId] },
     )) as {
       charge_id: string;
       realm: string;
       run_id: string;
+      pricing_version: string | null;
       credits: number;
       usage: Record<string, number>;
     }[];
@@ -338,6 +341,67 @@ module(basename(import.meta.filename), function (hooks) {
       (await batchCharges()).length,
       1,
       'and isn’t charged again',
+    );
+  });
+
+  test("a batch's charge records the pricing version of the process that settled it", async function (assert) {
+    await submittedBatch();
+    batchAnswers.set('batch_123', {
+      status: 200,
+      body: openRouterBatch('batch_123', { status: 'completed', cost: 0.0042 }),
+    });
+    let pricing = testPricing();
+
+    let result = await settleAIBatches(dbAdapter, { pricing: () => pricing });
+
+    assert.strictEqual(result.settled, 1);
+    let charges = await batchCharges();
+    assert.deepEqual(
+      charges.map(({ pricing_version, credits }) => ({
+        pricing_version,
+        credits,
+      })),
+      [{ pricing_version: pricing.version, credits: 4 }],
+      "the charge carries the version, and is still OpenRouter's cost with no margin",
+    );
+    let [line] = (await getCostCoverage(dbAdapter, hour())).filter(
+      (l) => l.chargeKind === 'batched_ai',
+    );
+    assert.strictEqual(
+      line.pricingVersion,
+      pricing.version,
+      'the coverage report reads the charge at its version',
+    );
+    assert.strictEqual(line.pricedCharges, 1, "priced at OpenRouter's cost");
+  });
+
+  test('a process without prices still settles a batch, and its charge records no pricing version', async function (assert) {
+    await submittedBatch();
+    batchAnswers.set('batch_123', {
+      status: 200,
+      body: openRouterBatch('batch_123', { status: 'expired' }),
+    });
+
+    let result = await settleAIBatches(dbAdapter, { pricing: () => undefined });
+
+    assert.strictEqual(result.settled, 1, 'the batch is settled');
+    let charges = await batchCharges();
+    assert.deepEqual(
+      charges.map(({ pricing_version, credits }) => ({
+        pricing_version,
+        credits,
+      })),
+      [{ pricing_version: null, credits: 12 }],
+      'it is billed at its estimate with no version',
+    );
+    let [line] = (await getCostCoverage(dbAdapter, hour())).filter(
+      (l) => l.chargeKind === 'batched_ai',
+    );
+    assert.strictEqual(line.pricingVersion, null);
+    assert.strictEqual(
+      line.pricedCharges,
+      1,
+      'a charge with no version is still priced at what it billed',
     );
   });
 

@@ -570,7 +570,8 @@ export interface CostCoverage {
     LedgerChargeKind,
     'run' | 'run_indexing' | 'storage' | 'ai' | 'batched_ai'
   >;
-  // Null for AI charges, which aren't metered.
+  // The version that priced a metered charge, or the version of the process
+  // that wrote an AI charge; null when the charge records none.
   pricingVersion: string | null;
   charges: number;
   // What every charge drew, in credits.
