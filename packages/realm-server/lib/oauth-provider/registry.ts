@@ -88,17 +88,19 @@ const MCP: OAuthResourceDefinition = {
 
 // The Boxel API: the realm and realm-server routes Boxel's own apps call,
 // starting with boxel-cli. Its controllers are `jwtMiddleware`,
-// `multiRealmAuthorization` and `Realm.#verifySession` (ADR 021 §1.5).
+// `multiRealmAuthorization` and `Realm.#admitOAuthToken` (ADR 021 §1.5).
 //
-// A scope maps only what boxel-cli calls today and a realm's reads; every
+// A scope maps only what boxel-cli calls and a realm's reads; every
 // other route refuses its tokens, so a route added later refuses them until
 // it is mapped here (§1.3). None of key management, a secure-session route,
 // a route that mints a token or a signed URL, or a realm's permissions is
 // mapped, nor may ever be (§1.6): the realm's `_session`, `_permissions` and
 // `_sign-capture-urls`, and the realm server's `_server-session`,
 // `_realm-auth`, `_delegate-session`, key, secure-session, secure-window and
-// `_oauth` routes. `oauth-provider-boxel-api-test.ts` checks the map against
-// both routers.
+// `_oauth` routes. Nor is `/_run-command`: its prerender tab holds sessions for
+// every realm the user can reach, beside code the caller chooses, which would
+// exchange the token for those sessions (§1.5).
+// `oauth-provider-boxel-api-test.ts` checks the map against both routers.
 const ROUTE_METHODS_READ: readonly OAuthRouteMethod[] = ['GET', 'QUERY'];
 
 function realm(
@@ -191,10 +193,11 @@ const BOXEL_API_WRITE_ROUTES: readonly OAuthRoute[] = [
   realm('POST', '/_full-reindex', SupportedMimeType.JSON),
   // Realm-server writes: what boxel-cli does with a user's workspaces.
   // Creating a workspace writes only its caller's own owner row, on a realm
-  // that didn't exist, so it changes no existing realm's permissions (§1.6).
+  // that didn't exist, and publishing writes read for everyone only on the
+  // published copy, never on the realm published from, so neither changes
+  // who can reach an existing realm of the user's (§1.6).
   server('POST', '/_create-realm'),
   server('DELETE', '/_delete-realm'),
-  server('POST', '/_run-command'),
   server('POST', '/_publish-realm'),
   server('POST', '/_unpublish-realm'),
   server('POST', '/_archive-realm'),
@@ -220,7 +223,7 @@ const BOXEL_API: OAuthResourceDefinition = {
     {
       name: 'boxel:write',
       description:
-        'Create and change cards and files, run commands, and create, publish, archive and delete workspaces you own.',
+        'Create and change cards and files, and create, publish, archive and delete workspaces you own.',
       label: 'Change',
       caution: true,
       routes: BOXEL_API_WRITE_ROUTES,

@@ -28,6 +28,7 @@ import {
   type AnonymousRateLimiter,
 } from './anonymous-rate-limiter.ts';
 import { resolveRangeHeader } from './http-range.ts';
+import { isPlainObject } from './is-plain-object.ts';
 import {
   awaitRealmIndexSettled,
   INDEX_WRITING_JOB_TYPES,
@@ -1100,22 +1101,67 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
-// A request URL safe to write to a log line: the capture-URL token (a bearer
-// credential carried in `?token=`) is redacted, since these lines ship to
-// Loki. Mirrors the request-log middleware's `loggableRequestURL`, needed
-// again here because the realm's own logger (auth-failure and capture-token
-// warnings) bypasses that middleware. A no-op when no token param is present.
+// A request URL safe to write to a log line: the bearer credentials a URL can
+// carry are redacted, since these lines ship to Loki. Those are the
+// capture-URL token (`?token=`) and an OAuth access token presented as
+// `?access_token=`, which the realm refuses but still logs the refusal of.
+// Mirrors the request-log middleware's `loggableRequestURL`, needed again here
+// because the realm's own logger (auth-failure and capture-token warnings)
+// bypasses that middleware. A no-op when no such param is present.
+const LOGGED_URL_TOKEN_PARAMS = [CAPTURE_URL_TOKEN_PARAM, 'access_token'];
 function maskLoggedURL(urlString: string): string {
   try {
     let url = new URL(urlString);
-    if (!url.searchParams.has(CAPTURE_URL_TOKEN_PARAM)) {
+    let present = LOGGED_URL_TOKEN_PARAMS.filter((name) =>
+      url.searchParams.has(name),
+    );
+    if (present.length === 0) {
       return urlString;
     }
-    url.searchParams.set(CAPTURE_URL_TOKEN_PARAM, 'REDACTED');
+    for (let name of present) {
+      url.searchParams.set(name, 'REDACTED');
+    }
     return url.href;
   } catch {
     return urlString;
   }
+}
+
+// The most of a form-encoded body the realm reads to look for a token in it,
+// as the realm server's OAuth controllers do.
+const OAUTH_FORM_BODY_LIMIT_BYTES = 64 * 1024;
+
+// A form-encoded request body as text, read from a clone so the handler can
+// still read it, or undefined when it is larger than the limit.
+async function readFormBody(request: Request): Promise<string | undefined> {
+  let reader = request.clone().body?.getReader();
+  if (!reader) {
+    return '';
+  }
+  let chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    let { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (!value) {
+      continue;
+    }
+    size += value.byteLength;
+    if (size > OAUTH_FORM_BODY_LIMIT_BYTES) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  let bytes = new Uint8Array(size);
+  let offset = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 // Opt-in signal a card-writing caller sets to say "don't block my write on the
@@ -3208,10 +3254,6 @@ export type RequestContext = {
   // in place of running what the caller asked for, and gives every refusal
   // ahead of that as the realm gives it while active.
   archivedSeal?: ArchivedRealmError;
-  // Set for a dispatch made from inside the realm-server process (a worker's
-  // or definition lookup's in-process fetch), which never reaches the realm
-  // ACL and so records no identity. Every other context, including one a
-  // route builds for itself, is treated as an outside caller.
   // The verified caller of an OAuth access token (ADR 021 §1.5), which the
   // request was judged as: the user its grant is for, read with that user's
   // permissions, and never more than its scopes allow in a realm
@@ -3223,6 +3265,10 @@ export type RequestContext = {
     scopes: readonly string[];
     permissionCeiling: 'read' | 'write' | undefined;
   };
+  // Set for a dispatch made from inside the realm-server process (a worker's
+  // or definition lookup's in-process fetch), which never reaches the realm
+  // ACL and so records no identity. Every other context, including one a
+  // route builds for itself, is treated as an outside caller.
   realmInternal?: true;
 };
 
@@ -6143,39 +6189,53 @@ export class Realm {
     return stored !== undefined && (await this.#writesPolicyCard(path, stored));
   }
 
-  // Whether writing `content` as `realm.json` changes its `policy` or
-  // `config` from what the realm stores. Content that isn't a JSON object
-  // changes them, since the realm would no longer read either.
+  // Whether writing `content` as `realm.json` changes what the realm reads as
+  // its policy pointer or its config from what the realm stores. The file is
+  // a RealmConfig card document, so both are read from `data.attributes`. Its
+  // type (`data.meta.adoptsFrom`) counts too, since the indexed instance's
+  // `config` wins over the file's and a RealmConfig subclass can compute it.
+  // Content that isn't a JSON object changes them, since the realm would no
+  // longer read any of them.
   async #changesRealmPolicySettings(content: WriteContent): Promise<boolean> {
-    let settingsOf = (text: string | undefined) => {
+    type Settings = { policy: unknown; config: unknown; adoptsFrom: unknown };
+    let settingsOf = (text: string | undefined): Settings => {
       if (text === undefined) {
-        return { policy: undefined, config: undefined };
+        return { policy: undefined, config: undefined, adoptsFrom: undefined };
       }
       let parsed: unknown = JSON.parse(text);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      if (!isPlainObject(parsed)) {
         throw new Error('realm.json is not a JSON object');
       }
-      let { policy, config } = parsed as Record<string, unknown>;
-      return { policy, config };
+      let member = (value: unknown): Record<string, unknown> =>
+        isPlainObject(value) ? value : {};
+      let data = member(parsed.data);
+      let attributes = member(data.attributes);
+      let meta = member(data.meta);
+      return {
+        policy: attributes.policy,
+        config: attributes.config,
+        adoptsFrom: meta.adoptsFrom,
+      };
     };
-    let next: { policy: unknown; config: unknown };
+    let next: Settings;
     try {
       next = settingsOf(await this.#writeContentText(content));
     } catch {
       return true;
     }
-    let current: { policy: unknown; config: unknown };
+    let current: Settings;
     try {
       current = settingsOf((await this.readFileAsText('realm.json'))?.content);
     } catch {
-      // A stored realm.json the realm can't read carries no policy or
-      // config to keep, so only a write that adds neither leaves them as
+      // A stored realm.json the realm can't read carries no policy, config or
+      // type to keep, so only a write that adds none of them leaves them as
       // they are.
-      current = { policy: undefined, config: undefined };
+      current = { policy: undefined, config: undefined, adoptsFrom: undefined };
     }
     return (
       canonicalJSON(next.policy) !== canonicalJSON(current.policy) ||
-      canonicalJSON(next.config) !== canonicalJSON(current.config)
+      canonicalJSON(next.config) !== canonicalJSON(current.config) ||
+      canonicalJSON(next.adoptsFrom) !== canonicalJSON(current.adoptsFrom)
     );
   }
 
@@ -13966,10 +14026,6 @@ export class Realm {
     requestContext.principal = run.actsAs;
   }
 
-  // Verifies a session presented to this realm: a diagnostic session under its
-  // own key, any other under the realm secret seed. The token's own claim
-  // picks the key, so one that claims to be a diagnostic session and is not
-  // fails verification.
   // The realm as one of the Boxel API's controllers (ADR 021 §1.3, §1.5). A
   // bearer token that isn't one of Boxel's session JWTs is looked up through
   // the shared lookup the realm server handed over, once, and must be for
@@ -13978,8 +14034,9 @@ export class Realm {
   // token is removed from the request, so nothing past this point (a
   // handler, a log, a request the realm sends on) sees it.
   //
-  // Answers, as RFC 6750 §3.1 says: a token in the query string, `400`
-  // without a lookup; one the lookup refuses, or on a route no scope maps,
+  // Answers, as RFC 6750 §3.1 says: a token in the query string or a
+  // form-encoded body, `400` without a lookup (and a form body too large to
+  // look through, `413`); one the lookup refuses, or on a route no scope maps,
   // `401 invalid_token`, whatever the reason, which a refusal on a public
   // realm also gets rather than falling back to an anonymous read; one whose
   // scopes don't reach the route or the permission it needs, `403
@@ -13996,9 +14053,9 @@ export class Realm {
       return undefined;
     }
     let refuse = (
-      status: 400 | 401 | 403,
+      status: 400 | 401 | 403 | 413,
       error: 'invalid_request' | 'invalid_token' | 'insufficient_scope',
-      challenge: string,
+      challenge?: string,
     ) =>
       createResponse({
         body: JSON.stringify({ error }),
@@ -14006,21 +14063,45 @@ export class Realm {
           status,
           headers: {
             'content-type': SupportedMimeType.JSON,
-            'WWW-Authenticate': challenge,
+            ...(challenge ? { 'WWW-Authenticate': challenge } : {}),
           },
         },
         requestContext,
       });
-    if (new URL(request.url).searchParams.has('access_token')) {
+    let notInHeader = () => {
       this.#log.info(
         `OAuth token refused for ${request.method} ${maskLoggedURL(request.url)}: not in the header`,
       );
       return refuse(400, 'invalid_request', 'Bearer error="invalid_request"');
+    };
+    if (new URL(request.url).searchParams.has('access_token')) {
+      return notInHeader();
     }
-    let bearer = /^Bearer[ ]+(\S+)[ ]*$/i.exec(
-      request.headers.get('Authorization') ?? '',
-    )?.[1];
-    if (!bearer || !isOAuthAccessTokenShaped(bearer)) {
+    let header = request.headers.get('Authorization') ?? '';
+    let bearer = /^Bearer[ ]+(\S+)[ ]*$/i.exec(header)?.[1];
+    if (header && !(bearer && isOAuthAccessTokenShaped(bearer))) {
+      return undefined;
+    }
+    // A token in a form-encoded body is refused as one in the query string
+    // is, whatever the header carries, as the realm server's controllers do.
+    if (
+      (request.headers.get('content-type') ?? '')
+        .split(';')[0]
+        .trim()
+        .toLowerCase() === 'application/x-www-form-urlencoded'
+    ) {
+      let body = await readFormBody(request);
+      if (body === undefined) {
+        this.#log.info(
+          `request refused for ${request.method} ${maskLoggedURL(request.url)}: form body too large to read`,
+        );
+        return refuse(413, 'invalid_request');
+      }
+      if (new URLSearchParams(body).has('access_token')) {
+        return notInHeader();
+      }
+    }
+    if (!bearer) {
       return undefined;
     }
     let result = await oauth.resolve(bearer);
@@ -14156,6 +14237,10 @@ export class Realm {
     requestContext.principal = caller.user;
   }
 
+  // Verifies a session presented to this realm: a diagnostic session under its
+  // own key, any other under the realm secret seed. The token's own claim
+  // picks the key, so one that claims to be a diagnostic session and is not
+  // fails verification.
   #verifySession(
     tokenString: string,
   ): TokenClaims & { iat: number; exp: number } {

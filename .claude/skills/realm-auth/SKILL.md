@@ -141,7 +141,10 @@ in a realm it can't change what a policy admits (ADR 021 §1.6). The map in
 route refuses the token, including every key, secure-session, token-minting
 and permissions route. A route that checks a session token itself
 (`/_download-realm`, which shares `retrieveUserSessionClaim`) never calls the
-lookup and refuses it as an invalid JWT. Its revocation is its grant's: see
+lookup and refuses it as an invalid JWT. One gap in "nothing administers": a
+`boxel:write` caller can write card and module code, and the indexer renders
+it with the realm owner's realm-authority session, which carries
+`realm-owner` (ADR 021's remediation file). Its revocation is its grant's: see
 "Revoking a user's sessions" below.
 
 ## What verification enforces

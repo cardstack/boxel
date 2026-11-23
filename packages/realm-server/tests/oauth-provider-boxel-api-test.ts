@@ -20,6 +20,7 @@ import {
   createVirtualNetwork,
   fixtureDir,
   matrixURL,
+  realmConfigCardJSON,
   runTestRealmServer,
   setupDB,
   setupTestDatabaseTemplate,
@@ -35,6 +36,10 @@ import {
   testOAuthProviderConfig,
   testOAuthSecureOriginURL,
 } from './helpers/oauth-provider.ts';
+import {
+  assertNoSecrets,
+  telemetryDuring,
+} from './helpers/oauth-provider-secrets.ts';
 import {
   endGrant,
   revokeUserOAuthGrants,
@@ -56,6 +61,14 @@ const REALM_URL = OAUTH_TEST_SERVER_URL.href;
 const OWNER = '@oauth-owner:localhost';
 const READER = '@oauth-reader:localhost';
 const STRANGER = '@oauth-stranger:localhost';
+// The card a realm's policy pointer names in the tests of the policy guard.
+// The guard refuses a write to the path the pointer names whatever the card
+// there is, so it needn't be a RealmPolicy, which the catalog defines.
+const POLICY_CARD_URL = `${REALM_URL}policy`;
+const CARD_DEF = {
+  module: 'https://cardstack.com/base/card-api',
+  name: 'CardDef',
+};
 
 interface Started {
   server: Server;
@@ -374,6 +387,9 @@ module(basename(import.meta.filename), function (hooks) {
         ['post', '/_incoming-webhooks'],
         ['get', '/_public-realms'],
         ['post', '/_request-forward'],
+        // Its prerender tab holds sessions for every realm the user can
+        // reach, beside code the caller chooses.
+        ['post', '/_run-command'],
       ];
       for (let [method, path] of routes) {
         let response = await request()
@@ -437,59 +453,291 @@ module(basename(import.meta.filename), function (hooks) {
       assertInvalidToken(assert, signed, '_sign-capture-urls');
     });
 
-    test('a write that would change what the realm’s policy admits is refused, and other realm.json edits are not', async function (assert) {
+    test('a realm.json write that changes the policy pointer, the config or the card’s type is refused, and other edits are not', async function (assert) {
       let { token } = await oauthToken(OWNER);
-      let current = { name: 'Test Workspace' };
-      let created = await writeSource(
-        token,
-        '/realm.json',
-        JSON.stringify(current),
-      );
-      assert.true(
-        succeeded(created),
-        `a realm.json with no policy or config is written: ${created.status} ${created.text}`,
+      await started!.realm.write(
+        'realm.json',
+        realmConfigCardJSON({ name: 'Test Workspace' }),
       );
       let renamed = await writeSource(
         token,
         '/realm.json',
-        JSON.stringify({ ...current, name: 'Renamed' }),
+        realmConfigCardJSON({ name: 'Renamed' }),
       );
       assert.true(
         succeeded(renamed),
         `a name change is accepted: ${renamed.status} ${renamed.text}`,
       );
-      let policy = await writeSource(
-        token,
-        '/realm.json',
-        JSON.stringify({ ...current, policy: { card: './policy' } }),
+      let refused: [string, string][] = [
+        [
+          'the policy pointer',
+          realmConfigCardJSON({ name: 'Renamed', policy: POLICY_CARD_URL }),
+        ],
+        [
+          'the config',
+          realmConfigCardJSON({ name: 'Renamed', config: { anything: true } }),
+        ],
+        [
+          'the card’s type',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { cardInfo: { name: 'Renamed' } },
+              meta: {
+                adoptsFrom: { module: `${REALM_URL}my-config`, name: 'Mine' },
+              },
+            },
+          }),
+        ],
+        ['a document the realm can’t read', 'not json'],
+      ];
+      for (let [label, content] of refused) {
+        let response = await writeSource(token, '/realm.json', content);
+        assert.strictEqual(
+          response.status,
+          403,
+          `a source write changing ${label}: ${response.text}`,
+        );
+      }
+      let atomic = await request()
+        .post('/_atomic')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Authorization', `Bearer ${token}`)
+        .send(
+          JSON.stringify({
+            'atomic:operations': [
+              {
+                op: 'update',
+                href: './realm.json',
+                data: JSON.parse(
+                  realmConfigCardJSON({
+                    name: 'Renamed',
+                    policy: POLICY_CARD_URL,
+                  }),
+                ).data,
+              },
+            ],
+          }),
+        );
+      assert.strictEqual(
+        atomic.status,
+        403,
+        `an /_atomic write changing the policy pointer: ${atomic.text}`,
       );
-      assert.strictEqual(policy.status, 403, `policy: ${policy.text}`);
-      let config = await writeSource(
-        token,
-        '/realm.json',
-        JSON.stringify({ ...current, config: { anything: true } }),
-      );
-      assert.strictEqual(config.status, 403, `config: ${config.text}`);
       let removal = await request()
         .delete('/realm.json')
         .set('Accept', SupportedMimeType.CardSource)
         .set('Authorization', `Bearer ${token}`);
       assert.strictEqual(removal.status, 403, `removal: ${removal.text}`);
+      let stored = JSON.parse(
+        (await started!.realm.operationCore.readFileAsText('realm.json'))!,
+      );
+      assert.strictEqual(
+        stored.data.attributes.cardInfo.name,
+        'Renamed',
+        'realm.json keeps the name change',
+      );
+      assert.strictEqual(
+        stored.data.attributes.policy,
+        undefined,
+        'and has no policy pointer',
+      );
+    });
+
+    test('no write route writes or removes the policy card the realm points at', async function (assert) {
+      let { token } = await oauthToken(OWNER);
+      let policyCard = JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { cardInfo: { name: 'Policy' } },
+          meta: { adoptsFrom: CARD_DEF },
+        },
+      });
+      await started!.realm.write(
+        'realm.json',
+        realmConfigCardJSON({
+          name: 'Test Workspace',
+          policy: POLICY_CARD_URL,
+        }),
+      );
+      await started!.realm.write('policy.json', policyCard);
+      let changed = JSON.parse(policyCard);
+      changed.data.attributes.cardInfo.name = 'Taken';
+      let authed = (req: supertest.Test) =>
+        req.set('Authorization', `Bearer ${token}`);
+      let attempts: [string, () => supertest.Test][] = [
+        [
+          'a source write',
+          () => writeSource(token, '/policy.json', JSON.stringify(changed)),
+        ],
+        [
+          'a binary upload',
+          () =>
+            authed(
+              request()
+                .post('/policy.json')
+                .set('Accept', SupportedMimeType.OctetStream)
+                .set('Content-Type', SupportedMimeType.OctetStream),
+            ).send(Buffer.from(JSON.stringify(changed))),
+        ],
+        [
+          'an /_atomic update',
+          () =>
+            authed(
+              request()
+                .post('/_atomic')
+                .set('Accept', SupportedMimeType.JSONAPI),
+            ).send(
+              JSON.stringify({
+                'atomic:operations': [
+                  { op: 'update', href: './policy.json', data: changed.data },
+                ],
+              }),
+            ),
+        ],
+        [
+          'an /_operations update',
+          () =>
+            authed(
+              request()
+                .post('/_operations')
+                .set('Accept', SupportedMimeType.BoxelOperations)
+                .set('Content-Type', SupportedMimeType.BoxelOperations),
+            ).send(
+              JSON.stringify({
+                'boxel:operations': [
+                  {
+                    op: 'invoke',
+                    'boxel:name': 'update',
+                    href: POLICY_CARD_URL,
+                    data: changed.data,
+                  },
+                ],
+              }),
+            ),
+        ],
+        [
+          'an /_operations delete',
+          () =>
+            authed(
+              request()
+                .post('/_operations')
+                .set('Accept', SupportedMimeType.BoxelOperations)
+                .set('Content-Type', SupportedMimeType.BoxelOperations),
+            ).send(
+              JSON.stringify({
+                'boxel:operations': [
+                  {
+                    op: 'invoke',
+                    'boxel:name': 'delete',
+                    href: POLICY_CARD_URL,
+                  },
+                ],
+              }),
+            ),
+        ],
+        [
+          'a card PATCH',
+          () =>
+            authed(
+              request()
+                .patch('/policy')
+                .set('Accept', SupportedMimeType.CardJson),
+            ).send(JSON.stringify(changed)),
+        ],
+        [
+          'a card DELETE',
+          () =>
+            authed(
+              request()
+                .delete('/policy')
+                .set('Accept', SupportedMimeType.CardJson),
+            ),
+        ],
+        [
+          'a source DELETE',
+          () =>
+            authed(
+              request()
+                .delete('/policy.json')
+                .set('Accept', SupportedMimeType.CardSource),
+            ),
+        ],
+      ];
+      // Each attempt starts from the stored card, so each route is judged on
+      // its own rather than on what an earlier one left behind.
+      for (let [label, attempt] of attempts) {
+        await started!.realm.write('policy.json', policyCard);
+        let response = await attempt();
+        assert.strictEqual(response.status, 403, `${label}: ${response.text}`);
+        assert.strictEqual(
+          await started!.realm.operationCore.readFileAsText('policy.json'),
+          policyCard,
+          `${label}: the policy card is untouched`,
+        );
+      }
+    });
+
+    test('an admitted token can’t assume another user', async function (assert) {
+      let { token } = await oauthToken(OWNER);
+      let response = await readCard(token).set('X-Boxel-Assume-User', READER);
+      assertInvalidToken(assert, response, 'X-Boxel-Assume-User');
+    });
+
+    test('a route the realm dispatches on its path alone refuses it as an unknown token', async function (assert) {
+      let { token } = await oauthToken(OWNER);
+      let response = await request()
+        .get('/_capture/person-1')
+        .set('Accept', '*/*')
+        .set('Authorization', `Bearer ${token}`);
+      assertInvalidToken(assert, response, '_capture/');
     });
   });
 
   module('how a Boxel API token is checked', function () {
-    test('a token in the query string is refused without a lookup', async function (assert) {
+    test('a token in the query string is refused without a lookup, and isn’t logged', async function (assert) {
       let { token } = await oauthToken(OWNER);
-      let realm = await request()
-        .get(`/person-1?access_token=${token}`)
-        .set('Accept', SupportedMimeType.CardJson);
-      assert.strictEqual(realm.status, 400, realm.text);
-      let server = await request()
-        .get(`/_archived-realms?access_token=${token}`)
-        .set('Accept', SupportedMimeType.JSONAPI)
-        .set('Authorization', `Bearer ${token}`);
-      assert.strictEqual(server.status, 400, server.text);
+      let telemetry = await telemetryDuring(
+        async () => {
+          let realm = await request()
+            .get(`/person-1?access_token=${token}`)
+            .set('Accept', SupportedMimeType.CardJson);
+          assert.strictEqual(realm.status, 400, realm.text);
+          let server = await request()
+            .get(`/_archived-realms?access_token=${token}`)
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set('Authorization', `Bearer ${token}`);
+          assert.strictEqual(server.status, 400, server.text);
+        },
+        { channels: ['realm'] },
+      );
+      assert.true(
+        telemetry.logs.includes('not in the header'),
+        'the refusal is logged',
+      );
+      assertNoSecrets(assert, telemetry, { 'access token': token });
+    });
+
+    test('a token in a form-encoded body is refused without a lookup, and isn’t logged', async function (assert) {
+      let { token } = await oauthToken(OWNER);
+      let telemetry = await telemetryDuring(
+        async () => {
+          let realm = await request()
+            .post('/notes.md')
+            .set('Accept', SupportedMimeType.CardSource)
+            .set('Content-Type', 'application/x-www-form-urlencoded')
+            .send(`access_token=${token}`);
+          assert.strictEqual(realm.status, 400, realm.text);
+          let server = await request()
+            .post('/_create-realm')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set('Content-Type', 'application/x-www-form-urlencoded')
+            .send(`access_token=${token}`);
+          assert.strictEqual(server.status, 400, server.text);
+        },
+        { channels: ['realm'] },
+      );
+      assertNoSecrets(assert, telemetry, { 'access token': token });
     });
 
     test('an /mcp token is refused on every realm and realm-server route', async function (assert) {
@@ -563,6 +811,7 @@ module(basename(import.meta.filename), function (hooks) {
         /^\/_secure-/,
         /^\/_oauth(\/|-provider|$)/,
         /^\/mcp$/,
+        /^\/_run-command$/,
       ];
       for (let scope of resource.scopes) {
         for (let route of scope.routes) {

@@ -92,8 +92,10 @@ only. The MCP server replaces it. The Boxel API takes only pre-registered
 clients, and its controllers are the realm server's session checks
 (`jwtMiddleware`, `multiRealmAuthorization`) and each realm's request
 authentication: its scopes map the realm and realm-server routes boxel-cli
-calls, and every other route refuses its tokens as unknown. The `realm-auth`
-skill covers how those controllers judge the caller.
+calls, and every other route refuses its tokens as unknown. That includes
+`/_run-command`, whose prerender tab would hold the user's sessions beside
+code the app chose (ADR 021 §1.5). The `realm-auth` skill covers how those
+controllers judge the caller.
 
 Lifetimes (`provider.ts`, `grants.ts`): an interaction and the library's
 session last 10 minutes, a code 60 seconds. A grant lasts 30 days if the user
