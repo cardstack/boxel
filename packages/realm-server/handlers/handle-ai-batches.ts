@@ -171,6 +171,7 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
     let unrecorded = {
       runId: run.id,
       actsAs: run.actsAs,
+      realm: run.realm,
       automationId: run.automationId,
       model,
       requestCount: requests.length,

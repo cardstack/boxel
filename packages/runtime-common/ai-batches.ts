@@ -70,6 +70,10 @@ export interface AIBatch {
   settledAt: string | null;
   billedUsd: number | null;
   billedAtEstimate: boolean | null;
+  // When an operator chose not to bill a settled batch whose charge drew
+  // nothing, and why. Null unless written off.
+  writtenOffAt: string | null;
+  writeOffReason: string | null;
 }
 
 // What a batch costs as the run that submitted it reads it: pending until the
@@ -111,6 +115,9 @@ export interface NewAIBatch {
   deadline: Date;
   expiresAt: Date | null;
   state: string;
+  // When OpenRouter accepted the batch. Defaults to when the row is written,
+  // which is when a submit records the batch it was answered with.
+  submittedAt?: Date;
 }
 
 // How a worker task settles batches: the realm-server side reads each
@@ -158,7 +165,7 @@ export async function recordAIBatch(
     );
   }
   let [created] = await query(dbAdapter, [
-    'INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, estimated_usd, run_ai_reservation, deadline, expires_at, state) VALUES (',
+    'INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, estimated_usd, run_ai_reservation, deadline, expires_at, state, submitted_at) VALUES (',
     param(batch.batchId),
     ',',
     param(batch.runId),
@@ -182,6 +189,9 @@ export async function recordAIBatch(
     param(batch.expiresAt ? batch.expiresAt.toISOString() : null),
     ',',
     param(batch.state),
+    ', COALESCE(CAST(',
+    param(batch.submittedAt ? batch.submittedAt.toISOString() : null),
+    'AS timestamptz), now())',
     ') ON CONFLICT (batch_id) DO NOTHING RETURNING *',
   ]);
   if (created) {
@@ -376,17 +386,102 @@ export async function recordUnrecordedAIBatches(
   return batches.filter((batch) => inserted.has(batch.batchId));
 }
 
-// Marks resolved every unrecorded batch that has an `ai_batches` row after
-// all, as a submit slower than the reconciliation's grace period leaves
-// behind. Returns how many it resolved.
+// Marks resolved, as `recorded`, every unrecorded batch that has an
+// `ai_batches` row after all: one a submit slower than the reconciliation's
+// grace period leaves behind, or one an operator recorded. Returns how many
+// it resolved.
 export async function resolveRecordedAIBatches(
   dbAdapter: DBAdapter,
 ): Promise<number> {
   let rows = await query(dbAdapter, [
-    'UPDATE unrecorded_ai_batches u SET resolved_at = now() WHERE resolved_at IS NULL',
+    "UPDATE unrecorded_ai_batches u SET resolved_at = now(), resolution = 'recorded' WHERE resolved_at IS NULL",
     'AND EXISTS (SELECT 1 FROM ai_batches b WHERE b.batch_id = u.batch_id) RETURNING batch_id',
   ]);
   return rows.length;
+}
+
+// An `unrecorded_ai_batches` row: a batch OpenRouter listed with no
+// `ai_batches` row, when the settle job found it, and how it was resolved.
+// `resolution` is `recorded` once an `ai_batches` row names the batch, or the
+// reason an operator gave for dismissing it.
+export interface UnrecordedAIBatchRecord extends UnrecordedAIBatch {
+  foundAt: string;
+  resolvedAt: string | null;
+  resolution: string | null;
+}
+
+export async function getUnrecordedAIBatch(
+  dbAdapter: DBAdapter,
+  batchId: string,
+): Promise<UnrecordedAIBatchRecord | undefined> {
+  let [row] = await query(dbAdapter, [
+    'SELECT * FROM unrecorded_ai_batches WHERE batch_id =',
+    param(batchId),
+  ]);
+  return row ? unrecordedFromRow(row) : undefined;
+}
+
+// Resolves an unrecorded batch an operator decided nothing should bill, such
+// as a batch another environment that shares the OpenRouter workspace
+// submitted, with the reason they gave. Returns the row as resolved, or
+// undefined when there is no such batch or it is already resolved.
+export async function dismissUnrecordedAIBatch(
+  dbAdapter: DBAdapter,
+  batchId: string,
+  reason: string,
+): Promise<UnrecordedAIBatchRecord | undefined> {
+  if (reason.trim() === '' || reason.trim() === 'recorded') {
+    throw new Error(
+      `dismissing a batch takes a reason other than "recorded", not "${reason}"`,
+    );
+  }
+  let [row] = await query(dbAdapter, [
+    'UPDATE unrecorded_ai_batches SET resolved_at = now(), resolution =',
+    param(reason.trim()),
+    'WHERE batch_id =',
+    param(batchId),
+    'AND resolved_at IS NULL RETURNING *',
+  ]);
+  return row ? unrecordedFromRow(row) : undefined;
+}
+
+// Records that an operator chose not to bill a settled batch, with the reason
+// they gave. Returns the batch as recorded, or undefined when there is no
+// such settled batch or it is already written off. Whether its charge drew
+// anything is the caller's to check, in the ledger.
+export async function writeOffAIBatch(
+  dbAdapter: DBAdapter,
+  batchId: string,
+  reason: string,
+): Promise<AIBatch | undefined> {
+  if (reason.trim() === '') {
+    throw new Error('writing off a batch takes a reason');
+  }
+  let [row] = await query(dbAdapter, [
+    'UPDATE ai_batches SET written_off_at = now(), write_off_reason =',
+    param(reason.trim()),
+    'WHERE batch_id =',
+    param(batchId),
+    'AND settled_at IS NOT NULL AND written_off_at IS NULL RETURNING *',
+  ]);
+  return row ? batchFromRow(row) : undefined;
+}
+
+function unrecordedFromRow(
+  row: Record<string, PgPrimitive>,
+): UnrecordedAIBatchRecord {
+  return {
+    batchId: String(row.batch_id),
+    model: row.model == null ? null : String(row.model),
+    status: row.status == null ? null : String(row.status),
+    requestCount: row.request_count == null ? null : Number(row.request_count),
+    costUsd: row.cost_usd == null ? null : Number(row.cost_usd),
+    createdAt:
+      row.created_at == null ? null : new Date(row.created_at as string),
+    foundAt: iso(row.found_at)!,
+    resolvedAt: iso(row.resolved_at),
+    resolution: row.resolution == null ? null : String(row.resolution),
+  };
 }
 
 function finalStatesList() {
@@ -418,6 +513,9 @@ function batchFromRow(row: Record<string, PgPrimitive>): AIBatch {
     billedUsd: row.billed_usd == null ? null : Number(row.billed_usd),
     billedAtEstimate:
       row.billed_at_estimate == null ? null : Boolean(row.billed_at_estimate),
+    writtenOffAt: iso(row.written_off_at),
+    writeOffReason:
+      row.write_off_reason == null ? null : String(row.write_off_reason),
   };
 }
 
