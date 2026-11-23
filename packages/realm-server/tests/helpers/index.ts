@@ -2460,7 +2460,8 @@ export function testPricingEnv(): Record<string, string> {
   };
 }
 
-const silentPricingReporter: PricingReporter = {
+// A pricing reporter that logs nothing, for tests that run the startup check.
+export const silentPricingReporter: PricingReporter = {
   info() {},
   error() {},
   alert() {},

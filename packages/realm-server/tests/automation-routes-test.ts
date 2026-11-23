@@ -47,6 +47,9 @@ import {
   setupPermissionedRealmCached,
   setupSecretsKeyring,
   testAccountStandings,
+  setupProcessPricing,
+  silentPricingReporter,
+  testPricingEnv,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
@@ -54,11 +57,7 @@ import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import { addUserKey, mintKeyWriteTicket } from '../lib/user-keys.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
-import {
-  checkPricingAtStartup,
-  currentPricing,
-  type PricingReporter,
-} from '../lib/pricing.ts';
+import { checkPricingAtStartup, currentPricing } from '../lib/pricing.ts';
 
 // The realm-server routes a direct writer drives an automation with: the
 // switch-on estimate, switch-on, Preview, Run now, pause, resume, remove and
@@ -104,43 +103,12 @@ const inboxModule = `
   }
 `;
 
-const silent: PricingReporter = { info() {}, error() {}, alert() {} };
-
-function pricingEnv(): Record<string, string> {
-  return {
-    PRICING_PRERENDER_USD_PER_VCPU_HOUR: '0.04048',
-    PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR: '0.004445',
-    PRICING_PRERENDER_TASK_VCPUS: '4',
-    PRICING_PRERENDER_TASK_MEMORY_GB: '16',
-    PRICING_PRERENDER_TASK_TABS: '8',
-    PRICING_WORKER_USD_PER_VCPU_HOUR: '0.03238',
-    PRICING_WORKER_USD_PER_MEMORY_GB_HOUR: '0.00356',
-    PRICING_WORKER_TASK_VCPUS: '2',
-    PRICING_WORKER_TASK_MEMORY_GB: '4',
-    PRICING_WORKER_TASK_PROCESSES: '2',
-    PRICING_USD_PER_DOWNLOADED_GB: '0.045',
-    PRICING_USD_PER_FILE_STORAGE_GB_MONTH: '0.30',
-    PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH: '0.115',
-    PRICING_MARGIN: '2',
-    PRICING_MINIMUM_BALANCE_FLOOR_CREDITS: '1000',
-  };
-}
-
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
   let dbAdapter: PgAdapter;
   let request: SuperTest<Test>;
 
-  let pricedBefore = currentPricing() !== undefined;
-  hooks.before(function () {
-    checkPricingAtStartup('automation-routes-test', pricingEnv(), silent);
-  });
-  hooks.after(function () {
-    if (!pricedBefore) {
-      // Leaves the process without prices again, as it started.
-      checkPricingAtStartup('automation-routes-test', {}, silent);
-    }
-  });
+  setupProcessPricing(hooks, 'automation-routes-test');
 
   setupCatalogTestSubset(hooks);
   // The tests seal incoming webhooks' signing secrets.
@@ -427,7 +395,11 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a server without prices answers 503', async function (assert) {
-      checkPricingAtStartup('automation-routes-test', {}, silent);
+      checkPricingAtStartup(
+        'automation-routes-test',
+        {},
+        silentPricingReporter,
+      );
       try {
         let response = await request
           .get(AUTOMATION_SWITCH_ON_PATH)
@@ -435,7 +407,11 @@ module(basename(import.meta.filename), function (hooks) {
           .set('Authorization', auth(OWNER));
         assert.strictEqual(response.status, 503, response.text);
       } finally {
-        checkPricingAtStartup('automation-routes-test', pricingEnv(), silent);
+        checkPricingAtStartup(
+          'automation-routes-test',
+          testPricingEnv(),
+          silentPricingReporter,
+        );
       }
     });
   });
