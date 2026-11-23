@@ -377,7 +377,7 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-state-sentence]')
       .hasText(
-        'Nobody has turned this automation on, so Boxel runs nothing. Anyone who can edit this workspace can turn the automation on, and that person then pays for every run.',
+        'Nobody has turned this automation on, so Boxel runs nothing. A realm administrator can turn this automation on, and that person then pays for every run.',
       );
     assert.dom('[data-test-automation-status]').includesText('Nobody yet');
     assert.dom('[data-test-automation-trigger-progress]').doesNotExist();
