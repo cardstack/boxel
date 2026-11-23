@@ -1,4 +1,5 @@
 import type Koa from 'koa';
+import { createHash } from 'crypto';
 import { JSDOM } from 'jsdom';
 import { merge } from 'lodash-es';
 import type {
@@ -207,6 +208,19 @@ const headLog = logger('realm-server:head');
 const isolatedLog = logger('realm-server:isolated');
 const scopedCSSLog = logger('realm-server:scoped-css');
 const hostRoutesLog = logger('realm-server:host-routes');
+const hostURLCacheLog = logger('realm-server:host-url-cache');
+
+// Whether an `If-None-Match` header names `etag`, weak or strong.
+function ifNoneMatchMatches(ifNoneMatch: string, etag: string): boolean {
+  return (
+    ifNoneMatch === '*' ||
+    ifNoneMatch
+      .split(',')
+      .some((tag) => tag.trim().replace(/^W\//, '') === etag)
+  );
+}
+
+const REVALIDATE = 'max-age=0, must-revalidate';
 
 // An <object>/<embed> load advertises text/html in its Accept header (the
 // browser issues it as a frame-style navigation), but it is always embedding
@@ -511,6 +525,34 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       (await isRealmFilePath(url, routingDeps)) &&
       (!hostURL || (await visitorMayRead({ url, isCard: false })));
 
+    // Whether a page on a host URL is the same for every caller, so a shared
+    // cache may keep it. It is not when the request is signed in, or when a
+    // realm it reads lacks public read: the routed realm's dynamic routes
+    // and path checks then run as the visitor, and a policy grant that
+    // admits the markup limits and blocks callers by address, so two
+    // visitors can get two different pages.
+    let sameForEveryCaller = async (
+      reads: (PageRead | null)[],
+    ): Promise<boolean> => {
+      if (ctxt.get('Authorization')) {
+        return false;
+      }
+      let routed = await findOrMountRealm(requestURL, routingDeps);
+      if (!(await hasPublicPermissions(routed, routingDeps))) {
+        return false;
+      }
+      for (let read of reads) {
+        if (!read) {
+          continue;
+        }
+        let realm = await realmHoldingPage(read.url, routed, routingDeps);
+        if (!(await hasPublicPermissions(realm, routingDeps))) {
+          return false;
+        }
+      }
+      return true;
+    };
+
     // The realm's host routes for this request, read at most once. Only a
     // browser's request waits for the definitions of the route types, which
     // may need a module visit, and only when it needs them: here, for a path
@@ -727,20 +769,19 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     if (!publishedRealmInfoFetched) {
       publishedRealmInfo = await getPublishedRealmInfo(requestURL, routingDeps);
     }
-    let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
+    // A page on a host URL is validated only by the hash of the page as
+    // built (see below), never by this publish-time tag, which would answer
+    // a 304 before the page and its access decisions are worked out.
+    let lastPublishedAt = hostURL
+      ? undefined
+      : publishedRealmInfo?.lastPublishedAt;
     let etag =
       lastPublishedAt && indexHTMLHash
         ? `"${lastPublishedAt}-${indexHTMLHash}"`
         : null;
 
     if (etag) {
-      let ifNoneMatch = ctxt.get('If-None-Match');
-      if (
-        ifNoneMatch === '*' ||
-        ifNoneMatch
-          .split(',')
-          .some((t) => t.trim().replace(/^W\//, '') === etag)
-      ) {
+      if (ifNoneMatchMatches(ctxt.get('If-None-Match'), etag)) {
         ctxt.status = 304;
         ctxt.set('ETag', etag);
         ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
@@ -1267,6 +1308,47 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       // The shell is withheld from document embeds (see
       // isDocumentEmbedRequest), so a cached copy must not satisfy them.
       ctxt.vary('Sec-Fetch-Dest');
+    }
+
+    // A page on a host URL with stored markup in it is validated by a hash
+    // of the page as built. Everything it draws on is in that hash: the
+    // shell, the stored markup, which the policy decided to serve, content
+    // from other realms in that markup, and the routing config. The boundary
+    // adds the suffix that names the host URL's translation, so a change to
+    // the canonical host URL changes the ETag too. The page is built in full
+    // before the comparison, so a 304 saves the bytes, not the build.
+    let servedMarkup =
+      headHTML != null || isolatedHTML != null || pageScopedCSS != null;
+    if (hostURL && !notFound && servedMarkup) {
+      let started = performance.now();
+      let hostETag = `"${createHash('sha256')
+        .update(responseHTML)
+        .digest('base64url')
+        .slice(0, 27)}"`;
+      hostURLCacheLog.debug(
+        `hashed ${responseHTML.length} characters for ${requestURL.href} in ${(
+          performance.now() - started
+        ).toFixed(2)}ms`,
+      );
+      let shared = await sameForEveryCaller([
+        headMarkup.read,
+        isolatedMarkup.read,
+        scopedCSS.read,
+      ]);
+      ctxt.set('ETag', hostETag);
+      ctxt.set(
+        'Cache-Control',
+        `${shared ? 'public' : 'private'}, ${REVALIDATE}`,
+      );
+      ctxt.vary('Accept');
+      // The shell is withheld from document embeds (see
+      // isDocumentEmbedRequest), so a cached copy must not satisfy them.
+      ctxt.vary('Sec-Fetch-Dest');
+      ctxt.vary('Authorization');
+      if (ifNoneMatchMatches(ctxt.get('If-None-Match'), hostETag)) {
+        ctxt.status = 304;
+        return;
+      }
     }
 
     ctxt.body = responseHTML;
