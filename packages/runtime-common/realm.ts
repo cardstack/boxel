@@ -85,9 +85,6 @@ import {
 // refuses every other method outright — so no HTTP cache reaches either body,
 // and the in-process caches that do hold one key on the served mode directly.
 const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
-// The host routes when the index can't be read.
-const NO_HOST_ROUTES: HostRoutesValidation = { routes: [], warnings: [] };
-
 // The cache directive a card+json response carries when a declared `output`
 // projected its body.
 //
@@ -22260,7 +22257,8 @@ export class Realm {
   // validated, and reading it never reads a type. A route whose type
   // couldn't be read then was dropped with a warning, and the next index
   // reads it again. Kept until the next index. When the index can't be read,
-  // there are no routes, and that answer isn't kept.
+  // this rejects with the read's error, and nothing is kept: an empty tree
+  // would read as a realm with no routes.
   async getHostRoutes(): Promise<HostRoutesValidation> {
     let cached = this.#cachedHostRoutes;
     if (cached) {
@@ -22268,36 +22266,34 @@ export class Realm {
     }
     let read = this.#readHostRoutes();
     this.#cachedHostRoutes = read;
-    let validation = await read;
-    if (validation === NO_HOST_ROUTES && this.#cachedHostRoutes === read) {
-      this.#cachedHostRoutes = undefined;
+    try {
+      return await read;
+    } catch (e) {
+      if (this.#cachedHostRoutes === read) {
+        this.#cachedHostRoutes = undefined;
+      }
+      throw e;
     }
-    return validation;
   }
 
   async #readHostRoutes(): Promise<HostRoutesValidation> {
-    try {
-      let stored = await this.#realmIndexQueryEngine.fetchHostRoutes();
-      if (stored) {
-        return stored;
-      }
-      // An index written before the index stored host routes. Its rules are
-      // validated without type definitions, so each field-match route is
-      // dropped until the realm is indexed again, and an index of realm.json
-      // is started once to store the tree: nothing else may index this realm
-      // for a long time.
-      let rules = await this.#readRawHostRoutingRules();
-      if (hostRouteTypeRefs(rules).length > 0) {
-        this.#indexRealmConfigForHostRoutes();
-      }
-      return validateHostRoutes(rules, {
-        realmURL: new URL(this.url),
-        lookupType: () => 'unavailable',
-      });
-    } catch (e) {
-      this.#log.warn(`failed to read the host routes from the index: ${e}`);
-      return NO_HOST_ROUTES;
+    let stored = await this.#realmIndexQueryEngine.fetchHostRoutes();
+    if (stored) {
+      return stored;
     }
+    // An index written before the index stored host routes. Its rules are
+    // validated without type definitions, so each field-match route is
+    // dropped until the realm is indexed again, and an index of realm.json
+    // is started once to store the tree: nothing else may index this realm
+    // for a long time.
+    let rules = await this.#readRawHostRoutingRules();
+    if (hostRouteTypeRefs(rules).length > 0) {
+      this.#indexRealmConfigForHostRoutes();
+    }
+    return validateHostRoutes(rules, {
+      realmURL: new URL(this.url),
+      lookupType: () => 'unavailable',
+    });
   }
 
   // Starts an index of realm.json, once in this process, so that an index
