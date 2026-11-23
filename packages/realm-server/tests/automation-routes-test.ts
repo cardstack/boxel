@@ -1208,7 +1208,10 @@ module(basename(import.meta.filename), function (hooks) {
           level: undefined,
           data: { name: 'Fetch' },
         }),
-        line('five'),
+        line('resolve test/model: 200', {
+          kind: 'resolve',
+          data: { model: 'test/model', status: 200, costInUsd: 0.002 },
+        }),
       ]);
 
       let first = await readLog(run.id, { limit: 2 });
@@ -1257,6 +1260,11 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(
         last.lines.map((l: { seq: number }) => l.seq),
         [4],
+      );
+      assert.deepEqual(
+        last.lines[0].data,
+        { model: 'test/model', status: 200 },
+        'a stored AI request’s cost is never served to a writer',
       );
       assert.false(last.more, 'the last page says so');
       assert.strictEqual(last.next, 4);

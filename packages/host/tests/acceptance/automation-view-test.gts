@@ -2496,7 +2496,7 @@ module('Acceptance | automation view', function (hooks) {
               callApiCalls: 2,
               callApiResponseBytes: 2048,
               resolveCalls: 1,
-              writes: 2,
+              writes: 1,
               aiCreditsSpent: 2,
               aiCreditsReserved: 0,
             },
@@ -2572,7 +2572,7 @@ module('Acceptance | automation view', function (hooks) {
         );
         assert
           .dom('[data-test-automation-run-storage]')
-          .includesText('The run saved 1 file (4 KB) that still exist.')
+          .includesText('The run saved 1 file (4 KB) that still exists.')
           .includesText('The automation’s runs keep 2 files in all (10 KB).')
           .includesText(
             'A day of storage for those files costs 0.0042 credits.',
@@ -2583,7 +2583,7 @@ module('Acceptance | automation view', function (hooks) {
           .exists({ count: 6 }, 'every per-run limit the card sets is listed');
         assert
           .dom('[data-test-automation-run-limit="writes"]')
-          .hasText('Saves 2 of 1')
+          .hasText('Saves 1 of 1')
           .hasAttribute(
             'data-test-automation-run-limit-reached',
             'true',

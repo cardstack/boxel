@@ -7,6 +7,10 @@ scope:
   - packages/host/app/tools/read-automation-run.ts
   - packages/host/app/lib/realm-runner/credits.ts
   - packages/base/**/*.gts
+  - packages/realm-server/handlers/handle-request-forward.ts
+  - packages/realm-server/handlers/handle-automations.ts
+  - packages/runtime-common/automation-manual-runs.ts
+  - packages/ai-bot/lib/responder.ts
 ---
 
 # 049. Show an end user cost only as the Boxel credits charged, never as a unit cost
@@ -15,9 +19,9 @@ A person using Boxel pays in Boxel credits, and every place the product shows
 what something cost says so in the credits Boxel charged, or will charge, for
 the thing: the charge's own figure, margin included. A unit cost (what an AI
 provider, a hosting provider or a vendor charges Boxel, in dollars or per
-token, per request or per unit of usage) never reaches a screen an end user
-sees, either as itself or converted into credits, so no figure on a screen
-can be worked back to what Boxel pays.
+token, per request or per unit of usage) never reaches an end user, on a
+screen or in data the person can read, either as itself or converted into
+credits, so nothing an end user reads can be worked back to what Boxel pays.
 
 ## 1. Decision
 
@@ -46,11 +50,14 @@ margin, so dividing it by `CREDITS_PER_USD` gives the unit cost back, and it
 differs from the charge whenever the margin isn't 1. A surface MUST read the
 credits a charge records, or an estimate the server prices as §1.1 says.
 
-### 1.4. Unit costs in data stay unshown
+### 1.4. No unit cost in what an end user can read
 
-Data a surface reads MAY carry a unit cost, such as an AI request's
-`costInUsd` in an automation run's report or a turn's `costUsd` in a usage
-event. A surface MUST NOT render that field or anything computed from it.
+A route, event or other payload an end user can read MUST NOT carry a unit
+cost. That includes what a realm's writers read from the realm server (an
+automation run's report and log), what a room's members read in its events,
+and anything a card reads with the viewer's session, since a card the viewer
+opens may be one the viewer wrote. Data stored with a unit cost, such as a
+log line written with one, MUST lose it before it is served.
 
 ### 1.5. Who counts as an end user
 
@@ -60,38 +67,45 @@ end-user surfaces, and MAY show unit costs.
 
 ## 2. Rationale
 
-Credits are the one unit a person both pays and spends, so a cost shown in
-credits answers the question the person has: how much of the balance did this
-take. A unit cost answers a different question, Boxel's own cost, and a
-person who can read it, directly or as credits worked out at the cost before
-the margin, can set it beside the credits charged and read the margin off the
-difference. A unit cost also changes with each pricing version (ADR 029
-§1.3), while the credits a charge recorded don't. Showing the charge's own
-credits keeps one figure for one spend, the figure the balance actually lost.
+Boxel's unit costs and its margin are Boxel's own. A person who can read a
+unit cost, on a screen, in a payload, or as credits worked out at the cost
+before the margin, can set it beside the credits charged and read the margin
+off the difference, so keeping the margin private means keeping unit costs
+out of everything an end user can read, not only off the screens Boxel ships.
+A card is code a writer can write, and it reads what its viewer can read, so
+a field a shipped screen never renders is still readable.
+
+Credits are also the one unit a person both pays and spends, so a cost shown
+in credits answers the question the person has: how much of the balance did
+this take. A unit cost changes with each pricing version (ADR 029 §1.3),
+while the credits a charge recorded don't.
 
 ## 3. Considered options
 
-- **Credits only, with unit costs kept out of every end-user surface.** Chosen:
-  one unit, the one the person pays in.
+- **Credits only, with unit costs kept out of everything an end user can
+  read.** Chosen: one unit, the one the person pays in, and a margin no
+  reader can work out.
 - **Show the unit cost beside the credits, as a detail.** Rejected: it exposes
   the margin and the providers' prices, and a person has no use for it, since
   credits are what the balance loses.
 - **Convert a provider cost to credits on the client.** Rejected (§1.3): the
   result is the cost before the margin, which gives the unit cost back and
   disagrees with the charge whenever the margin isn't 1.
-- **Strip unit costs from every payload a client reads.** Not required: an
-  operator tool reads the same payloads, and a field a surface never renders
-  shows nothing. A payload MAY drop one where no reader needs it.
+- **Keep unit costs in payloads, and never render them.** Rejected: a card
+  the viewer wrote reads the same payloads with the viewer's session and can
+  render any field in them. Operators read unit costs where only operators
+  can (the credits ledger, server logs and dashboards, §1.5).
 - **Allow a relative price tier (a model picker's `$` to `$$$$`).** A tier
   ranks options and states no cost, so §1.2 doesn't forbid it.
 
-## 4. Open questions
+## 4. Consequences
 
 - An AI or batched AI charge is the provider's cost with no margin (ADR 029
   §1.1), so the credits charged for AI divide back to the provider's cost
-  exactly, even when a surface shows only the charge as §1.1 requires. Keeping
-  AI's unit cost unreadable needs a margin on AI charges, which is a change to
-  ADR 029, not to this ADR.
+  exactly, even though nothing an end user reads carries that cost. AI's unit
+  cost stays readable this way until ADR 029 puts a margin on AI charges.
+- An operator who needs a run's AI cost reads it from the credits ledger or
+  the server's logs, not from the run's log or report.
 
 ## 5. Remediation
 

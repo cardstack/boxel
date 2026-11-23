@@ -13,7 +13,7 @@ Element: an <ol>
 
 **The order you pass is the order rendered and numbered.** No sorting, no reversing. Newest-first and oldest-first are both legitimate and the component refuses to guess.
 
-**The event fields map onto kit components rather than to strings:** `status` → **StatusChip** (hue derived from the value, Law 2, unless `statusTone` names the chip's tone for a status whose meaning the value's hue can't carry), `token` → **Token** (machine values as jewelry, Law 3), `at` → **RelativeTime** (timer-free, `@now` supplied by the caller), `person` → **Avatar** plus name. That is the interesting design decision: the data shape is declarative, and the visual vocabulary is the kit's, so every timeline in a product looks the same and none of them invent their own status colours.
+**The event fields map onto kit components rather than to strings:** `status` → **StatusChip** (hue derived from the value, Law 2, unless `statusTone` names the chip's tone for a status whose meaning the value's hue can't carry), `token` → **Token** (machine values as jewelry, Law 3), `at` → **RelativeTime** (timer-free, `@now` supplied by the caller), `person` → **Avatar** plus name. That is the interesting design decision: the data shape is declarative, and the visual vocabulary is the kit's, so every timeline in a product looks the same and none of them invent their own status colors.
 
 `@density='compact'` collapses each event to one line with a smaller marker and no marker ring; `expanded` gives each a body block.
 

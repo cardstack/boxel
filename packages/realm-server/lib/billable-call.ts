@@ -58,10 +58,10 @@ export interface BillableCallOptions {
   // with no reference; a call an automation run makes names the run.
   charge?: AICallCharge;
   // Told what the upstream response cost in USD once the credit strategy has
-  // priced it, or undefined when it couldn't be. Not called for a call that
+  // priced it, or undefined when it couldn't be, with what `call` returned
+  // (the request forward's `{ id, usage }`, whose `usage` carries the token
+  // counts of a response that wasn't streamed). Not called for a call that
   // returned nothing to price.
-  // Hears the call's cost once the strategy resolves it, with the usage the
-  // provider reported, which carries the request's token counts.
   onCostResolved?: (costInUsd: number | undefined, usage: unknown) => void;
 }
 

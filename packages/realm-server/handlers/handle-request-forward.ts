@@ -556,7 +556,6 @@ export default function handleRequestForward({
             model: runModel,
             status: upstreamStatus,
             ms: sentAt !== undefined ? Date.now() - sentAt : undefined,
-            costInUsd: settledCost,
             ...tokens,
           }),
         );
@@ -593,22 +592,20 @@ export function tokensOf(answer: unknown): {
 }
 
 // A run's `resolve` call as its line in the run's log: the model, the
-// provider's status and time, the tokens the request read and wrote, and
-// what the call cost. The message names no cost: a run's log is shown to the
-// automation's writers, who see what AI cost only as the credits charged
-// (ADR 049 §1.2). The cost stays in `data` for the operators who read it.
+// provider's status and time, and the tokens the request read and wrote.
+// The line records no cost, in its message or its data: a run's log is
+// served to the automation's writers, who see what AI cost only as the
+// credits charged (ADR 049 §1.2, §1.4).
 export function resolveLogLine({
   model,
   status,
   ms,
-  costInUsd,
   inputTokens,
   outputTokens,
 }: {
   model?: string;
   status?: number;
   ms?: number;
-  costInUsd?: number;
   inputTokens?: number;
   outputTokens?: number;
 }): Omit<RunLogLine, 'source' | 'at'> {
@@ -626,7 +623,6 @@ export function resolveLogLine({
       ...(model ? { model } : {}),
       ...(status !== undefined ? { status } : {}),
       ...(ms !== undefined ? { ms } : {}),
-      ...(costInUsd !== undefined ? { costInUsd } : {}),
       ...(inputTokens !== undefined ? { inputTokens } : {}),
       ...(outputTokens !== undefined ? { outputTokens } : {}),
     },

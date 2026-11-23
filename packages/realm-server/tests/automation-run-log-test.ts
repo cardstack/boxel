@@ -724,19 +724,17 @@ module(basename(import.meta.filename), function (hooks) {
         model: 'anthropic/claude',
         status: 200,
         ms: 800,
-        costInUsd: 0.0012,
         inputTokens: 1200,
         outputTokens: 300,
       }).message,
       'resolve anthropic/claude: 200 (800 ms, 1200 tokens in, 300 out)',
-      'the message names the tokens and no cost, which a run log’s readers never see',
+      'the message names the tokens',
     );
     assert.deepEqual(
       resolveLogLine({
         model: 'anthropic/claude',
         status: 200,
         ms: 800,
-        costInUsd: 0.0012,
         inputTokens: 1200,
         outputTokens: 300,
       }).data,
@@ -744,11 +742,10 @@ module(basename(import.meta.filename), function (hooks) {
         model: 'anthropic/claude',
         status: 200,
         ms: 800,
-        costInUsd: 0.0012,
         inputTokens: 1200,
         outputTokens: 300,
       },
-      'the cost and the tokens stay in the data',
+      'the data holds the tokens',
     );
     assert.deepEqual(
       tokensOf({ usage: { prompt_tokens: 12, completion_tokens: 3, cost: 1 } }),

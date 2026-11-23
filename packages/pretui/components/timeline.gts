@@ -216,8 +216,8 @@ export class Timeline extends Component<TimelineSignature> {
           min-width: 0;
           padding-bottom: 2px;
         }
-        /* As tall as the marker at least, with its contents centred, so the
-           title, its status and its time sit on the marker's centre line
+        /* As tall as the marker at least, with its contents centered, so the
+           title, its status and its time sit on the marker's center line
            rather than above it. */
         .pretui-timeline-head {
           display: flex;

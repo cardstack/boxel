@@ -338,7 +338,6 @@ export interface RunResolveCall {
   model?: string;
   status?: number;
   ms?: number;
-  costInUsd?: number;
   // The tokens the request read and wrote, as the provider reported them.
   inputTokens?: number;
   outputTokens?: number;
@@ -430,7 +429,6 @@ export async function readAutomationRunSummary(
         ...optionalString(data, 'model'),
         ...optionalNumber(data, 'status'),
         ...optionalNumber(data, 'ms'),
-        ...optionalNumber(data, 'costInUsd'),
         ...optionalNumber(data, 'inputTokens'),
         ...optionalNumber(data, 'outputTokens'),
       });

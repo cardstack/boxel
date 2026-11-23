@@ -56,13 +56,17 @@ module('Pretui | components/timeline', function (hooks) {
     ];
     await render(<template><Timeline @events={{toned}} /></template>);
     let [first, second] = events();
-    let chip = (event: HTMLElement | undefined) =>
-      event?.querySelector('.pretui-timeline-head [data-test-pretui-status-chip]');
-    assert.strictEqual(chip(first)?.textContent?.trim(), 'Running', 'the chip is in the head, with the title');
+    let chip = (event: HTMLElement | undefined) => event?.querySelector<HTMLElement>('[data-test-pretui-status-chip]');
+    assert.strictEqual(chip(first)?.textContent?.trim(), 'Running');
     assert.strictEqual(chip(first)?.getAttribute('data-tone'), 'info');
     assert.strictEqual(chip(second)?.getAttribute('data-tone'), 'danger');
     let third = events()[2];
     assert.strictEqual(chip(third)?.getAttribute('data-tone'), 'neutral');
+    assert.strictEqual(
+      chip(third)?.style.getPropertyValue('--pretui-chip-hue').trim(),
+      'var(--muted-foreground)',
+      'a neutral status has a muted dot, not a hue derived from its value',
+    );
   });
 
   test('a default block replaces the body per event, and a marker block the glyph', async function (assert) {

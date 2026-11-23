@@ -840,7 +840,7 @@ export function handleAutomationRunLog(args: CreateRoutesArgs): Handler {
         attributes: {
           state:
             page.state as AutomationRunLogDocument['data']['attributes']['state'],
-          lines: page.lines,
+          lines: page.lines.map(withoutUnitCost),
           next: page.next,
           more: page.more,
           total: page.total,
@@ -850,6 +850,19 @@ export function handleAutomationRunLog(args: CreateRoutesArgs): Handler {
     };
     await sendJSON(ctxt, 200, document);
   });
+}
+
+// A log line as a writer reads it. A stored line's data can carry an AI
+// request's cost, which a writer sees only as the credits charged (ADR 049
+// §1.4).
+function withoutUnitCost<T extends { data?: Record<string, unknown> }>(
+  line: T,
+): T {
+  if (!line.data || !('costInUsd' in line.data)) {
+    return line;
+  }
+  let { costInUsd: _costInUsd, ...data } = line.data;
+  return { ...line, data };
 }
 
 // The largest `seq` a run's log holds, Postgres's `integer`.

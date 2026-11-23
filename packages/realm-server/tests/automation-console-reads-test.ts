@@ -221,16 +221,11 @@ module(basename(import.meta.filename), function (hooks) {
           bytes: 2048,
         } as Parameters<typeof callApiLogLine>[0]),
       );
-      await logRunPlatformLine(
-        dbAdapter,
-        run.id,
-        resolveLogLine({
-          model: 'test/model',
-          status: 200,
-          ms: 900,
-          costInUsd: 0.002,
-        }),
-      );
+      await logRunPlatformLine(dbAdapter, run.id, {
+        ...resolveLogLine({ model: 'test/model', status: 200, ms: 900 }),
+        // A stored line can carry an AI request's cost in its data.
+        data: { model: 'test/model', status: 200, ms: 900, costInUsd: 0.002 },
+      });
       await logRunPlatformLine(dbAdapter, run.id, {
         kind: 'commit',
         level: 'info',
@@ -297,7 +292,10 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(a.resolveCalls.length, 1);
       assert.strictEqual(a.resolveCalls[0].model, 'test/model');
-      assert.strictEqual(a.resolveCalls[0].costInUsd, 0.002);
+      assert.notOk(
+        'costInUsd' in a.resolveCalls[0],
+        'a writer never reads an AI request’s cost',
+      );
       assert.deepEqual(a.writes, {
         count: 2,
         committed: ['out/a.json', 'out/b.json'],
