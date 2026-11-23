@@ -16,6 +16,9 @@ module(basename(import.meta.filename), function () {
   test('hostRouteAddress: an undecided route ends the search', async function (assert) {
     await runSharedTest(hostRouteAddressTests, assert, {});
   });
+  test('hostRouteAddress: an unavailable route that comes first ends the search', async function (assert) {
+    await runSharedTest(hostRouteAddressTests, assert, {});
+  });
 
   test('hostRouteAddress: a fixed route gives its card its path', async function (assert) {
     await runSharedTest(hostRouteAddressTests, assert, {});

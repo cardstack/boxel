@@ -247,11 +247,27 @@ export type HostRouteParentLink =
     }
   | { field: string; side: 'unverified'; inferred: false };
 
+// A field-match route whose type's definition couldn't be read for a reason
+// that may pass: its module's render timed out, or a server couldn't be
+// reached. The route stays in the tree, so a path it matches answers as a
+// failed lookup does (ADR 036 §1.4) rather than falling through to a later
+// route or to not-found, and the walk that works out a card's address stops
+// at it. Its child routes aren't validated without its type, so it has none:
+// it matches every path that starts with its own.
+export interface HostUnavailableRoute extends HostRouteBase {
+  kind: 'unavailable';
+  pattern: RoutePathPattern;
+  type: ResolvedCodeRef;
+  // As on a field-match route: an alias is never canonical.
+  statusCode: 301 | undefined;
+}
+
 export type HostRoute =
   | HostFixedCardRoute
   | HostRedirectRoute
   | HostCardIdRoute
-  | HostFieldMatchRoute;
+  | HostFieldMatchRoute
+  | HostUnavailableRoute;
 
 export type HostRouteWarningCode =
   // The route has no usable `path`, or it doesn't parse.
@@ -294,6 +310,9 @@ export type HostRouteWarningCode =
   // `type` isn't a card type the index knows.
   | 'not-card-type'
   // The module of `type` has an error or can't be found.
+  | 'type-unreadable'
+  // The definition of `type` can't be read now. The route is kept as
+  // unavailable (`HostUnavailableRoute`), not dropped.
   | 'type-unavailable'
   // `match` is missing or malformed, or doesn't match each `:name` of the
   // route's own path with exactly one field.
@@ -339,19 +358,17 @@ export interface HostRoutesValidation {
   warnings: readonly HostRouteWarning[];
 }
 
-// Thrown by a read of a realm's host routes when the definition of a type a
-// field-match route names couldn't be read for a reason that may pass: its
-// module's render timed out, or the prerender server couldn't be reached.
-// The routes are not validated without that type, so no reader gets a tree
-// that lacks its route. Nothing is cached, and the next read tries again. A
-// server answers the request with 503 (ADR 036 §1.4).
-export class HostRoutesReadError extends Error {
-  constructor(message: string, opts?: { cause?: unknown }) {
-    super(message);
-    this.name = 'HostRoutesReadError';
-    if (opts?.cause !== undefined) {
-      (this as { cause?: unknown }).cause = opts.cause;
-    }
+// What the resolver ends with, and the canonical address walk rejects with,
+// at an unavailable route (`HostUnavailableRoute`).
+export class HostRouteUnavailableError extends Error {
+  readonly position: readonly number[];
+
+  constructor(route: HostUnavailableRoute) {
+    super(
+      `The host route ${route.fullPath} is unavailable: the definition of ${route.type.name} from ${route.type.module} can't be read now`,
+    );
+    this.name = 'HostRouteUnavailableError';
+    this.position = route.position;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -361,11 +378,13 @@ export interface ValidateHostRoutesOptions {
   // must be in it.
   realmURL: URL;
   // The definition of a type a field-match route names. `undefined` when
-  // there is no such type; `'unavailable'` when the type's module has an
-  // error or can't be found. Either drops its routes.
+  // there is no such type and `'unreadable'` when the type's module has an
+  // error or can't be found: either drops its routes. `'unavailable'` when
+  // the definition can't be read now, which keeps the route as an
+  // unavailable one.
   lookupType: (
     type: ResolvedCodeRef,
-  ) => HostRouteTypeInfo | 'unavailable' | undefined;
+  ) => HostRouteTypeInfo | 'unreadable' | 'unavailable' | undefined;
   // Defaults to `MAX_DYNAMIC_HOST_ROUTES`.
   maxDynamicRoutes?: number;
 }
@@ -761,11 +780,27 @@ class Validator {
         return drop('invalid-type', 'type must name a module and an export');
       }
       let found = this.options.lookupType(type);
-      if (found === 'unavailable') {
+      if (found === 'unreadable') {
         return drop(
-          'type-unavailable',
+          'type-unreadable',
           `The definition of ${type.name} from ${type.module} could not be read`,
         );
+      }
+      if (found === 'unavailable') {
+        this.warn(
+          'type-unavailable',
+          `The definition of ${type.name} from ${type.module} can't be read now; a path this route matches answers with an error until it can`,
+          position,
+          displayPath,
+          false,
+        );
+        return {
+          ...base,
+          kind: 'unavailable',
+          pattern: pattern!,
+          type,
+          statusCode: this.aliasStatusCode(rule, position, displayPath),
+        };
       }
       typeInfo = found;
       if (!typeInfo || !typeInfo.isCardType) {
@@ -1071,8 +1106,7 @@ class Validator {
         if (route.kind === 'field-match') {
           let info = this.options.lookupType(route.type);
           if (
-            info &&
-            info !== 'unavailable' &&
+            typeof info === 'object' &&
             info.types.some((key) => standaloneTypes.has(key))
           ) {
             return;
@@ -1237,7 +1271,11 @@ function isLinkType(
 }
 
 function isDynamicCardRoute(route: HostRoute): boolean {
-  return route.kind === 'card-id' || route.kind === 'field-match';
+  return (
+    route.kind === 'card-id' ||
+    route.kind === 'field-match' ||
+    route.kind === 'unavailable'
+  );
 }
 
 function isDynamic(route: HostRoute): boolean {

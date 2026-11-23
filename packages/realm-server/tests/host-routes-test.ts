@@ -116,6 +116,9 @@ module(basename(import.meta.filename), function () {
   test('validateHostRoutes: a type whose module has an error drops its route and keeps the rest', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
+  test('validateHostRoutes: a type that can not be read now keeps its route as unavailable', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
 
   test('validateHostRoutes: a link to a type the parent descends from counts', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});

@@ -98,12 +98,12 @@ script's fetch (`Sec-Fetch-Dest: empty`) and a request for a file of the
 realm MUST NOT read the routes, so the module visit's own imports never wait
 for them. A type whose module has an error,
 can't be found or has no such export makes its route invalid. A read that
-may pass when tried again (a render timeout, a prerender server that can't
-be reached) MUST fail the request with 503 (§1.4) and leave nothing cached.
-Every page of the realm carries the whole tree (§1.6), so while such a read
-fails, every page of the realm answers 503, not only the paths its route
-could answer.
-A reader MUST get the whole validated tree or an error, never part of it.
+may pass when tried again (a render timeout, a server that can't be reached)
+MUST keep the route as an unavailable route, which covers its child routes,
+and the tree MUST NOT be cached. A path an unavailable route matches MUST
+answer as a failed lookup does (§1.4), and the address walk MUST stop at it
+(§1.7). Every other route MUST be served as usual. A reader MUST get the whole
+validated tree, with no flag that marks it incomplete.
 Validation MUST drop each
 dynamic route past `MAX_DYNAMIC_HOST_ROUTES`, with a warning. Validation
 SHOULD warn when a literal or fixed route takes a path that a dynamic sibling
@@ -126,7 +126,7 @@ A link's routed address MUST be worked out when the card renders, at
 HTML visit and in the browser, by `hostRouteAddress`. It MUST be synchronous
 over cards already loaded, and MUST NOT load a card or search. It MUST stop
 at the first route in canonical order that it can't decide yet (a card,
-parent or value not loaded) and give no address, instead of trying a later
+parent or value not loaded, or an unavailable route, §1.5) and give no address, instead of trying a later
 route. When a link needs a card that isn't loaded, the link helper MUST ask
 the store for it and give the card's own URL until it arrives, then the
 address. The HTML visit MUST wait for those loads before it stores the HTML.

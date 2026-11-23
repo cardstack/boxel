@@ -106,7 +106,9 @@ function validate(
         ? undefined
         : ref.name === 'Pending'
           ? 'unavailable'
-          : TYPES[ref.name],
+          : ref.name === 'Broken'
+            ? 'unreadable'
+            : TYPES[ref.name],
     ...options,
   });
 }
@@ -1074,7 +1076,7 @@ const tests: SharedTests<unknown> = Object.freeze({
         { path: '/', instance: instance('home') },
         fieldMatch(
           '/later/:slug',
-          'Pending',
+          'Broken',
           { slug: ':slug' },
           { routes: [fieldMatch('/:venue', 'Venue', { slug: ':venue' })] },
         ),
@@ -1082,7 +1084,7 @@ const tests: SharedTests<unknown> = Object.freeze({
       ]);
       assert.deepEqual(paths(routes), ['/', '/posts/:slug']);
       assert.deepEqual(codes(warnings), [
-        { code: 'type-unavailable', path: '/later/:slug', dropped: true },
+        { code: 'type-unreadable', path: '/later/:slug', dropped: true },
         {
           code: 'parent-dropped',
           path: '/later/:slug/:venue',
@@ -1091,6 +1093,33 @@ const tests: SharedTests<unknown> = Object.freeze({
       ]);
       assert.deepEqual(hostRoutingMapFromRoutes(routes), [
         { path: '/', id: `${REALM}home` },
+      ]);
+    },
+  'validateHostRoutes: a type that can not be read now keeps its route as unavailable':
+    async (assert) => {
+      let { routes, warnings } = validate([
+        fieldMatch(
+          '/later/:slug',
+          'Pending',
+          { slug: ':slug' },
+          { routes: [fieldMatch('/:venue', 'Venue', { slug: ':venue' })] },
+        ),
+        fieldMatch('/posts/:slug', 'Post', { slug: ':slug' }),
+      ]);
+      assert.deepEqual(
+        routes.map((route) => [
+          route.kind,
+          route.fullPath,
+          route.routes.length,
+        ]),
+        [
+          ['unavailable', '/later/:slug', 0],
+          ['field-match', '/posts/:slug', 0],
+        ],
+        'the route stays, covering its child routes, and the rest is validated',
+      );
+      assert.deepEqual(codes(warnings), [
+        { code: 'type-unavailable', path: '/later/:slug', dropped: false },
       ]);
     },
   'validateHostRoutes: a link to a type the parent descends from counts':

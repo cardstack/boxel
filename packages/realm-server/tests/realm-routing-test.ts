@@ -2,7 +2,6 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
-  HostRoutesReadError,
   isFilterRefersToNonexistentTypeError,
   rri,
 } from '@cardstack/runtime-common';
@@ -628,8 +627,8 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(
           first.warnings.map((w) => [w.code, w.path, w.dropped]),
           [
-            ['type-unavailable', '/later/:slug', true],
-            ['type-unavailable', '/broken/:slug', true],
+            ['type-unreadable', '/later/:slug', true],
+            ['type-unreadable', '/broken/:slug', true],
           ],
         );
         assert.strictEqual(
@@ -673,7 +672,7 @@ module(basename(import.meta.filename), function () {
           warnings
             .filter((w) => w.path === '/broken/:slug')
             .map((w) => [w.code, w.dropped]),
-          [['type-unavailable', true]],
+          [['type-unreadable', true]],
         );
       });
     },
@@ -723,31 +722,32 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a type read that may pass throws and caches nothing', async function (assert) {
+    test('a type read that may pass keeps the route as unavailable and caches nothing', async function (assert) {
       let { lookupDefinitionEntryForRealm } = definitionLookup;
       definitionLookup.lookupDefinitionEntryForRealm = async () => {
         throw new Error('the prerender server could not be reached');
       };
+      let unavailable;
       try {
         testRealm.clearRealmIndexCaches();
-        await assert.rejects(
-          testRealm.getHostRoutes(),
-          HostRoutesReadError,
-          'no reader gets a tree that lacks the route',
-        );
-        await assert.rejects(
-          testRealm.getHostRoutingMap(),
-          HostRoutesReadError,
-          'nor a routing map built from one',
-        );
+        unavailable = await testRealm.getHostRoutes();
       } finally {
         definitionLookup.lookupDefinitionEntryForRealm =
           lookupDefinitionEntryForRealm;
       }
-      let { routes } = await testRealm.getHostRoutes();
       assert.deepEqual(
-        routes.map((route) => route.fullPath),
-        ['/cities/:city'],
+        unavailable.routes.map((route) => [route.kind, route.fullPath]),
+        [
+          ['unavailable', '/cities/:city'],
+          ['unavailable', '/nope/:slug'],
+        ],
+        'each route whose type can not be read now is kept as unavailable',
+      );
+      let next = await testRealm.getHostRoutes();
+      assert.notStrictEqual(next, unavailable, 'the tree was not cached');
+      assert.deepEqual(
+        next.routes.map((route) => [route.kind, route.fullPath]),
+        [['field-match', '/cities/:city']],
         'the next read validates the whole tree',
       );
     });
@@ -823,7 +823,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(
         warnings.map((w) => [w.code, w.path, w.dropped]),
-        [['type-unavailable', '/nope/:slug', true]],
+        [['type-unreadable', '/nope/:slug', true]],
         'the export the row lacks is dropped with a warning',
       );
     });
@@ -918,7 +918,7 @@ module(basename(import.meta.filename), function () {
           );
           assert.true(
             (e as { transient?: boolean }).transient,
-            'the failure is transient, so a host route read throws rather than dropping the route',
+            'the failure is transient, so the host route is kept as unavailable rather than dropped',
           );
         }
       });

@@ -164,7 +164,6 @@ import type {
 import { HtmlResourceType } from './resource-types.ts';
 import type { HostRoutingRule } from './host-routing-validation.ts';
 import {
-  HostRoutesReadError,
   hostRouteTypeInfo,
   hostRouteTypeRefs,
   hostRoutingMapFromRoutes,
@@ -22335,11 +22334,12 @@ export class Realm {
   // the read is a module visit in the prerender server (ADR 015 §1.1, ADR 036
   // §1.5). A type whose module has an error or no such export makes its
   // route invalid, and the route is dropped with a warning like any other.
-  // Cached until the next index, which reads a changed module again. A read
-  // that may succeed when asked again (a render timeout, a prerender server
-  // that can't be reached) throws `HostRoutesReadError` instead, and nothing
-  // is cached. Resolves
-  // to no routes when the rules can't be read, without caching that.
+  // A read that may succeed when asked again (a render timeout, a server
+  // that can't be reached) keeps the route as an unavailable one
+  // (`HostUnavailableRoute`), which answers with an error. Cached until the
+  // next index, which reads a changed module again, unless a route is
+  // unavailable: then the next call reads again. Resolves to no routes when
+  // the rules can't be read, without caching that.
   async getHostRoutes(): Promise<HostRoutesValidation> {
     this.#dropStaleHostRoutes();
     if (this.#cachedHostRoutes) {
@@ -22418,10 +22418,12 @@ export class Realm {
     let usesOtherRealmTypes = refs.some(
       (ref) => !this.paths.inRealm(ref.module),
     );
+    let hasUnavailableRoute = [...types.values()].includes('unavailable');
     // A validation that uses another realm's types is kept only while the
     // definition generation holds, and not at all by a lookup without one.
     if (
       epoch === this.#hostRoutesEpoch &&
+      !hasUnavailableRoute &&
       (!usesOtherRealmTypes || generation !== undefined)
     ) {
       this.#cachedHostRoutes = validation;
@@ -22433,39 +22435,41 @@ export class Realm {
   }
 
   // The definition of one host route type, read through the definitions
-  // cache as a search reads it. `'unavailable'` when its module has an
-  // error or can't be found, and `undefined` when the module has no such export: either way
-  // the route is invalid. A read that may succeed when asked again throws
-  // `HostRoutesReadError`.
+  // cache as a search reads it. `'unreadable'` when its module has an error
+  // or can't be found, and `undefined` when the module has no such export:
+  // either way the route is invalid. `'unavailable'` when the read may
+  // succeed when asked again.
   async #readHostRouteType(
     ref: ResolvedCodeRef,
-  ): Promise<HostRouteTypeInfo | 'unavailable' | undefined> {
+  ): Promise<HostRouteTypeInfo | 'unreadable' | 'unavailable' | undefined> {
     try {
       return this.#hostRouteTypeInfo(
         await this.#definitionLookup.lookupDefinitionEntry(ref),
       );
     } catch (e) {
+      let message = `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`;
       if (!isFilterRefersToNonexistentTypeError(e) || e.transient) {
-        throw new HostRoutesReadError(
-          `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
-          { cause: e },
-        );
+        this.#log.warn(message);
+        return 'unavailable';
       }
-      // The read throws for a missing export as it does for a module with
-      // an error, and for a module whose row holds an error beside the
-      // definitions. The cache it just filled tells them apart.
-      let cached =
-        await this.#definitionLookup.lookupCachedDefinitionEntry(ref);
-      if (cached.status === 'found') {
-        return this.#hostRouteTypeInfo(cached.entry);
+      try {
+        // The read throws for a missing export as it does for a module with
+        // an error, and for a module whose row holds an error beside the
+        // definitions. The cache it just filled tells them apart.
+        let cached =
+          await this.#definitionLookup.lookupCachedDefinitionEntry(ref);
+        if (cached.status === 'found') {
+          return this.#hostRouteTypeInfo(cached.entry);
+        }
+        if (cached.status === 'missing-export') {
+          return undefined;
+        }
+      } catch (cacheError) {
+        this.#log.warn(`${message}; the cache read failed: ${cacheError}`);
+        return 'unavailable';
       }
-      if (cached.status === 'missing-export') {
-        return undefined;
-      }
-      this.#log.warn(
-        `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
-      );
-      return 'unavailable';
+      this.#log.warn(message);
+      return 'unreadable';
     }
   }
 

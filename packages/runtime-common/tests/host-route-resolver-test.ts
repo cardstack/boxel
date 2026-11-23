@@ -6,6 +6,7 @@ import {
   type HostRouteSearchRequest,
 } from '../host-route-resolver.ts';
 import {
+  HostRouteUnavailableError,
   validateHostRoutes,
   type HostRoute,
   type HostRouteTypeInfo,
@@ -66,7 +67,12 @@ function type(name: string): ResolvedCodeRef {
 function routesFor(rules: RawHostRoutingRule[]): readonly HostRoute[] {
   let { routes, warnings } = validateHostRoutes(rules, {
     realmURL: new URL(REALM),
-    lookupType: (ref) => (ref.module === MODULE ? TYPES[ref.name] : undefined),
+    lookupType: (ref) =>
+      ref.module !== MODULE
+        ? undefined
+        : ref.name === 'Pending'
+          ? 'unavailable'
+          : TYPES[ref.name],
   });
   let dropped = warnings.filter((w) => w.dropped);
   if (dropped.length > 0) {
@@ -572,6 +578,39 @@ const tests: SharedTests<unknown> = Object.freeze({
     realm.failSearch.add('Post');
     let searchFailed = await resolve(rules, realm, '/hello');
     assert.strictEqual(searchFailed.kind, 'error', 'a failed search too');
+  },
+
+  'resolveHostRoute: an unavailable route is an error, not a miss': async (
+    assert,
+  ) => {
+    let realm = new FakeRealm([
+      { id: 'Page/about', type: 'Page', fields: { slug: 'about' } },
+      { id: 'Person/writer-a' },
+    ]);
+    let rules = [
+      fieldMatch('/:slug', 'Pending', { slug: ':slug' }),
+      fieldMatch('/:slug', 'Page', { slug: ':slug' }),
+      { path: '/people/:person_id', card: './Person/:person_id' },
+    ];
+    let about = await resolve(rules, realm, '/about');
+    assert.strictEqual(about.kind, 'error', 'the later sibling is not tried');
+    assert.true(
+      about.kind === 'error' &&
+        about.error instanceof HostRouteUnavailableError,
+    );
+    assert.strictEqual(realm.searches.length, 0, 'nothing is searched');
+    let under = await resolve(rules, realm, '/about/more');
+    assert.strictEqual(
+      under.kind,
+      'error',
+      'a path under it is an error too: its child routes are not known',
+    );
+    let person = await resolve(rules, realm, '/people/writer-a');
+    assert.strictEqual(
+      cardIdOf(person),
+      abs('Person/writer-a'),
+      'a sibling that ranks before it still resolves',
+    );
   },
 
   'resolveHostRoute: a lookup that returns an identifier, not a served URL, is an error':

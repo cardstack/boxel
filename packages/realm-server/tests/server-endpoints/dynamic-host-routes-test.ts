@@ -550,7 +550,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
-    test('a route type read that may pass answers 503, and the next request is served', async function (assert) {
+    test('while a route type read may pass, that route answers 503, the rest is served, and the next request is served', async function (assert) {
       await definitionLookup.clearRealmDefinitions(realmURL.href);
       testRealm.clearRealmIndexCaches();
       let lookup = definitionLookup.lookupDefinitionEntryForRealm;
@@ -560,6 +560,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       try {
         let failed = await page('posts/hello');
         assert.strictEqual(failed.status, 503, 'not a 404, and not a page');
+        let fixed = await page('fixed');
+        assert.strictEqual(fixed.status, 200, 'a fixed route is served');
+        let person = await page('people/robin');
+        assert.strictEqual(
+          person.status,
+          200,
+          'a route that needs no type is served',
+        );
       } finally {
         definitionLookup.lookupDefinitionEntryForRealm = lookup;
       }

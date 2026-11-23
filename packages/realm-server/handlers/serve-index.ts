@@ -11,7 +11,6 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import {
-  HostRoutesReadError,
   CAPTURE_SERVING_PREFIXES,
   CLIENT_CLASS_HEADER,
   CLIENT_IP_HEADER,
@@ -480,25 +479,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     ];
   }
 
-  // A request whose realm's host routes can't be read now gets 503, as for
-  // any other failed route lookup (ADR 036 §1.4).
   let serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
-    try {
-      await serveIndexUnguarded(ctxt, next);
-    } catch (error) {
-      if (!(error instanceof HostRoutesReadError)) {
-        throw error;
-      }
-      hostRoutesLog.warn(
-        `host routes for ${ctxt.href} could not be read: ${error.message}`,
-      );
-      ctxt.status = 503;
-      ctxt.type = 'text';
-      ctxt.body = 'Service Unavailable';
-    }
-  };
-
-  let serveIndexUnguarded = async (ctxt: Koa.Context, next: Koa.Next) => {
     // Derive the request URL via fullRequestURL so the protocol honors
     // `x-forwarded-proto` from a TLS-terminating proxy (ALB/Traefik), matching
     // the rest of the request pipeline. Building it from the raw `ctxt.protocol`
