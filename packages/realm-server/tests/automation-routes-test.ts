@@ -416,7 +416,7 @@ module(basename(import.meta.filename), function (hooks) {
       owner: user,
       realm: realmURL.href,
       keyId: key.id,
-      label: `Vendor ${user.slice(1, 12)}`,
+      label: `Vendor ${user.slice(1).split(':')[0]}`,
       ticket: await keyWriteTicket(user, 'share', { keyId: key.id }),
     });
   }
