@@ -2050,5 +2050,564 @@ module('Acceptance | automation view', function (hooks) {
         .dom(progress)
         .hasText('Milestone 1 of 1: Group by label — Grouped the docs label');
     });
+
+    // An opened run, read from the realm server's `_automation-run-report` and
+    // `_automation-run-log` routes, which an in-browser test can't answer: each
+    // test says what the routes answer for each run.
+    module('a run opened', function (hooks) {
+      let reports: Map<string, Record<string, unknown>>;
+      let logs: Map<string, { state: string; lines: LogLine[] }>;
+      let logAsked: URL[];
+
+      type LogLine = {
+        seq: number;
+        at: number;
+        source: 'script' | 'platform';
+        kind: string;
+        level?: string;
+        message: string;
+        scriptLine?: number;
+      };
+
+      hooks.beforeEach(function () {
+        reports = new Map();
+        logs = new Map();
+        logAsked = [];
+        getService('network').virtualNetwork.mount(
+          async (request: Request) => {
+            let url = new URL(request.url);
+            let runId = url.searchParams.get('run') ?? '';
+            if (url.pathname.endsWith('/_automation-run-report')) {
+              let attributes = reports.get(runId);
+              return attributes
+                ? new Response(
+                    JSON.stringify({
+                      data: {
+                        type: 'automation-run-report',
+                        id: runId,
+                        attributes,
+                      },
+                    }),
+                    {
+                      status: 200,
+                      headers: { 'content-type': 'application/json' },
+                    },
+                  )
+                : new Response(JSON.stringify({ errors: [] }), { status: 404 });
+            }
+            if (url.pathname.endsWith('/_automation-run-log')) {
+              logAsked.push(url);
+              let log = logs.get(runId) ?? { state: 'complete', lines: [] };
+              let after = Number(url.searchParams.get('after') ?? '-1');
+              let levels = url.searchParams.get('level')?.split(',');
+              let past = log.lines.filter((line) => line.seq > after);
+              let lines = past.filter(
+                (line) => !levels || levels.includes(line.level ?? 'info'),
+              );
+              return new Response(
+                JSON.stringify({
+                  data: {
+                    type: 'automation-run-log',
+                    id: runId,
+                    attributes: {
+                      state: log.state,
+                      lines,
+                      next: past.length ? past[past.length - 1].seq : after,
+                      more: false,
+                      total: log.lines.length,
+                      dropped: 0,
+                    },
+                  },
+                }),
+                {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                },
+              );
+            }
+            return null;
+          },
+          { prepend: true },
+        );
+      });
+
+      function line(
+        seq: number,
+        level: string,
+        message: string,
+        extra: Partial<LogLine> = {},
+      ): LogLine {
+        return {
+          seq,
+          at: Date.parse('2030-01-01T08:30:10.000Z') + seq * 1000,
+          source: 'script',
+          kind: 'console',
+          level,
+          message,
+          ...extra,
+        };
+      }
+
+      function report(attributes: Record<string, unknown> = {}) {
+        return {
+          dryRun: false,
+          state: 'complete',
+          timings: {
+            createdAt: '2030-01-01T08:30:00.000Z',
+            startedAt: '2030-01-01T08:30:05.000Z',
+            commitStartedAt: '2030-01-01T08:30:58.000Z',
+            committedAt: '2030-01-01T08:30:59.000Z',
+            finishedAt: '2030-01-01T08:31:00.000Z',
+            queuedMs: 5000,
+            runMs: 55000,
+            commitMs: 1000,
+          },
+          log: { lines: 0, dropped: 0, byLevel: {}, byKind: {} },
+          callApiCalls: [],
+          resolveCalls: [],
+          writes: { count: 0 },
+          cost: {
+            credits: 0,
+            creditsByKind: {},
+            callApiCalls: 0,
+            callApiResponseBytes: 0,
+            resolveCalls: 0,
+            writes: 0,
+            aiCreditsSpent: 0,
+            aiCreditsReserved: 0,
+          },
+          ...attributes,
+        };
+      }
+
+      const plan = ['Fetch open issues', 'Group by label', 'Write digest'];
+      function milestones(
+        runId: string,
+        state: string,
+        reached: { name: string; ms: number; ended?: boolean }[],
+        extra: Record<string, unknown> = {},
+      ) {
+        return {
+          runId,
+          state,
+          startedAt: '2030-01-01T08:30:05.000Z',
+          finishedAt: state === 'running' ? null : '2030-01-01T08:31:00.000Z',
+          plan,
+          milestones: reached.map(({ name, ms, ended }) => ({
+            name,
+            planned: true,
+            startedAt: '2030-01-01T08:30:10.000Z',
+            endedAt: ended === false ? null : '2030-01-01T08:30:20.000Z',
+            ms,
+            tasks: [],
+          })),
+          current: null,
+          ahead: plan.slice(reached.length),
+          failedIn: null,
+          dropped: 0,
+          tasksDropped: 0,
+          ...extra,
+        };
+      }
+
+      async function openRun(id: string, label: string) {
+        await openIsolated();
+        await waitFor('[data-test-automation-runs-section]', {
+          timeout: 10000,
+        });
+        await settled();
+        await click(
+          '[data-test-automation-runs-section] [data-test-pretui-section-toggle]',
+        );
+        await click(
+          `[data-test-automation-runs] button[aria-label^="Expand nightly run for"][aria-label$=", ${label}"]`,
+        );
+        await waitFor(`[data-test-automation-run-detail="${id}"]`, {
+          timeout: 10000,
+        });
+      }
+
+      // Each marker of the opened run, in order: the run's steps, with the
+      // script's milestones between the script's step and the commit.
+      function markers(id: string) {
+        return [
+          ...document.querySelectorAll(
+            `[data-test-automation-run-detail="${id}"] [data-test-milestone-state]`,
+          ),
+        ].map((marker) => marker.getAttribute('data-test-milestone-state'));
+      }
+
+      function logMessages(id: string) {
+        return [
+          ...document.querySelectorAll(
+            `[data-test-automation-run-detail="${id}"] [data-test-automation-run-log-line]`,
+          ),
+        ].map((row) =>
+          row
+            .querySelector('td:last-child')
+            ?.textContent?.replace(/\s+/g, ' ')
+            .trim(),
+        );
+      }
+
+      async function showTab(name: string) {
+        let tab = [
+          ...document.querySelectorAll(
+            '[data-test-automation-run-tabs] [role="tab"]',
+          ),
+        ].find((element) => element.textContent?.trim() === name);
+        await click(tab as HTMLElement);
+      }
+
+      function sendJobEvent(runId: string, state: string) {
+        mockMatrixUtils.simulateRemoteMessage(
+          mockMatrixUtils.getRoomIdForRealmAndUser(
+            testRealmURL,
+            '@testuser:localhost',
+          ),
+          testRealmInfo.realmUserId!,
+          {
+            eventName: 'job',
+            runId,
+            automation: AUTOMATION,
+            state,
+            step: 'script',
+            milestone: 'Group by label',
+            realmURL: testRealmURL,
+          },
+          { type: APP_BOXEL_REALM_EVENT_TYPE },
+        );
+      }
+
+      test("a running run shows the run's steps, the milestone the run is in against the last run's time, and the log's lines as the run writes them", async function (assert) {
+        let runningMilestones = milestones(
+          'live',
+          'running',
+          [
+            { name: 'Fetch open issues', ms: 3000 },
+            { name: 'Group by label', ms: 4000, ended: false },
+          ],
+          { current: 'Group by label' },
+        );
+        list([
+          run('live', {
+            state: 'running',
+            step: 'script',
+            finishedAt: null,
+            milestones: runningMilestones,
+          }),
+          run('earlier', {
+            milestones: milestones('earlier', 'complete', [
+              { name: 'Fetch open issues', ms: 2000 },
+              { name: 'Group by label', ms: 9000 },
+              { name: 'Write digest', ms: 6000 },
+            ]),
+          }),
+        ]);
+        reports.set(
+          'live',
+          report({
+            state: 'running',
+            milestones: runningMilestones,
+            timings: {
+              createdAt: '2030-01-01T08:30:00.000Z',
+              startedAt: '2030-01-01T08:30:05.000Z',
+              commitStartedAt: null,
+              committedAt: null,
+              finishedAt: null,
+              queuedMs: 5000,
+              runMs: null,
+              commitMs: null,
+            },
+          }),
+        );
+        logs.set('live', {
+          state: 'running',
+          lines: [line(0, 'log', 'Fetched 12 open issues', { scriptLine: 4 })],
+        });
+        await openRun('live', 'Running');
+
+        assert.deepEqual(
+          markers('live'),
+          [
+            'reached',
+            'running',
+            'reached',
+            'running',
+            'not-started',
+            'not-started',
+          ],
+          'admission is done and the script runs, inside the second milestone; the commit has not started',
+        );
+        let detail = text('[data-test-automation-run-detail="live"]') ?? '';
+        assert.true(
+          detail.includes('Waited 5 s to start'),
+          'admission says how long the run waited',
+        );
+        assert
+          .dom('[data-test-automation-run-milestones]')
+          .includesText('Running for 4 s · Last run took 9 s');
+        assert
+          .dom('[data-test-automation-run-milestones]')
+          .includesText(
+            'Last run took 6 s',
+            'a milestone still ahead reads against the last run',
+          );
+
+        await waitFor('[data-test-automation-run-log-line]', {
+          timeout: 10000,
+        });
+        assert.deepEqual(logMessages('live'), [
+          'Fetched 12 open issues line 4',
+        ]);
+
+        logs
+          .get('live')!
+          .lines.push(line(1, 'warn', 'Skipped 3 archived issues'));
+        sendJobEvent('live', 'running');
+        await waitUntil(() => logMessages('live').length === 2, {
+          timeout: 10000,
+          timeoutMessage: 'the new line never showed',
+        });
+        assert.deepEqual(logMessages('live'), [
+          'Fetched 12 open issues line 4',
+          'Skipped 3 archived issues',
+        ]);
+        assert.true(
+          logAsked.every(
+            (url) => url.searchParams.get('realm') === testRealmURL,
+          ),
+          'every read names the run’s realm',
+        );
+      });
+
+      test("a finished run shows every step done, the run's calls, the files the run saved, and the run's cost", async function (assert) {
+        let done = milestones('done', 'complete', [
+          { name: 'Fetch open issues', ms: 3000 },
+          { name: 'Group by label', ms: 4000 },
+          { name: 'Write digest', ms: 1000 },
+        ]);
+        list([run('done', { step: 'commit', milestones: done })]);
+        reports.set(
+          'done',
+          report({
+            milestones: done,
+            callApiCalls: [
+              {
+                seq: 2,
+                at: '2030-01-01T08:30:12.000Z',
+                operation: 'listIssues',
+                method: 'GET',
+                destination:
+                  'https://api.github.com/repos/acme/app/issues?state=•••',
+                status: 200,
+                ms: 340,
+                bytes: 2048,
+              },
+              {
+                seq: 3,
+                at: '2030-01-01T08:30:13.000Z',
+                operation: 'listIssues',
+                code: 'destination-not-declared',
+              },
+            ],
+            resolveCalls: [
+              {
+                seq: 5,
+                at: '2030-01-01T08:30:20.000Z',
+                model: 'anthropic/claude-haiku',
+                status: 200,
+                ms: 1200,
+                costInUsd: 0.0021,
+              },
+            ],
+            writes: {
+              count: 2,
+              committed: ['digests/2030-01-01.md', 'digests/index.json'],
+            },
+            cost: {
+              credits: 3,
+              creditsByKind: { run: 1, ai: 2 },
+              callApiCalls: 2,
+              callApiResponseBytes: 2048,
+              resolveCalls: 1,
+              writes: 2,
+              aiCreditsSpent: 2,
+              aiCreditsReserved: 0,
+            },
+          }),
+        );
+        await openRun('done', 'Complete');
+
+        assert.deepEqual(markers('done'), [
+          'reached',
+          'reached',
+          'reached',
+          'reached',
+          'reached',
+          'reached',
+        ]);
+
+        await showTab('Calls');
+        assert
+          .dom('[data-test-automation-run-call="2"]')
+          .includesText('200')
+          .includesText(
+            'GET https://api.github.com/repos/acme/app/issues?state=•••',
+          );
+        assert
+          .dom('[data-test-automation-run-call="3"]')
+          .includesText('Refused', 'a call Boxel refused names no status');
+        assert
+          .dom('[data-test-automation-run-resolve="5"]')
+          .includesText('anthropic/claude-haiku')
+          .includesText('$0.0021');
+
+        await showTab('Writes');
+        assert
+          .dom('[data-test-automation-run-writes-sentence]')
+          .hasText('The run saved 2 files to the workspace.');
+        assert
+          .dom('[data-test-automation-run-saved]')
+          .exists({ count: 2 }, 'each saved file is listed');
+
+        await showTab('Cost and timings');
+        let cost = text('[data-test-automation-run-cost]') ?? '';
+        assert.true(cost.includes('Credits in all 3'), cost);
+        assert.true(cost.includes('Compute and network 1'), cost);
+        assert.true(cost.includes('AI requests 2'), cost);
+        assert.true(cost.includes('Ran for 55 s'), cost);
+      });
+
+      test('a failed run names the milestone the run failed in', async function (assert) {
+        let failed = milestones(
+          'failed',
+          'error',
+          [
+            { name: 'Fetch open issues', ms: 3000 },
+            { name: 'Group by label', ms: 4000 },
+          ],
+          { failedIn: 'Group by label' },
+        );
+        list([
+          run('failed', {
+            state: 'error',
+            step: 'script',
+            errorReason: 'script-error',
+            errorMessage: 'TypeError: labels is undefined',
+            scriptLine: 12,
+            milestones: failed,
+          }),
+        ]);
+        reports.set('failed', report({ state: 'error', milestones: failed }));
+        logs.set('failed', {
+          state: 'error',
+          lines: [
+            line(0, 'error', 'TypeError: labels is undefined', {
+              kind: 'error',
+              scriptLine: 12,
+            }),
+          ],
+        });
+        await openRun('failed', 'Failed');
+
+        assert.deepEqual(markers('failed'), [
+          'reached',
+          'failed',
+          'reached',
+          'failed',
+          'not-started',
+          'not-started',
+        ]);
+        let failedRow = [
+          ...document.querySelectorAll(
+            '[data-test-automation-run-milestones] li',
+          ),
+        ].find((row) => row.textContent?.includes('Group by label'));
+        assert.true(
+          failedRow?.textContent?.includes('Failed here'),
+          'the milestone the run failed in says so',
+        );
+        await waitFor('[data-test-automation-run-log-line]', {
+          timeout: 10000,
+        });
+        assert.deepEqual(logMessages('failed'), [
+          'TypeError: labels is undefined line 12',
+        ]);
+      });
+
+      test('the log shows the lines at each level chosen, and asks only for those levels', async function (assert) {
+        list([run('levels', { step: 'commit' })]);
+        reports.set(
+          'levels',
+          report({
+            log: {
+              lines: 4,
+              dropped: 0,
+              byLevel: { log: 1, info: 1, warn: 1, error: 1 },
+              byKind: {},
+            },
+          }),
+        );
+        logs.set('levels', {
+          state: 'complete',
+          lines: [
+            line(0, 'log', 'Started the digest'),
+            line(1, 'info', 'Fetched 12 open issues'),
+            line(2, 'warn', 'Skipped 3 archived issues'),
+            line(3, 'error', 'Lost the docs label'),
+          ],
+        });
+        await openRun('levels', 'Complete');
+        await waitUntil(() => logMessages('levels').length === 4, {
+          timeout: 10000,
+          timeoutMessage: 'the log never showed every line',
+        });
+
+        let levelButtons = () => [
+          ...document.querySelectorAll<HTMLElement>(
+            '[data-test-automation-run-log-levels] button',
+          ),
+        ];
+        async function showOnly(label: string) {
+          for (let button of levelButtons()) {
+            let wanted = button.textContent?.trim().startsWith(label) ?? false;
+            if ((button.getAttribute('aria-pressed') === 'true') !== wanted) {
+              await click(button);
+            }
+          }
+        }
+        for (let [label, level, message] of [
+          ['Errors', 'error', 'Lost the docs label'],
+          ['Warnings', 'warn', 'Skipped 3 archived issues'],
+          ['Info', 'info', 'Fetched 12 open issues'],
+          ['Log', 'log', 'Started the digest'],
+        ]) {
+          await showOnly(label);
+          await waitUntil(
+            () =>
+              logMessages('levels').length === 1 &&
+              logMessages('levels')[0] === message,
+            {
+              timeout: 10000,
+              timeoutMessage: `the ${label} filter never showed its line alone`,
+            },
+          );
+          assert.deepEqual(logMessages('levels'), [message], label);
+          assert.strictEqual(
+            logAsked[logAsked.length - 1].searchParams.get('level'),
+            level,
+            `the log asks for ${level} lines alone`,
+          );
+        }
+
+        await showOnly('none');
+        assert
+          .dom('[data-test-automation-run-log-no-level]')
+          .exists(
+            'with no level chosen, the log asks the viewer to choose one',
+          );
+      });
+    });
   });
 });
