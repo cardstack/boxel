@@ -15,11 +15,16 @@ const ROUTE_PATTERN = /^_automation-[a-z-]+$/;
 // name the Automation card by `automation`.
 const RUN_BODY_ROUTES = new Set(['_automation-run-cancel']);
 
-// Calls one of the realm server's automation routes for a card, such as the
-// Automation card's Preview, Run now, Pause, Resume, Remove and Cancel
-// buttons, and the reads behind its run report, staged files and storage.
-// The request carries the realm-server session, which those routes take,
-// rather than a realm's token.
+// Calls one of the realm server's automation routes for a card: the
+// Automation card's switch-on screen, and the console's Preview, Run now,
+// Pause, Resume, Remove and Cancel buttons and the reads behind its run
+// report, staged files and storage. The request carries the realm-server
+// session, which those routes take, rather than a realm's token.
+//
+// Card code calls this tool, as it calls `authed-fetch`. It isn't one of the
+// assistant's workspace capabilities (ADR 022 §1.1): no skill offers it to the
+// model, so the assistant reaches automations through the Realm Runner. Should
+// a skill ever name it, every call but a GET waits for the person's click.
 export default class AutomationRequestTool extends HostBaseTool<
   typeof BaseToolModule.AutomationRequestInput,
   typeof BaseToolModule.AutomationRequestResult

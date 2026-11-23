@@ -15,6 +15,7 @@ import {
   ri,
   SupportedMimeType,
   type AutomationRun,
+  type CompiledRealmPolicy,
   type DBAdapter,
   type RealmIdentifier,
   type RealmResourceIdentifier,
@@ -538,16 +539,25 @@ async function estimateFor(
 
 // Who beyond the people the realm's direct writers name can read what the
 // automation writes there (`broadReadersOf`): the realm's permission rows, and
-// its policy as this process compiles it. A realm this process can't mount
-// is judged on its permission rows alone.
+// its policy as this process compiles it. A realm this process can't mount,
+// or whose mount fails, is judged on its permission rows alone.
 async function broadReadersFor(
   args: CreateRoutesArgs,
   realmURL: URL,
 ): Promise<AutomationBroadReaders> {
   let permissions = await fetchRealmPermissions(args.dbAdapter, realmURL);
-  let realm = await findOrMountRealm(realmURL, args);
-  let policy =
-    realm?.url === realmURL.href ? await realm.getCompiledPolicy() : undefined;
+  let policy: CompiledRealmPolicy | undefined;
+  try {
+    let realm = await findOrMountRealm(realmURL, args);
+    policy =
+      realm?.url === realmURL.href
+        ? await realm.getCompiledPolicy()
+        : undefined;
+  } catch (error) {
+    log.warn(
+      `the switch-on estimate couldn't read the policy of ${realmURL.href}, so it judges the realm's readers on its permission rows alone: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   return broadReadersOf(permissions, policy);
 }
 
