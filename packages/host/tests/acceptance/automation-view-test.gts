@@ -2570,6 +2570,22 @@ module('Acceptance | automation view', function (hooks) {
           .includesText(
             'a day of storage for those files costs 0.0042 credits',
           );
+        await showTab('Limits');
+        assert
+          .dom('[data-test-automation-run-limit]')
+          .exists({ count: 6 }, 'every per-run limit the card sets is listed');
+        assert
+          .dom('[data-test-automation-run-limit="writes"]')
+          .hasText('Saves 2 of 1')
+          .hasAttribute(
+            'data-test-automation-run-limit-reached',
+            'true',
+            'a run at a limit reads as reaching the limit',
+          );
+        assert
+          .dom('[data-test-automation-run-limit="callApiCalls"]')
+          .hasText('Outside calls 2 of none allowed');
+        await showTab('Cost');
         assert
           .dom('[data-test-automation-run-storage-rules]')
           .includesText('Storage isn’t part of any one run’s total')
