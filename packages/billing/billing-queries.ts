@@ -664,7 +664,8 @@ export async function getCostCoverage(
 // A batch the settle job billed that has no batched AI charge in the ledger
 // although its cost comes to a credit or more: its payer's balance held
 // nothing to draw on, or its payer has no `users` row. The platform paid for
-// it and recovered nothing.
+// it and recovered nothing. A batch an operator wrote off is still listed,
+// with when and why, since its cost went unrecovered all the same.
 export interface UnbilledAIBatch {
   batchId: string;
   runId: string;
@@ -672,6 +673,8 @@ export interface UnbilledAIBatch {
   billedUsd: number;
   billedAtEstimate: boolean;
   settledAt: string;
+  writtenOffAt: string | null;
+  writeOffReason: string | null;
 }
 
 // The batches settled from `from` (inclusive) to `to` (exclusive) that wrote
@@ -683,7 +686,7 @@ export async function getUnbilledAIBatches(
   { from, to }: { from: Date; to: Date },
 ): Promise<UnbilledAIBatch[]> {
   let rows = await query(dbAdapter, [
-    `SELECT b.batch_id, b.run_id, b.acts_as, b.billed_usd, b.billed_at_estimate, b.settled_at`,
+    `SELECT b.batch_id, b.run_id, b.acts_as, b.billed_usd, b.billed_at_estimate, b.settled_at, b.written_off_at, b.write_off_reason`,
     `FROM ai_batches b WHERE b.settled_at >=`,
     param(from.toISOString()),
     `AND b.settled_at <`,
@@ -701,6 +704,12 @@ export async function getUnbilledAIBatches(
     billedUsd: Number(row.billed_usd),
     billedAtEstimate: Boolean(row.billed_at_estimate),
     settledAt: new Date(row.settled_at as string).toISOString(),
+    writtenOffAt:
+      row.written_off_at == null
+        ? null
+        : new Date(row.written_off_at as string).toISOString(),
+    writeOffReason:
+      row.write_off_reason == null ? null : String(row.write_off_reason),
   }));
 }
 

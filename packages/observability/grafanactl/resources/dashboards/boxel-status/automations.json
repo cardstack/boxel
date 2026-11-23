@@ -2362,6 +2362,345 @@
           "x": 0,
           "y": 67
         },
+        "id": 35,
+        "panels": [],
+        "title": "Batches",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Settled batches whose charge drew nothing although they cost a credit or more: the payer's balance held nothing when the settle job billed them, or the payer has no users row. Every batch ever settled is listed until it is billed or written off, whatever the time range. Its Bill action charges what the settle job billed, once; a payer whose balance still holds nothing is refused and nothing is written. Its Write off action records the reason typed in \"Reason\" and takes the batch off this list; the cost coverage report still counts it. The pricing skill's runbook (\"Batches the settle job reports\") says which to choose.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true
+            },
+            "actions": [
+              {
+                "type": "fetch",
+                "title": "Bill batch ${__data.fields.batch_id} to ${__data.fields.acts_as}",
+                "fetch": {
+                  "method": "POST",
+                  "url": "/api/datasources/proxy/uid/realm-server-operator/_grafana-bill-ai-batch",
+                  "queryParams": [
+                    [
+                      "batch",
+                      "${__data.fields.batch_id}"
+                    ]
+                  ],
+                  "headers": [],
+                  "body": ""
+                },
+                "confirmation": "Bill batch ${__data.fields.batch_id} (${__data.fields.billed_usd} USD) to ${__data.fields.acts_as}?",
+                "oneClick": false
+              },
+              {
+                "type": "fetch",
+                "title": "Write off batch ${__data.fields.batch_id}",
+                "fetch": {
+                  "method": "POST",
+                  "url": "/api/datasources/proxy/uid/realm-server-operator/_grafana-write-off-ai-batch",
+                  "queryParams": [
+                    [
+                      "batch",
+                      "${__data.fields.batch_id}"
+                    ],
+                    [
+                      "reason",
+                      "${batch_reason}"
+                    ]
+                  ],
+                  "headers": [],
+                  "body": ""
+                },
+                "confirmation": "Write off batch ${__data.fields.batch_id} (${__data.fields.billed_usd} USD), reason: \"${batch_reason}\"?",
+                "oneClick": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "batch_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "batch"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "acts_as"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "payer"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "billed_usd"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "billed (USD)"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "billed_at_estimate"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "at estimate"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "settled_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "settled"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "run_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "run"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "automation_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "automation"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 68
+        },
+        "id": 36,
+        "options": {
+          "cellHeight": "sm",
+          "showHeader": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT b.batch_id, b.acts_as, b.billed_usd, ROUND(b.billed_usd * 1000) AS credits,\n       b.billed_at_estimate, b.settled_at, b.run_id, b.automation_id\nFROM ai_batches b\nWHERE b.settled_at IS NOT NULL\n  AND b.written_off_at IS NULL\n  AND ROUND(b.billed_usd * 1000) >= 1\n  AND NOT EXISTS (SELECT 1 FROM credits_ledger l\n                  WHERE l.charge_kind = 'batched_ai' AND l.batch_id = b.batch_id)\nORDER BY b.settled_at\nLIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Batches still to bill",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Batches OpenRouter lists that have no ai_batches row in this environment, unresolved. Staging and production share one OpenRouter workspace, so the other environment's batches appear here too: look each one up in the other environment's ai_batches first, and use its Dismiss action, which records the reason typed in \"Reason\" when it is there. One that neither environment records is a batch whose submit outcome was unknown: match it to the Sentry event its submit sent, then record it with POST /_grafana-record-ai-batch (batch, run, estimate, reservation), and the settle job bills it. The pricing skill's runbook (\"Batches the settle job reports\") walks through it.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true
+            },
+            "actions": [
+              {
+                "type": "fetch",
+                "title": "Dismiss batch ${__data.fields.batch_id}",
+                "fetch": {
+                  "method": "POST",
+                  "url": "/api/datasources/proxy/uid/realm-server-operator/_grafana-dismiss-unrecorded-ai-batch",
+                  "queryParams": [
+                    [
+                      "batch",
+                      "${__data.fields.batch_id}"
+                    ],
+                    [
+                      "reason",
+                      "${batch_reason}"
+                    ]
+                  ],
+                  "headers": [],
+                  "body": ""
+                },
+                "confirmation": "Dismiss batch ${__data.fields.batch_id}, reason: \"${batch_reason}\"? Nothing will bill it in this environment.",
+                "oneClick": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "batch_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "batch"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "request_count"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "requests"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "cost_usd"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "cost (USD)"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "created_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "created"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "found_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "found"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 77
+        },
+        "id": 37,
+        "options": {
+          "cellHeight": "sm",
+          "showHeader": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT u.batch_id, u.model, u.status, u.request_count, u.cost_usd, u.created_at, u.found_at\nFROM unrecorded_ai_batches u\nWHERE u.resolved_at IS NULL\nORDER BY u.created_at\nLIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "OpenRouter batches with no record",
+        "type": "table"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 86
+        },
         "id": 30,
         "panels": [],
         "title": "Automations and runs",
@@ -2514,7 +2853,7 @@
           "h": 9,
           "w": 24,
           "x": 0,
-          "y": 68
+          "y": 87
         },
         "id": 31,
         "options": {
@@ -2737,7 +3076,7 @@
           "h": 14,
           "w": 24,
           "x": 0,
-          "y": 77
+          "y": 96
         },
         "id": 32,
         "options": {
@@ -2776,7 +3115,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 91
+          "y": 110
         },
         "id": 34,
         "panels": [
@@ -2838,7 +3177,7 @@
               "h": 9,
               "w": 24,
               "x": 0,
-              "y": 92
+              "y": 111
             },
             "id": 33,
             "options": {
@@ -3035,6 +3374,27 @@
           "skipUrlSync": false,
           "sort": 1,
           "type": "query"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "",
+            "value": ""
+          },
+          "description": "The reason the Batches panels' Write off and Dismiss actions record. Type it before clicking.",
+          "hide": 0,
+          "label": "Reason",
+          "name": "batch_reason",
+          "options": [
+            {
+              "selected": true,
+              "text": "",
+              "value": ""
+            }
+          ],
+          "query": "",
+          "skipUrlSync": true,
+          "type": "textbox"
         }
       ]
     },
