@@ -155,8 +155,8 @@ module('Unit | Lib | realm-runner surfaces', function () {
     }
   });
   // The tab refuses a progress call past these caps, and the realm server
-  // cuts what it records at its own: the two must agree, or a line the tab
-  // accepts is cut short without a mark.
+  // holds what it records to its own: the two must agree, or a line the tab
+  // accepts is cut short or dropped without a mark.
   test('progress caps in the tab match what the realm server records', function (assert) {
     assert.strictEqual(MAX_TASK_CHARS, RUN_TASK_MAX_CHARS, 'task text');
     assert.strictEqual(
