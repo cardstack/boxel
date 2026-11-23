@@ -55,8 +55,10 @@ export async function renderAgainAfterHostURLChange({
       dbAdapter,
       userInitiatedPriority,
       // The realm's users did not ask for an index pass, and the cards they
-      // see do not change.
-      { realmEvents: false },
+      // see do not change. A pass already running read the index card's
+      // modified time, and whether the realm has a host URL, before this
+      // change, so it can't stand in for this one.
+      { realmEvents: false, freshPass: true },
     );
   } catch (error) {
     log.error(

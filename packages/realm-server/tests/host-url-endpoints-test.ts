@@ -288,12 +288,14 @@ module(basename(import.meta.filename), function () {
     });
 
     // The index passes started on this realm after the job with id `after`.
+    // Each asks for a fresh pass, so it never rides on one already running.
     async function reindexJobsAfter(after: number): Promise<number> {
       let rows = (await query(dbAdapter, [
         `SELECT count(*)::int AS count FROM jobs WHERE job_type = 'from-scratch-index' AND id >`,
         param(after),
         `AND args ->> 'realmURL' =`,
         param(REALM_URL),
+        `AND args ->> 'freshPass' = 'true'`,
       ])) as { count: number }[];
       return rows[0].count;
     }
