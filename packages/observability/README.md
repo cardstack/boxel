@@ -421,12 +421,16 @@ selector matches and the time it covers, not by its line filter: Loki reads
 every line of `{service=~"realm-server|worker"}` in the window before `|=`
 discards most of them. Measured on staging:
 
-| Query                                                        | Bytes read | Time      |
-| ------------------------------------------------------------ | ---------- | --------- |
-| one alert rule over realm-server + worker, `[5m]` or `[10m]` | 2–50 MB    | 10–230 ms |
-| the same selector over `[1d]` (an instant query)             | 0.3–2.4 GB | 2–17 s    |
+| Query                                                           | Bytes read | Time        |
+| --------------------------------------------------------------- | ---------- | ----------- |
+| one alert rule over realm-server + worker, `[5m]` or `[10m]`    | 2–50 MB    | 10–230 ms   |
+| the same selector over `[1d]` (an instant query)                | 0.3–2.4 GB | 2–17 s      |
+| the prerender pricing rule, `{service="prerender"}` over `[6m]` | 0–350 MB   | up to 0.9 s |
 
-The alert rules together read about 5 GB an hour. About 100 `[1d]` queries sent
+The alert rules together read about 5 GB an hour. The prerender pricing rule
+evaluates every 5 minutes rather than every minute because its stream is the
+busiest: it adds about 0.7 GB an hour averaged over a week, and up to about 4 GB an
+hour while prerender logs at its busiest. About 100 `[1d]` queries sent
 every 30 s for 23 minutes read 159 GB, and Loki cancelled queries, alert rules
 among them, until they stopped. By those figures, a 24-panel dashboard over a day reads
 7–60 GB each time it loads or refreshes. So:
