@@ -95,6 +95,11 @@ import {
 import { dialectFor } from './query-engine/dialect.ts';
 import { SEARCH_TEXT_KEY } from './search-intent.ts';
 import { CARD_TITLE_KEY, TYPE_AHEAD_KEY } from './search-doc-keys.ts';
+import { searchKeysFpColumn, searchKeysFpOf } from './search-keys-reuse.ts';
+import {
+  PASSAGE_DOC_FILTER,
+  StagedSearchDocReads,
+} from './staged-search-docs.ts';
 
 // The production columns a swap derives from the staged row rather than
 // copying it: `boxel_index_pending` and `prerendered_html_pending` have none
@@ -102,6 +107,7 @@ import { CARD_TITLE_KEY, TYPE_AHEAD_KEY } from './search-doc-keys.ts';
 // `#restampedColumns` and `promotePrerenderedHtmlPending`).
 const DERIVED_INDEX_COLUMNS: readonly string[] = [
   'search_text_fp',
+  'search_keys_fp',
   'search_tsv',
   'rank_tsv',
   'search_title',
@@ -166,6 +172,12 @@ export const INDEX_COLUMN_CLASSES: Readonly<
   // The search text's fingerprint (add-search-text-fingerprint), from the
   // staged search doc; promotion writes it in the text-search row.
   search_text_fp: 'derived',
+  // The fingerprint of the staged doc the row's search_keys were projected
+  // from (add-search-keys-reuse): a later pass staging the same doc reuses
+  // the keys. Written on every promotion, a bookkeeping-only one included,
+  // so an unchanged row keeps a fingerprint to reuse by; it never makes a
+  // row count as changed.
+  search_keys_fp: 'bookkeeping',
   search_tsv: 'derived',
   rank_tsv: 'derived',
   search_title: 'derived',
@@ -951,6 +963,8 @@ export class Batch {
   #stagingId: string;
   // `table.column` of each production column promoted as NULL.
   #unstagedColumns = new Set<string>();
+  // The commit's shared reads of staged docs (see `#stagedSearchDocs`).
+  #stagedDocReads: StagedSearchDocReads | undefined;
   // Whether this pass rebuilt the whole realm (a from-scratch index), as
   // opposed to an incremental fan-out; recorded on the ledger row.
   #fullRealm = false;
@@ -4243,8 +4257,13 @@ export class Batch {
         tombstoneColumns: INDEX_TOMBSTONE_COLUMNS,
         restamp: true,
       });
+      // The two syncs read each chunk's staged docs once between them.
+      this.#stagedDocReads = new StagedSearchDocReads((chunk, where, flags) =>
+        this.#readStagedSearchDocs(chunk, where, flags),
+      );
       await this.#syncVectorIndex();
       await this.#syncPassageIndex();
+      this.#stagedDocReads = undefined;
       await this.#syncLogLineIndex();
       await this.#syncWordList();
 
@@ -4286,13 +4305,37 @@ export class Batch {
 
   // The full search docs this pass staged for `chunk`'s live rows, matching
   // `filter`. Derived tables are built from these: the staged doc still
-  // holds the render's `_searchText`, which the promoted doc drops.
+  // holds the render's `_searchText`, which the promoted doc drops. Within a
+  // commit the vector and passage syncs share one read per chunk
+  // (`StagedSearchDocReads`).
   async #stagedSearchDocs(
     chunk: string[],
     filter: string,
   ): Promise<Pick<BoxelIndexTable, 'url' | 'type' | 'search_doc'>[]> {
+    let reads =
+      this.#stagedDocReads ??
+      new StagedSearchDocReads((c, where, flags) =>
+        this.#readStagedSearchDocs(c, where, flags),
+      );
+    return (await reads.docs(chunk, filter)) as Pick<
+      BoxelIndexTable,
+      'url' | 'type' | 'search_doc'
+    >[];
+  }
+
+  async #readStagedSearchDocs(
+    chunk: string[],
+    where: string,
+    flags: Record<string, string> = {},
+  ): Promise<Record<string, unknown>[]> {
     return (await this.#query([
-      'SELECT url, type, search_doc FROM boxel_index_pending WHERE',
+      [
+        'SELECT url, type, search_doc',
+        ...Object.entries(flags).map(
+          ([name, expr]) => `, (${expr}) AS ${name}`,
+        ),
+        'FROM boxel_index_pending WHERE',
+      ].join(' '),
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         ['staging_id =', param(this.#stagingId)],
@@ -4303,9 +4346,9 @@ export class Batch {
           ),
         ],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
-        [filter],
+        [where],
       ]),
-    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'search_doc'>[];
+    ] as Expression)) as Record<string, unknown>[];
   }
 
   // Keeps `boxel_log_lines` in step with every log this pass staged: only
@@ -4395,10 +4438,7 @@ export class Batch {
           this.#stagedInChunk(chunk),
         ]),
       ] as Expression);
-      let rows = await this.#stagedSearchDocs(
-        chunk,
-        `search_doc ? '_passages'`,
-      );
+      let rows = await this.#stagedSearchDocs(chunk, PASSAGE_DOC_FILTER);
       let values: Expression[] = [];
       for (let row of rows) {
         for (let passage of collectSearchDocPassages(row.search_doc)) {
@@ -4576,15 +4616,17 @@ export class Batch {
       return [];
     }
     let sets: Expression[] = bookkeeping.map((c) =>
-      this.#unstagedColumns.has(`boxel_index.${c}`)
-        ? [`${c} = NULL`]
-        : c === 'generation'
-          ? ([
-              'generation = CAST(',
-              param(this.commitGeneration),
-              'AS INTEGER)',
-            ] as Expression)
-          : [`${c} = p.${c}`],
+      c === 'search_keys_fp'
+        ? [`search_keys_fp = ${searchKeysFpOf('p.search_doc')}`]
+        : this.#unstagedColumns.has(`boxel_index.${c}`)
+          ? [`${c} = NULL`]
+          : c === 'generation'
+            ? ([
+                'generation = CAST(',
+                param(this.commitGeneration),
+                'AS INTEGER)',
+              ] as Expression)
+            : [`${c} = p.${c}`],
     );
     let rows = (await this.#query([
       'UPDATE boxel_index AS b SET',
@@ -4648,6 +4690,8 @@ export class Batch {
             ? `${this.#searchTextFp('boxel_index_pending')} AS search_text_fp`
             : 'NULL AS search_text_fp',
         ];
+      case 'search_keys_fp':
+        return [searchKeysFpColumn(pg, 'search_doc')];
       case 'search_title':
         // The row's display title, lowercased, inline for type-ahead
         // ranking.

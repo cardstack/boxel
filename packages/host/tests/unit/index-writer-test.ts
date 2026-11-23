@@ -52,6 +52,7 @@ type SearchTableColumns = {
   title_sort?: string | null;
   search_keys?: unknown;
   search_text_fp?: string | null;
+  search_keys_fp?: string | null;
 };
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -1483,6 +1484,7 @@ module('Unit | index-writer', function (hooks) {
       title_sort,
       search_keys,
       search_text_fp,
+      search_keys_fp,
       ...errorEntry
     } = rawErrorEntry as BoxelIndexTable & SearchTableColumns;
     assert.deepEqual(
@@ -1494,8 +1496,9 @@ module('Unit | index-writer', function (hooks) {
         title_sort,
         search_keys,
         search_text_fp,
+        search_keys_fp,
       ],
-      [null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
       'no search-table column is written for the error row',
     );
     assert.ok(errorEntry.error_doc, 'row has an error_doc');
@@ -1870,6 +1873,7 @@ module('Unit | index-writer', function (hooks) {
       title_sort,
       search_keys,
       search_text_fp,
+      search_keys_fp,
       ...errorEntry
     } = rawErrorEntry as BoxelIndexTable & SearchTableColumns;
     assert.deepEqual(
@@ -1881,8 +1885,9 @@ module('Unit | index-writer', function (hooks) {
         title_sort,
         search_keys,
         search_text_fp,
+        search_keys_fp,
       ],
-      [null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
       'no search-table column is written for the error row',
     );
     assert.ok(errorEntry.error_doc, 'row has an error_doc');

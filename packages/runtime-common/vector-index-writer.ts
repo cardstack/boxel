@@ -6,6 +6,7 @@ import {
   type Expression,
   type PgPrimitive,
 } from './expression.ts';
+import { VECTOR_DOC_FILTER } from './staged-search-docs.ts';
 import type { DBAdapter } from './db.ts';
 import { collectSearchDocVectors } from './vector-index.ts';
 import {
@@ -165,10 +166,7 @@ export async function syncVectorIndex(
   store.noteVectorWrites([...spaces]);
   for (let start = 0; start < urls.length; start += CHUNK) {
     let chunk = urls.slice(start, start + CHUNK);
-    let rows = await host.stagedSearchDocs(
-      chunk,
-      `(search_doc::text LIKE '%"vec:[%' OR jsonb_exists(search_doc, '_vectorFields'))`,
-    );
+    let rows = await host.stagedSearchDocs(chunk, VECTOR_DOC_FILTER);
     let loaded = new Map<string, string>();
     if (host.readVectorSidecar) {
       let known = (await host.query([
