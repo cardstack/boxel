@@ -5,6 +5,7 @@ import { StatusChip } from './status-chip';
 import { Token } from './token';
 import { RelativeTime } from './relative-time';
 import { iconFor } from '../icon-registry';
+import type { PretuiToneArg } from '../pretui-primitives';
 
 // ── Timeline ─────────────────────────────────────────────────────────────
 // A chronological sequence, semantically an ordered list.
@@ -32,6 +33,11 @@ export interface TimelineEvent {
   at?: string;
   /** status value → StatusChip */
   status?: string;
+  /** the StatusChip's tone, for a status whose meaning its value's derived
+   * hue can't carry (a run's 'Running' is info, 'Failed here' danger);
+   * omitted, the hue derives from the value. 'neutral' gives the chip a
+   * muted dot, not one derived from the value */
+  statusTone?: PretuiToneArg;
   /** machine value (lot id, version, batch) → Token */
   token?: string;
   /** person's name → Avatar + name */
@@ -66,6 +72,10 @@ export interface TimelineSignature {
 }
 
 export class Timeline extends Component<TimelineSignature> {
+  // A status the caller toned neutral reads as no state yet: a muted dot,
+  // not a hue derived from the value's text.
+  statusHue = (event: TimelineEvent): string | undefined =>
+    event.statusTone === 'neutral' ? 'var(--muted-foreground)' : undefined;
   get density(): 'compact' | 'expanded' {
     return this.args.density ?? 'expanded';
   }
@@ -104,7 +114,11 @@ export class Timeline extends Component<TimelineSignature> {
             <div class='pretui-timeline-head'>
               <span class='pretui-timeline-title'>{{event.title}}</span>
               {{#if event.token}}<Token @value={{event.token}} />{{/if}}
-              {{#if event.status}}<StatusChip @value={{event.status}} />{{/if}}
+              {{#if event.status}}<StatusChip
+                  @value={{event.status}}
+                  @tone={{event.statusTone}}
+                  @hue={{this.statusHue event}}
+                />{{/if}}
               {{#if event.at}}
                 <RelativeTime
                   class='pretui-timeline-when'

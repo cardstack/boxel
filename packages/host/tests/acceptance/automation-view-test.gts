@@ -2482,6 +2482,8 @@ module('Acceptance | automation view', function (hooks) {
                 status: 200,
                 ms: 1200,
                 costInUsd: 0.0021,
+                inputTokens: 1200,
+                outputTokens: 300,
               },
             ],
             writes: {
@@ -2528,6 +2530,11 @@ module('Acceptance | automation view', function (hooks) {
           .dom('[data-test-automation-run-resolve="5"]')
           .includesText('anthropic/claude-haiku');
         assert
+          .dom(
+            '[data-test-automation-run-resolve="5"] [data-test-automation-run-resolve-tokens]',
+          )
+          .hasText('1,200 in · 300 out', 'an AI request shows its tokens');
+        assert
           .dom('[data-test-automation-run-calls]')
           .doesNotIncludeText('$', 'an AI request shows no unit cost');
 
@@ -2559,7 +2566,7 @@ module('Acceptance | automation view', function (hooks) {
         await waitUntil(
           () =>
             text('[data-test-automation-run-storage]')?.includes(
-              'a day of storage',
+              'day of storage',
             ),
           { timeout: 10000, timeoutMessage: 'the storage never read' },
         );
@@ -2568,7 +2575,7 @@ module('Acceptance | automation view', function (hooks) {
           .includesText('The run saved 1 file (4 KB) that still exist.')
           .includesText('The automation’s runs keep 2 files in all (10 KB).')
           .includesText(
-            'a day of storage for those files costs 0.0042 credits',
+            'A day of storage for those files costs 0.0042 credits.',
           );
         await showTab('Limits');
         assert
@@ -2648,7 +2655,7 @@ module('Acceptance | automation view', function (hooks) {
         ]);
       });
 
-      test('the log shows the lines at each level chosen, and asks only for those levels', async function (assert) {
+      test('the log shows the lines at the level picked and every more severe level, and asks only for those levels', async function (assert) {
         list([run('levels', { step: 'commit' })]);
         reports.set(
           'levels',
@@ -2676,49 +2683,57 @@ module('Acceptance | automation view', function (hooks) {
           timeoutMessage: 'the log never showed every line',
         });
 
-        let levelButtons = () => [
-          ...document.querySelectorAll<HTMLElement>(
-            '[data-test-automation-run-log-levels] button',
-          ),
-        ];
-        async function showOnly(label: string) {
-          for (let button of levelButtons()) {
-            let wanted = button.textContent?.trim().startsWith(label) ?? false;
-            if ((button.getAttribute('aria-pressed') === 'true') !== wanted) {
-              await click(button);
-            }
-          }
-        }
-        for (let [label, level, message] of [
-          ['Errors', 'error', 'Lost the docs label'],
-          ['Warnings', 'warn', 'Skipped 3 archived issues'],
-          ['Info', 'info', 'Fetched 12 open issues'],
-          ['Log', 'log', 'Started the digest'],
-        ]) {
-          await showOnly(label);
+        // The option names its level and counts that level's lines and every
+        // more severe level's.
+        assert
+          .dom('[data-test-automation-run-log-levels]')
+          .hasText('Errors (1) Warnings (2) Info (3) All (4)');
+        for (let [level, asked, messages] of [
+          ['error', 'error', ['Lost the docs label']],
+          [
+            'warn',
+            'error,warn',
+            ['Skipped 3 archived issues', 'Lost the docs label'],
+          ],
+          [
+            'info',
+            'error,warn,info',
+            [
+              'Fetched 12 open issues',
+              'Skipped 3 archived issues',
+              'Lost the docs label',
+            ],
+          ],
+          [
+            'log',
+            'error,warn,info,log',
+            [
+              'Started the digest',
+              'Fetched 12 open issues',
+              'Skipped 3 archived issues',
+              'Lost the docs label',
+            ],
+          ],
+        ] as const) {
+          await click(
+            `[data-test-automation-run-log-levels] [data-test-pretui-segmented-option="${level}"]`,
+          );
           await waitUntil(
             () =>
-              logMessages('levels').length === 1 &&
-              logMessages('levels')[0] === message,
+              JSON.stringify(logMessages('levels')) ===
+              JSON.stringify(messages),
             {
               timeout: 10000,
-              timeoutMessage: `the ${label} filter never showed its line alone`,
+              timeoutMessage: `the ${level} filter never showed its lines`,
             },
           );
-          assert.deepEqual(logMessages('levels'), [message], label);
+          assert.deepEqual(logMessages('levels'), [...messages], level);
           assert.strictEqual(
             logAsked[logAsked.length - 1].searchParams.get('level'),
-            level,
-            `the log asks for ${level} lines alone`,
+            asked,
+            `the log asks for ${asked} lines`,
           );
         }
-
-        await showOnly('none');
-        assert
-          .dom('[data-test-automation-run-log-no-level]')
-          .exists(
-            'with no level chosen, the log asks the viewer to choose one',
-          );
       });
     });
   });

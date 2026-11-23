@@ -45,7 +45,10 @@ import {
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
-import { resolveLogLine } from '../handlers/handle-request-forward.ts';
+import {
+  resolveLogLine,
+  tokensOf,
+} from '../handlers/handle-request-forward.ts';
 
 // An automation run's log: the script's lines its tab sends to the realm's
 // `_run-log` with the run's token, and the platform's own lines for each
@@ -722,9 +725,37 @@ module(basename(import.meta.filename), function (hooks) {
         status: 200,
         ms: 800,
         costInUsd: 0.0012,
+        inputTokens: 1200,
+        outputTokens: 300,
       }).message,
-      'resolve anthropic/claude: 200 (800 ms, $0.001200)',
+      'resolve anthropic/claude: 200 (800 ms, 1200 tokens in, 300 out)',
+      'the message names the tokens and no cost, which a run log’s readers never see',
     );
+    assert.deepEqual(
+      resolveLogLine({
+        model: 'anthropic/claude',
+        status: 200,
+        ms: 800,
+        costInUsd: 0.0012,
+        inputTokens: 1200,
+        outputTokens: 300,
+      }).data,
+      {
+        model: 'anthropic/claude',
+        status: 200,
+        ms: 800,
+        costInUsd: 0.0012,
+        inputTokens: 1200,
+        outputTokens: 300,
+      },
+      'the cost and the tokens stay in the data',
+    );
+    assert.deepEqual(
+      tokensOf({ usage: { prompt_tokens: 12, completion_tokens: 3, cost: 1 } }),
+      { inputTokens: 12, outputTokens: 3 },
+    );
+    assert.deepEqual(tokensOf({ usage: { prompt_tokens: -1 } }), {});
+    assert.deepEqual(tokensOf(undefined), {});
     assert.strictEqual(
       resolveLogLine({ model: 'anthropic/claude' }).level,
       'error',

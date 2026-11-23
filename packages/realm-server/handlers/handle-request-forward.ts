@@ -199,6 +199,7 @@ export default function handleRequestForward({
     // The model a run's request named, for its line in the run's log.
     let runModel: string | undefined;
     let costInUsd: number | undefined;
+    let tokens: { inputTokens?: number; outputTokens?: number } = {};
     // The upstream's status, once it has answered.
     let upstreamStatus: number | undefined;
 
@@ -423,8 +424,9 @@ export default function handleRequestForward({
                 runId: runForward.run.runId,
               }
             : undefined,
-          onCostResolved: (cost) => {
+          onCostResolved: (cost, usage) => {
             costInUsd = cost;
+            tokens = tokensOf(usage);
           },
         },
         (errorMessage) => sendResponseForForbiddenRequest(ctxt, errorMessage),
@@ -555,6 +557,7 @@ export default function handleRequestForward({
             status: upstreamStatus,
             ms: sentAt !== undefined ? Date.now() - sentAt : undefined,
             costInUsd: settledCost,
+            ...tokens,
           }),
         );
       }
@@ -569,22 +572,51 @@ const STATUS_TEXT = {
   503: 'Service Unavailable',
 } as const;
 
+// The token counts a provider's answer reports, as OpenRouter's `usage`
+// gives them (`prompt_tokens`, `completion_tokens`), when it gives them.
+export function tokensOf(answer: unknown): {
+  inputTokens?: number;
+  outputTokens?: number;
+} {
+  let usage = (answer as { usage?: Record<string, unknown> } | undefined)
+    ?.usage;
+  let count = (value: unknown) =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 0
+      ? value
+      : undefined;
+  let inputTokens = count(usage?.prompt_tokens);
+  let outputTokens = count(usage?.completion_tokens);
+  return {
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+  };
+}
+
 // A run's `resolve` call as its line in the run's log: the model, the
-// provider's status and time, and what the call cost.
+// provider's status and time, the tokens the request read and wrote, and
+// what the call cost. The message names no cost: a run's log is shown to the
+// automation's writers, who see what AI cost only as the credits charged
+// (ADR 049 §1.2). The cost stays in `data` for the operators who read it.
 export function resolveLogLine({
   model,
   status,
   ms,
   costInUsd,
+  inputTokens,
+  outputTokens,
 }: {
   model?: string;
   status?: number;
   ms?: number;
   costInUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }): Omit<RunLogLine, 'source' | 'at'> {
   let measured = [
     ...(ms !== undefined ? [`${ms} ms`] : []),
-    ...(costInUsd !== undefined ? [`$${costInUsd.toFixed(6)}`] : []),
+    ...(inputTokens !== undefined || outputTokens !== undefined
+      ? [`${inputTokens ?? 0} tokens in, ${outputTokens ?? 0} out`]
+      : []),
   ].join(', ');
   return {
     kind: 'resolve',
@@ -595,6 +627,8 @@ export function resolveLogLine({
       ...(status !== undefined ? { status } : {}),
       ...(ms !== undefined ? { ms } : {}),
       ...(costInUsd !== undefined ? { costInUsd } : {}),
+      ...(inputTokens !== undefined ? { inputTokens } : {}),
+      ...(outputTokens !== undefined ? { outputTokens } : {}),
     },
   };
 }
