@@ -38,7 +38,7 @@ const log = logger('host-route-links');
 // What an HTML visit read of its realm's routes. `routes` is `undefined`
 // when the realm is not served at a host URL, or the read got none. `key`
 // says which read it was; see `routesReadKey`. `failure` is set when the
-// read itself failed (the endpoint answered a gateway status, or the network
+// read itself failed (the endpoint answered a server error, or the network
 // failed). That is a failure to reach the routes, never a state of them: the
 // endpoint always answers the whole tree the realm's last index stored.
 interface RealmRoutes {
@@ -77,7 +77,8 @@ type RenderGlobals = {
 // Until the read lands, and when it gets no routes, links fall back.
 //
 // One case fails the render instead: the read of the routes fails to reach
-// them, because the endpoint answers a gateway status or the network fails.
+// them, because the endpoint answers a server error (a 5xx) or the network
+// fails.
 // That is a transport failure, not a state of the routes, which the realm
 // always answers whole. The links would otherwise be stored with card URLs
 // that nothing corrects later. The visit doesn't ask again: a transport
@@ -260,7 +261,7 @@ export default class HostRouteLinksService
         log.debug(
           `no host routes from ${realmURL} for now (status ${response.status})`,
         );
-        if (isGatewayFailureStatus(response.status)) {
+        if (response.status >= 500 || isGatewayFailureStatus(response.status)) {
           failure = routesReadFailure(
             `the host routes of ${realmURL} could not be read: ${url} answered HTTP ${response.status}`,
             response.status,

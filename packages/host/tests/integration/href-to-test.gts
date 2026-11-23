@@ -450,4 +450,35 @@ module('Integration | hrefTo', function (hooks) {
       },
     );
   });
+
+  test('an HTML visit fails, and does not ask again, when the routes endpoint answers a server error', async function (assert) {
+    let links = getService('host-route-links');
+    let requests = 0;
+
+    await inHTMLVisit(
+      () => {
+        requests++;
+        return new Response(
+          JSON.stringify({ errors: [{ status: 500, title: 'Server Error' }] }),
+          { status: 500 },
+        );
+      },
+      async () => {
+        links.routes();
+        await getService('render-store').loaded();
+        let thrown: { gatewayFailure?: boolean; status?: number } | undefined;
+        try {
+          links.routes();
+        } catch (e) {
+          thrown = e as typeof thrown;
+        }
+        assert.true(
+          thrown?.gatewayFailure,
+          'a link throws an error that makes the visit run again',
+        );
+        assert.strictEqual(thrown?.status, 500);
+        assert.strictEqual(requests, 1, 'the endpoint was asked once');
+      },
+    );
+  });
 });
