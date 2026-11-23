@@ -99,7 +99,6 @@ function classroomModule(rosterField: string) {
 type Grant = {
   operation: string;
   where?: unknown;
-  paths?: string[];
   actingUser?: unknown;
   blocklist?: unknown;
   rateLimitRequests?: unknown;
@@ -1119,62 +1118,6 @@ module(basename(import.meta.filename), function (hooks) {
       'only a grant whose where can hold for the caller who is not signed in admits one; a guard that keeps them out is a signed-in grant',
     );
     assert.deepEqual(policy?.anonymous, { operations: ['read'], writes: [] });
-  });
-
-  test('a grant that lets callers read, and admits them by something other than who they are, is recorded as a broad read', async function (assert) {
-    await writeTo(
-      org,
-      'policies/education.json',
-      policyCard([
-        // Every signed-in caller: no condition, a guard that only keeps out
-        // the caller who isn't signed in, a condition on the card alone, and
-        // the two together.
-        { operation: 'read' },
-        { operation: 'read', where: 'actor() != "anonymous"' },
-        { operation: 'read', where: '.status == "open"' },
-        {
-          operation: 'read',
-          where: 'actor() != "anonymous" and .status == "open"',
-        },
-        // Anyone, signed in or not.
-        { operation: 'read', where: `${ANYONE} or .status == "open"` },
-        // Searches, ad hoc and named, and a read limited to some paths.
-        { operation: 'query', where: '.status == "open"' },
-        { operation: 'listOpen' },
-        { operation: 'read', paths: ['open/'] },
-        // Callers the author names, a search that names them, and a grant
-        // that lets no one read.
-        { operation: 'read', where: '.teacherIds | any(. == actor())' },
-        { operation: 'query', where: '.teacherIds | any(. == actor())' },
-        { operation: 'update' },
-      ]),
-    );
-    let policy = await compiled();
-    assert.deepEqual(issuesOf(policy), [], 'every grant compiles');
-    assert.deepEqual(policy?.broadReadGrants, [
-      { path: 'rules[0].grants[0]', who: 'signed-in' },
-      { path: 'rules[0].grants[1]', who: 'signed-in' },
-      { path: 'rules[0].grants[2]', who: 'signed-in' },
-      { path: 'rules[0].grants[3]', who: 'signed-in' },
-      { path: 'rules[0].grants[4]', who: 'anyone' },
-      { path: 'rules[0].grants[5]', who: 'signed-in' },
-      { path: 'rules[0].grants[6]', who: 'signed-in' },
-      { path: 'rules[0].grants[7]', who: 'signed-in' },
-    ]);
-
-    await writeTo(
-      org,
-      'policies/education.json',
-      policyCard([
-        { operation: 'read', where: '.teacherIds | any(. == actor())' },
-      ]),
-    );
-    policy = await compiled();
-    assert.strictEqual(
-      policy?.broadReadGrants,
-      undefined,
-      'a policy whose read grants name their callers records none',
-    );
   });
 
   test('an acting user read from the card a create sends is warned about, since the caller chooses it', async function (assert) {

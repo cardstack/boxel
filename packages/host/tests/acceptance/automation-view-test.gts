@@ -1902,12 +1902,6 @@ module('Acceptance | automation view', function (hooks) {
                 uncountedChargeKinds: ['run_indexing', 'storage'],
               },
               notices: [],
-              broadReaders: {
-                anyone: false,
-                everySignedInUser: false,
-                policyGrants: [],
-                policy: null,
-              },
               ...attributes,
             },
           },
@@ -2005,9 +1999,6 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-switch-on-payer]')
         .includesText('Boxel charges every scheduled run');
-      assert
-        .dom('[data-test-automation-switch-on-broad-read]')
-        .doesNotExist('a workspace that names each reader gets no warning');
       assert.dom('[data-test-automation-switch-on-reconfirm]').doesNotExist();
     });
 
@@ -2112,40 +2103,6 @@ module('Acceptance | automation view', function (hooks) {
         .includesText(
           'The limit is below the estimate, so Boxel may stop starting runs before the month ends.',
         );
-    });
-
-    test('the screen warns when many people can read the workspace, and names each kind of reader', async function (assert) {
-      estimateAnswer = estimate({
-        broadReaders: {
-          anyone: true,
-          everySignedInUser: true,
-          policyGrants: [
-            { path: 'rules[0].grants[0]', who: 'signed-in' },
-            { path: 'rules[0].grants[1]', who: 'signed-in' },
-            { path: 'rules[1].grants[0]', who: 'anyone' },
-          ],
-          policy: `${testRealmURL}policy`,
-        },
-      });
-      await openScreen(OFF);
-      assert
-        .dom('[data-test-automation-switch-on-broad-read]')
-        .includesText(
-          'Whoever can read this workspace can read every file the automation writes.',
-        );
-      assert.deepEqual(
-        [
-          ...document.querySelectorAll(
-            '[data-test-automation-switch-on-broad-reader]',
-          ),
-        ].map((li) => li.textContent?.trim()),
-        [
-          'Anyone, signed in or not, can read this workspace.',
-          'Every signed-in Boxel user can read this workspace.',
-          'One grant in the workspace’s policy lets anyone, signed in or not, read cards.',
-          '2 grants in the workspace’s policy let every signed-in Boxel user read cards.',
-        ],
-      );
     });
 
     test('an automation paused for a raised limit or batched AI resumes through the screen, which says why', async function (assert) {

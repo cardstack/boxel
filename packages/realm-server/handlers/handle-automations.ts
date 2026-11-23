@@ -1,7 +1,6 @@
 import type Koa from 'koa';
 import {
   DAYS_PER_AVERAGE_MONTH,
-  fetchRealmPermissions,
   getAutomationRun,
   getAutomationStorage,
   isAutomationRunId,
@@ -15,7 +14,6 @@ import {
   ri,
   SupportedMimeType,
   type AutomationRun,
-  type CompiledRealmPolicy,
   type DBAdapter,
   type RealmIdentifier,
   type RealmResourceIdentifier,
@@ -51,10 +49,6 @@ import {
   type RunLogLevel,
 } from '@cardstack/runtime-common/automation-run-log';
 import { switchOnNotices } from '@cardstack/runtime-common/automation-webhooks';
-import {
-  broadReadersOf,
-  type AutomationBroadReaders,
-} from '@cardstack/runtime-common/automation-readers';
 import { admitPayer } from '@cardstack/runtime-common/automation-admission';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
@@ -537,35 +531,10 @@ async function estimateFor(
   });
 }
 
-// Who beyond the people the realm's direct writers name can read what the
-// automation writes there (`broadReadersOf`): the realm's permission rows, and
-// its policy as this process compiles it. A realm this process can't mount,
-// or whose mount fails, is judged on its permission rows alone.
-async function broadReadersFor(
-  args: CreateRoutesArgs,
-  realmURL: URL,
-): Promise<AutomationBroadReaders> {
-  let permissions = await fetchRealmPermissions(args.dbAdapter, realmURL);
-  let policy: CompiledRealmPolicy | undefined;
-  try {
-    let realm = await findOrMountRealm(realmURL, args);
-    policy =
-      realm?.url === realmURL.href
-        ? await realm.getCompiledPolicy()
-        : undefined;
-  } catch (error) {
-    log.warn(
-      `the switch-on estimate couldn't read the policy of ${realmURL.href}, so it judges the realm's readers on its permission rows alone: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  return broadReadersOf(permissions, policy);
-}
-
 // `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>`: what
-// switching the automation on is likely to cost a month, the monthly credit
-// cap the card sets, which a switch-on agrees to, and who beyond the realm's
-// named readers can read what the automation writes (`broadReaders`), which
-// the switch-on screen warns about. 503 while this process has no prices.
+// switching the automation on is likely to cost a month, and the monthly
+// credit cap the card sets, which a switch-on agrees to. 503 while this
+// process has no prices.
 export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let caller = callerOf(ctxt);
@@ -604,7 +573,6 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
           monthlyCredits: declaration.caps.monthlyCredits,
           estimate,
           notices: switchOnNotices(declaration),
-          broadReaders: await broadReadersFor(args, realmURL),
         },
       },
     });
