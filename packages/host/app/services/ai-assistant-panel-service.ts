@@ -80,9 +80,9 @@ export default class AiAssistantPanelService extends Service {
   // object per request, so the room can tell a request it has handled from a
   // new one for the same room.
   @tracked promptFocusRequest: { roomId: string } | undefined = undefined;
-  // The prompt each session's box was last filled with, so a later fill can
-  // replace it while the user hasn't changed it.
-  private filledPrompts = new Map<string, string>();
+  // The prompt the panel last filled a session's box with. While the box
+  // still holds it, it is the panel's text, not the user's.
+  private filledPrompt: { roomId: string; prompt: string } | undefined;
 
   constructor(owner: Owner) {
     super(owner);
@@ -119,7 +119,7 @@ export default class AiAssistantPanelService extends Service {
     this.roomToDelete = undefined;
     this.roomDeleteError = undefined;
     this.promptFocusRequest = undefined;
-    this.filledPrompts.clear();
+    this.filledPrompt = undefined;
     this.deletedRoomIds.clear();
     window.localStorage.removeItem(NewSessionIdPersistenceKey);
     this.loadRoomsTask.cancelAll();
@@ -254,11 +254,14 @@ export default class AiAssistantPanelService extends Service {
     // loadRoomsTask then selects leaves the list as it is, so a list the user
     // opens while the rooms load stays open.
     this.hidePastSessions();
+    // A focus request belongs to the open that made it.
+    this.promptFocusRequest = undefined;
     return this.loadRoomsTask.perform();
   }
 
   @action
   closePanel() {
+    this.promptFocusRequest = undefined;
     this.operatorModeStateService.closeAiAssistant();
   }
 
@@ -274,6 +277,9 @@ export default class AiAssistantPanelService extends Service {
 
   @action
   enterRoom(roomId: string, hidePastSessionsList = true) {
+    if (this.promptFocusRequest?.roomId !== roomId) {
+      this.promptFocusRequest = undefined;
+    }
     this.matrixService.currentRoomId = roomId;
 
     this.localPersistenceService.setCurrentRoomId(roomId);
@@ -299,24 +305,36 @@ export default class AiAssistantPanelService extends Service {
   }
 
   // Opens a new session with `prompt` in its prompt box, unsent, and focuses
-  // the box. The new session may be an empty one opened before: a draft the
-  // user typed there stays, while a prompt filled in earlier and left as it
-  // was gives way to this one.
+  // the box. The new session may be an empty one opened before, so a draft
+  // the user typed there stays instead.
   async openNewSessionWithPrompt(prompt: string) {
     let roomId = await this.openNewSession();
     if (!roomId) {
       return;
     }
-    let draft = this.matrixService.getMessageToSend(roomId);
-    if (!draft || draft === this.filledPrompts.get(roomId)) {
+    if (!this.matrixService.getMessageToSend(roomId)) {
       this.matrixService.setMessageToSend(roomId, prompt);
-      this.filledPrompts.set(roomId, prompt);
+      this.filledPrompt = { roomId, prompt };
     }
     this.promptFocusRequest = { roomId };
   }
 
+  // Empties a session's prompt box when it still holds the prompt the panel
+  // filled it with.
+  private clearFilledPrompt(roomId: string) {
+    let filled = this.filledPrompt;
+    this.filledPrompt = undefined;
+    if (
+      filled?.roomId === roomId &&
+      filled.prompt === this.matrixService.getMessageToSend(roomId)
+    ) {
+      this.matrixService.setMessageToSend(roomId, undefined);
+    }
+  }
+
   // Enters a new session, and resolves to its room, or to nothing when it
-  // couldn't be created.
+  // couldn't be created. A reused empty session drops a prompt the panel
+  // filled in and the user left as it was, so it opens as empty as a new one.
   @action
   async createNewSession(
     opts: {
@@ -338,6 +356,7 @@ export default class AiAssistantPanelService extends Service {
       !opts.shouldSummarizeSession &&
       !opts.shouldCopyFileHistory
     ) {
+      this.clearFilledPrompt(newSessionId);
       this.enterRoom(newSessionId);
       return newSessionId;
     }
