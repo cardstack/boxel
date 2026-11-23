@@ -249,8 +249,10 @@ export default class HostLinkNavigationService extends Service {
         if (isRedirectRoutingRule(rule)) {
           return LEAVE;
         }
-        await this.store.get(rule.id);
-        return { kind: 'app' };
+        // As for a dynamic route: a card that can't be loaded is left to
+        // the browser, so the server answers.
+        let card = await this.store.get(rule.id);
+        return isCardInstance(card) ? { kind: 'app' } : LEAVE;
       }
       let cardHref = this.hostRouteLinks.linkedCard(link.href);
       if (!cardHref) {
