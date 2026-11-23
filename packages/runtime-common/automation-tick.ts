@@ -6,7 +6,9 @@
 // credits*, `next_run` at or before now) with `FOR UPDATE SKIP LOCKED`, so two
 // ticks never handle one automation at once, and holds the row until it has
 // advanced the row past what it enqueued. A tick that finds the row locked,
-// or no longer due, leaves it alone.
+// or no longer due, leaves it alone. An automation that is paused, *done* or
+// *waiting for key approval* is never claimed: a waiting one has no next run
+// until its approvals match (`followKeyApprovals`).
 //
 // For each trigger due at the row's next run, the tick:
 //

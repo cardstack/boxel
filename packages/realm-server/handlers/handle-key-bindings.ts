@@ -1,10 +1,15 @@
 import type Koa from 'koa';
 import {
   fetchRealmPermissions,
+  param,
+  query,
   rri,
   trimExecutableExtension,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
+import { realmServerAutomationChangeReporter } from '../lib/run-change-reporter.ts';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import { setContextResponse } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
@@ -34,6 +39,13 @@ import {
   type BindingNames,
 } from '../lib/key-binding-batch.ts';
 import { findRealm } from '../lib/realm-routing.ts';
+import {
+  automationsWaitingForKeyApproval,
+  followAutomationKeyApprovals,
+} from '../lib/automation-key-approvals.ts';
+import { getAutomation } from '@cardstack/runtime-common/automations';
+import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
+import type { AutomationVersion } from '@cardstack/runtime-common/automation-key-approval';
 import { isSecureSession } from '../lib/secure-session.ts';
 import { validateContextRequest } from '../lib/secure-window.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
@@ -56,6 +68,7 @@ const APPROVE_ATTRIBUTES = new Set([
   'interactive',
   'anonymous',
   'dailyBudgets',
+  'automation',
 ]);
 const OPERATION_MEMBERS = new Set([
   'codeRef',
@@ -174,10 +187,18 @@ function operationOf(
 
 // Approves a batch of operations in one realm: `attributes.{realm,
 // operations: [{codeRef, operation, instance?, expectedDestination, slots:
-// {<slot>: {keyId} | {shareId}}}]}`. Answers 201 with a binding per slot, each
-// with the request it recorded and the grant it sends under, and the batch's
-// id. The caller must be able to read the realm; one they can't is answered
-// as one that doesn't exist.
+// {<slot>: {keyId} | {shareId}}}], automation?: {id, version}}`. Answers 201
+// with a binding per slot, each with the request it recorded and the grant it
+// sends under, and the batch's id. The caller must be able to read the realm;
+// one they can't is answered as one that doesn't exist.
+//
+// `automation` names a switched-on automation of the realm, by its card, and
+// the version of it the approver was shown (the `version` switch-on answers
+// in `keyApprovals`): the confirmation also approves that automation to use
+// each binding it writes (ADR 039 §1.2), and is refused (409) when the
+// automation has changed since. Once the confirmation commits, every
+// automation of the realm waiting for key approval is checked again, and
+// each whose approvals all match now runs.
 export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let approver = ownerOf(ctxt);
@@ -207,6 +228,7 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
     }
     let { realm, operations, interactive, anonymous, dailyBudgets } =
       attributes;
+    let named = automationNamed(attributes.automation);
     if (!Array.isArray(operations)) {
       throw new UserKeyError(400, 'an approval lists its operations');
     }
@@ -225,6 +247,9 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
       operationOf(args.virtualNetwork, operation),
     );
     let { realmURL, target } = await readableRealm(args, approver, realm);
+    let automation = named
+      ? await approvedAutomation(args, target, realmURL, named)
+      : undefined;
     let { batchId, approved } = await approveBindings(
       args.dbAdapter,
       secretsKeyring(),
@@ -237,13 +262,86 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
         interactive: interactive === true,
         anonymous: anonymous === true,
         dailyBudgets: (dailyBudgets ?? {}) as Record<string, number>,
+        ...(automation ? { automation } : {}),
       },
+    );
+    await followAutomationKeyApprovals(
+      args,
+      realmURL,
+      await automationsWaitingForKeyApproval(args.dbAdapter, realmURL, args),
     );
     await sendJSON(ctxt, 201, {
       data: approved.map((a) => serializeApproved(args.virtualNetwork, a)),
       meta: { batchId },
     });
   });
+}
+
+// The automation an approval names, as `{id, version}`: its card, and the
+// version of it the approver was shown.
+function automationNamed(
+  value: unknown,
+): { id: string; version: string } | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  let named = value as Record<string, unknown> | null;
+  if (
+    !named ||
+    typeof named !== 'object' ||
+    Array.isArray(named) ||
+    typeof named.id !== 'string' ||
+    typeof named.version !== 'string' ||
+    Object.keys(named).some((key) => key !== 'id' && key !== 'version')
+  ) {
+    throw new UserKeyError(
+      400,
+      'automation names the automation card as id and the version its approver was shown as version',
+    );
+  }
+  return { id: named.id, version: named.version };
+}
+
+// The automation an approval names, switched on in the realm, with its
+// version as it is now.
+async function approvedAutomation(
+  args: CreateRoutesArgs,
+  target: CreateRoutesArgs['realms'][number],
+  realmURL: URL,
+  named: { id: string; version: string },
+): Promise<{
+  automationId: string;
+  expectedVersion: string;
+  current: AutomationVersion;
+}> {
+  let cardURL = resolved(args.virtualNetwork, named.id).replace(/\.json$/, '');
+  let automationId = rri(args.virtualNetwork.unresolveURL(cardURL));
+  let row = await getAutomation(args.dbAdapter, automationId);
+  if (!row || args.virtualNetwork.toURLHref(row.realm) !== realmURL.href) {
+    throw new UserKeyError(
+      404,
+      'the automation the approval names is not switched on in this realm',
+    );
+  }
+  let read = await readRunDeclaration({
+    dbAdapter: args.dbAdapter,
+    definitionLookup: args.definitionLookup,
+    virtualNetwork: args.virtualNetwork,
+    automationId,
+  });
+  let current = read.ok
+    ? await target.automationVersionOf({
+        declaration: read.declaration,
+        payer: row.payer,
+      })
+    : undefined;
+  if (!current) {
+    throw new UserKeyError(
+      409,
+      "the automation's card or script can't be read, so its approval can't be given now",
+    );
+  }
+  return { automationId, expectedVersion: named.version, current };
 }
 
 // Which of the user's bindings `?realm=&module=&name=&operation=&instance=`
@@ -474,16 +572,32 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
   });
 }
 
-// Revokes one of the user's bindings. Its grant stays.
+// Revokes one of the user's bindings. Its grant stays. Each automation the
+// binding served waits for key approval from then on
+// (`revokeBindingsIn`), and the direct writers of its realm are told.
 export function handleRevokeKeyBinding(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let via = await secureClientOf(ctxt, args, 'approvals are revoked');
-    await revokeBinding(args.dbAdapter, {
-      owner,
-      bindingId: ctxt.params.bindingId,
-      via,
-    });
+    let bindingId = ctxt.params.bindingId;
+    let served = UUID_PATTERN.test(bindingId)
+      ? await query(args.dbAdapter, [
+          'SELECT a.automation_id, au.realm FROM automation_key_approvals a JOIN automations au ON au.automation_id = a.automation_id WHERE a.binding_id =',
+          param(bindingId),
+          '::uuid',
+        ])
+      : [];
+    await revokeBinding(args.dbAdapter, { owner, bindingId, via });
+    let report = realmServerAutomationChangeReporter(args);
+    for (let row of served) {
+      await report({
+        automationId: row.automation_id as RealmResourceIdentifier,
+        realm: row.realm as RealmIdentifier,
+      });
+    }
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

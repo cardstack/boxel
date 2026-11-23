@@ -52,6 +52,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=key_bindings \
   --exclude-table-and-children=key_binding_approvals \
   --exclude-table-and-children=key_binding_notices \
+  --exclude-table-and-children=automation_key_approvals \
   --exclude-table-and-children=user_key_grant_notices \
   --exclude-table-and-children=key_limit_notices \
   --exclude-table-and-children=key_uses \

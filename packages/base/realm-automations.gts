@@ -84,6 +84,8 @@ export function automationStateLook(automation: Automation): StateLook {
       return { label: 'Paused', tone: 'warning', dot: true };
     case 'waiting-for-credits':
       return { label: 'Waiting for credits', tone: 'warning', dot: true };
+    case 'waiting-for-key-approval':
+      return { label: 'Waiting for key approval', tone: 'warning', dot: true };
     case 'done':
       return { label: 'Done', tone: 'neutral', dot: true };
     default:
@@ -151,6 +153,8 @@ function glanceText(automation: Automation): string | undefined {
       return pausedBecause(automation);
     case 'waiting-for-credits':
       return 'The payer has no credits left, so Boxel holds every run';
+    case 'waiting-for-key-approval':
+      return 'Boxel holds every run until each key owner approves the automation';
     case 'done':
       return 'No runs left on any trigger';
     default:

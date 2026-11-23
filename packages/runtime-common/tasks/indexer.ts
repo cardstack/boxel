@@ -16,6 +16,7 @@ import {
   type QueueCoalesceDecision,
   registerQueueJobDefinition,
 } from '../queue.ts';
+import { SupportedMimeType } from '../supported-mime-type.ts';
 import { IndexRunner } from '../index-runner.ts';
 import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
@@ -833,6 +834,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       definitionLookup,
       virtualNetwork,
       realmURL,
+      readFile: realmFileReader(_fetch),
       reportRunChange: taskRunChangeReporter({
         dbAdapter,
         virtualNetwork,
@@ -1076,6 +1078,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       virtualNetwork,
       realmURL,
       touched: [...invalidations, ...changes.map(({ url }) => url)],
+      readFile: realmFileReader(_fetch),
       reportRunChange: taskRunChangeReporter({
         dbAdapter,
         virtualNetwork,
@@ -1162,6 +1165,24 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ...(chargedRunIndexing ? { chargedRunIndexing } : {}),
     };
   };
+
+// Reads a realm file's source as text with the pass's authorized fetch, for
+// the automation hook to compare an automation's script with its key
+// approvals; undefined when it can't be read.
+function realmFileReader(
+  _fetch: typeof globalThis.fetch,
+): (url: string) => Promise<string | undefined> {
+  return async (url) => {
+    try {
+      let response = await _fetch(url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+      return response.ok ? await response.text() : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+}
 
 // The automation card's index hook, run once the pass has committed. The index
 // is already committed, so a failure here is logged, naming the automation

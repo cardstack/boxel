@@ -251,13 +251,20 @@ import {
 import {
   automationRunCallApiMeter,
   credentialRefusalOf,
+  readRunDeclaration,
   readRunLimits,
 } from './automation-run-limits.ts';
+import {
+  automationVersion,
+  type AutomationKeyApprovals,
+  type AutomationVersion,
+} from './automation-key-approval.ts';
 import {
   endsRunOnCredential,
   subjectOfRefusal,
 } from './card-operations/call-api.ts';
 import {
+  RUN_ADMISSION_KIND_PARAM,
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
 } from './automation-admission-route.ts';
@@ -14838,7 +14845,7 @@ export class Realm {
   // answers the first refusal, or none (see `automation-admission-route.ts`).
   // A refused credential that ends the run is recorded on its row.
   private async admitRunOperations(
-    _request: Request,
+    request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
     let respond = (status: number, body: unknown) =>
@@ -14907,11 +14914,107 @@ export class Realm {
         }
       },
     );
-    return answer(
-      refusal
-        ? { refusal }
-        : { refusal: null, operations: limits.operations.length },
-    );
+    if (refusal) {
+      return answer({ refusal });
+    }
+    // A run of the automation's triggers also needs each binding's approval
+    // for this automation, matching it as its card and script read now
+    // (ADR 039 §1.7). The worker says which kind of run asks; a Preview, a
+    // Run now or a batch's follow-up needs no automation approval.
+    if (
+      new URL(request.url).searchParams.get(RUN_ADMISSION_KIND_PARAM) ===
+      'trigger'
+    ) {
+      let read = await readRunDeclaration({
+        dbAdapter: this.#dbAdapter,
+        definitionLookup: this.#definitionLookup,
+        virtualNetwork: this.#virtualNetwork,
+        automationId: call.automationId,
+      });
+      let approvals = read.ok
+        ? await this.checkAutomationKeyApprovals({
+            automationId: call.automationId,
+            declaration: read.declaration,
+            payer: call.actsAs,
+          })
+        : undefined;
+      if (approvals && !approvals.approved) {
+        let operation = approvals.operations.find(
+          ({ state }) => state === 'missing',
+        )!;
+        return answer({
+          refusal: {
+            code: 'key-approval-ended',
+            detail: `a key approval this automation needs for operation "${operation.operation}" ended, or the automation changed since its key's owner approved it, so the run waits until it is approved again`,
+            operation: operation.operation,
+            targetType: operation.targetType,
+          },
+        });
+      }
+    }
+    return answer({ refusal: null, operations: limits.operations.length });
+  }
+
+  // Checks each operation the automation declares for the key approvals a
+  // run of its triggers needs, with `payer` as its payer and its card read as
+  // `declaration` and its script as this realm holds it now
+  // (`CallApiSender.checkAutomationKeyApprovals`). Undefined when this realm
+  // can't check, or the script can't be read, which a run's admission refuses
+  // on its own.
+  async checkAutomationKeyApprovals({
+    automationId,
+    declaration,
+    payer,
+  }: {
+    automationId: string;
+    declaration: AutomationDeclaration;
+    payer: string;
+  }): Promise<AutomationKeyApprovals | undefined> {
+    let check = this.#callApi?.checkAutomationKeyApprovals;
+    if (!check) {
+      return undefined;
+    }
+    let script = await this.#readAutomationScript(declaration);
+    if (script === undefined) {
+      return undefined;
+    }
+    return await check({
+      core: this.operationCore,
+      realmURL: new URL(this.url),
+      automationId,
+      declaration,
+      payer,
+      script,
+    });
+  }
+
+  // The automation's version with `payer` as its payer, its card read as
+  // `declaration` and its script as this realm holds it now: what a key's
+  // owner approves (`automation-key-approval.ts`). Undefined when the script
+  // can't be read.
+  async automationVersionOf({
+    declaration,
+    payer,
+  }: {
+    declaration: AutomationDeclaration;
+    payer: string;
+  }): Promise<AutomationVersion | undefined> {
+    let script = await this.#readAutomationScript(declaration);
+    return script === undefined
+      ? undefined
+      : await automationVersion(declaration, { payer, script });
+  }
+
+  // The automation's script, as this realm holds it, or undefined when it
+  // isn't in this realm or can't be read.
+  async #readAutomationScript(
+    declaration: AutomationDeclaration,
+  ): Promise<string | undefined> {
+    let scriptURL = this.#virtualNetwork.toURLHref(declaration.script);
+    let script = this.paths.inRealm(new URL(scriptURL))
+      ? await this.readFileAsText(this.paths.local(new URL(scriptURL)))
+      : undefined;
+    return script?.content;
   }
 
   // Checks, before a resume makes `payer` the payer of the automation
@@ -14928,16 +15031,14 @@ export class Realm {
     payer: string;
   }): Promise<AdmissionRefusal | undefined> {
     let scriptURL = this.#virtualNetwork.toURLHref(declaration.script);
-    let script = this.paths.inRealm(new URL(scriptURL))
-      ? await this.readFileAsText(this.paths.local(new URL(scriptURL)))
-      : undefined;
-    if (!script) {
+    let script = await this.#readAutomationScript(declaration);
+    if (script === undefined) {
       return {
         reason: 'missing-script',
         message: `The script ${scriptURL} could not be read`,
       };
     }
-    let unrunnable = scriptRefusal(script.content, scriptURL);
+    let unrunnable = scriptRefusal(script, scriptURL);
     if (unrunnable) {
       return unrunnable;
     }

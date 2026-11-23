@@ -1,13 +1,20 @@
 // The automation card's index hook: after an index pass commits, every
-// switched-on automation whose card the pass touched has its row brought in
-// step with the card as indexed (`syncAutomationWithCard`). The worker's
+// switched-on automation whose card or script file the pass touched has its
+// row brought in step with the card as indexed (`syncAutomationWithCard`),
+// and its key approvals compared with the card and script as they are now
+// (`approvalsStillMatch`), so an edit that changes what a key's owner
+// approved makes the automation wait for key approval at once. The worker's
 // indexing tasks call it once their pass has committed, so the row is read
 // against the committed index.
 //
 // The `automations` table is server-only, so the hook runs only against
 // Postgres.
 
-import { automationRef } from './automation-declaration.ts';
+import {
+  automationRef,
+  readAutomationDeclaration,
+} from './automation-declaration.ts';
+import { approvalsStillMatch } from './automation-key-approval.ts';
 import type { ReportAutomationChange } from './automation-change-events.ts';
 import type { ReportRunChange } from './automation-run-events.ts';
 import {
@@ -16,6 +23,7 @@ import {
   type AutomationSync,
 } from './automations.ts';
 import type { DBAdapter } from './db.ts';
+import { dbAdapterQuerier } from './expression.ts';
 import type { DefinitionLookup } from './definition-lookup.ts';
 import { internalKeyFor } from './index.ts';
 import { IndexQueryEngine } from './index-query-engine.ts';
@@ -32,6 +40,10 @@ export interface AutomationIndexHookArgs {
   touched?: readonly string[];
   // Unix seconds; the current time when absent.
   now?: number;
+  // Reads a file of the realm as text, undefined when it can't be read. The
+  // hook reads an automation's script with it to compare the automation with
+  // its key approvals; absent, no approval is compared.
+  readFile?: (url: string) => Promise<string | undefined>;
   // Told of each run a sync cancels.
   reportRunChange?: ReportRunChange;
   // Told of each automation a sync removes, pauses, or moves between active
@@ -57,6 +69,7 @@ export async function syncAutomationsAfterIndex({
   realmURL,
   touched,
   now,
+  readFile,
   reportRunChange,
   reportAutomationChange,
 }: AutomationIndexHookArgs): Promise<Map<string, AutomationSyncOutcome>> {
@@ -85,10 +98,16 @@ export async function syncAutomationsAfterIndex({
     undefined,
     virtualNetwork,
   );
+  let touchedFiles = touched ? new Set(touched) : undefined;
+  let querier = dbAdapterQuerier(dbAdapter);
   for (let { automationId } of automations) {
     try {
       let cardURL = virtualNetwork.toURLHref(automationId);
-      if (touchedCards && !touchedCards.has(cardURL)) {
+      if (
+        touchedCards &&
+        !touchedCards.has(cardURL) &&
+        !(await scriptTouched(cardURL))
+      ) {
         continue;
       }
       let result = await syncAutomationWithCard(
@@ -101,6 +120,18 @@ export async function syncAutomationsAfterIndex({
           now,
           reportRunChange,
           reportAutomationChange,
+          ...(readFile
+            ? {
+                keyApprovalsMatch: (automation, declaration) =>
+                  approvalsStillMatch(querier, {
+                    automationId,
+                    declaration,
+                    payer: automation.payer,
+                    readScript: () =>
+                      readFile(virtualNetwork.toURLHref(declaration.script)),
+                  }),
+              }
+            : {}),
         },
       );
       if (result) {
@@ -111,4 +142,29 @@ export async function syncAutomationsAfterIndex({
     }
   }
   return synced;
+
+  // Whether the pass touched the script the automation's card names, as the
+  // card is indexed now.
+  async function scriptTouched(cardURL: string): Promise<boolean> {
+    if (!touchedFiles?.size) {
+      return false;
+    }
+    let card = await engine.getInstanceSource(new URL(cardURL));
+    if (!card?.instance || card.failureWithheld) {
+      return false;
+    }
+    let read = readAutomationDeclaration(
+      {
+        url: cardURL,
+        realmURL: card.realmURL,
+        types: card.types,
+        instance: card.instance,
+      },
+      { automationTypeKey, virtualNetwork },
+    );
+    return (
+      read.ok &&
+      touchedFiles.has(virtualNetwork.toURLHref(read.declaration.script))
+    );
+  }
 }

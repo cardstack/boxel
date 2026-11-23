@@ -7,6 +7,12 @@
 // its own realm is refused (403 `not-a-run`).
 export const RUN_ADMISSION_PATH = '/_run-admission';
 
+// The query parameter naming the kind of run asking (`AdmittedRunKind`). For
+// a run of the automation's triggers (`trigger`), the realm also checks each
+// binding's automation approval against the automation as it reads now, and
+// refuses one that ended or no longer matches (`key-approval-ended`).
+export const RUN_ADMISSION_KIND_PARAM = 'kind';
+
 export interface RunAdmissionAnswer {
   // The first refusal, or null when every declared operation would be
   // served.

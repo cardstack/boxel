@@ -50,6 +50,10 @@ import {
 } from '@cardstack/runtime-common/automation-run-log';
 import { switchOnNotices } from '@cardstack/runtime-common/automation-webhooks';
 import { admitPayer } from '@cardstack/runtime-common/automation-admission';
+import {
+  KEY_APPROVAL_REFUSAL_REASONS,
+  type AutomationKeyApprovals,
+} from '@cardstack/runtime-common/automation-key-approval';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   AUTOMATION_ESTIMATE_RESOURCE_TYPE,
@@ -82,6 +86,7 @@ import {
 } from '../lib/automation-estimate.ts';
 import { buildAdmitPayerSpending } from '../lib/automation-spending.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
+import { followAutomationKeyApprovals } from '../lib/automation-key-approvals.ts';
 import { exactMeteredCredits } from '../lib/metered-charge.ts';
 import { currentPricing } from '../lib/pricing.ts';
 import {
@@ -322,6 +327,39 @@ async function declarationOf(
   return read.declaration;
 }
 
+// The automation's key approvals with `payer` as its payer (ADR 039),
+// checked in its realm: each declared operation approved, or missing with who
+// can approve it, and the version an approval of it names. Undefined when
+// the realm can't check, which leaves the automation to its runs'
+// admission.
+async function keyApprovalsOf(
+  args: CreateRoutesArgs,
+  realmURL: URL,
+  automationId: RealmResourceIdentifier,
+  declaration: AutomationDeclaration,
+  payer: string,
+): Promise<AutomationKeyApprovals | undefined> {
+  let realm = await findOrMountRealm(realmURL, args);
+  return realm?.url === realmURL.href
+    ? await realm.checkAutomationKeyApprovals({
+        automationId,
+        declaration,
+        payer,
+      })
+    : undefined;
+}
+
+// Key approvals as a route answers them: whether every one is there, the
+// version (`versionKey`) a confirmation approving the rest names, and each
+// operation's state.
+function serializeKeyApprovals(approvals: AutomationKeyApprovals) {
+  return {
+    approved: approvals.approved,
+    version: approvals.version.versionKey,
+    operations: approvals.operations,
+  };
+}
+
 // Preview and Run now start a run whether or not the automation is switched
 // on, so archiving a realm, which stops its switched-on automations, has no
 // row of theirs to pause. Switch-on and resume make this check themselves,
@@ -532,9 +570,10 @@ async function estimateFor(
 }
 
 // `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>`: what
-// switching the automation on is likely to cost a month, and the monthly
-// credit cap the card sets, which a switch-on agrees to. 503 while this
-// process has no prices.
+// switching the automation on is likely to cost a month, the monthly credit
+// cap the card sets, which a switch-on agrees to, and its key approvals
+// (`keyApprovals`): with its payer as payer once it is switched on, and with
+// the caller before. 503 while this process has no prices.
 export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let caller = callerOf(ctxt);
@@ -564,6 +603,13 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
         'this server has no prices, so it can neither estimate nor admit automation runs until its pricing is fixed',
       );
     }
+    let keyApprovals = await keyApprovalsOf(
+      args,
+      realmURL,
+      automationId,
+      declaration,
+      row?.payer ?? caller,
+    );
     await sendJSON(ctxt, 200, {
       data: {
         type: AUTOMATION_ESTIMATE_RESOURCE_TYPE,
@@ -573,6 +619,9 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
           monthlyCredits: declaration.caps.monthlyCredits,
           estimate,
           notices: switchOnNotices(declaration),
+          ...(keyApprovals
+            ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+            : {}),
         },
       },
     });
@@ -581,7 +630,13 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
 
 // `POST /_automation-switch-on`: switches the automation on for the caller,
 // who becomes its payer, with the card's caps as the snapshot. The body's
-// `monthlyCredits` must be the card's monthly credit cap.
+// `monthlyCredits` must be the card's monthly credit cap. Every declared
+// operation is checked for its key approvals first, with the caller as the
+// payer: when one is missing, the automation switches on *waiting for key
+// approval*, with no next run, and runs once the last approval lands. The
+// answer's `meta.keyApprovals` says, for each operation, whether it is
+// approved or who can approve it, and names the version a confirmation
+// approving the rest names.
 export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let caller = callerOf(ctxt);
@@ -595,6 +650,13 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
     let automationId = automationIn(realmURL, id, args.virtualNetwork);
     let declaration = await declarationOf(args, automationId, realmURL);
     agreedMonthlyCap(attributes, declaration);
+    let keyApprovals = await keyApprovalsOf(
+      args,
+      realmURL,
+      automationId,
+      declaration,
+      caller,
+    );
     let change = await switchOnAutomation(
       args.dbAdapter,
       {
@@ -602,9 +664,20 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
         realm: ri(args.virtualNetwork.unresolveURL(realmURL.href)),
         user: caller,
         declaration,
+        keyApproved: keyApprovals?.approved ?? true,
       },
       actorOptions(args),
     );
+    if (change.ok && change.automation.state === 'waiting-for-key-approval') {
+      // An approval that landed between the check and the row's insert found
+      // no row to move, so the new row is checked once more.
+      let followed = (
+        await followAutomationKeyApprovals(args, realmURL, [automationId])
+      ).get(automationId);
+      if (followed) {
+        change = { ok: true, automation: followed.automation };
+      }
+    }
     let estimate = change.ok
       ? await estimateFor(
           args,
@@ -617,6 +690,9 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
     await answerChange(ctxt, args, change, caller, 201, {
       ...(estimate ? { estimate } : {}),
       notices: switchOnNotices(declaration),
+      ...(keyApprovals
+        ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+        : {}),
     });
   });
 }
@@ -717,7 +793,9 @@ export function handleAutomationPause(args: CreateRoutesArgs): Handler {
 // at switch-on. The caller is admitted as the payer first, as the
 // automation's next run would admit them (`admitPayer`): a refusal answers
 // 422 with the run's refusal code in `meta.code`, and the automation stays
-// paused.
+// paused. A key approval the caller as payer would need doesn't refuse the
+// resume: as at switch-on, the automation resumes *waiting for key approval*
+// until it lands, and `meta.keyApprovals` says what is missing.
 export function handleAutomationResume(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let { caller, realmURL, automationId, attributes } =
@@ -725,6 +803,7 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
     let declaration = await declarationOf(args, automationId, realmURL);
     agreedMonthlyCap(attributes, declaration);
     let admitSpending = buildAdmitPayerSpending({ dbAdapter: args.dbAdapter });
+    let keyApprovals: AutomationKeyApprovals | undefined;
     let change = await resumeAutomation(
       args.dbAdapter,
       {
@@ -740,12 +819,21 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
                 // isn't mounted yet; mounting it is what serving its first
                 // request would do.
                 let realm = await findOrMountRealm(realmURL, args);
-                return realm?.url === realmURL.href
-                  ? await realm.admitAutomationPayer({ declaration, payer })
-                  : {
-                      reason: 'run-admission-unavailable',
-                      message: `${realmURL.href} isn't served here, so its automation's operations can't be checked`,
-                    };
+                let refusal =
+                  realm?.url === realmURL.href
+                    ? await realm.admitAutomationPayer({ declaration, payer })
+                    : {
+                        reason: 'run-admission-unavailable',
+                        message: `${realmURL.href} isn't served here, so its automation's operations can't be checked`,
+                      };
+                // A missing key approval makes the automation wait instead
+                // (`keyApproved`).
+                return refusal &&
+                  (KEY_APPROVAL_REFUSAL_REASONS as readonly string[]).includes(
+                    refusal.reason,
+                  )
+                  ? undefined
+                  : refusal;
               },
               admitSpending: (payer) =>
                 admitSpending({
@@ -757,11 +845,24 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
             },
             payer,
           ),
+        keyApproved: async (payer) => {
+          keyApprovals = await keyApprovalsOf(
+            args,
+            realmURL,
+            automationId,
+            declaration,
+            payer,
+          );
+          return keyApprovals?.approved ?? true;
+        },
       },
       actorOptions(args),
     );
     await answerChange(ctxt, args, change, caller, 200, {
       notices: switchOnNotices(declaration),
+      ...(keyApprovals
+        ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+        : {}),
     });
   });
 }

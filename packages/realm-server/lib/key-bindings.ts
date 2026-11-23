@@ -72,6 +72,14 @@ import {
   type LimitSubject,
 } from './key-limits.ts';
 import { recordFillRefusal } from './key-uses.ts';
+import {
+  endAutomationKeyApprovalsIn,
+  writeAutomationKeyApprovalsIn,
+} from './automation-key-approval-records.ts';
+import {
+  versionKeyOf,
+  type AutomationVersion,
+} from '@cardstack/runtime-common/automation-key-approval';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
 // to send a chosen key in one of the operation's credential slots. Card code
@@ -122,6 +130,14 @@ import { recordFillRefusal } from './key-uses.ts';
 //   session signed in on the secure origin, from the secure window or the CLI
 //   (`handle-key-bindings.ts`), never the app page's session, which card code
 //   can reach.
+//
+// - **Per automation, for an automation's run.** A run of an automation's
+//   triggers is served only by a binding its key's owner approved for that
+//   automation, as the automation was then (ADR 039): an *automation
+//   approval*, which a confirmation records when it names the automation
+//   (`automation-key-approvals.ts`). A binding that comes to send another
+//   share or key ends its automation approvals, unless the confirmation that
+//   moves it approves those automations again.
 //
 // Each approval, re-approval and revocation appends a row to
 // `key_binding_approvals` with a readable copy of the request, for people: the
@@ -385,6 +401,12 @@ export interface ApprovedBinding {
 // binding and its approval row is written in one transaction, all sharing
 // one batch. A slot already bound is approved again: its key or share, grant
 // and fingerprint move to what this confirmation says, and it is active.
+//
+// A confirmation that names an automation (`automation`) also approves that
+// automation to use each binding it writes, at the automation's version as
+// it is now (`current`). It names the version its approver was shown
+// (`expectedVersion`, a `versionKey`), and is refused when the automation has
+// changed since.
 export async function approveBindings(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -397,6 +419,7 @@ export async function approveBindings(
     interactive = false,
     anonymous,
     dailyBudgets = {},
+    automation,
   }: {
     core: Pick<
       OperationCore,
@@ -413,10 +436,25 @@ export async function approveBindings(
     // for a share's first interactive approval, accepted for any share an
     // interactive approval fills, and refused otherwise.
     dailyBudgets?: Record<string, number>;
+    automation?: {
+      automationId: string;
+      expectedVersion: string;
+      current: AutomationVersion;
+    };
   },
 ): Promise<{ batchId: string; approved: ApprovedBinding[] }> {
   if (anonymous) {
     throw new UserKeyError(403, 'anonymous use of a binding is not offered');
+  }
+  if (
+    automation &&
+    (await versionKeyOf(automation.current)).versionKey !==
+      automation.expectedVersion
+  ) {
+    throw new UserKeyError(
+      409,
+      'the automation changed since its approval was shown; show it again',
+    );
   }
   for (let [shareId, budget] of Object.entries(dailyBudgets)) {
     if (!interactive) {
@@ -606,6 +644,14 @@ export async function approveBindings(
         approved.push({ binding, snapshot, grant, grantCreated: created });
       }
     }
+    if (automation) {
+      await writeAutomationKeyApprovalsIn(txQuery, {
+        automationId: automation.automationId,
+        bindingIds: approved.map(({ binding }) => binding.id),
+        approver,
+        version: automation.current,
+      });
+    }
   });
   return { batchId, approved };
 }
@@ -780,7 +826,7 @@ async function writeApproval(
   },
 ): Promise<KeyBinding> {
   let [existing] = await txQuery([
-    `SELECT id FROM key_bindings WHERE realm_url = `,
+    `SELECT id, key_id, share_id FROM key_bindings WHERE realm_url = `,
     param(realmURL),
     ` AND definition_url = `,
     param(type.module),
@@ -800,6 +846,14 @@ async function writeApproval(
   let fingerprint = fingerprintOf(snapshot);
   let approvalId = randomUUID();
   let bindingId = (existing?.id as string | undefined) ?? randomUUID();
+  // An automation's approval was given for the key the binding sent then.
+  if (
+    existing &&
+    ((existing.key_id ?? null) !== keyId ||
+      (existing.share_id ?? null) !== shareId)
+  ) {
+    await endAutomationKeyApprovalsIn(txQuery, [bindingId]);
+  }
   let [row] = existing
     ? await txQuery([
         `UPDATE key_bindings SET key_id = `,
@@ -1087,6 +1141,9 @@ export async function moveShareBindingsIn(
     });
     moved.push(row.id as string);
   }
+  // Each automation approval of a moved binding was given for the key the
+  // share held before.
+  await endAutomationKeyApprovalsIn(txQuery, moved);
   return moved;
 }
 
