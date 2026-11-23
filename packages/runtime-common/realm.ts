@@ -21340,10 +21340,9 @@ export class Realm {
   // The realm's validated host route tree, as `getHostRoutes` gives it and
   // as a host page gets it in `hostDynamicRoutes`, so a reader resolves a
   // path or works out an address without validating anything again. It is
-  // always the whole tree: a route whose type can't be read now is in it as
-  // an unavailable route, which a reader resolves to an error and at which
-  // the address walk stops. The validation's warnings are for the server's
-  // log, not for a reader.
+  // the tree the realm's last index validated and stored, so it is always the
+  // whole tree, and reading it never waits for a type's definition. The
+  // validation's warnings are for the server's log, not for a reader.
   private async hostRoutes(
     _request: Request,
     requestContext: RequestContext,
@@ -21354,8 +21353,7 @@ export class Realm {
       init: {
         headers: {
           'content-type': SupportedMimeType.JSON,
-          // The tree changes when the realm is indexed, and when an
-          // unavailable route's type can be read again, and carries no
+          // The tree changes when the realm is indexed, and carries no
           // validator a cache could ask with.
           'cache-control': 'no-store',
         },

@@ -177,8 +177,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         ['routes'],
         'the answer holds the routes and nothing else',
       );
-      let { routes, complete } = await testRealm.getHostRoutes();
-      assert.true(complete, 'the realm validated every route');
+      let { routes } = await testRealm.getHostRoutes();
       assert.deepEqual(
         response.body.routes,
         JSON.parse(JSON.stringify(routes)),
@@ -219,47 +218,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let stranger = await hostRoutes(strangerUserId, []);
       assert.strictEqual(stranger.status, 403, 'no read permission: 403');
       assert.strictEqual(stranger.body.routes, undefined, 'and no routes');
-    });
-
-    test('answers 503 with a time to ask again while a route is not available', async function (assert) {
-      // The realm's own answer while a field-match route's type can't be
-      // read yet: the route is dropped and the validation is incomplete.
-      let getHostRoutes = testRealm.getHostRoutes;
-      testRealm.getHostRoutes = async function (this: Realm) {
-        let validation = await getHostRoutes.call(this);
-        return {
-          ...validation,
-          routes: validation.routes.filter(
-            (route) => route.kind !== 'field-match',
-          ),
-          complete: false,
-        };
-      };
-      try {
-        let response = await hostRoutes(ownerUserId);
-
-        assert.strictEqual(response.status, 503, 'HTTP 503 status');
-        assert.true(
-          Number(response.headers['retry-after']) > 0,
-          'it says when to ask again',
-        );
-        assert.strictEqual(
-          response.body.routes,
-          undefined,
-          'it answers no routes, not the ones that are left',
-        );
-        assert.strictEqual(
-          response.body.errors?.[0]?.status,
-          503,
-          'the body is an error document',
-        );
-      } finally {
-        testRealm.getHostRoutes = getHostRoutes;
-      }
-
-      let recovered = await hostRoutes(ownerUserId);
-      assert.strictEqual(recovered.status, 200, 'then the whole tree');
-      assert.strictEqual(recovered.body.routes.length, 4);
     });
   });
 
