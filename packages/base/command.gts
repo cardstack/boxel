@@ -136,7 +136,10 @@ export class CardIdCard extends CardDef {
   @field cardId = contains(StringField);
 }
 
+// The cards are `cardId`, then `cardIds`, all in one workspace, pinned in
+// that order or unpinned in one save.
 export class SetWorkspacePinInput extends CardIdCard {
+  @field cardIds = containsMany(StringField);
   @field pinned = contains(BooleanField);
 }
 
