@@ -119,6 +119,7 @@ module('Integration | tools | read-automation-run', function (hooks) {
       { realm: testRealmURL, read: 'report' },
       { realm: testRealmURL, run: 'run-1', read: 'storage' },
       { realm: testRealmURL, run: 'run-1', read: 'log', after: 'start' },
+      { realm: testRealmURL, run: 'run-1', read: 'log', levels: [] },
     ]) {
       await assert.rejects(read(json), JSON.stringify(json));
     }

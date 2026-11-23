@@ -17,7 +17,8 @@ import type * as BaseToolModule from '@cardstack/base/command';
 // - `{ realm, run, read: 'report' }` reads `GET /_automation-run-report`.
 // - `{ realm, run, read: 'log', after?, limit?, levels? }` reads one page of
 //   `GET /_automation-run-log`, past the `seq` in `after`, keeping only the
-//   levels in `levels` when given.
+//   levels in `levels`. Without `levels` the page keeps every level; an
+//   empty `levels` is refused, since the route can't keep no level.
 export interface ReadAutomationRunInput {
   realm: string;
   run: string;
@@ -56,9 +57,10 @@ function inputOf(json: unknown): ReadAutomationRunInput {
   if (
     input.levels !== undefined &&
     (!Array.isArray(input.levels) ||
+      input.levels.length === 0 ||
       input.levels.some((level) => typeof level !== 'string'))
   ) {
-    throw new Error('`levels` must be a list of log levels');
+    throw new Error('`levels` must be a list of one or more log levels');
   }
   return input as ReadAutomationRunInput;
 }

@@ -2058,6 +2058,7 @@ module('Acceptance | automation view', function (hooks) {
       let reports: Map<string, Record<string, unknown>>;
       let logs: Map<string, { state: string; lines: LogLine[] }>;
       let logAsked: URL[];
+      let reportsAsked: string[];
 
       type LogLine = {
         seq: number;
@@ -2073,11 +2074,13 @@ module('Acceptance | automation view', function (hooks) {
         reports = new Map();
         logs = new Map();
         logAsked = [];
+        reportsAsked = [];
         getService('network').virtualNetwork.mount(
           async (request: Request) => {
             let url = new URL(request.url);
             let runId = url.searchParams.get('run') ?? '';
             if (url.pathname.endsWith('/_automation-run-report')) {
+              reportsAsked.push(runId);
               let attributes = reports.get(runId);
               return attributes
                 ? new Response(
@@ -2222,7 +2225,7 @@ module('Acceptance | automation view', function (hooks) {
         await click(
           `[data-test-automation-runs] button[aria-label^="Expand nightly run for"][aria-label$=", ${label}"]`,
         );
-        await waitFor(`[data-test-automation-run-detail="${id}"]`, {
+        await waitFor(`[data-test-automation-run-timeline="${id}"]`, {
           timeout: 10000,
         });
       }
@@ -2232,7 +2235,7 @@ module('Acceptance | automation view', function (hooks) {
       function markers(id: string) {
         return [
           ...document.querySelectorAll(
-            `[data-test-automation-run-detail="${id}"] [data-test-milestone-state]`,
+            `[data-test-automation-run-timeline="${id}"] [data-test-milestone-state]`,
           ),
         ].map((marker) => marker.getAttribute('data-test-milestone-state'));
       }
@@ -2240,7 +2243,7 @@ module('Acceptance | automation view', function (hooks) {
       function logMessages(id: string) {
         return [
           ...document.querySelectorAll(
-            `[data-test-automation-run-detail="${id}"] [data-test-automation-run-log-line]`,
+            `[data-test-automation-run-timeline="${id}"] [data-test-automation-run-log-line]`,
           ),
         ].map((row) =>
           row
@@ -2339,7 +2342,7 @@ module('Acceptance | automation view', function (hooks) {
           ],
           'admission is done and the script runs, inside the second milestone; the commit has not started',
         );
-        let detail = text('[data-test-automation-run-detail="live"]') ?? '';
+        let detail = text('[data-test-automation-run-timeline="live"]') ?? '';
         assert.true(
           detail.includes('Waited 5 s to start'),
           'admission says how long the run waited',
@@ -2361,6 +2364,27 @@ module('Acceptance | automation view', function (hooks) {
           'Fetched 12 open issues line 4',
         ]);
 
+        // The card reads the report as the row opens and again once the
+        // log's first page brings a line. A job event naming the run reads
+        // the report once more; the log brings nothing new meanwhile, so
+        // nothing else reads the report.
+        await waitUntil(() => reportsAsked.length >= 2, {
+          timeout: 10000,
+          timeoutMessage: 'the report was never read again for the log’s line',
+        });
+        let readsBefore = reportsAsked.length;
+        sendJobEvent('live', 'running');
+        await waitUntil(() => reportsAsked.length > readsBefore, {
+          timeout: 10000,
+          timeoutMessage: 'a job event naming the run never read the report',
+        });
+        assert.true(
+          reportsAsked.every((runId) => runId === 'live'),
+          'every report read is of the opened run',
+        );
+
+        // A line the run writes shows while the run goes, read at the
+        // follow interval or at once on a job event naming the run.
         logs
           .get('live')!
           .lines.push(line(1, 'warn', 'Skipped 3 archived issues'));
