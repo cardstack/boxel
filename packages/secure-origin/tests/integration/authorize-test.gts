@@ -686,6 +686,65 @@ module('Integration | authorize', function (hooks) {
       );
     });
 
+    test('an ended flow brought back from the browser cache looks its error up again, not the flow', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      servers.realmServer(`POST ${CONSENT}`, () => ({
+        status: 400,
+        body: { error: 'bad-request', reference: REF },
+      }));
+      let stored = {
+        error: 'server_error',
+        reason: 'unreadable-decision',
+        app: {
+          kind: 'metadata-document',
+          shown: 'example.com',
+          verified: true,
+        },
+        returnOffered: true,
+      };
+      servers.realmServer(`GET ${ERROR_DETAILS}`, () => stored);
+      await open();
+      await allow();
+      await waitFor('[data-test-oauth-error="cant-continue"]');
+      let restore = async () => {
+        window.dispatchEvent(
+          new PageTransitionEvent('pageshow', { persisted: true }),
+        );
+        await settled();
+      };
+
+      await restore();
+      assert
+        .dom(
+          '[data-test-oauth-error="cant-continue"] [data-test-oauth-error-return]',
+        )
+        .hasAttribute('href', ERROR_RETURN);
+      assert.strictEqual(
+        servers.requests('realm-server', `GET ${CONSENT}`).length,
+        1,
+        'the flow is not asked for again',
+      );
+      assert.strictEqual(
+        servers.requests('realm-server', `GET ${ERROR_DETAILS}`).length,
+        2,
+        'the error is looked up again',
+      );
+
+      // "Return" spends the reference.
+      servers.realmServer(`GET ${ERROR_DETAILS}`, () => ({
+        status: 404,
+        body: { error: 'expired' },
+      }));
+      await restore();
+      assert.dom('[data-test-oauth-error="expired"]').exists();
+      assert.dom('[data-test-oauth-error-return]').doesNotExist();
+      assert.strictEqual(
+        servers.requests('realm-server', `GET ${CONSENT}`).length,
+        1,
+      );
+    });
+
     test('an ended flow whose return the provider doesn\'t offer has no "Return"', async function (assert) {
       signedIn();
       shows(cimdDetails());

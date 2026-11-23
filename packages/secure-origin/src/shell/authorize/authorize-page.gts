@@ -260,10 +260,14 @@ export default class AuthorizePage extends Component {
 
   // Back from the app can bring this page back as it was left, from the
   // browser's cache, showing a consent already answered. It starts again,
-  // and finds out the flow was decided. The error page looks its error up
-  // again itself.
+  // and finds out the flow was decided. It goes by the address as it is now:
+  // once a stored error's reference has replaced the flow there, the error
+  // page looks that error up again itself, with its "Return".
   private shown = (event: PageTransitionEvent) => {
-    if (event.persisted && this.request.kind === 'consent') {
+    if (
+      event.persisted &&
+      authorizeRequest(window.location.search).kind === 'consent'
+    ) {
       this.start();
     }
   };
