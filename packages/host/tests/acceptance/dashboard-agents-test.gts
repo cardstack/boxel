@@ -410,8 +410,17 @@ module('Acceptance | dashboard agents', function (hooks) {
       assert.dom(PANEL).includesText('Uses credits');
 
       await click('[data-test-agent-describe-it]');
+      let matrixService = getService('matrix-service') as MatrixService;
+      await waitUntil(() => matrixService.currentRoomId);
+      await settled();
 
       assert.dom('[data-test-ai-assistant-panel]').exists();
+      assert
+        .dom(`[data-test-message-field="${matrixService.currentRoomId}"]`)
+        .hasValue(
+          'Build me a card to track my reading list, with a title, author, status and rating for each book.',
+        )
+        .isFocused();
     });
   });
 

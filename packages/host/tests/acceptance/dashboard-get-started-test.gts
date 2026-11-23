@@ -1,5 +1,6 @@
 import {
   click,
+  fillIn,
   find,
   findAll,
   settled,
@@ -431,6 +432,121 @@ module('Acceptance | dashboard get started', function (hooks) {
     await waitUntil(() => countText() === '1 of 3 done');
 
     assert.strictEqual(stepDone('ask-ai'), 'true');
+  });
+
+  test('asking Boxel AI Assistant starts a session with a prompt to send', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let roomId = await openBoxelAiSession();
+    let field = `[data-test-message-field="${roomId}"]`;
+
+    assert
+      .dom(field)
+      .hasValue(
+        'Build me a card to track my reading list, with a title, author, status and rating for each book.',
+      )
+      .isFocused();
+    let input = find(field) as HTMLTextAreaElement;
+    assert.strictEqual(
+      input.selectionStart,
+      input.value.length,
+      'the cursor is after the prompt',
+    );
+    assert.dom('[data-test-message-idx]').doesNotExist('nothing is sent');
+    assert.strictEqual(stepDone('ask-ai'), 'false');
+  });
+
+  test('the prompt names the workspace the user was last in', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+      workspaceChooserOpened: true,
+    });
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
+    await settled();
+    await reopenDashboard();
+    await openSteps();
+
+    let roomId = await openBoxelAiSession();
+
+    assert
+      .dom(`[data-test-message-field="${roomId}"]`)
+      .hasValue(
+        'In Workspace A, build me a card to track my reading list, with a title, author, status and rating for each book.',
+      );
+  });
+
+  test('asking again keeps what the user typed in the empty session, and focuses it', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let roomId = await openBoxelAiSession();
+    let field = `[data-test-message-field="${roomId}"]`;
+    await fillIn(field, 'A card for my recipes');
+
+    await click('[data-test-get-started-action="ask-ai"]');
+
+    let matrixService = getService('matrix-service') as MatrixService;
+    assert.strictEqual(
+      matrixService.currentRoomId,
+      roomId,
+      'the empty session is reused',
+    );
+    assert.dom(field).hasValue('A card for my recipes').isFocused();
+  });
+
+  test('asking again from another workspace renames the workspace in a prompt left unchanged', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let roomId = await openBoxelAiSession();
+    let field = `[data-test-message-field="${roomId}"]`;
+
+    await operatorModeState().openWorkspace(realmURL);
+    await settled();
+    operatorModeState().workspaceChooserOpened = true;
+    await waitFor('[data-test-dashboard-greeting]');
+    await openSteps();
+    await click('[data-test-get-started-action="ask-ai"]');
+
+    let matrixService = getService('matrix-service') as MatrixService;
+    assert.strictEqual(
+      matrixService.currentRoomId,
+      roomId,
+      'the empty session is reused',
+    );
+    assert
+      .dom(field)
+      .hasValue(
+        'In Workspace A, build me a card to track my reading list, with a title, author, status and rating for each book.',
+      );
+  });
+
+  test('a session that fails to open leaves the prompt out of the older session', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let roomId = await openBoxelAiSession();
+    await fillIn(`[data-test-message-field="${roomId}"]`, '');
+    sendMessage(roomId);
+    await waitUntil(() => countText() === '1 of 3 done');
+
+    // The mock server fails room creation while this element is on the page.
+    let failRoomCreation = document.createElement('div');
+    failRoomCreation.setAttribute('data-test-throw-room-error', '');
+    document.body.append(failRoomCreation);
+    try {
+      await click('[data-test-get-started-action="ask-ai"]');
+      await waitFor('[data-test-room-error]');
+    } finally {
+      failRoomCreation.remove();
+    }
+
+    let matrixService = getService('matrix-service') as MatrixService;
+    assert.notOk(
+      matrixService.getMessageToSend(roomId),
+      'the older session gets no prompt',
+    );
   });
 
   test('with every step done, the steps stay, each with its action, until dismissed', async function (assert) {

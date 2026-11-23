@@ -76,6 +76,13 @@ export default class AiAssistantPanelService extends Service {
   @tracked roomToRename: SessionRoomData | undefined = undefined;
   @tracked roomToDelete: { id: string; name: string } | undefined = undefined;
   @tracked roomDeleteError: string | undefined = undefined;
+  // The room whose prompt box should take the focus once it renders. A new
+  // object per request, so the room can tell a request it has handled from a
+  // new one for the same room.
+  @tracked promptFocusRequest: { roomId: string } | undefined = undefined;
+  // The prompt each session's box was last filled with, so a later fill can
+  // replace it while the user hasn't changed it.
+  private filledPrompts = new Map<string, string>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -111,6 +118,8 @@ export default class AiAssistantPanelService extends Service {
     this.roomToRename = undefined;
     this.roomToDelete = undefined;
     this.roomDeleteError = undefined;
+    this.promptFocusRequest = undefined;
+    this.filledPrompts.clear();
     this.deletedRoomIds.clear();
     window.localStorage.removeItem(NewSessionIdPersistenceKey);
     this.loadRoomsTask.cancelAll();
@@ -273,20 +282,41 @@ export default class AiAssistantPanelService extends Service {
     }
   }
 
-  // Opens the panel on a new session. A second press while the first is still
+  // Opens the panel on a new session, and resolves to its room, or to nothing
+  // when it couldn't be created. A second press while the first is still
   // opening restarts the panel's tasks and cancels the first, which is
-  // superseded rather than failed.
-  async openNewSession() {
+  // superseded rather than failed and resolves to nothing.
+  async openNewSession(): Promise<string | undefined> {
     try {
       await this.openPanel();
-      await this.createNewSession();
+      return await this.createNewSession();
     } catch (error) {
       if (!didCancel(error)) {
         throw error;
       }
+      return undefined;
     }
   }
 
+  // Opens a new session with `prompt` in its prompt box, unsent, and focuses
+  // the box. The new session may be an empty one opened before: a draft the
+  // user typed there stays, while a prompt filled in earlier and left as it
+  // was gives way to this one.
+  async openNewSessionWithPrompt(prompt: string) {
+    let roomId = await this.openNewSession();
+    if (!roomId) {
+      return;
+    }
+    let draft = this.matrixService.getMessageToSend(roomId);
+    if (!draft || draft === this.filledPrompts.get(roomId)) {
+      this.matrixService.setMessageToSend(roomId, prompt);
+      this.filledPrompts.set(roomId, prompt);
+    }
+    this.promptFocusRequest = { roomId };
+  }
+
+  // Enters a new session, and resolves to its room, or to nothing when it
+  // couldn't be created.
   @action
   async createNewSession(
     opts: {
@@ -299,19 +329,20 @@ export default class AiAssistantPanelService extends Service {
       shouldCopyFileHistory: false,
       shouldSummarizeSession: false,
     },
-  ) {
+  ): Promise<string | undefined> {
     this.displayRoomError = false;
+    let newSessionId = this.newSessionId;
     if (
-      this.newSessionId &&
+      newSessionId &&
       !opts.addSameSkills &&
       !opts.shouldSummarizeSession &&
       !opts.shouldCopyFileHistory
     ) {
-      this.enterRoom(this.newSessionId);
-      return;
+      this.enterRoom(newSessionId);
+      return newSessionId;
     }
 
-    await this.doCreateRoom.perform(NEW_SESSION_NAME, opts);
+    return await this.doCreateRoom.perform(NEW_SESSION_NAME, opts);
   }
 
   private get newSessionId() {
@@ -492,12 +523,12 @@ export default class AiAssistantPanelService extends Service {
             shouldCopyFileHistory,
           });
         }
+        return roomId;
       } catch (e) {
         console.error(e);
         this.displayRoomError = true;
+        return undefined;
       }
-
-      return undefined;
     },
   );
 
