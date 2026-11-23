@@ -22304,7 +22304,13 @@ export class Realm {
     }
     this.#requestedHostRoutesIndex = true;
     void this.#realmIndexUpdater
-      .enqueueUpdate([this.paths.fileURL('realm.json')])
+      .enqueueUpdate([this.paths.fileURL('realm.json')], {
+        // As for any write: the swap drops this realm's index caches, the
+        // stored-routes read among them, here and on peer replicas.
+        onInvalidation: async () => {
+          await this.clearRealmIndexCachesAndBroadcast();
+        },
+      })
       .then(({ settled }) => settled)
       .catch((e: unknown) => {
         this.#requestedHostRoutesIndex = false;

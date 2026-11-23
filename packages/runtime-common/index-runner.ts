@@ -1682,9 +1682,12 @@ export class IndexRunner {
   // (and its neighbors, coalesced into a multi-row upsert) drains. The batch
   // times the physical writes; the job result reads `batch.writeMs`.
   async #writeEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
+    // The RealmConfig card is written under its file's URL (realm.json) or
+    // its card URL, depending on the visit.
     if (
       entry.type === 'instance' &&
-      url.href === realmConfigCardURL(this.#realmURL).href
+      (url.href === realmConfigHrefFor(this.#realmURL) ||
+        url.href === realmConfigCardURL(this.#realmURL).href)
     ) {
       this.#stagedRealmConfigSearchDoc = entry.searchData;
     }
@@ -1773,8 +1776,11 @@ export class IndexRunner {
     prerenderUserId: string;
   }> {
     let realmURL = this.#realmURL;
-    if (!this.#realmPaths.inRealm(new URL(moduleURL))) {
-      let response = await this.#fetch(moduleURL, { method: 'HEAD' });
+    // `moduleURL` is canonical, so a module of a realm served under a prefix
+    // (`@cardstack/base/…`) is in its prefix form, which isn't a URL.
+    let url = this.#virtualNetwork.toURL(moduleURL);
+    if (!this.#realmPaths.inRealm(url)) {
+      let response = await this.#fetch(url.href, { method: 'HEAD' });
       let header = response.headers.get('x-boxel-realm-url');
       if (!response.ok || !header) {
         throw new Error(
