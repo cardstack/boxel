@@ -569,8 +569,12 @@ module('Acceptance | automation view', function (hooks) {
               startedAt: '2030-01-01T08:59:00.000Z',
               endedAt: '2030-01-01T08:59:04.000Z',
               ms: 4_000,
-              done: 30,
-              total: 30,
+              tasks: [
+                {
+                  text: 'Fetched 30 open issues',
+                  at: '2030-01-01T08:59:03.000Z',
+                },
+              ],
             },
             {
               name: 'Retry',
@@ -585,13 +589,18 @@ module('Acceptance | automation view', function (hooks) {
               startedAt: '2030-01-01T08:59:05.000Z',
               endedAt: '2030-01-01T09:00:00.000Z',
               ms: 55_000,
-              done: 12,
-              total: 40,
+              tasks: [
+                {
+                  text: 'Grouped the bug label',
+                  at: '2030-01-01T08:59:10.000Z',
+                },
+              ],
             },
           ],
           ahead: ['Write digest'],
           failedIn: 'Group by label',
           dropped: 0,
+          tasksDropped: 2,
         },
       },
     };
@@ -600,17 +609,17 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-milestones-lead]')
       .hasText(
-        'The milestones the script reported on the last run, which ended with an error.',
+        'The milestones the script reported on the last run, which ended with an error. Boxel didn’t record 2 more tasks the script reported: a run records at most 200 tasks.',
       );
     let milestones = text('[data-test-automation-milestones]') ?? '';
     for (let expected of [
       'Fetch issues',
-      'Took 4 s · 30 of 30',
+      'Took 4 s',
       'Retry',
       'Took 1 s · Not in the plan',
       'Group by label',
       'Failed here',
-      'Ran for 55 s · 12 of 40',
+      'Ran for 55 s',
       'Write digest',
       'Not started',
     ]) {
@@ -633,6 +642,89 @@ module('Acceptance | automation view', function (hooks) {
       ['reached', 'reached', 'failed', 'not-started'],
       'done up to the failure, failed there, and not started after it',
     );
+    assert.deepEqual(
+      [
+        ...document.querySelectorAll(
+          '[data-test-automation-milestones] [data-test-automation-milestone-tasks]',
+        ),
+      ].map((list) => [
+        list.getAttribute('aria-label'),
+        [...list.querySelectorAll('[data-test-automation-milestone-task]')].map(
+          (task) => task.textContent?.trim(),
+        ),
+      ]),
+      [
+        ['Tasks in Fetch issues', ['Fetched 30 open issues']],
+        ['Tasks in Group by label', ['Grouped the bug label']],
+      ],
+      'each milestone lists the tasks the script reported inside the milestone, in place of a count',
+    );
+  });
+
+  test('a milestone lists the latest five tasks, and a button shows the earlier ones', async function (assert) {
+    let tasks = Array.from({ length: 8 }, (_, i) => ({
+      text: `Grouped label ${i + 1}`,
+      at: '2030-01-01T08:59:10.000Z',
+    }));
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: {
+          runId: 'run-1',
+          state: 'complete',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: '2030-01-01T09:00:00.000Z',
+          plan: ['Group by label'],
+          milestones: [
+            {
+              name: 'Group by label',
+              planned: true,
+              startedAt: '2030-01-01T08:59:00.000Z',
+              endedAt: '2030-01-01T09:00:00.000Z',
+              ms: 60_000,
+              tasks,
+            },
+          ],
+          ahead: [],
+          failedIn: null,
+          dropped: 0,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    let shown = () =>
+      [
+        ...document.querySelectorAll(
+          '[data-test-automation-milestones] [data-test-automation-milestone-task]',
+        ),
+      ].map((task) => task.textContent?.trim());
+    assert.deepEqual(shown(), [
+      'Grouped label 4',
+      'Grouped label 5',
+      'Grouped label 6',
+      'Grouped label 7',
+      'Grouped label 8',
+    ]);
+    assert
+      .dom(
+        '[data-test-automation-milestones] [data-test-automation-milestone-earlier-tasks]',
+      )
+      .hasText('Show 3 earlier tasks');
+    await click(
+      '[data-test-automation-milestones] [data-test-automation-milestone-earlier-tasks]',
+    );
+    assert.deepEqual(
+      shown(),
+      tasks.map(({ text }) => text),
+      'every task, in the order reported',
+    );
+    assert
+      .dom(
+        '[data-test-automation-milestones] [data-test-automation-milestone-earlier-tasks]',
+      )
+      .doesNotExist();
   });
 
   test('a run in progress shows the milestone it is in as running, the ones before it done and the ones after it not started', async function (assert) {
@@ -662,8 +754,12 @@ module('Acceptance | automation view', function (hooks) {
               startedAt: '2030-01-01T08:59:04.000Z',
               endedAt: null,
               ms: 90_000,
-              done: 140,
-              total: 412,
+              tasks: [
+                {
+                  text: 'Grouped the bug label',
+                  at: '2030-01-01T09:00:00.000Z',
+                },
+              ],
             },
           ],
           ahead: ['Write digest'],
@@ -687,7 +783,8 @@ module('Acceptance | automation view', function (hooks) {
     assert.deepEqual(states, ['reached', 'running', 'not-started']);
     let milestones = text('[data-test-automation-milestones]') ?? '';
     for (let expected of [
-      'Running for 1 min 30 s · 140 of 412',
+      'Running for 1 min 30 s',
+      'Grouped the bug label',
       'Not started',
     ]) {
       assert.true(milestones.includes(expected), `shows "${expected}"`);
@@ -1105,8 +1202,9 @@ module('Acceptance | automation view', function (hooks) {
         startedAt: '2030-01-01T08:59:05.000Z',
         endedAt: '2030-01-01T09:00:00.000Z',
         ms: 55_000,
-        done: 12,
-        total: 40,
+        tasks: [
+          { text: 'Grouped the bug label', at: '2030-01-01T08:59:10.000Z' },
+        ],
       },
     ],
     ahead: ['Write digest'],
@@ -1799,7 +1897,14 @@ module('Acceptance | automation view', function (hooks) {
               milestone('Fetch open issues', {
                 endedAt: '2030-01-01T08:30:11.000Z',
               }),
-              milestone('Group by label', { done: 40, total: 120 }),
+              milestone('Group by label', {
+                tasks: [
+                  {
+                    text: 'Grouped the bug label',
+                    at: '2030-01-01T08:30:12.000Z',
+                  },
+                ],
+              }),
             ],
             current: 'Group by label',
             ahead: ['Write digest'],
@@ -1839,7 +1944,7 @@ module('Acceptance | automation view', function (hooks) {
         .dom(
           '[data-test-automation-run="running"] [data-test-automation-run-progress]',
         )
-        .hasText('Milestone 2 of 3: Group by label');
+        .hasText('Milestone 2 of 3: Group by label — Grouped the bug label');
       assert
         .dom(
           '[data-test-automation-run="failed"] [data-test-automation-run-progress]',
@@ -1864,6 +1969,79 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-run-milestones]')
         .includesText('Write digest');
+      assert
+        .dom(
+          '[data-test-automation-run-milestones] [data-test-automation-milestone-task]',
+        )
+        .hasText(
+          'Grouped the bug label',
+          'the opened timeline lists the tasks under the milestone',
+        );
+    });
+
+    test("a running run's new task shows live when the realm sends a job event", async function (assert) {
+      let running = (tasks: string[]) =>
+        run('live', {
+          state: 'running',
+          step: 'script',
+          finishedAt: null,
+          milestones: {
+            runId: 'live',
+            state: 'running',
+            startedAt: '2030-01-01T08:30:05.000Z',
+            finishedAt: null,
+            plan: ['Group by label'],
+            milestones: [
+              {
+                name: 'Group by label',
+                planned: true,
+                startedAt: '2030-01-01T08:30:10.000Z',
+                endedAt: null,
+                ms: 1000,
+                tasks: tasks.map((text) => ({
+                  text,
+                  at: '2030-01-01T08:30:12.000Z',
+                })),
+              },
+            ],
+            current: 'Group by label',
+            ahead: [],
+            failedIn: null,
+            dropped: 0,
+          },
+        });
+      list([running(['Grouped the bug label'])]);
+      await openRuns();
+      let progress =
+        '[data-test-automation-run="live"] [data-test-automation-run-progress]';
+      assert
+        .dom(progress)
+        .hasText('Milestone 1 of 1: Group by label — Grouped the bug label');
+      list([running(['Grouped the bug label', 'Grouped the docs label'])]);
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(
+          testRealmURL,
+          '@testuser:localhost',
+        ),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'job',
+          runId: 'live',
+          automation: AUTOMATION,
+          state: 'running',
+          step: 'script',
+          milestone: 'Group by label',
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+      await waitUntil(
+        () => text(progress)?.includes('Grouped the docs label'),
+        { timeout: 10000, timeoutMessage: 'the new task never showed' },
+      );
+      assert
+        .dom(progress)
+        .hasText('Milestone 1 of 1: Group by label — Grouped the docs label');
     });
   });
 });
