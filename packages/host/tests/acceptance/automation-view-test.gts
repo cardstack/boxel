@@ -730,6 +730,85 @@ module('Acceptance | automation view', function (hooks) {
     assert.strictEqual(shown().length, 5, 'the earlier tasks hide again');
   });
 
+  test("a milestone's earlier tasks start hidden again when the card moves on to the next run", async function (assert) {
+    // The same milestone in two runs, each with more tasks than the card
+    // shows at first.
+    let run = (runId: string, label: string) => ({
+      runId,
+      state: 'complete',
+      startedAt: '2030-01-01T08:59:00.000Z',
+      finishedAt: '2030-01-01T09:00:00.000Z',
+      plan: ['Group by label'],
+      milestones: [
+        {
+          name: 'Group by label',
+          planned: true,
+          startedAt: '2030-01-01T08:59:00.000Z',
+          endedAt: '2030-01-01T09:00:00.000Z',
+          ms: 60_000,
+          tasks: Array.from({ length: 8 }, (_, i) => ({
+            text: `${label} ${i + 1}`,
+            at: '2030-01-01T08:59:10.000Z',
+          })),
+        },
+      ],
+      ahead: [],
+      failedIn: null,
+      dropped: 0,
+    });
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, lastRun: run('run-1', 'Grouped label') },
+    };
+    await openIsolated();
+    await waitForStatus();
+    let toggle =
+      '[data-test-automation-milestones] [data-test-automation-milestone-earlier-tasks]';
+    let shown = () =>
+      [
+        ...document.querySelectorAll(
+          '[data-test-automation-milestones] [data-test-automation-milestone-task]',
+        ),
+      ].map((task) => task.textContent?.trim());
+    await click(toggle);
+    assert.strictEqual(shown().length, 8, "the first run's tasks all show");
+
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, lastRun: run('run-2', 'Sorted label') },
+    };
+    mockMatrixUtils.simulateRemoteMessage(
+      mockMatrixUtils.getRoomIdForRealmAndUser(
+        testRealmURL,
+        '@testuser:localhost',
+      ),
+      testRealmInfo.realmUserId!,
+      {
+        eventName: 'job',
+        runId: 'run-2',
+        automation: AUTOMATION,
+        state: 'complete',
+        step: 'script',
+        milestone: null,
+        realmURL: testRealmURL,
+      },
+      { type: APP_BOXEL_REALM_EVENT_TYPE },
+    );
+    await waitUntil(() => shown().includes('Sorted label 8'), {
+      timeout: 10000,
+      timeoutMessage: 'the card never moved on to the next run',
+    });
+    assert.deepEqual(
+      shown(),
+      [4, 5, 6, 7, 8].map((n) => `Sorted label ${n}`),
+      "the next run's milestone shows its latest five tasks",
+    );
+    assert
+      .dom(toggle)
+      .hasText('Show 3 earlier tasks')
+      .hasAttribute('aria-expanded', 'false');
+  });
+
   test('a run in progress shows the milestone it is in as running, the ones before it done and the ones after it not started', async function (assert) {
     answer = {
       status: 200,
@@ -1263,6 +1342,19 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-fitted-next]')
       .exists('an active automation shows its next run');
+    // The sizes with room for two lines a milestone show each milestone's
+    // last task beside its time.
+    let showsTask = () =>
+      [
+        ...document.querySelectorAll(
+          '[data-test-automation-fitted-milestone-list] [data-milestone-detail]',
+        ),
+      ].some((detail) => detail.textContent?.includes('Grouped the bug label'));
+    await waitUntil(showsTask, {
+      timeout: 10000,
+      timeoutMessage: "no fitted size showed the milestone's last task",
+    });
+    assert.true(showsTask(), "a fitted size shows the milestone's last task");
   });
 
   test('the fitted and embedded views show the milestone a run is in', async function (assert) {
