@@ -152,6 +152,14 @@ export const ANONYMOUS_STYLESHEET: AnonymousDispatch = {
   operations: ['read', 'query'],
   counted: 'never',
 };
+// An automation's status and runs, the realm's automations, and the webhooks
+// an automation may name. A caller the realm ACL refused is told only that
+// they aren't a direct writer, which goes with the view of an automation card
+// a `read` grant serves them, so the answer counts for nothing on its own.
+export const ANONYMOUS_AUTOMATION_VIEW: AnonymousDispatch = {
+  operations: ['read'],
+  counted: 'never',
+};
 // A capability check asks what the caller could invoke and invokes nothing, so
 // it answers an anonymous caller in any realm whose policy opens anything to
 // one. It is counted by the handler, one unit for each pair it asks about,

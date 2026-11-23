@@ -157,8 +157,8 @@ export interface AutomationStatusDocument {
   meta: { directWriter: true };
 }
 
-// The answer to any other caller the realm ACL lets read: it says the caller
-// isn't a direct writer, and carries nothing about the automation.
+// The answer to any other caller the realm admits: it says the caller isn't a
+// direct writer, and carries nothing about the automation.
 export interface AutomationStatusNotDirectWriterDocument {
   data: null;
   meta: { directWriter: false };
@@ -183,9 +183,10 @@ export type AutomationStatusAnswer =
 // failure: the host sends an auth-error event for any 401 or 403 that comes
 // back through `authedFetch`, and wherever an auth-error guard listens, as in
 // the in-page indexer the host's tests run, that fails whatever is rendering
-// or loading at the time. The route answers on the realm ACL alone, so a caller only a
-// policy grant admits gets the ACL's refusal: a grant reaches a card, not
-// the row.
+// or loading at the time. A caller the realm hands to its policy, whom a
+// grant may admit to the card but never to the row, asks as no one, so they
+// get the same answer, as does a caller who isn't signed in where the policy
+// opens `read` to such callers.
 export async function answerAutomationStatus({
   dbAdapter,
   realmURL,

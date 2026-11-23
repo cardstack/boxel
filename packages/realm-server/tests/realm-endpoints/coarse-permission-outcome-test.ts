@@ -543,13 +543,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
           `GET ${SupportedMimeType.RealmInfo} /_info`,
           `QUERY ${SupportedMimeType.RealmInfo} /_info`,
+          `GET ${SupportedMimeType.JSON} /_automation-status`,
+          `GET ${SupportedMimeType.JSON} /_automations`,
+          `GET ${SupportedMimeType.JSON} /_automation-runs`,
+          `GET ${SupportedMimeType.JSON} /_automation-webhooks`,
           `POST ${SupportedMimeType.CardSource} /.*`,
           `POST ${SupportedMimeType.OctetStream} /.*`,
           `DELETE ${SupportedMimeType.CardSource} /.+`,
           `POST ${SupportedMimeType.JSONAPI} /_atomic`,
           'GET * /_scoped-css/*',
         ].sort(),
-        'the consumer set is the card+json read and writes, the verbatim writes, the search, the operations envelope, the capability check, the realm info and the hashed stylesheet serve',
+        'the consumer set is the card+json read and writes, the verbatim writes, the search, the operations envelope, the capability check, the realm info, the automation routes and the hashed stylesheet serve',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -597,10 +601,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.JSONAPI} /_run-log`,
           `GET ${SupportedMimeType.JSONAPI} /_run-admission`,
           `GET ${SupportedMimeType.JSONAPI} /_run-state`,
-          `GET ${SupportedMimeType.JSON} /_automation-status`,
-          `GET ${SupportedMimeType.JSON} /_automations`,
-          `GET ${SupportedMimeType.JSON} /_automation-runs`,
-          `GET ${SupportedMimeType.JSON} /_automation-webhooks`,
           `GET ${SupportedMimeType.Permissions} /_permissions`,
           `PATCH ${SupportedMimeType.Permissions} /_permissions`,
           `POST ${SupportedMimeType.JSON} /_cancel-indexing-job`,
@@ -663,13 +663,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
           `GET ${SupportedMimeType.RealmInfo} /_info`,
           `QUERY ${SupportedMimeType.RealmInfo} /_info`,
+          `GET ${SupportedMimeType.JSON} /_automation-status`,
+          `GET ${SupportedMimeType.JSON} /_automations`,
+          `GET ${SupportedMimeType.JSON} /_automation-runs`,
+          `GET ${SupportedMimeType.JSON} /_automation-webhooks`,
           `POST ${SupportedMimeType.CardSource} /.*`,
           `POST ${SupportedMimeType.OctetStream} /.*`,
           `DELETE ${SupportedMimeType.CardSource} /.+`,
           `POST ${SupportedMimeType.JSONAPI} /_atomic`,
           'GET * /_scoped-css/*',
         ].sort(),
-        'the card+json read and writes, the verbatim writes, the search, the operations envelope, the capability check, the realm info, which applies it by never sealing, and the hashed stylesheet serve',
+        'the card+json read and writes, the verbatim writes, the search, the operations envelope, the capability check, the realm info and the automation routes, which apply it by never sealing, and the hashed stylesheet serve',
       );
       assert.deepEqual(
         testRealm
