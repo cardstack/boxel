@@ -103,6 +103,15 @@ module('Integration | tools | read-automation-run', function (hooks) {
     assert.strictEqual(url.searchParams.get('level'), 'warn,error');
   });
 
+  test("reads an automation's storage from the realm server, for the realm and automation asked", async function (assert) {
+    let automation = `${testRealmURL}automations/nightly`;
+    await read({ realm: testRealmURL, automation, read: 'storage' });
+    let url = new URL(asked[0]);
+    assert.true(url.pathname.endsWith('/_automation-storage'));
+    assert.strictEqual(url.searchParams.get('realm'), testRealmURL);
+    assert.strictEqual(url.searchParams.get('automation'), automation);
+  });
+
   test('answers a refusal with its status and no body', async function (assert) {
     answer = { status: 403, body: { errors: ['not a direct writer'] } };
     let result = await read({
@@ -120,6 +129,7 @@ module('Integration | tools | read-automation-run', function (hooks) {
       { realm: testRealmURL, run: 'run-1', read: 'storage' },
       { realm: testRealmURL, run: 'run-1', read: 'log', after: 'start' },
       { realm: testRealmURL, run: 'run-1', read: 'log', levels: [] },
+      { realm: testRealmURL, read: 'storage' },
     ]) {
       await assert.rejects(read(json), JSON.stringify(json));
     }

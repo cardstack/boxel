@@ -2098,6 +2098,46 @@ module('Acceptance | automation view', function (hooks) {
                   )
                 : new Response(JSON.stringify({ errors: [] }), { status: 404 });
             }
+            if (url.pathname.endsWith('/_automation-storage')) {
+              return new Response(
+                JSON.stringify({
+                  data: {
+                    type: 'automation-storage',
+                    id: AUTOMATION,
+                    attributes: {
+                      switchedOn: true,
+                      payer: '@testuser:localhost',
+                      viewerIsPayer: true,
+                      files: [
+                        {
+                          path: 'digests/2030-01-01.md',
+                          run: 'done',
+                          createdAt: '2030-01-01T08:31:00.000Z',
+                          fileBytes: 3000,
+                          indexBytes: 1000,
+                        },
+                        {
+                          path: 'digests/2029-12-31.md',
+                          run: 'earlier',
+                          createdAt: '2029-12-31T08:31:00.000Z',
+                          fileBytes: 5000,
+                          indexBytes: 1000,
+                        },
+                      ],
+                      fileBytes: 8000,
+                      indexBytes: 2000,
+                      dailyCredits: 0.0042,
+                      pricingVersion: 'test',
+                      charges: [],
+                    },
+                  },
+                }),
+                {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                },
+              );
+            }
             if (url.pathname.endsWith('/_automation-run-log')) {
               logAsked.push(url);
               let log = logs.get(runId) ?? { state: 'complete', lines: [] };
@@ -2500,10 +2540,40 @@ module('Acceptance | automation view', function (hooks) {
           .exists({ count: 2 }, 'each saved file is listed');
 
         await showTab('Cost');
-        let cost = text('[data-test-automation-run-cost]') ?? '';
-        assert.true(cost.includes('Credits in all 3'), cost);
-        assert.true(cost.includes('Compute and network 1'), cost);
-        assert.true(cost.includes('AI requests 2'), cost);
+        let charge = (kind: string) =>
+          text(
+            `[data-test-automation-run-receipt] [data-test-automation-run-charge="${kind}"]`,
+          )?.trim();
+        assert.strictEqual(charge('run'), 'Compute and network 1');
+        assert.strictEqual(charge('ai'), 'AI requests 2');
+        assert.strictEqual(charge('batched_ai'), 'Batched AI requests 0');
+        assert.strictEqual(
+          charge('run_indexing'),
+          'Indexing the saved files 0',
+        );
+        assert.strictEqual(
+          charge('total'),
+          'Total charged for the run 3',
+          'the total is the sum of the lines above the total',
+        );
+        await waitUntil(
+          () =>
+            text('[data-test-automation-run-storage]')?.includes(
+              'a day of storage',
+            ),
+          { timeout: 10000, timeoutMessage: 'the storage never read' },
+        );
+        assert
+          .dom('[data-test-automation-run-storage]')
+          .includesText('The run saved 1 file (4 KB) that still exist.')
+          .includesText('The automation’s runs keep 2 files in all (10 KB).')
+          .includesText(
+            'a day of storage for those files costs 0.0042 credits',
+          );
+        assert
+          .dom('[data-test-automation-run-storage-rules]')
+          .includesText('Storage isn’t part of any one run’s total')
+          .includesText('including while the automation is paused or done');
       });
 
       test('a failed run names the milestone the run failed in', async function (assert) {
