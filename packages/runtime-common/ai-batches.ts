@@ -445,10 +445,11 @@ export async function dismissUnrecordedAIBatch(
   return row ? unrecordedFromRow(row) : undefined;
 }
 
-// Records that an operator chose not to bill a settled batch, with the reason
-// they gave. Returns the batch as recorded, or undefined when there is no
-// such settled batch or it is already written off. Whether its charge drew
-// anything is the caller's to check, in the ledger.
+// Records that an operator chose not to bill a settled batch whose charge
+// drew nothing, with the reason they gave. The ledger is checked in the same
+// statement, so a batch charged meanwhile isn't written off. Returns the
+// batch as recorded, or undefined when there is no such settled batch, it is
+// already written off, or it has a charge.
 export async function writeOffAIBatch(
   dbAdapter: DBAdapter,
   batchId: string,
@@ -462,7 +463,9 @@ export async function writeOffAIBatch(
     param(reason.trim()),
     'WHERE batch_id =',
     param(batchId),
-    'AND settled_at IS NOT NULL AND written_off_at IS NULL RETURNING *',
+    'AND settled_at IS NOT NULL AND written_off_at IS NULL',
+    "AND NOT EXISTS (SELECT 1 FROM credits_ledger l WHERE l.charge_kind = 'batched_ai' AND l.batch_id = ai_batches.batch_id)",
+    'RETURNING *',
   ]);
   return row ? batchFromRow(row) : undefined;
 }

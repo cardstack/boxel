@@ -11,18 +11,22 @@ import {
   resolveRecordedAIBatches,
   writeOffAIBatch,
   SupportedMimeType,
+  CREDITS_PER_USD,
   type DBAdapter,
   type RealmIdentifier,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { chargeAIBatch } from '@cardstack/billing/ai-billing';
 import {
+  getUserByMatrixUserId,
+  sumUpAvailableCredits,
+} from '@cardstack/billing/billing-queries';
+import {
   sendResponseForBadRequest,
   sendResponseForError,
   sendResponseForNotFound,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import { currentPricing } from '../lib/pricing.ts';
 import { MAX_AI_BATCH_DEADLINE_SECONDS } from '../lib/openrouter-batches.ts';
 
 const log = logger('ai-batch-settle');
@@ -38,8 +42,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Bills a settled batch whose charge drew nothing: its payer's balance held
 // nothing when the settle job billed it. Charges what the settle job billed,
 // to the person its run acted as, exactly as the settle job does, so a batch
-// is still charged once however often this is called. A payer whose balance
-// still holds nothing is told so, and nothing is written.
+// is still charged once however often this is called. A charge draws what the
+// balance holds and the rest can never be billed, since the batch's one
+// charge is then written, so a balance that can't cover the whole batch is
+// refused unless `partial=true` says to draw what it holds. A written-off
+// batch is refused: billing it is a decision to reverse the write-off, which
+// this doesn't make.
 export function handleBillAIBatch({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -61,7 +69,26 @@ export function handleBillAIBatch({
       );
       return;
     }
-    let pricingVersion = currentPricing()?.version;
+    if (batch.writtenOffAt !== null) {
+      await sendConflict(
+        ctxt,
+        `Batch ${batchId} was written off on ${batch.writtenOffAt}: ${batch.writeOffReason}`,
+      );
+      return;
+    }
+    let partial = ctxt.URL.searchParams.get('partial') === 'true';
+    let payer = await getUserByMatrixUserId(dbAdapter, batch.actsAs);
+    if (payer && !partial) {
+      let credits = Math.round(batch.billedUsd * CREDITS_PER_USD);
+      let balance = await sumUpAvailableCredits(dbAdapter, payer.id);
+      if (balance < credits && !(await isAIBatchCharged(dbAdapter, batchId))) {
+        await sendConflict(
+          ctxt,
+          `Nothing was charged for batch ${batchId}: ${batch.actsAs}'s balance holds ${Math.max(balance, 0)} of its ${credits} credits. Pass partial=true to draw what it holds and give up the rest`,
+        );
+        return;
+      }
+    }
     let charged = await chargeAIBatch(dbAdapter, {
       payer: batch.actsAs,
       charge: {
@@ -69,13 +96,12 @@ export function handleBillAIBatch({
         realm: batch.realm,
         runId: batch.runId,
         batchId: batch.batchId,
-        ...(pricingVersion ? { pricingVersion } : {}),
       },
       usd: batch.billedUsd,
       estimated: batch.billedAtEstimate === true,
     });
     log.info(
-      `operator billed batch ${batchId}: ${batch.billedUsd} USD to ${batch.actsAs}${batch.billedAtEstimate ? ' at its estimate' : ''}; ${charged}`,
+      `operator billed batch ${batchId}: ${batch.billedUsd} USD to ${batch.actsAs}${batch.billedAtEstimate ? ' at its estimate' : ''}${partial ? ', drawing what the balance holds' : ''}; ${charged}`,
     );
     switch (charged) {
       case 'charged':
@@ -131,18 +157,14 @@ export function handleWriteOffAIBatch({
       );
       return;
     }
-    if (await isAIBatchCharged(dbAdapter, batchId)) {
-      await sendConflict(
-        ctxt,
-        `Batch ${batchId} is already charged, so there is nothing to write off`,
-      );
-      return;
-    }
     let written = await writeOffAIBatch(dbAdapter, batchId, reason);
     if (!written) {
+      let current = await getAIBatch(dbAdapter, batchId);
       await sendConflict(
         ctxt,
-        `Batch ${batchId} was written off on ${batch.writtenOffAt}: ${batch.writeOffReason}`,
+        current?.writtenOffAt
+          ? `Batch ${batchId} was written off on ${current.writtenOffAt}: ${current.writeOffReason}`
+          : `Batch ${batchId} is already charged, so there is nothing to write off`,
       );
       return;
     }
@@ -233,6 +255,14 @@ export function handleRecordAIBatch({
         await sendResponseForBadRequest(
           ctxt,
           `Run ${runId} holds no AI reservation ${reservation}. Check the run and reservation against the Sentry event for this batch`,
+        );
+        return;
+      }
+      let named = await batchNamingReservation(dbAdapter, runId, reservation);
+      if (named) {
+        await sendResponseForBadRequest(
+          ctxt,
+          `Batch ${named} already holds reservation ${reservation} of run ${runId}. A submit holds one reservation, so this Sentry event belongs to that batch`,
         );
         return;
       }
@@ -352,6 +382,21 @@ async function isAIBatchCharged(
     'LIMIT 1',
   ]);
   return rows.length > 0;
+}
+
+async function batchNamingReservation(
+  dbAdapter: DBAdapter,
+  runId: string,
+  reservationId: string,
+): Promise<string | undefined> {
+  let [row] = await query(dbAdapter, [
+    'SELECT batch_id FROM ai_batches WHERE run_id =',
+    param(runId),
+    'AND run_ai_reservation =',
+    param(reservationId),
+    'LIMIT 1',
+  ]);
+  return row ? String(row.batch_id) : undefined;
 }
 
 async function runHoldsAIReservation(

@@ -166,8 +166,10 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
         reservationId,
         costInUsd: 0,
       });
-    // What an operator needs to bill a batch by hand when it may have been
-    // submitted with no row recording it.
+    // What an operator needs to record a batch that may have been submitted
+    // with no row (`/_grafana-record-ai-batch`). Every report of such a
+    // submit carries the `ai-batch-submit` tag, whatever its title, so an
+    // operator finds them all with one Sentry search.
     let unrecorded = {
       runId: run.id,
       actsAs: run.actsAs,
@@ -194,7 +196,10 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       // that is paid for and recorded nowhere. The reservation stays held.
       let message = `batch submit outcome unknown for run ${run.id} (acting as ${run.actsAs}, ${requests.length} requests to ${model}, estimated at ${estimated.estimate.usd} USD): OpenRouter may have accepted a batch that nothing records`;
       log.error(message, answer.error);
-      Sentry.captureException(answer.error, { extra: unrecorded });
+      Sentry.captureException(answer.error, {
+        tags: { 'ai-batch-submit': 'outcome-unknown' },
+        extra: unrecorded,
+      });
       return;
     }
     let { status, json, text } = answer;
@@ -205,7 +210,11 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       // a timeout, so the reservation stays held.
       let message = `batch submit outcome unknown for run ${run.id}: OpenRouter answered ${status}, so a batch may exist that nothing records`;
       log.error(message);
-      Sentry.captureMessage(message, { level: 'error', extra: unrecorded });
+      Sentry.captureMessage(message, {
+        level: 'error',
+        tags: { 'ai-batch-submit': 'outcome-unknown' },
+        extra: unrecorded,
+      });
       sendJson(ctxt, status, text);
       return;
     }
@@ -226,7 +235,11 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       // batch, if one exists, can't be recorded or billed.
       let message = `batch submit outcome unknown for run ${run.id}: OpenRouter accepted the submit but its answer names no batch, so it can't be recorded for billing`;
       log.error(message);
-      Sentry.captureMessage(message, { level: 'error', extra: unrecorded });
+      Sentry.captureMessage(message, {
+        level: 'error',
+        tags: { 'ai-batch-submit': 'outcome-unknown' },
+        extra: unrecorded,
+      });
       await sendResponseForSystemError(
         ctxt,
         'OpenRouter answered the batch submit with no batch',
@@ -250,11 +263,12 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       });
     } catch (error) {
       // The batch is submitted and will be charged to the platform, but
-      // nothing records it to bill. Reported with everything needed to bill
-      // it by hand.
+      // nothing records it to bill. Reported with everything needed to
+      // record it.
       let message = `OpenRouter batch ${batch.id} for run ${run.id} (acting as ${run.actsAs}, estimated at ${estimated.estimate.usd} USD) was submitted but could not be recorded for billing`;
       log.error(message, error);
       Sentry.captureException(error, {
+        tags: { 'ai-batch-submit': 'not-recorded' },
         extra: { batchId: batch.id, ...unrecorded },
       });
       await sendResponseForSystemError(

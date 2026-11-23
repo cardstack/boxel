@@ -742,8 +742,90 @@ module(basename(import.meta.filename), function (hooks) {
 
     assert.strictEqual(second.unrecorded, 0);
     let [row] = (await dbAdapter.execute(
-      `SELECT resolved_at FROM unrecorded_ai_batches WHERE batch_id = 'batch_slow'`,
-    )) as { resolved_at: string | null }[];
+      `SELECT resolved_at, resolution FROM unrecorded_ai_batches WHERE batch_id = 'batch_slow'`,
+    )) as { resolved_at: string | null; resolution: string | null }[];
     assert.ok(row.resolved_at, 'its unrecorded row is resolved');
+    assert.strictEqual(row.resolution, 'recorded');
+  });
+
+  test('a lost batch an operator records is billed by the next pass, and its reservation settled', async function (assert) {
+    let now = Math.floor(Date.now() / 1000);
+    let createdAt = now - 7200;
+    listPages = [
+      {
+        data: [
+          openRouterBatch('batch_lost', { status: 'completed', createdAt }),
+        ],
+        last_id: 'batch_lost',
+        has_more: false,
+      },
+    ];
+    let pending = await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger: 'daily',
+      slot: '2026-11-11T11:30:00.000Z',
+      actsAs: PAYER,
+    });
+    let started = await startAutomationRunAttempt(dbAdapter, pending.id, 1);
+    if (started.kind !== 'run') {
+      throw new Error(`expected the attempt to run, got ${started.kind}`);
+    }
+    let reservation = await reserveAutomationRunAICredits(
+      dbAdapter,
+      started.run.id,
+      RESERVED_CREDITS,
+      100,
+    );
+    if (reservation.kind !== 'reserved') {
+      throw new Error(`expected a reservation, got ${reservation.kind}`);
+    }
+    let first = await settleAIBatches(dbAdapter);
+    assert.strictEqual(first.unrecorded, 1, 'the lost batch is reported');
+
+    // The row the record lever writes from the submit's Sentry event.
+    await recordAIBatch(dbAdapter, {
+      batchId: 'batch_lost',
+      runId: started.run.id,
+      actsAs: PAYER,
+      realm: REALM,
+      automationId: AUTOMATION,
+      model: MODEL,
+      requestCount: 2,
+      estimatedUsd: ESTIMATED_USD,
+      runAIReservation: reservation.reservationId,
+      deadline: new Date((createdAt + 86400) * 1000),
+      expiresAt: null,
+      state: 'completed',
+      submittedAt: new Date(createdAt * 1000),
+    });
+    batchAnswers.set('batch_lost', {
+      status: 200,
+      body: openRouterBatch('batch_lost', {
+        status: 'completed',
+        cost: 0.0042,
+        createdAt,
+      }),
+    });
+    let second = await settleAIBatches(dbAdapter);
+
+    assert.strictEqual(second.settled, 1, 'the next pass bills it');
+    let charges = await batchCharges('batch_lost');
+    assert.strictEqual(charges.length, 1);
+    assert.strictEqual(
+      charges[0].credits,
+      4,
+      'at the cost OpenRouter reported',
+    );
+    let run = (await getAutomationRun(dbAdapter, started.run.id))!;
+    assert.strictEqual(
+      run.aiCreditsReserved,
+      0,
+      'the reservation the submit held is settled',
+    );
+    let [row] = (await dbAdapter.execute(
+      `SELECT resolution FROM unrecorded_ai_batches WHERE batch_id = 'batch_lost'`,
+    )) as { resolution: string | null }[];
+    assert.strictEqual(row.resolution, 'recorded');
   });
 });

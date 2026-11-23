@@ -128,12 +128,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
     // A batch the settle job billed at `usd` while its payer's balance held
     // nothing, so its charge wrote nothing.
-    async function unbilledBatch(batchId = 'batch_unbilled', usd = 0.0042) {
+    async function unbilledBatch(
+      batchId = 'batch_unbilled',
+      usd = 0.0042,
+      actsAs = PAYER,
+    ) {
       let { run, reservationId } = await runWithReservation();
       await recordAIBatch(context.dbAdapter, {
         batchId,
         runId: run.id,
-        actsAs: PAYER,
+        actsAs,
         realm: REALM,
         automationId: AUTOMATION,
         model: MODEL,
@@ -218,6 +222,63 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         4,
         'a second call bills nothing',
       );
+    });
+
+    test('a balance that covers only part of a batch is refused unless partial is asked for', async function (assert) {
+      await unbilledBatch();
+      await topUp(2);
+
+      let refused = await post('/_grafana-bill-ai-batch', {
+        batch: 'batch_unbilled',
+      });
+      assert.strictEqual(refused.status, 409);
+      assert.ok(
+        refused.text.includes('holds 2 of its 4 credits'),
+        `the refusal says what the balance holds: ${refused.text}`,
+      );
+      assert.strictEqual(await batchCredits('batch_unbilled'), 0);
+
+      let partial = await post('/_grafana-bill-ai-batch', {
+        batch: 'batch_unbilled',
+        partial: 'true',
+      });
+      assert.strictEqual(partial.status, 200);
+      assert.strictEqual(
+        await batchCredits('batch_unbilled'),
+        2,
+        'it draws what the balance holds',
+      );
+      assert.deepEqual(
+        await unbilledNow(),
+        [],
+        'a batch with a charge leaves the unbilled list',
+      );
+    });
+
+    test('a batch whose payer has no users row is refused', async function (assert) {
+      await unbilledBatch('batch_ghost', 0.0042, '@ghost:localhost');
+
+      let response = await post('/_grafana-bill-ai-batch', {
+        batch: 'batch_ghost',
+      });
+      assert.strictEqual(response.status, 409);
+      assert.ok(response.text.includes('has no users row'), response.text);
+      assert.strictEqual(await batchCredits('batch_ghost'), 0);
+    });
+
+    test('a written-off batch isn’t billed', async function (assert) {
+      await unbilledBatch();
+      await post('/_grafana-write-off-ai-batch', {
+        batch: 'batch_unbilled',
+        reason: 'payer account closed',
+      });
+      await topUp(1_000);
+
+      let response = await post('/_grafana-bill-ai-batch', {
+        batch: 'batch_unbilled',
+      });
+      assert.strictEqual(response.status, 409);
+      assert.strictEqual(await batchCredits('batch_unbilled'), 0);
     });
 
     test('a batch still unsettled is left to the settle job', async function (assert) {
@@ -369,6 +430,29 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         reservation: reservationId,
       });
       assert.strictEqual(again.status, 409, 'a batch is recorded once');
+
+      await recordUnrecordedAIBatches(context.dbAdapter, [
+        {
+          batchId: 'batch_other',
+          model: MODEL,
+          status: 'in_progress',
+          requestCount: 3,
+          costUsd: null,
+          createdAt,
+        },
+      ]);
+      let reused = await post('/_grafana-record-ai-batch', {
+        batch: 'batch_other',
+        run: run.id,
+        estimate: '0.02',
+        reservation: reservationId,
+      });
+      assert.strictEqual(
+        reused.status,
+        400,
+        'a reservation another batch holds is refused',
+      );
+      assert.notOk(await getAIBatch(context.dbAdapter, 'batch_other'));
     });
 
     test('a batch whose run is gone is recorded from the payer, realm and automation given', async function (assert) {
