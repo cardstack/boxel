@@ -190,6 +190,33 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
       .exists({ count: 1 }, 'only the desk shows pins');
   });
 
+  test('a desk leaves out a pin naming its own Workspace card, by id or by the realm URL', async function (assert) {
+    const deskPins =
+      '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-pinned-card]';
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write(
+      'index.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './index' } },
+          'entryPoints.1': { links: { self: './notes' } },
+          'entryPoints.2': { links: { self: './' } },
+        }),
+      ),
+    );
+    await visitWithFavorites([realmURL]);
+    await waitUntil(() => findAll(deskPins).length > 0);
+
+    assert.deepEqual(
+      findAll(deskPins).map((el) => el.getAttribute('aria-label')),
+      ['Open Notes'],
+    );
+    let pinnedStat =
+      '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-workspace-stat="Pinned"]';
+    await waitFor(pinnedStat);
+    assert.dom(pinnedStat).hasText('Pinned 1');
+  });
+
   test('a pin saved to the Workspace card shows on its desk without a reload', async function (assert) {
     const deskPins =
       '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-pinned-card]';
@@ -709,6 +736,82 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
       'with other cards, the index card is left out and they are pinned',
     );
     assert.deepEqual(await savedPins(2), ['./notes', undefined]);
+  });
+
+  test('the Workspace Home and Library leave out a pin naming the Workspace card itself, by id or by the realm URL', async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write(
+      'index.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './index' } },
+          'entryPoints.1': { links: { self: './notes' } },
+          'entryPoints.2': { links: { self: './' } },
+        }),
+      ),
+    );
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+    });
+
+    await waitFor('[data-test-door-unpin="1"]');
+    assert.dom('[data-test-door-unpin]').exists({ count: 1 });
+
+    await click('[data-test-workspace-tab="library"]');
+    const badge =
+      '[data-test-library-filter="Entry points"] [data-test-pretui-sidebar-item-badge]';
+    // The badge counts the pins whose card has loaded.
+    await waitUntil(() => findAll(badge)[0]?.textContent?.trim() === '1');
+    assert.dom(badge).hasText('1');
+  });
+
+  test("the Library's Entry points badge counts the cards it lists, not a pin whose card is missing", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write(
+      'index.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './notes' } },
+          'entryPoints.1': { links: { self: './missing' } },
+        }),
+      ),
+    );
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+    });
+
+    await waitFor('[data-test-workspace-tab="library"]');
+    await click('[data-test-workspace-tab="library"]');
+    await waitFor('[data-test-library-filter="Entry points"]');
+    const badge =
+      '[data-test-library-filter="Entry points"] [data-test-pretui-sidebar-item-badge]';
+    // The badge counts the pins whose card has loaded.
+    await waitUntil(() => findAll(badge)[0]?.textContent?.trim() === '1');
+    assert.dom(badge).hasText('1');
+  });
+
+  test('a Workspace whose only pins name itself has no Pinned section and no Entry points filter', async function (assert) {
+    await mainRealm.write(
+      'index.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './index' } },
+          'entryPoints.1': { links: { self: './' } },
+        }),
+      ),
+    );
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+    });
+
+    // Home shows its no-pins welcome, which only an editor gets a New card in.
+    await waitFor('[data-test-welcome-new-card]');
+    assert.dom('[data-test-door-add]').doesNotExist();
+    assert.dom('[data-test-door-unpin]').doesNotExist();
+
+    await click('[data-test-workspace-tab="library"]');
+    await waitFor('[data-test-library-filter]');
+    assert.dom('[data-test-library-filter="Entry points"]').doesNotExist();
   });
 
   test("the Workspace Home's unpin keeps the other pins, even one whose card is missing", async function (assert) {
