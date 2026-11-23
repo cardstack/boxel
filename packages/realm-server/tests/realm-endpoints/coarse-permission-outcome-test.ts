@@ -26,6 +26,15 @@ import {
 
 const MISSING_AUTH = 'Missing Authorization header';
 const INSUFFICIENT = 'Insufficient permissions to perform this action';
+// The automation routes an Automation card's view, its editor and the realm
+// config read. Each tells a caller who isn't a direct writer so, rather than
+// refusing them.
+const AUTOMATION_ROUTES = [
+  '/_automation-status',
+  '/_automations',
+  '/_automation-runs',
+  '/_automation-webhooks',
+];
 
 // Each route by the family and method that selects it, with a body that would
 // be answered as a 4xx of the route's own if the route were reached — so a
@@ -974,13 +983,15 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
-      // Four consumers answer an admitted caller with something other than a
+      // Some consumers answer an admitted caller with something other than a
       // refusal, and each is pinned on its own. The search hands them to the
       // policy's query lane, which answers with rows (below). The capability
       // check answers a decision per pair, a 200 with denials in it (its own
       // module). The realm info resolves no operation, and answers them with
-      // the info (below). The hashed stylesheet serve hands them nothing to
-      // judge and serves the stylesheet (the capture-authority module).
+      // the info (below). The automation routes resolve none either, and tell
+      // them they aren't a direct writer (below). The hashed stylesheet serve
+      // hands them nothing to judge and serves the stylesheet (the
+      // capture-authority module).
       let consumers = testRealm
         .routeDescriptions()
         .filter((route) => route.consumesCoarseOutcome)
@@ -989,6 +1000,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             route.path !== '/_search' &&
             route.path !== '/_capabilities' &&
             route.path !== '/_info' &&
+            !AUTOMATION_ROUTES.includes(route.path) &&
             route.path !== '/_scoped-css/*',
         )
         .map((route) => `${route.method} ${route.mimeType}`)
@@ -1050,6 +1062,31 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             testRealm.__testOnlyPolicyGateStats().policyLoads,
             before,
             'admitting: and nothing asked the gate',
+          );
+        }
+      } finally {
+        testRealm.__testOnlySetCoarseAdmission(undefined);
+      }
+    });
+
+    test("the automation routes tell an admitted caller they aren't a direct writer without asking the policy gate", async function (assert) {
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        for (let path of AUTOMATION_ROUTES) {
+          let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
+          let response = await request
+            .get(path)
+            .set('Accept', SupportedMimeType.JSON);
+          assert.strictEqual(response.status, 200, `${path}: answered`);
+          assert.deepEqual(
+            response.body.meta,
+            { directWriter: false },
+            `${path}: as a caller who isn't a direct writer`,
+          );
+          assert.strictEqual(
+            testRealm.__testOnlyPolicyGateStats().policyLoads,
+            before,
+            `${path}: and nothing asked the gate`,
           );
         }
       } finally {
