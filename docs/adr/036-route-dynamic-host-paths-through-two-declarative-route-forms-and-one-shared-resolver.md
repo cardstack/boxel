@@ -136,13 +136,12 @@ route walk. Both MUST give the same address for the same card, in the HTML
 visit and in the browser alike. An address MUST be the routed path on the URL
 that ADR 033 §1.5 gives for the realm: in stored HTML, the URL it has
 prerendered HTML carry, and on a page served on a host URL, that host URL.
-The stored HTML MUST carry the address. A realm with no host URL has no
-routed addresses: a link given a card or an id MUST give the card's own URL,
-and a link given a type and field values, or a route name, MUST give
-`undefined`. The server MUST NOT work out a routed address when a response
-leaves it. Translating between the realm's URL and a host URL at that
-boundary is ADR 033 §1.5: it changes the URL an address is on, never its
-routed path. A change to the realm's routes MUST run the realm's HTML visits
+The stored HTML MUST carry the address. Whether the realm has a host URL
+MUST NOT change the routed path of an address, so adding a realm's first host
+URL or removing its last needs no new HTML visits. The server MUST NOT work
+out a routed address when a response leaves it. Translating between the
+realm's URL and a host URL at that boundary is ADR 033 §1.5: it changes the
+URL an address is on, never its routed path. A change to the realm's routes MUST run the realm's HTML visits
 again. A link into another realm MUST keep that card's own URL.
 
 ### 1.8. Links are portable across realms
@@ -219,9 +218,12 @@ the path is on is ADR 033's decision, because it holds for everything in the
 stored HTML that names the realm, not only for routed links, and two ADRs
 that each state it can come to disagree [16]. Until host URLs serve a realm
 directly, a site is a published realm whose own URL is its public address, so
-the realm's URL and its host URL are the same [11]. Nothing serves a route on
-a realm that has no host URL, so a routed address there would open no page,
-where the card's own URL opens the card [16].
+the realm's URL and its host URL are the same [11]. A routed address on the
+realm's URL opens its page, because the realm server resolves a publicly
+readable realm's routes at the realm's URL too, as it does for a published
+realm, which has no host URL [17]. So the stored path depends only on the
+realm's routes, whose change already runs the HTML visits again, and not on
+whether a host URL exists, which changes with no HTML visit [17].
 
 A link with no route renders with no `href` instead of failing, as Rails and
 Ember do, because there one team owns the templates and the routes. A shared
@@ -255,6 +257,11 @@ A hand-written redirect is explicit [10].
   Rationale [10].
 - **A uniqueness check on field values at indexing.** It needs a search for
   each card that a field match serves [13].
+- **A realm with no host URL keeps card URLs [16].** The realm's URL serves
+  its routes when the realm is publicly readable, so this would take the
+  `href` from links to pages that work. Stored links would also stay wrong
+  when a realm gains its first host URL or loses its last, since that runs
+  no HTML visit and ADR 033 §1.5 changes only the URL, never the path [17].
 - **A link that searches for its card when no route fits.** It makes each
   such link slow and async [10].
 - **Card types that declare the route names they need, which each realm maps
@@ -287,6 +294,10 @@ A hand-written redirect is explicit [10].
     decision.
 16. Matic Jurglic, 2026-11-20: the URL an address is on follows ADR 033
     §1.5, and a realm with no host URL keeps card URLs.
+17. https://github.com/cardstack/boxel/pull/7645#discussion_r4664565701 and
+    https://github.com/cardstack/boxel/pull/7645#discussion_r4663634509:
+    `serve-index.ts` resolves routes at the URL of a publicly readable realm,
+    and adding or removing a host URL runs no HTML visit.
 
 ## 5. Remediation
 
