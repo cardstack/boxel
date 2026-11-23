@@ -677,6 +677,7 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
   });
 
   test("a workspace's root URL can't be pinned to it", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
     await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));
     await visitOperatorMode({
       stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
@@ -691,6 +692,16 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
       /index card can't be one of its pins/,
     );
     assert.deepEqual(await savedPins(1), [undefined]);
+
+    await assert.rejects(
+      new SetWorkspacePinTool(toolContext).execute({
+        cardIds: [`${realmURL}notes`, realmURL],
+        pinned: true,
+      }),
+      /index card can't be one of its pins: \S+\. The other cards are pinned\./,
+      'with other cards, the index card is left out and they are pinned',
+    );
+    assert.deepEqual(await savedPins(2), ['./notes', undefined]);
   });
 
   test("the Workspace Home's unpin keeps the other pins, even one whose card is missing", async function (assert) {

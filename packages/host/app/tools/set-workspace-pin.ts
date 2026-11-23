@@ -99,10 +99,11 @@ export default class SetWorkspacePinTool extends HostBaseTool<
         `The index card of ${realmURL} isn't a Workspace card, so it has no pins.`,
       );
     }
-    // A card that fails to load isn't pinned. The others still are, and the
-    // error names it afterwards.
+    // A card that fails to load, or is the workspace's index card, isn't
+    // pinned. The others still are, and the error names the cards left out.
     let cardsToPin: { id: RealmResourceIdentifier; card: CardDef }[] = [];
     let notFound: string[] = [];
+    let indexCards: string[] = [];
     for (let [i, card] of cards.entries()) {
       if (!isCardInstance(card)) {
         notFound.push(inputIds[i]);
@@ -112,12 +113,23 @@ export default class SetWorkspacePinTool extends HostBaseTool<
       if (
         isRealmIndexCardId(rri(card.id as string), ri(realmURL), virtualNetwork)
       ) {
-        throw new Error(`A workspace's index card can't be one of its pins.`);
+        indexCards.push(inputIds[i]);
+        continue;
       }
       cardsToPin.push({ id: cardIds[i], card });
     }
-    if (notFound.length > 0 && cardsToPin.length === 0) {
-      throw new Error(`Card not found: ${notFound.join(', ')}`);
+    let leftOut = [
+      ...(notFound.length > 0
+        ? [`Card not found: ${notFound.join(', ')}.`]
+        : []),
+      ...(indexCards.length > 0
+        ? [
+            `A workspace's index card can't be one of its pins: ${indexCards.join(', ')}.`,
+          ]
+        : []),
+    ].join(' ');
+    if (leftOut && cardsToPin.length === 0) {
+      throw new Error(leftOut);
     }
     // A pin is a loaded card, or the link of one that is missing or not
     // loaded yet, written as a URL, a registered prefix, or relative to the
@@ -179,14 +191,17 @@ export default class SetWorkspacePinTool extends HostBaseTool<
       )?.lastSaveError;
       if (saveError) {
         throw new Error(
-          `The pins of ${realmURL} couldn't be saved: ${saveError.message}`,
+          [
+            `The pins of ${realmURL} couldn't be saved: ${saveError.message}`,
+            leftOut,
+          ]
+            .filter(Boolean)
+            .join(' '),
         );
       }
     }
-    if (notFound.length > 0) {
-      throw new Error(
-        `Card not found: ${notFound.join(', ')}. The other cards are pinned.`,
-      );
+    if (leftOut) {
+      throw new Error(`${leftOut} The other cards are pinned.`);
     }
     return undefined;
   }
