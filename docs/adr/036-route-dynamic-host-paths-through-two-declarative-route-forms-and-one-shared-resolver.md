@@ -100,6 +100,9 @@ for them. A type whose module has an error,
 can't be found or has no such export makes its route invalid. A read that
 may pass when tried again (a render timeout, a prerender server that can't
 be reached) MUST fail the request with 503 (§1.4) and leave nothing cached.
+Every page of the realm carries the whole tree (§1.6), so while such a read
+fails, every page of the realm answers 503, not only the paths its route
+could answer.
 A reader MUST get the whole validated tree or an error, never part of it.
 Validation MUST drop each
 dynamic route past `MAX_DYNAMIC_HOST_ROUTES`, with a warning. Validation
