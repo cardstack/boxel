@@ -105,10 +105,27 @@ export interface CompiledRealmPolicy {
   // Of those, the ones whose grants open a write, made as the user the grant's
   // `actingUser` names.
   anonymous?: { operations: string[]; writes: string[] };
+  // The live grants that let a broad set of callers read the cards they
+  // admit (see `BroadReadGrant`). Absent when no grant does.
+  broadReadGrants?: BroadReadGrant[];
   // The policy card's fields as its index visit recorded them, which a grant's
   // expressions read through `policy()`. Absent for a card that couldn't be
   // read.
   fields?: Record<string, unknown>;
+}
+
+// A grant that lets a caller read a card (`read`, `readSource`, or a `query`
+// that compiled a filter) and admits callers by something other than who they
+// are: `anyone` for a grant whose `where` names the caller who isn't signed
+// in, and `signed-in` for one with no `where`, or with a `where` that holds
+// for every signed-in caller alike. Such a grant hands the cards it admits to
+// people the realm's direct writers never named, so whatever lands under it
+// is broadly readable. A grant limited to some paths counts too: the cards
+// under those paths are as readable as any others.
+export interface BroadReadGrant {
+  // Where the grant is in the policy card, as `rules[2].grants[1]`.
+  path: string;
+  who: 'anyone' | 'signed-in';
 }
 
 export interface CompiledPolicyRule {
@@ -1078,6 +1095,11 @@ async function compileDocument(
   // The paths of the grants whose `where` can never hold for a signed-in
   // caller, as `actor() == "anonymous"` can't.
   let neverSignedIn = new Set<string>();
+  // The paths of the grants whose `where` holds for every signed-in caller
+  // alike: one that never reads `actor()`, or one that settles true once the
+  // caller is known to be signed in, as `actor() != "anonymous"` does.
+  let everySignedIn = new Set<string>();
+  let broadReadGrants: BroadReadGrant[] = [];
   let cardURL = new URL(card);
   // An issue's message is read on the policy card and in a `validate` answer.
   // It marks identifiers as code with backticks, separates one idea from the
@@ -1092,6 +1114,7 @@ async function compileDocument(
       rules,
       issues,
       ...anonymousSummary(rules),
+      ...(broadReadGrants.length > 0 ? { broadReadGrants } : {}),
       ...(attributes ? { fields: structuredClone(attributes) } : {}),
     },
     definitions,
@@ -1678,8 +1701,11 @@ async function compileDocument(
         );
         continue;
       }
-      if (settleActor(outcome.body, 'signed-in') === false) {
+      let signedIn = settleActor(outcome.body, 'signed-in');
+      if (signedIn === false) {
         neverSignedIn.add(grantPath);
+      } else if (signedIn === true || !outcome.readsActor) {
+        everySignedIn.add(grantPath);
       }
       grants.push(
         await withFilter(
@@ -1837,6 +1863,19 @@ async function compileDocument(
     // A grant limited to some paths admits only the cards under them, so it
     // doesn't make a type readable: a card of the type that a granted card
     // links to can be anywhere (ADR 038 §1.7).
+    for (let grant of rule.grants) {
+      if (!letsCallerRead(definition, grant)) {
+        continue;
+      }
+      let who: BroadReadGrant['who'] | undefined = opensToAnonymous(grant)
+        ? 'anyone'
+        : !grant.where || everySignedIn.has(grant.path)
+          ? 'signed-in'
+          : undefined;
+      if (who) {
+        broadReadGrants.push({ path: grant.path, who });
+      }
+    }
     if (
       rule.grants.some(
         (grant) => !grant.paths && letsCallerRead(definition, grant),

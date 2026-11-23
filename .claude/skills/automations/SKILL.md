@@ -1969,19 +1969,19 @@ URL>", "attributes": { "realm": "<realm URL>", ... } } }`; a cancel names the
 run instead, `{ "data": { "type": "automation-run", "id": "<run id>",
 "attributes": { "realm": "<realm URL>" } } }`. Answers are `no-store`.
 
-| Route                                                                | Body attributes  | Answers                                                                                                                                                                                                                                 |
-| -------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>` | —                | 200 `automation-estimate`: `switchedOn`, the card's `monthlyCredits`, and `estimate` (`estimateAutomationCost`, with `recentPreviewCredits`: what the caller's latest finished Preview of it cost). 503 while the process has no prices |
-| `POST /_automation-switch-on`                                        | `monthlyCredits` | 201 `automation` (state, pause reason, `viewerIsPayer`, next run, caps snapshot), with `meta.estimate`. The caller is the payer                                                                                                         |
-| `POST /_automation-preview`                                          | `click`          | 202 `automation-run`, pending, `dryRun` true, acting as and charged to the caller                                                                                                                                                       |
-| `POST /_automation-run-now`                                          | `click`          | 202 `automation-run`, pending, `dryRun` false                                                                                                                                                                                           |
-| `POST /_automation-pause`                                            | —                | 200 `automation`, paused `requested`; its pending and running runs are canceled                                                                                                                                                         |
-| `POST /_automation-resume`                                           | `monthlyCredits` | 200 `automation`; the caller is the payer, with a new caps snapshot. 422 with `meta.code` when admitting the caller as the payer refuses them (see _Admission_), and the automation stays paused                                        |
-| `POST /_automation-remove`                                           | —                | 200 `automation`, the row as it was; the row is gone                                                                                                                                                                                    |
-| `POST /_automation-run-cancel`                                       | —                | 200 `automation-run`, canceled by the caller                                                                                                                                                                                            |
-| `GET /_automation-run-report?realm=&run=`                            | —                | 200 `automation-run-report` (_The console's reads_, below)                                                                                                                                                                              |
-| `GET /_automation-preview-file?realm=&run=&path=`                    | —                | 200, the staged file's bytes as `application/octet-stream`                                                                                                                                                                              |
-| `GET /_automation-storage?realm=&automation=`                        | —                | 200 `automation-storage` (_The console's reads_, below)                                                                                                                                                                                 |
+| Route                                                                | Body attributes  | Answers                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>` | —                | 200 `automation-estimate`: `switchedOn`, the card's `monthlyCredits`, `estimate` (`estimateAutomationCost`, with `recentPreviewCredits`: what the caller's latest finished Preview of it cost), and `broadReaders` (_The switch-on screen_, below). 503 while the process has no prices |
+| `POST /_automation-switch-on`                                        | `monthlyCredits` | 201 `automation` (state, pause reason, `viewerIsPayer`, next run, caps snapshot), with `meta.estimate`. The caller is the payer                                                                                                                                                         |
+| `POST /_automation-preview`                                          | `click`          | 202 `automation-run`, pending, `dryRun` true, acting as and charged to the caller                                                                                                                                                                                                       |
+| `POST /_automation-run-now`                                          | `click`          | 202 `automation-run`, pending, `dryRun` false                                                                                                                                                                                                                                           |
+| `POST /_automation-pause`                                            | —                | 200 `automation`, paused `requested`; its pending and running runs are canceled                                                                                                                                                                                                         |
+| `POST /_automation-resume`                                           | `monthlyCredits` | 200 `automation`; the caller is the payer, with a new caps snapshot. 422 with `meta.code` when admitting the caller as the payer refuses them (see _Admission_), and the automation stays paused                                                                                        |
+| `POST /_automation-remove`                                           | —                | 200 `automation`, the row as it was; the row is gone                                                                                                                                                                                                                                    |
+| `POST /_automation-run-cancel`                                       | —                | 200 `automation-run`, canceled by the caller                                                                                                                                                                                                                                            |
+| `GET /_automation-run-report?realm=&run=`                            | —                | 200 `automation-run-report` (_The console's reads_, below)                                                                                                                                                                                                                              |
+| `GET /_automation-preview-file?realm=&run=&path=`                    | —                | 200, the staged file's bytes as `application/octet-stream`                                                                                                                                                                                                                              |
+| `GET /_automation-storage?realm=&automation=`                        | —                | 200 `automation-storage` (_The console's reads_, below)                                                                                                                                                                                                                                 |
 
 **The monthly cap.** Switch-on and resume make the caller the payer of the
 caps the card sets (the caps snapshot), and the monthly credit cap is what
@@ -2017,6 +2017,57 @@ paused, not paused, a click already used for another person's run or the
 other kind of run, a run that already ended or whose commit was claimed; 400
 for a malformed body, an automation outside the realm, or a missing click.
 The error body is `{ "errors": [<message>] }`.
+
+### The switch-on screen
+
+The Automation card's isolated view turns an automation on through a
+switch-on screen, a Pret UI `Dialog` (`SwitchOnDialog` in the catalog's
+`automation/automation.gts`). A direct writer opens it from the _Status_
+section: **Turn on** for an automation that isn't switched on, and **Review
+and resume** for one paused with `caps-raised` or `batched-ai-enabled`. Any
+other state offers no button. The screen:
+
+- reads `GET /_automation-switch-on` and shows the estimate: the most one run
+  can cost (`perRun.totalCredits`), the runs counted in a month, the
+  estimate's `credits`, and beside them the caller's
+  `recentPreviewCredits`, which the estimate leaves out;
+- lists what the estimate leaves out: the indexing a run's writes cause, the
+  daily storage, and runs a webhook delivery starts (naming the card's
+  `webhookTriggers`);
+- asks for the monthly limit, filled in from the card's
+  `caps.monthlyCredits`, and refuses an empty one before sending anything;
+- says the person becomes the payer, and what that means;
+- warns when `broadReaders` names anyone beyond the people the realm names;
+- posts `POST /_automation-switch-on`, or `POST /_automation-resume` for
+  **Review and resume**, with the monthly limit, and shows a refusal's
+  message (`errors[0]`) in the screen.
+
+The routes take only the card's own monthly cap (409 otherwise), so a person
+who enters another limit gets that limit written to the card first. The
+screen then reads the estimate again until the server reads the card with the
+new limit (up to 30 seconds), and only then posts.
+
+**`broadReaders`** (`broadReadersOf` in
+`packages/runtime-common/automation-readers.ts`) says who beyond the people
+the realm names can read what the automation writes: `anyone` (a `*` read
+row), `everySignedInUser` (a `users` read row), and `policyGrants`, the
+realm policy's `broadReadGrants`. Policy compilation records a grant there
+when the grant lets a caller read (`read`, `readSource`, or a `query` that
+compiled a filter) and admits callers by something other than who they are:
+`who: 'anyone'` for a grant open to the caller who isn't signed in, and
+`who: 'signed-in'` for one with no `where`, or a `where` that never reads
+`actor()` or settles true for every signed-in caller. A grant whose `where`
+names its callers isn't broad. A realm this process can't mount is judged on
+its permission rows alone.
+
+The card calls these routes through the host's `automation-request` tool
+(`packages/host/app/tools/automation-request.ts`), which sends a request to
+one of the realm server's `/_automation-` routes with the realm-server
+session: `route`, `method`, `realm`, `automation`, `run`, `filePath`,
+`monthlyCredits` and `click` become the route's query or JSON:API body. A
+call the AI assistant makes with any method but GET waits for the person's
+click. Host tests answer the routes with a virtual-network handler
+(`tests/acceptance/automation-view-test.gts`, the _switching on_ module).
 
 ### The console's reads
 

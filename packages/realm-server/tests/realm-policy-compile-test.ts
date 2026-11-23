@@ -1120,6 +1120,47 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(policy?.anonymous, { operations: ['read'], writes: [] });
   });
 
+  test('a grant that lets callers read, and admits them by something other than who they are, is recorded as a broad read', async function (assert) {
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard([
+        // Every signed-in caller: no condition, a guard that only keeps out
+        // the caller who isn't signed in, and a condition on the card alone.
+        { operation: 'read' },
+        { operation: 'read', where: 'actor() != "anonymous"' },
+        { operation: 'read', where: '.status == "open"' },
+        // Anyone, signed in or not.
+        { operation: 'read', where: `${ANYONE} or .status == "open"` },
+        // Callers the author names, and a grant that lets no one read.
+        { operation: 'read', where: '.teacherIds | any(. == actor())' },
+        { operation: 'update' },
+      ]),
+    );
+    let policy = await compiled();
+    assert.deepEqual(issuesOf(policy), [], 'every grant compiles');
+    assert.deepEqual(policy?.broadReadGrants, [
+      { path: 'rules[0].grants[0]', who: 'signed-in' },
+      { path: 'rules[0].grants[1]', who: 'signed-in' },
+      { path: 'rules[0].grants[2]', who: 'signed-in' },
+      { path: 'rules[0].grants[3]', who: 'anyone' },
+    ]);
+
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard([
+        { operation: 'read', where: '.teacherIds | any(. == actor())' },
+      ]),
+    );
+    policy = await compiled();
+    assert.strictEqual(
+      policy?.broadReadGrants,
+      undefined,
+      'a policy whose read grants name their callers records none',
+    );
+  });
+
   test('an acting user read from the card a create sends is warned about, since the caller chooses it', async function (assert) {
     await writeTo(
       org,

@@ -12,6 +12,7 @@ import {
   archiveRealm,
   createAutomationRun,
   getAutomationRun,
+  insertPermissions,
   ri,
   rri,
   type AutomationRun,
@@ -416,6 +417,40 @@ module(basename(import.meta.filename), function (hooks) {
         .query({ realm: realm.url, automation: cardURL() })
         .set('Authorization', auth(OWNER));
       assert.deepEqual(daily.body.data.attributes.notices, []);
+    });
+
+    test('the estimate names who beyond the realm’s named readers can read what the automation writes', async function (assert) {
+      let read = async () => {
+        let response = await request
+          .get(AUTOMATION_SWITCH_ON_PATH)
+          .query({ realm: realm.url, automation: cardURL() })
+          .set('Authorization', auth(OWNER));
+        assert.strictEqual(response.status, 200, response.text);
+        return response.body.data.attributes.broadReaders;
+      };
+      assert.deepEqual(
+        await read(),
+        {
+          anyone: false,
+          everySignedInUser: false,
+          policyGrants: [],
+          policy: null,
+        },
+        'a realm whose permissions name each reader, with no policy, has none',
+      );
+
+      let realmURL = new URL(realm.url);
+      await insertPermissions(dbAdapter, realmURL, { users: ['read'] });
+      try {
+        assert.true(
+          (await read()).everySignedInUser,
+          'a `users` read row lets every signed-in user read it',
+        );
+        await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
+        assert.true((await read()).anyone, 'a `*` read row lets anyone');
+      } finally {
+        await insertPermissions(dbAdapter, realmURL, { users: [], '*': [] });
+      }
     });
 
     test('a caller who is not a direct writer is refused', async function (assert) {
