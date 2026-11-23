@@ -4,6 +4,7 @@ date: 2026-11-06
 scope:
   - packages/realm-server/lib/oauth-provider/**
   - packages/realm-server/handlers/handle-oauth-provider-*.ts
+  - packages/realm-server/handlers/handle-mcp.ts
   - packages/realm-server/middleware/index.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
   - packages/realm-server/routes.ts
@@ -19,6 +20,7 @@ scope:
   - packages/secure-origin/src/shell/device/**
   - packages/secure-origin/src/security/oauth-provider*
   - packages/secure-origin/src/security/oauth-error*
+  - packages/secure-origin/src/security/confirmation-code.js
 ---
 
 # 021. Run Boxel's OAuth provider in the realm server, with opaque tokens bound to one resource
@@ -140,8 +142,16 @@ an account holder controls. A CIMD client ID's scheme MUST be written
 Consent MUST take what the access means (each resource's name, what it covers
 and what each scope allows) from the registry. Consent MUST name a CIMD client
 by its client ID's registrable domain, and a DCR client as unverified, beside
-its redirect URI's registrable domain. It MUST NOT show a client's logo or
+its redirect URI's registrable domain. It MUST name a pre-registered client by
+the name its entry in code gives. It MUST NOT show a client's logo or
 website link.
+
+A pre-registered client that runs on the user's computer MUST send a
+confirmation code with each authorization request, which it shows the user
+where they started signing in, and a flow from it without one MUST be refused.
+A flow from any other client that sends one MUST be refused. Its consent MUST
+show the code, and MUST tell the user to allow only a sign-in they started
+themselves.
 
 The endpoints that need no sign-in (registration, authorization, token,
 revocation and device-code entry) MUST be rate-limited. The token endpoint's limit MUST NOT
@@ -338,6 +348,17 @@ port, so any program on the user's machine that knows a client ID can start a
 flow. RFC 8252 §8.6 rules out skipping consent for such clients even when the
 user has approved them before.
 
+Pre-registration names Boxel's own apps plainly, but proves nothing about the
+program asking: anyone can send a pre-registered client's ID. The loopback
+redirect and PKCE keep the code on the computer that consented. What remains
+is an attacker who starts a flow as Boxel's app, so holds its verifier, sends
+the user the link, and talks them into allowing it and pasting back the
+loopback address their browser lands on, code included. Consent that names
+Boxel's own app makes that more convincing, not less. The confirmation code
+gives the user something concrete to check: a user who never started signing
+in has nothing that shows it. It is friction, not proof, since whoever starts
+the flow picks the code.
+
 The library binds a flow to its browser only through its own cookie, which
 the secure origin's pages never send, so Boxel adds the ticket check itself.
 Without it, a user sent an attacker's consent link could approve a flow that
@@ -426,6 +447,12 @@ it, and the provider warns before it does.
 - **Boxel's own apps registered by DCR or CIMD.** DCR shows them as
   unverified, which teaches users to click through the label. CIMD needs a
   client ID off Boxel's own hosts.
+- **No confirmation code for Boxel's own apps.** Consent would vouch for the
+  name of whatever program sent the client ID, with nothing for the user to
+  check it against.
+- **A code Boxel generates and the user types into the app.** The attacker in
+  the paste attack asks for that code along with the address, so it adds a
+  step for every user and stops no one the shown code doesn't.
 - **Private-use redirect schemes, such as `cursor://`.** Any app on the device
   can claim a scheme (RFC 8252 §8.1), so the redirect proves nothing about the
   client. A client that offers only such a scheme can't connect.

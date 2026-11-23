@@ -383,21 +383,80 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
-    test('the prerendered (html) leg is exempt from the page ceiling', async function (assert) {
-      // The ceiling bounds the live item leg only. The default/html fieldset is
-      // the cheap precomputed path and runs as asked even below the ceiling.
-      setSearchBoundsForTests({ serverMaxPageSize: 1 });
+    test('the prerendered (html) leg is held to the same page bounds', async function (assert) {
+      // A row's markup can run to tens of KB, so the HTML leg is bounded like
+      // the item leg: no page takes the default, an explicit page is clamped to
+      // the maximum, and the true match count rides meta.page.total.
+      setSearchBoundsForTests({
+        serverMaxPageSize: 1,
+        serverAbsoluteMaxPageSize: 1,
+      });
       try {
-        let response = await postSearch({
+        let unpaged = await postSearch({ filter: personFilter() });
+        assert.strictEqual(unpaged.status, 200);
+        assert.strictEqual(
+          unpaged.body.data.length,
+          1,
+          'an html-leg request naming no page gets the default',
+        );
+        assert.strictEqual(
+          unpaged.body.meta.page.total,
+          2,
+          'the true match count is preserved',
+        );
+
+        let over = await postSearch({
           filter: personFilter(),
+          fields: { entry: ['html'] },
           page: { size: 2 },
         });
+        assert.strictEqual(over.status, 200, 'clamped, not rejected');
         assert.strictEqual(
-          response.status,
-          200,
-          'an oversized html-leg page is not rejected',
+          over.body.data.length,
+          1,
+          'an html-leg page above the maximum is clamped to it',
         );
-        assert.strictEqual(response.body.data.length, 2);
+
+        // The header that marks a render is the caller's to set, so it does
+        // not lift the bound.
+        let duringRender = await postSearch({ filter: personFilter() }).set(
+          'x-boxel-during-prerender',
+          'true',
+        );
+        assert.strictEqual(duringRender.status, 200);
+        assert.strictEqual(
+          duringRender.body.data.length,
+          1,
+          "a render's search is held to the same page",
+        );
+        assert.strictEqual(duringRender.body.meta.page.total, 2);
+      } finally {
+        resetSearchBoundsForTests();
+      }
+    });
+
+    test('the time budget cuts off an html-leg search, but not a render', async function (assert) {
+      setSearchBoundsForTests({ timeBudgetMs: 0 });
+      try {
+        let live = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['html'] },
+        });
+        assert.strictEqual(
+          live.status,
+          408,
+          'an over-budget html-leg search is cut off',
+        );
+
+        let duringRender = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['html'] },
+        }).set('x-boxel-during-prerender', 'true');
+        assert.strictEqual(
+          duringRender.status,
+          200,
+          "a render's search runs to completion; the render's own timeout bounds it",
+        );
       } finally {
         resetSearchBoundsForTests();
       }

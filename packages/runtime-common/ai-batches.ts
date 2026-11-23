@@ -4,6 +4,9 @@
 // it ends. A batch can't be canceled, so every batch is billed later, from its
 // row, to the person its run acted as, by the settle job once it ends.
 
+import { MANUAL_RUN_TRIGGER } from './automation-declaration.ts';
+import { runCreditHoldCounts } from './automation-runs.ts';
+import { CREDITS_PER_USD } from './constants.ts';
 import type { DBAdapter } from './db.ts';
 import {
   addExplicitParens,
@@ -11,6 +14,7 @@ import {
   query,
   separatedByCommas,
   type Expression,
+  type Querier,
 } from './expression.ts';
 import type { PgPrimitive } from './index.ts';
 import type {
@@ -45,6 +49,9 @@ export interface AIBatch {
   // at twice its requests' worst case at the normal price, for the settle job
   // to settle when the batch ends.
   runAIReservation: string;
+  // The credits that reservation holds. Null on a row recorded without them
+  // (see `creditsHeldByUnsettledAIBatches` for what such a row holds).
+  reservedCredits: number | null;
   // How long the submitting script waits for the results.
   deadline: string;
   // When OpenRouter says its provider stops working on the batch, if it
@@ -108,6 +115,7 @@ export interface NewAIBatch {
   requestCount: number;
   estimatedUsd: number;
   runAIReservation: string;
+  reservedCredits: number;
   deadline: Date;
   expiresAt: Date | null;
   state: string;
@@ -137,6 +145,66 @@ export interface AIBatchSettlementResult {
   unrecorded: number;
 }
 
+// The credits held by unsettled batches: those billed to `actsAs` (the
+// balance check), or those of `automationId` that runs other than Previews
+// and Run nows submitted (the credit caps). A batch is billed only once it
+// ends, so from submit until the settle job bills it, a batch holds what it
+// reserved on its submitting run's AI spending cap: twice its requests' worst
+// case at the normal price, once for the batch and once for the requests its
+// follow-up sends at the normal price when it misses its deadline (ADR 030
+// §1.4).
+//
+// A row recorded without `reserved_credits` holds the reservation its run's
+// row still names (`ai_reservations`). A row whose reservation is gone too
+// holds twice its estimate. The estimate is the most the batch can be
+// billed, so twice it covers the batch's own bill with headroom. The
+// requests a follow-up sends at the normal price are held by that follow-up
+// run, under its own AI spending cap.
+//
+// A batch stops holding `AI_BATCH_HOLD_SECONDS` after it was submitted. By
+// then OpenRouter has deleted its results (a `410`, 30 days after submit),
+// which the settle job bills at its estimate, so a batch still unsettled is
+// one OpenRouter doesn't know (`404`) or won't answer for. The settle job
+// keeps reading it and the unsettled batch alert reports it, but it no
+// longer keeps the payer short or takes from the automation's caps.
+//
+// While the submitting run's own credit hold counts
+// (`creditsHeldByRunsInFlight`), that hold already covers the batch: the
+// run's cost ceiling includes its AI spending cap, which the batch's
+// reservation counts against. So a batch holds only once its run's hold has
+// stopped counting, or its run's row is gone.
+// 30 days until OpenRouter deletes a batch's results, and a day of slack for
+// the settle pass that bills the `410`.
+export const AI_BATCH_HOLD_SECONDS = 31 * 24 * 60 * 60;
+
+export async function creditsHeldByUnsettledAIBatches(
+  querier: Querier,
+  filter:
+    | { actsAs: string; automationId?: undefined }
+    | { automationId: RealmResourceIdentifier; actsAs?: undefined },
+): Promise<number> {
+  let [row] = await querier([
+    'SELECT COALESCE(SUM(COALESCE(b.reserved_credits, CAST(r.ai_reservations ->> b.run_ai_reservation AS numeric), b.estimated_usd *',
+    param(2 * CREDITS_PER_USD),
+    ')), 0) AS held FROM ai_batches b LEFT JOIN automation_runs r ON r.id = b.run_id',
+    'WHERE b.settled_at IS NULL',
+    'AND b.submitted_at > now() - make_interval(secs =>',
+    param(AI_BATCH_HOLD_SECONDS),
+    ') AND',
+    ...((filter.actsAs !== undefined
+      ? ['b.acts_as =', param(filter.actsAs)]
+      : [
+          'b.automation_id =',
+          param(filter.automationId),
+          'AND r.trigger IS DISTINCT FROM',
+          param(MANUAL_RUN_TRIGGER),
+        ]) as Expression),
+    'AND NOT',
+    ...runCreditHoldCounts('r'),
+  ] as Expression);
+  return Number(row?.held ?? 0);
+}
+
 export function isFinalAIBatchState(state: string): boolean {
   return AI_BATCH_FINAL_STATES.includes(state);
 }
@@ -157,8 +225,13 @@ export async function recordAIBatch(
       `a batch's estimate is a finite number of USD, 0 or more, not ${batch.estimatedUsd}`,
     );
   }
+  if (!Number.isFinite(batch.reservedCredits) || batch.reservedCredits < 0) {
+    throw new Error(
+      `a batch reserves a finite number of credits, 0 or more, not ${batch.reservedCredits}`,
+    );
+  }
   let [created] = await query(dbAdapter, [
-    'INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, estimated_usd, run_ai_reservation, deadline, expires_at, state) VALUES (',
+    'INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, estimated_usd, run_ai_reservation, reserved_credits, deadline, expires_at, state) VALUES (',
     param(batch.batchId),
     ',',
     param(batch.runId),
@@ -176,6 +249,8 @@ export async function recordAIBatch(
     param(batch.estimatedUsd),
     ',',
     param(batch.runAIReservation),
+    ',',
+    param(batch.reservedCredits),
     ',',
     param(batch.deadline.toISOString()),
     ',',
@@ -406,6 +481,8 @@ function batchFromRow(row: Record<string, PgPrimitive>): AIBatch {
     requestCount: Number(row.request_count),
     estimatedUsd: Number(row.estimated_usd),
     runAIReservation: String(row.run_ai_reservation),
+    reservedCredits:
+      row.reserved_credits == null ? null : Number(row.reserved_credits),
     deadline: iso(row.deadline)!,
     expiresAt: iso(row.expires_at),
     state: String(row.state),

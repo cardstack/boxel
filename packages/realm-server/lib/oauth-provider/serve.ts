@@ -4,6 +4,10 @@ import type Router from '@koa/router';
 import { CLIENT_IP_HEADER } from '@cardstack/runtime-common';
 import { fullRequestURL } from '../../middleware/index.ts';
 import {
+  handleMCP,
+  handleMCPMethodNotAllowed,
+} from '../../handlers/handle-mcp.ts';
+import {
   OAUTH_AUTHORIZATION_PATH,
   OAUTH_ERROR_PATH,
   OAUTH_INTERACTION_PATH,
@@ -24,6 +28,7 @@ import {
   type ConsentRouteDeps,
   type OAuthProviderService,
 } from './provider.ts';
+import { MCP_RESOURCE_PATH } from './registry.ts';
 
 // Registers the provider's routes on the realm server's router. The library
 // is a whole Koa app that answers every path it knows (its signing keys, its
@@ -100,6 +105,24 @@ export function registerOAuthProviderRoutes(
       Promise.resolve(handle(ctxt, async () => {}));
 
   router.get(OAUTH_DISCOVERY_PATH, onIssuerHost(serve));
+  // The placeholder MCP endpoint (`handle-mcp.ts`), behind its resource's
+  // controller. It is stateless, so `GET` (an event stream) and `DELETE` (a
+  // session's end) serve nothing and look at no token.
+  let mcp = registry.find(
+    (resource) =>
+      !resource.testOnly && resourcePath(resource) === MCP_RESOURCE_PATH,
+  );
+  if (mcp) {
+    let controller = resourceController(mcp);
+    router.post(
+      MCP_RESOURCE_PATH,
+      onIssuerHost((ctxt) =>
+        Promise.resolve(controller(ctxt, () => handleMCP(ctxt))),
+      ),
+    );
+    router.get(MCP_RESOURCE_PATH, onIssuerHost(handleMCPMethodNotAllowed));
+    router.delete(MCP_RESOURCE_PATH, onIssuerHost(handleMCPMethodNotAllowed));
+  }
   for (let resource of registry) {
     // Each resource's protected-resource metadata (RFC 9728), which a client
     // reads from the challenge a resource answers without a token.

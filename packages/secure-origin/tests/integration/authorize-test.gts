@@ -331,6 +331,43 @@ module('Integration | authorize', function (hooks) {
       assert.dom('[data-test-authorize-own-app]').hasText('Boxel’s own app.');
       assert.dom('[data-test-authorize-app-icon]').doesNotExist();
       assert.dom('[data-test-authorize-terms]').doesNotExist();
+      assert.dom('[data-test-authorize-confirmation]').doesNotExist();
+    });
+
+    test("Boxel's own app on this computer shows its confirmation code, and says to allow only a sign-in the user started", async function (assert) {
+      signedIn();
+      shows(
+        cimdDetails({
+          app: {
+            kind: 'pre-registered',
+            shown: 'Boxel CLI',
+            verified: true,
+            place: 'this-computer',
+          },
+          outsideApp: false,
+          confirmationCode: 'WDJB-MJHT',
+        }),
+      );
+      await open();
+      assert
+        .dom('[data-test-authorize-heading]')
+        .hasText('Connect Boxel CLI to Boxel workspaces?');
+      // The app, not where this request came from: someone else may have
+      // started it and sent the link.
+      assert.dom('[data-test-authorize-own-app]').hasText('Boxel’s own app.');
+      assert.dom('[data-test-authorize-unverified]').doesNotExist();
+      assert.dom('[data-test-authorize-app-icon]').doesNotExist();
+      assert.dom('[data-test-authorize-terms]').doesNotExist();
+      assert
+        .dom('[data-test-authorize-confirmation]')
+        .includesText('Check that Boxel CLI shows this code:');
+      assert
+        .dom('[data-test-authorize-confirmation-code]')
+        .hasText('WDJB-MJHT');
+      assert.dom('[data-test-authorize-confirmation-warning]').hasText(
+        // The alert speaks its tone first, for those who can't see it.
+        'Warning: Only allow this if you just started signing in from Boxel CLI and it shows this code. If someone sent you this link, or asks you to copy the address you land on, choose Deny.',
+      );
     });
 
     test('unchecking renewal says the connection ends after 60 minutes', async function (assert) {

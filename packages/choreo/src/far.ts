@@ -81,6 +81,15 @@ export function join(host: PassHost) {
   }
 }
 
+/**
+ * Has a region announced a pass in this render yet? The first to announce is
+ * the first region the render reaches, which is the moment every region takes
+ * its "before" (see `snapshotEvery` in choreo.gts).
+ */
+export function passOpen(): boolean {
+  return booked;
+}
+
 export function leave(host: PassHost) {
   intents.delete(host);
 }

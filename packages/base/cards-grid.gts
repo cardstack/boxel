@@ -52,6 +52,8 @@ import StringField from './string';
 
 const [_CardView, StripView, GridView] = VIEW_OPTIONS;
 
+const GRID_PAGE_SIZE = 100;
+
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <CardsGridLayout
@@ -70,6 +72,8 @@ class Isolated extends Component<typeof CardsGrid> {
       @onChangeFilter={{this.onChangeFilter}}
       @onChangeView={{this.onChangeView}}
       @onChangeSort={{this.onChangeSort}}
+      @page={{this.currentPage}}
+      @onPageChange={{this.onChangePage}}
     >
       <:content>
         {{#if @canEdit}}
@@ -139,7 +143,42 @@ class Isolated extends Component<typeof CardsGrid> {
     return {
       ...this.activeFilter.query,
       sort: this.activeSort?.sort,
+      // The server pages every search, so the grid asks for its pages
+      // explicitly and offers controls to step through them, rather than
+      // showing a first page with no way past it.
+      page: {
+        size: this.pageSize,
+        number: this.currentPage - 1,
+      },
     };
+  }
+
+  private get pageSize(): number {
+    return (this.args.model.constructor as typeof CardsGrid).gridPageSize;
+  }
+
+  // The page (1-based) belongs to the filter + sort it was chosen under:
+  // choosing a filter or a sort, even the same one again, starts the grid at
+  // page 1. A live re-run keeps the filter and sort, so it stays on the page;
+  // so does a realm event that rebuilds the filter list, since the rebuilt
+  // filter carries the same query and the key still matches. It lives only in
+  // this component, so a reload also starts at page 1.
+  @tracked private chosenPage: { key: string; page: number } | undefined;
+
+  private get pageKey(): string {
+    return JSON.stringify({
+      filter: this.activeFilter?.query?.filter,
+      sort: this.activeSort?.sort,
+    });
+  }
+
+  private get currentPage(): number {
+    let chosen = this.chosenPage;
+    return chosen && chosen.key === this.pageKey ? chosen.page : 1;
+  }
+
+  @action private onChangePage(page: number) {
+    this.chosenPage = { key: this.pageKey, page };
   }
 
   private get realms(): string[] {
@@ -266,10 +305,12 @@ class Isolated extends Component<typeof CardsGrid> {
 
   @action private onChangeFilter(filter: FilterOption) {
     this.activeFilter = filter;
+    this.chosenPage = undefined;
   }
 
   @action private onChangeSort(option: SortOption) {
     this.activeSort = option;
+    this.chosenPage = undefined;
   }
 
   @action private onChangeView(viewId: ViewOption['id']) {
@@ -498,6 +539,8 @@ export class CardsGrid extends CardDef {
   static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
+  // How many cards one page of the grid shows.
+  static gridPageSize = GRID_PAGE_SIZE;
   @field realmName = contains(StringField, {
     computeVia: function (this: CardsGrid) {
       return this[realmInfo]?.name;

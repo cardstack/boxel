@@ -5,13 +5,15 @@ import {
   type AutomationTrigger,
   type TriggerRunState,
 } from '@cardstack/runtime-common/automation-schedule';
+import { BATCHED_AI_RESERVE_FACTOR } from './automation-ai-spending.ts';
 import { BYTES_PER_GB, type Pricing } from './pricing.ts';
 
 // What switching an automation on is likely to cost a month, shown on the
 // switch-on screen beside the monthly cap it asks for.
 //
 // Each run is priced at the most its caps let it spend on compute, network
-// and AI, the charges a run's caps bound. Two charges the payer also pays
+// and AI, the charges a run's caps bound, with AI doubled for an automation
+// that turns on `batchedAI` (`runCostCeiling`). Two charges the payer also pays
 // are outside the estimate, listed in `uncountedChargeKinds`: the indexing a
 // run's writes cause, which no cap bounds and which ADR 029 §1.5 keeps out of
 // the per-run cost, and the daily storage of the files its runs create, which
@@ -45,11 +47,12 @@ export const UNCOUNTED_CHARGE_KINDS = ['run_indexing', 'storage'] as const;
 // The caps that bound what one run can cost. A run's compute is bounded by
 // its time limit, its network by the bytes its `callApi` calls may download,
 // and its AI by its AI spending cap (ADR 029 §1.5), which is already in
-// credits.
+// credits. `batchedAI` is whether the run's automation batches AI requests.
 export interface RunCostCaps {
   seconds: number;
   responseBytes: number;
   aiCredits: number;
+  batchedAI?: boolean;
 }
 
 // The most one run's compute, network and AI can cost under its caps, in
@@ -58,6 +61,18 @@ export interface RunCostCaps {
 // can cost") comes from `runCostCeiling` too (`automation-spending.ts`), so
 // the balance a run is admitted against and the estimate shown at switch-on
 // can't drift apart.
+//
+// For an automation that batches AI requests, the AI part is
+// `BATCHED_AI_RESERVE_FACTOR` times the AI spending cap (ADR 030 §1.4). The
+// first `aiCredits` bounds the run's own AI, its batches included: each batch
+// reserves twice its worst case at the normal price against that cap. The
+// second covers the AI of the follow-up run a batch starts, which sends the
+// same requests at the normal price when the batch misses its deadline. That
+// follow-up reserves its fallback against its own `aiCredits` cap, and the
+// estimate counts only the runs triggers start, not their follow-ups. In the
+// minimum balance the second `aiCredits` is headroom, since a follow-up is
+// also admitted against its own minimum. The factor bounds spending and is
+// never charged.
 //
 // The ceiling leaves out the indexing the run's writes cause (ADR 029 §1.5).
 // That time depends on how many cards link to what the run wrote, which no
@@ -84,7 +99,9 @@ export function runCostCeiling(
     margin *
     CREDITS_PER_USD;
   // AI carries no margin (ADR 029 §1.1), and the cap is already in credits.
-  let aiCredits = caps.aiCredits;
+  let aiCredits = caps.batchedAI
+    ? caps.aiCredits * BATCHED_AI_RESERVE_FACTOR
+    : caps.aiCredits;
   return {
     computeCredits,
     networkCredits,

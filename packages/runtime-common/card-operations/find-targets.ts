@@ -336,7 +336,7 @@ async function runFilter(
   // Expecting one card needs to tell none from one from several and nothing
   // beyond that, so two rows is the whole of it.
   //
-  // Expecting many is bounded by the size no item-leg search may exceed
+  // Expecting many is bounded by the size no search may exceed
   // however deliberately it asks — the realm's own statement of the most rows
   // one request may materialize. An expansion is one staged entry per row, so
   // that bound is the right one to borrow rather than a number invented here,
@@ -387,7 +387,7 @@ async function runFilter(
   if (!query) {
     return { urls: [], total: 0 };
   }
-  // Under the same wall-clock budget the search route runs its item leg
+  // Under the same wall-clock budget the search route runs a live search
   // under, with the signal threaded in so the work stops rather than being
   // abandoned. A query target is a search issued on the realm's behalf; it
   // reaching the engine by a different door than `_search` is no reason for
@@ -463,7 +463,7 @@ async function grantedQuery(
 
 // How many cards one entry may expand into.
 //
-// Borrowed rather than invented: it is the size no item-leg search may exceed
+// Borrowed rather than invented: it is the size no search may exceed
 // however deliberately it asks — the realm's own statement of the most rows
 // one request may materialize — and an expansion is one staged entry per row.
 // Already an operator's to tune, through the same env var.
