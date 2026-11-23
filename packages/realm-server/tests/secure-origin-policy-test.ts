@@ -399,7 +399,8 @@ const POLICY_TEST_KEY = {
 };
 // A flow's consent, as the stubbed provider answers it: an app that
 // registered itself, asking for two resources, so the page draws every part
-// consent has.
+// consent has for an app outside Boxel. `POLICY_TEST_OWN_APP_CONSENT` draws
+// the rest.
 const POLICY_TEST_CONSENT = {
   app: {
     kind: 'dynamic',
@@ -447,6 +448,21 @@ const POLICY_TEST_CONSENT = {
   account: { email: 'someone@example.test' },
   renewalOffered: true,
 };
+// Boxel's own app on the user's computer, with the confirmation code it
+// sends: the own-app note, the code and the warning.
+const POLICY_TEST_OWN_APP_CONSENT = {
+  ...POLICY_TEST_CONSENT,
+  app: {
+    kind: 'pre-registered',
+    shown: 'Boxel CLI',
+    verified: true,
+    place: 'this-computer',
+  },
+  outsideApp: false,
+  confirmationCode: 'WDJB-MJHT',
+};
+// The consent the stubbed provider answers, which a test may set.
+let policyTestConsent: Record<string, unknown> = POLICY_TEST_CONSENT;
 // The connections the stubbed provider lists, which a test sets and a
 // disconnect takes from. Ending `POLICY_TEST_FAILING_GRANT` is refused.
 let policyTestConnections: Record<string, unknown>[] = [];
@@ -537,7 +553,7 @@ module(basename(import.meta.filename), function (hooks) {
       }
       if (pathname === `/_oauth-provider/consent/${INTERACTION}`) {
         return req.method === 'GET'
-          ? answer(200, POLICY_TEST_CONSENT)
+          ? answer(200, policyTestConsent)
           : answer(201, { ticket: 'policy-test-ticket' });
       }
       if (req.method === 'GET' && pathname === '/_oauth-provider/connections') {
@@ -1008,6 +1024,51 @@ module(basename(import.meta.filename), function (hooks) {
       waitUntil: 'networkidle0',
     });
     await page.evaluate(() => localStorage.clear());
+  });
+
+  test("Boxel's own app's consent, with its confirmation code, runs under the policy", async function (assert) {
+    policyTestConsent = POLICY_TEST_OWN_APP_CONSENT;
+    try {
+      await page.goto(`${secureOrigin}/secure?mode=none`, {
+        waitUntil: 'networkidle0',
+      });
+      await page.evaluate(() =>
+        localStorage.setItem(
+          'boxel-secure-session',
+          JSON.stringify({
+            token: 'policy-test',
+            user: '@someone:example.test',
+            expiresAt: '2099-01-01T00:00:00.000Z',
+          }),
+        ),
+      );
+      await page.goto(
+        `${secureOrigin}/secure/authorize?interaction=${INTERACTION}`,
+        { waitUntil: 'networkidle0' },
+      );
+      await page.waitForSelector('[data-test-authorize-confirmation-code]', {
+        timeout: 10000,
+      });
+      assert.ok(
+        await page.$('[data-test-authorize-own-app]'),
+        'the own-app note is drawn',
+      );
+      assert.ok(
+        await page.$('[data-test-authorize-confirmation-warning]'),
+        'the warning is drawn',
+      );
+      assert.deepEqual(
+        await violationsIn(page),
+        [],
+        `own-app consent: no violation`,
+      );
+    } finally {
+      policyTestConsent = POLICY_TEST_CONSENT;
+      await page.goto(`${secureOrigin}/secure?mode=none`, {
+        waitUntil: 'networkidle0',
+      });
+      await page.evaluate(() => localStorage.clear());
+    }
   });
 
   // The error rules a selector pattern picks out of every stylesheet the

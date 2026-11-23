@@ -37,6 +37,7 @@ import {
   takeConsentTicket,
 } from '../lib/oauth-provider/objects.ts';
 import { buildRegistry } from '../lib/oauth-provider/registry.ts';
+import { BOXEL_CLI_CLIENT_ID } from '../lib/oauth-provider/pre-registered-clients.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
 const serverURL = OAUTH_TEST_SERVER_URL;
@@ -396,6 +397,36 @@ module(basename(import.meta.filename), function (hooks) {
         claimedName: 'Test App',
         standIn: 'loopback',
       });
+    });
+
+    test("boxel-cli is named as Boxel's own app on this computer, with its confirmation code", async function (assert) {
+      let user = await matrixAccount();
+      let uid = await startFlow(BOXEL_CLI_CLIENT_ID, {
+        redirectUri: 'http://127.0.0.1:51234/callback',
+        confirmationCode: 'WDJB-MJHT',
+      });
+      let response = await details(uid, {
+        authorization: await secureSessionAuth(db, user),
+      });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.app, {
+        kind: 'pre-registered',
+        shown: 'Boxel CLI',
+        verified: true,
+        place: 'this-computer',
+      });
+      assert.false(response.body.outsideApp, "it is Boxel's own app");
+      assert.true(response.body.renewalOffered);
+      assert.strictEqual(response.body.confirmationCode, 'WDJB-MJHT');
+    });
+
+    test('a client that sends no confirmation code has none in its details', async function (assert) {
+      let user = await matrixAccount();
+      let uid = await startFlow(await register());
+      let response = await details(uid, {
+        authorization: await secureSessionAuth(db, user),
+      });
+      assert.false('confirmationCode' in response.body);
     });
 
     test('an account without an email address is named by its display name', async function (assert) {
