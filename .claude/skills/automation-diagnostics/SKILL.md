@@ -477,8 +477,9 @@ its prices, so renders and automation run tabs carry on. The failure means
 its task has `PRICING_*` variables that are missing or wrong:
 
 - **A bad value**: the prerender task takes the same SSM parameters as the
-  realm server and the worker, so their next start fails on it too. Fix the
-  parameter and redeploy all three (the `pricing` skill's steps).
+  realm server and the worker, so each of those that starts after the change
+  fails its check too and runs without prices. Fix the parameter and redeploy
+  all three (the `pricing` skill's steps).
 - **A missing variable**: the prerender task wires in only the pricing
   parameters that existed when its config was applied. A parameter created
   after that is missing until the prerender config is applied again.
