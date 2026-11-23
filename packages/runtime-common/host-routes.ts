@@ -35,6 +35,7 @@ import {
 } from './host-routing-validation.ts';
 import {
   parseCardIdPattern,
+  matchRoutePathPattern,
   parseRoutePathPattern,
   type CardIdPattern,
   type RoutePathPattern,
@@ -419,6 +420,75 @@ export type HostRouteTypes = ReadonlyMap<
   string,
   HostRouteTypeInfo | 'unavailable' | undefined
 >;
+
+// What the index read for each type a realm's field-match routes name, by
+// `typeLookupKey`: as `HostRouteTypes`, and `'transient'` for a read that
+// failed for a reason that may pass (a render timeout, a prerender server
+// or another realm's server that can't be reached). The commit then
+// validates with the definition the stored routes were validated with.
+export type HostRouteTypeReads = ReadonlyMap<
+  string,
+  HostRouteTypeInfo | 'unavailable' | 'transient' | undefined
+>;
+
+// Thrown by a read of a realm's host routes when the index can't be read.
+// The read may pass when tried again, so a server answers 503 rather than
+// a page without routes.
+export class HostRoutesReadError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'HostRoutesReadError';
+  }
+}
+
+// The path patterns of the routes dropped because their type's definition
+// couldn't be read (`type-unavailable`), and of the routes under them: the
+// paths the realm's next index may route. Such a path isn't known to be
+// not found.
+export function unavailableRoutePatterns(
+  validation: HostRoutesValidation,
+): RoutePathPattern[] {
+  let unavailable = validation.warnings
+    .filter((w) => w.code === 'type-unavailable')
+    .map((w) => w.position);
+  if (unavailable.length === 0) {
+    return [];
+  }
+  let patterns: RoutePathPattern[] = [];
+  for (let warning of validation.warnings) {
+    let underUnavailable = unavailable.some((position) =>
+      position.every((index, i) => warning.position[i] === index),
+    );
+    if (!warning.dropped || !underUnavailable) {
+      continue;
+    }
+    let parsed = parseRoutePathPattern(warning.path);
+    if (parsed.ok) {
+      patterns.push(parsed.pattern);
+    }
+  }
+  return patterns;
+}
+
+// Whether a route dropped because its type's definition couldn't be read,
+// or a route under it, matches `pathInRealm` (a path within the realm that
+// starts with `/`).
+export function unavailableRouteMayAnswer(
+  validation: HostRoutesValidation,
+  pathInRealm: string,
+): boolean {
+  return unavailableRoutePatterns(validation).some(
+    (pattern) => matchRoutePathPattern(pattern, pathInRealm) !== undefined,
+  );
+}
+
+// Whether a route was dropped because its type's definition couldn't be
+// read. The tree may then be missing a card's canonical route.
+export function hasUnavailableRoutes(
+  validation: HostRoutesValidation,
+): boolean {
+  return validation.warnings.some((w) => w.code === 'type-unavailable');
+}
 
 export interface ValidateHostRoutesOptions {
   // The URL the realm is served at, ending with `/`. A fixed route's card

@@ -85,6 +85,10 @@ import {
 // refuses every other method outright — so no HTTP cache reaches either body,
 // and the in-process caches that do hold one key on the served mode directly.
 const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
+// How long after a realm starts an index of realm.json to store its host
+// routes, or to read a route type again, it may start another one.
+const HOST_ROUTES_INDEX_INTERVAL_MS = 60_000;
+
 // The cache directive a card+json response carries when a declared `output`
 // projected its body.
 //
@@ -166,9 +170,11 @@ import {
   readRawHostRoutingRules,
   realmConfigCardURL,
   validateHostRoutes,
+  HostRoutesReadError,
   type HostRoutesValidation,
   type RawHostRoutingRule,
 } from './host-routes.ts';
+import type { StoredHostRoutes } from './index-structure.ts';
 import type { LocalPath } from './paths.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -3610,9 +3616,11 @@ export class Realm {
   #cachedHostRoutingMap:
     | { validation: HostRoutesValidation; map: HostRoutingRule[] }
     | undefined;
-  // Whether this process started an index of realm.json because the index
-  // held no stored host routes.
-  #requestedHostRoutesIndex = false;
+  // When this process last started an index of realm.json to store the
+  // host routes or read their types again, and whether that index is still
+  // running (`#indexRealmConfigForHostRoutes`).
+  #hostRoutesIndexStartedAt: number | undefined;
+  #hostRoutesIndexRunning = false;
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -22255,10 +22263,10 @@ export class Realm {
   // types field-match routes name, and stores them with the rest of the index
   // (`realm_meta`), so this is always the whole tree the last index
   // validated, and reading it never reads a type. A route whose type
-  // couldn't be read then was dropped with a warning, and the next index
-  // reads it again. Kept until the next index. When the index can't be read,
-  // this rejects with the read's error, and nothing is kept: an empty tree
-  // would read as a realm with no routes.
+  // couldn't be read then was dropped with a `type-unavailable` warning.
+  // Kept until the next index. When the index can't be read, this rejects
+  // with a `HostRoutesReadError`, and nothing is kept: an empty tree would
+  // read as a realm with no routes.
   async getHostRoutes(): Promise<HostRoutesValidation> {
     let cached = this.#cachedHostRoutes;
     if (cached) {
@@ -22277,16 +22285,33 @@ export class Realm {
   }
 
   async #readHostRoutes(): Promise<HostRoutesValidation> {
-    let stored = await this.#realmIndexQueryEngine.fetchHostRoutes();
+    let stored: StoredHostRoutes | undefined;
+    let rules: RawHostRoutingRule[] = [];
+    try {
+      stored = await this.#realmIndexQueryEngine.fetchHostRoutes();
+      if (!stored) {
+        rules = await this.#readRawHostRoutingRules();
+      }
+    } catch (e) {
+      throw new HostRoutesReadError(
+        `could not read the host routes of ${this.url} from the index: ${e}`,
+        { cause: e },
+      );
+    }
     if (stored) {
-      return stored;
+      if (stored.retryTypeReads) {
+        // A type read failed for a reason that may pass when the realm was
+        // indexed, and its route was dropped. Nothing else may index this
+        // realm for a long time, so an index of realm.json reads it again.
+        this.#indexRealmConfigForHostRoutes();
+      }
+      return { routes: stored.routes, warnings: stored.warnings };
     }
     // An index written before the index stored host routes. Its rules are
     // validated without type definitions, so each field-match route is
-    // dropped until the realm is indexed again, and an index of realm.json
-    // is started once to store the tree: nothing else may index this realm
-    // for a long time.
-    let rules = await this.#readRawHostRoutingRules();
+    // dropped as `type-unavailable` until the realm is indexed again, and an
+    // index of realm.json is started to store the tree: nothing else may
+    // index this realm for a long time.
     if (hostRouteTypeRefs(rules).length > 0) {
       this.#indexRealmConfigForHostRoutes();
     }
@@ -22296,13 +22321,23 @@ export class Realm {
     });
   }
 
-  // Starts an index of realm.json, once in this process, so that an index
-  // written before the index stored host routes gets them.
+  // Starts an index of realm.json, which stores the host routes with the
+  // types it reads: for an index written before the index stored them, or a
+  // stored tree that dropped a route for a type read that may pass. At most
+  // one runs at a time in this process, and one starts at most once every
+  // `HOST_ROUTES_INDEX_INTERVAL_MS`, so a type that still can't be read
+  // isn't read on every request.
   #indexRealmConfigForHostRoutes(): void {
-    if (this.#requestedHostRoutesIndex) {
+    let now = Date.now();
+    if (
+      this.#hostRoutesIndexRunning ||
+      (this.#hostRoutesIndexStartedAt !== undefined &&
+        now - this.#hostRoutesIndexStartedAt < HOST_ROUTES_INDEX_INTERVAL_MS)
+    ) {
       return;
     }
-    this.#requestedHostRoutesIndex = true;
+    this.#hostRoutesIndexStartedAt = now;
+    this.#hostRoutesIndexRunning = true;
     void this.#realmIndexUpdater
       .enqueueUpdate([this.paths.fileURL('realm.json')], {
         // As for any write: the swap drops this realm's index caches, the
@@ -22313,11 +22348,19 @@ export class Realm {
       })
       .then(({ settled }) => settled)
       .catch((e: unknown) => {
-        this.#requestedHostRoutesIndex = false;
         this.#log.warn(
           `failed to index realm.json to store the host routes of ${this.url}: ${e}`,
         );
+      })
+      .finally(() => {
+        this.#hostRoutesIndexRunning = false;
       });
+  }
+
+  // Lets the next read start an index of realm.json at once, as it would
+  // once `HOST_ROUTES_INDEX_INTERVAL_MS` has passed.
+  __testOnlyAllowHostRoutesIndexNow(): void {
+    this.#hostRoutesIndexStartedAt = undefined;
   }
 
   // Drops the cached host routes and the map built from them.

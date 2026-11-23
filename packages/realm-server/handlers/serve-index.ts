@@ -20,7 +20,9 @@ import {
   SCOPED_CSS_SERVING_PREFIX,
   foreignQueryParams,
   hasExtension,
+  hasUnavailableRoutes,
   hostRouteCanonicalAddress,
+  HostRoutesReadError,
   isCaptureServingPath,
   isHashedScopedCSSRequest,
   isRedirectRoutingRule,
@@ -51,6 +53,7 @@ import {
   isRealmFilePath,
   matchHostRoutingRule,
   resolveDynamicHostRoute,
+  unavailableRouteMayAnswerRequest,
   type RealmRoutingDeps,
   type ResolvedHostRoute,
 } from '../lib/realm-routing.ts';
@@ -65,6 +68,10 @@ import {
   prefixRealmURLsOf,
   type PrefixRealmSource,
 } from '@cardstack/runtime-common/prefix-realm-network';
+
+// How long a page that answers 503 because a realm's host routes can't be
+// served yet asks the client to wait, in seconds.
+const HOST_ROUTES_RETRY_AFTER_SECONDS = '30';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
@@ -479,7 +486,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     ];
   }
 
-  let serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
+  let serveRoutedIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
     // Derive the request URL via fullRequestURL so the protocol honors
     // `x-forwarded-proto` from a TLS-terminating proxy (ALB/Traefik), matching
     // the rest of the request pipeline. Building it from the raw `ctxt.protocol`
@@ -571,12 +578,23 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       ) {
         return false;
       }
-      let { routes } = await hostRoutesFor(realm);
+      let validation = await hostRoutesFor(realm);
+      let { routes } = validation;
+      // A path that only a route dropped for an unreadable type matches gets
+      // the 503 a browser gets.
+      let unavailableMayAnswer = unavailableRouteMayAnswerRequest(
+        requestURL,
+        realm,
+        validation,
+      );
       if (
-        !hasDynamicHostRoutes(routes) ||
+        (!unavailableMayAnswer && !hasDynamicHostRoutes(routes)) ||
         (await isRealmFilePath(requestURL, routingDeps))
       ) {
         return false;
+      }
+      if (unavailableMayAnswer) {
+        return true;
       }
       let resolution = (await resolveDynamic(realm, routes))?.resolution;
       return !!resolution && resolution.kind !== 'nothing';
@@ -841,9 +859,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // child routes) resolves the path through all of its validated routes.
     // The lookups run as the visitor, against the live realm, so a route
     // resolves only to a card the visitor's own card request would get.
-    let hostRoutes: readonly HostRoute[] = routedRealm
-      ? (await hostRoutesFor(routedRealm)).routes
-      : [];
+    let hostRoutesValidation: HostRoutesValidation | undefined = routedRealm
+      ? await hostRoutesFor(routedRealm)
+      : undefined;
+    let hostRoutes: readonly HostRoute[] = hostRoutesValidation?.routes ?? [];
     let dynamicRoutes = hasDynamicHostRoutes(hostRoutes);
     let notFound = false;
     // Whether a dynamic route matched the path and it resolved to nothing.
@@ -876,7 +895,15 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         ctxt.status = resolution.statusCode;
         return;
       }
-      if (resolved && resolution?.kind === 'alias') {
+      // While a route is dropped because its type couldn't be read, the
+      // tree may be missing the card's canonical route, and a later route
+      // would look canonical. A 301 is cached for good, so the alias serves
+      // its card at its own path instead.
+      if (
+        resolved &&
+        resolution?.kind === 'alias' &&
+        !hasUnavailableRoutes(hostRoutesValidation!)
+      ) {
         let target = await aliasRedirectTarget({
           requestURL,
           realm: routedRealm,
@@ -939,13 +966,35 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     }
     // A path some route matched that resolved to nothing answers 404, unless
     // it is a card's own path or names a file of the realm, which are still
-    // served there. A path no route matched at all is served as it was before
-    // routes.
+    // served there. A path that a route dropped because its type couldn't
+    // be read may answer gets 503 rather than not found, so a crawler or a
+    // CDN keeps the page: the realm's next index may route it. A path no
+    // route matched at all is served as it was before routes.
+    let unavailableMayAnswer =
+      !fixedRouteMatched &&
+      !dynamicServeRule &&
+      !!routedRealm &&
+      !!hostRoutesValidation &&
+      unavailableRouteMayAnswerRequest(
+        requestURL,
+        routedRealm,
+        hostRoutesValidation,
+      );
     if (
-      matchedNothing &&
+      (matchedNothing || unavailableMayAnswer) &&
       !(await isCardPath(cardURL)) &&
       !(await isFilePath(requestURL))
     ) {
+      if (unavailableMayAnswer) {
+        hostRoutesLog.warn(
+          `${requestURL.href} answers 503: a host route that may answer it is dropped because its type could not be read`,
+        );
+        ctxt.status = 503;
+        ctxt.set('Retry-After', HOST_ROUTES_RETRY_AFTER_SECONDS);
+        ctxt.type = 'text';
+        ctxt.body = 'Service Unavailable';
+        return;
+      }
       notFound = true;
     }
 
@@ -1269,6 +1318,24 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       ctxt.status = 404;
     }
     return;
+  };
+
+  // A realm's host routes that can't be read from its index answer 503, for
+  // a fixed route or the home page as for any other page: the read may pass
+  // when tried again, and a 500 or a page without routes would be wrong.
+  let serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
+    try {
+      return await serveRoutedIndex(ctxt, next);
+    } catch (error) {
+      if (!(error instanceof HostRoutesReadError)) {
+        throw error;
+      }
+      hostRoutesLog.warn(`${ctxt.href} answers 503: ${error.message}`);
+      ctxt.status = 503;
+      ctxt.set('Retry-After', HOST_ROUTES_RETRY_AFTER_SECONDS);
+      ctxt.type = 'text';
+      ctxt.body = 'Service Unavailable';
+    }
   };
 
   let serveHostApp = async (ctxt: Koa.Context, next: Koa.Next) => {

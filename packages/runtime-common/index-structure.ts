@@ -1,7 +1,7 @@
 import type { CardResource } from './resource-types.ts';
 import type { SerializedError } from './error.ts';
 import type { PgPrimitive } from './expression.ts';
-import type { HostRoutesValidation } from './host-routes.ts';
+import type { HostRouteTypeInfo, HostRoutesValidation } from './host-routes.ts';
 
 export interface BoxelIndexTable {
   url: string;
@@ -247,7 +247,19 @@ export interface RealmMetaValue {
   // The realm's host routes as the pass validated them, with the type
   // definitions it read (`IndexWriter`'s `done`). Absent from a value written
   // before the index stored them.
-  hostRoutes?: HostRoutesValidation;
+  hostRoutes?: StoredHostRoutes;
+}
+
+// The host routes a realm's index stored.
+export interface StoredHostRoutes extends HostRoutesValidation {
+  // The type definitions the routes were validated with, by
+  // `typeLookupKey`; `null` for a type the index didn't find. A later read
+  // of a type that fails for a reason that may pass validates with these.
+  types?: Record<string, HostRouteTypeInfo | null>;
+  // Set when a type read failed for a reason that may pass and no earlier
+  // definition stood in for it, so its route was dropped. A read of the
+  // routes then starts an index of realm.json, which reads the type again.
+  retryTypeReads?: true;
 }
 
 export interface RealmMetaTable {
@@ -296,9 +308,7 @@ export function isPartitionedRealmMetaValue(
 }
 
 // The host routes a `realm_meta.value` holds, or undefined when it holds none.
-export function storedHostRoutes(
-  raw: unknown,
-): HostRoutesValidation | undefined {
+export function storedHostRoutes(raw: unknown): StoredHostRoutes | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return undefined;
   }
@@ -310,7 +320,15 @@ export function storedHostRoutes(
   ) {
     return undefined;
   }
-  return { routes: hostRoutes.routes, warnings: hostRoutes.warnings };
+  let { types, retryTypeReads } = hostRoutes;
+  return {
+    routes: hostRoutes.routes,
+    warnings: hostRoutes.warnings,
+    ...(types && typeof types === 'object' && !Array.isArray(types)
+      ? { types }
+      : {}),
+    ...(retryTypeReads === true ? { retryTypeReads } : {}),
+  };
 }
 
 export const coerceTypes = Object.freeze({

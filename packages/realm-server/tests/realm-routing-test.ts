@@ -637,6 +637,7 @@ module(basename(import.meta.filename), function () {
         { bind: [realmURL.href] },
       );
       testRealm.clearRealmIndexCaches();
+      testRealm.__testOnlyAllowHostRoutesIndexNow();
 
       let old = await testRealm.getHostRoutes();
       assert.deepEqual(
@@ -653,6 +654,45 @@ module(basename(import.meta.filename), function () {
         'the index of realm.json stored the whole tree',
       );
     });
+
+    test('a pass that changes no module and not realm.json keeps the stored routes, and one that changes a module validates them again', async function (assert) {
+      // A mark on the stored tree that no validation writes.
+      await dbAdapter.execute(
+        `UPDATE realm_meta SET value = jsonb_set(value, '{hostRoutes,warnings}', '[]'::jsonb) WHERE realm_url = $1`,
+        { bind: [realmURL.href] },
+      );
+      await testRealm.write(
+        'extra.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Extra' } },
+            meta: {
+              adoptsFrom: {
+                module: rri('@cardstack/base/card-api'),
+                name: 'CardDef',
+              },
+            },
+          },
+        }),
+      );
+      await testRealm.incrementalIndexing();
+      testRealm.clearRealmIndexCaches();
+      assert.deepEqual(
+        (await testRealm.getHostRoutes()).warnings,
+        [],
+        'a card save reads no type and keeps the stored tree',
+      );
+
+      await testRealm.write('extra.gts', `export const extra = 1;\n`);
+      await testRealm.incrementalIndexing();
+      testRealm.clearRealmIndexCaches();
+      assert.deepEqual(
+        (await testRealm.getHostRoutes()).warnings.map((w) => w.code),
+        ['fixed-route-with-params', 'missing-form'],
+        'a module change validates the routes again',
+      );
+    });
   });
 
   module(
@@ -660,15 +700,35 @@ module(basename(import.meta.filename), function () {
     function (hooks) {
       let realmURL = new URL('http://127.0.0.1:4444/routing-unavailable/');
       let testRealm: Realm;
+      let dbAdapter: PgAdapter;
 
       setupPermissionedRealmCached(hooks, {
         realmURL,
         permissions: { '*': ['read'] },
         fileSystem: makeUnavailableTypeFixture(),
-        onRealmSetup({ testRealm: realm }) {
+        onRealmSetup({ testRealm: realm, dbAdapter: adapter }) {
           testRealm = realm;
+          dbAdapter = adapter;
         },
       });
+
+      async function storedHostRoutes(): Promise<{
+        types?: Record<string, unknown>;
+        retryTypeReads?: boolean;
+      }> {
+        let [row] = (await dbAdapter.execute(
+          `SELECT rm.value FROM realm_meta rm
+           JOIN realm_generations rg
+             ON rg.realm_url = rm.realm_url
+            AND rg.current_generation = rm.generation
+           WHERE rm.realm_url = $1`,
+          { bind: [realmURL.href] },
+        )) as { value: unknown }[];
+        let value = (
+          typeof row?.value === 'string' ? JSON.parse(row.value) : row?.value
+        ) as { hostRoutes?: Record<string, any> } | undefined;
+        return value?.hostRoutes ?? {};
+      }
 
       hooks.beforeEach(async function () {
         await testRealm.indexing();
@@ -690,17 +750,54 @@ module(basename(import.meta.filename), function () {
           ],
           'a module that does not exist, a module that fails, and a realm that can not be reached',
         );
-        assert.strictEqual(
-          await testRealm.getHostRoutes(),
-          first,
-          'the stored tree is read once until the next index',
-        );
         let map = await testRealm.getHostRoutingMap();
         assert.deepEqual(map, [{ path: '/', id: `${realmURL.href}home` }]);
+        // The unreachable realm is a read that may pass, so the first read
+        // started an index of realm.json, which reads it again and drops the
+        // route again.
+        await testRealm.incrementalIndexing();
+        assert.deepEqual(
+          (await testRealm.getHostRoutes()).warnings.map((w) => w.path),
+          ['/later/:slug', '/broken/:slug', '/away/:slug'],
+        );
+      });
+
+      test('a type read that may pass is read again by an index of realm.json, with the definition an earlier index read standing in', async function (assert) {
+        let awayKey = 'http://127.0.0.1:9/unreachable-realm/thing/Thing';
+        let first = await storedHostRoutes();
+        assert.true(
+          first.retryTypeReads,
+          'a realm that can not be reached is a read that may pass',
+        );
+        assert.false(awayKey in (first.types ?? {}));
+
+        // A definition an earlier index read.
+        let thing = {
+          key: awayKey,
+          types: [awayKey],
+          isCardType: true,
+          fields: { slug: { type: 'contains', isPrimitive: true } },
+        };
+        await dbAdapter.execute(
+          `UPDATE realm_meta SET value = jsonb_set(value, '{hostRoutes,types}', COALESCE(value->'hostRoutes'->'types', '{}'::jsonb) || $2::jsonb) WHERE realm_url = $1`,
+          { bind: [realmURL.href, JSON.stringify({ [awayKey]: thing })] },
+        );
+        testRealm.clearRealmIndexCaches();
+        testRealm.__testOnlyAllowHostRoutesIndexNow();
+        // The read starts an index of realm.json.
+        await testRealm.getHostRoutes();
+        await testRealm.incrementalIndexing();
+
+        let { routes } = await testRealm.getHostRoutes();
+        assert.deepEqual(
+          routes.map((route) => route.fullPath),
+          ['/', '/away/:slug'],
+          'the route is validated with the definition the earlier index read',
+        );
         assert.strictEqual(
-          await testRealm.getHostRoutingMap(),
-          map,
-          'the fixed routing map is cached with it',
+          (await storedHostRoutes()).retryTypeReads,
+          undefined,
+          'and the tree no longer asks for a read',
         );
       });
     },

@@ -93,12 +93,23 @@ validation MUST be dropped with a warning, with its child routes. The
 routes MUST be validated when the realm is indexed, and the validated tree
 MUST be stored with the index. A field match's type MUST be read then,
 through the definitions cache, which renders a module it doesn't hold. A
-type that can't be read, for any reason (a module error, a missing export,
-a render timeout, a server that can't be reached), MUST make its route
-invalid, and the next index MUST read it again. A reader MUST read the
-stored tree, and MUST NOT read a type to answer a request, so a reader
-always gets the whole validated tree and never a "not ready" answer.
-Validation MUST drop each
+type that can't be read (a module error, a missing export, a render
+timeout, a server that can't be reached) MUST make its route invalid, and
+the next index MUST read it again. A read that fails for a reason that may
+pass (a render timeout, a server that can't be reached) MUST use the
+definition the stored tree was validated with, when there is one. When
+there is none, the stored tree MUST say so, and a read of the routes MUST
+start an index of realm.json, at most once a minute, to read the type again.
+An index pass that changes neither realm.json nor a module SHOULD keep the
+stored tree without reading a type. A reader MUST read the stored tree,
+and MUST NOT read a type to answer a request, so a reader always gets the
+whole tree the last index validated. A path that a route dropped for a type
+that couldn't be read may answer, and that nothing else serves, MUST answer
+503, not 404: the next index may route it. While such a route is dropped,
+an alias MUST serve its card at its own path rather than answer a 301, as
+the tree may be missing the card's canonical route. When the index can't
+be read, a read of the routes MUST fail rather than answer no routes, and
+the page MUST answer 503. Validation MUST drop each
 dynamic route past `MAX_DYNAMIC_HOST_ROUTES`, with a warning. Validation
 SHOULD warn when a literal or fixed route takes a path that a dynamic sibling
 matches.

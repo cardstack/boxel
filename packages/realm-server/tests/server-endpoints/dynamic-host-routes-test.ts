@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import { rri } from '@cardstack/runtime-common';
+import { HostRoutesReadError, rri } from '@cardstack/runtime-common';
 import type {
   CachingDefinitionLookup,
   LooseSingleCardDocument,
@@ -538,6 +538,49 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
+    test('a path a route dropped for an unreadable type may answer gets 503 until an index reads the type', async function (assert) {
+      // What an index written before the index stored the routes holds: each
+      // field-match route is validated without its type, and dropped.
+      await dbAdapter.execute(
+        `UPDATE realm_meta SET value = value - 'hostRoutes' WHERE realm_url = $1`,
+        { bind: [realmURL.href] },
+      );
+      testRealm.clearRealmIndexCaches();
+      testRealm.__testOnlyAllowHostRoutesIndexNow();
+      try {
+        let dropped = await page('posts/no-such-post');
+        assert.strictEqual(dropped.status, 503, 'not a 404');
+        assert.strictEqual(dropped.headers['retry-after'], '30');
+        let other = await page('Post/b');
+        assert.strictEqual(
+          other.status,
+          200,
+          "a card's own path is served as before",
+        );
+      } finally {
+        // The read started an index of realm.json, which stores the tree.
+        await testRealm.incrementalIndexing();
+      }
+      let missing = await page('posts/no-such-post');
+      assert.strictEqual(missing.status, 404, 'once the index reads the type');
+    });
+
+    test('a page whose host routes can not be read from the index answers 503', async function (assert) {
+      let getHostRoutes = testRealm.getHostRoutes;
+      testRealm.getHostRoutes = async () => {
+        throw new HostRoutesReadError('the index can not be read');
+      };
+      try {
+        let fixed = await page('fixed');
+        assert.strictEqual(fixed.status, 503, 'a fixed route');
+        assert.strictEqual(fixed.headers['retry-after'], '30');
+        let dynamic = await page('posts/hello');
+        assert.strictEqual(dynamic.status, 503, 'a dynamic route');
+      } finally {
+        testRealm.getHostRoutes = getHostRoutes;
+      }
+    });
+
     test('a file of the realm a route pattern covers is served as before', async function (assert) {
       for (let path of ['site', 'site.gts']) {
         let response = await page(path);
@@ -969,6 +1012,38 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.true(limited.text.includes('Served Hello Post'));
       } finally {
         testRealm.handle = handle;
+      }
+    });
+
+    test('while a route is dropped for an unreadable type, an alias serves its card at its own path', async function (assert) {
+      // The canonical route of a published post is dropped, so the walk
+      // would reach the archive route, which isn't canonical.
+      let getHostRoutes = testRealm.getHostRoutes;
+      testRealm.getHostRoutes = async function (this: Realm) {
+        let validation = await getHostRoutes.call(this);
+        let posts = validation.routes.find(
+          (route) => route.fullPath === '/posts/:slug',
+        )!;
+        return {
+          routes: validation.routes.filter((route) => route !== posts),
+          warnings: [
+            ...validation.warnings,
+            {
+              code: 'type-unavailable' as const,
+              message: 'The definition of Post could not be read',
+              position: posts.position,
+              path: '/posts/:slug',
+              dropped: true,
+            },
+          ],
+        };
+      };
+      try {
+        let response = await page('a/hello');
+        assert.strictEqual(response.status, 200, 'no permanent redirect');
+        assert.true(response.text.includes('Served Hello Post'));
+      } finally {
+        testRealm.getHostRoutes = getHostRoutes;
       }
     });
 

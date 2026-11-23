@@ -69,12 +69,12 @@ import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import { parsePathSpecifier } from './path-specifier.ts';
 import { RealmPaths } from './paths.ts';
-import type { HostRoutesValidation } from './host-routes.ts';
 import {
   coerceTypes,
   normalizeRealmMetaValue,
   storedHostRoutes,
   type BoxelIndexTable,
+  type StoredHostRoutes,
   type PrerenderedHtmlTable,
   type RealmMetaValue,
 } from './index-structure.ts';
@@ -1591,9 +1591,7 @@ export class IndexQueryEngine {
 
   // The validated host routes the realm's current index stored, or undefined
   // for an index written before the index stored them.
-  async fetchHostRoutes(
-    realmURL: URL,
-  ): Promise<HostRoutesValidation | undefined> {
+  async fetchHostRoutes(realmURL: URL): Promise<StoredHostRoutes | undefined> {
     let results = (await this.#query([
       `SELECT rm.value
        FROM realm_meta rm

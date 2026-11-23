@@ -7,6 +7,7 @@ import type {
   HostRouteLoad,
   HostRouteResolution,
   HostRouteSearch,
+  HostRoutesValidation,
   HostRoutingRule,
   Realm,
   ServedRealm,
@@ -20,6 +21,7 @@ import {
   param,
   query,
   RealmPaths,
+  unavailableRouteMayAnswer,
 } from '@cardstack/runtime-common';
 import {
   indexCandidateExpressions,
@@ -214,6 +216,26 @@ export function hostRoutingRuleFor(
   pathInRealm: string,
 ): HostRoutingRule | undefined {
   return routingMap.find((rule) => rule.path === pathInRealm);
+}
+
+// Whether a route dropped because its type's definition couldn't be read
+// when the realm was indexed, or a route under it, matches the request path.
+// The realm's next index may route that path, so it isn't known to be not
+// found.
+export function unavailableRouteMayAnswerRequest(
+  requestURL: URL,
+  realm: Realm,
+  validation: HostRoutesValidation,
+): boolean {
+  let realmURL = new URL(realm.url);
+  realmURL.protocol = requestURL.protocol;
+  let pathInRealm: string;
+  try {
+    pathInRealm = '/' + new RealmPaths(realmURL).local(requestURL);
+  } catch {
+    return false;
+  }
+  return unavailableRouteMayAnswer(validation, pathInRealm);
 }
 
 // Whether a realm's validated host routes hold any route the fixed routing
