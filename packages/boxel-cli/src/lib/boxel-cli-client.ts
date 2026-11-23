@@ -46,6 +46,7 @@ import {
 import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready.ts';
 import { getProfileManager, type ProfileManager } from './profile-manager.ts';
 import { resolveRealmNetwork } from './resolve-realm-identifier.ts';
+import { describeFetchError } from './describe-fetch-error.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export type {
@@ -337,7 +338,7 @@ export class BoxelCLIClient {
     } catch (err) {
       return {
         status: 'error',
-        error: `run-command fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+        error: `run-command fetch failed: ${describeFetchError(err)}`,
       };
     }
 

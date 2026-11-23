@@ -372,11 +372,11 @@ export function stampStaleShellFailure(
 // file extraction that failed beside it for its own reasons.
 //
 // Keyed on the `gatewayFailure` marker the fetch boundary stamps, not on the
-// error status. The status alone is ambiguous — a render timeout is a
-// card-originated 504 — so inferring the verdict from the number would withhold
-// every render timeout, exactly the failure that most needs to stay visible.
-// The marker is set only where a fetch actually met the network failure, so its
-// presence is the conclusion without any invariant to defend.
+// error status: the marker is set only where a fetch actually met the network
+// failure, so its presence is the conclusion without any invariant to defend.
+// A render timeout (a 504 the render itself produces) is not this verdict; the
+// prerendered-html writer classifies it as a transient render failure
+// (`isTransientRenderError`) and withholds it under its own verdict.
 function gatewayFailureRowTypes(
   response: RenderVisitResponse,
 ): ('instance' | 'file')[] {

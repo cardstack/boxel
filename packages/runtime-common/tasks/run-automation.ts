@@ -3,7 +3,7 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 import {
   admitRunIdentity,
   admitRunOperations,
-  scriptParseError,
+  scriptRefusal,
   type AdmittedRunKind,
   type AutomationAdmissionChecks,
 } from '../automation-admission.ts';
@@ -15,7 +15,6 @@ import {
   type AutomationScriptOutcome,
   AUTOMATION_COMMAND,
   AUTOMATION_TAB_GRACE_MS,
-  MAX_AUTOMATION_SCRIPT_CHARS,
   automationRunDedupeKey,
   isAutomationScriptOutcome,
   scriptErrorText,
@@ -404,18 +403,9 @@ async function attemptRun(
       redact(`The script ${scriptURL} could not be read: ${e?.message ?? e}`),
     );
   }
-  if (!code.trim() || code.length > MAX_AUTOMATION_SCRIPT_CHARS) {
-    return await refuse(
-      'script-error',
-      `The script ${scriptURL} must be between 1 and ${MAX_AUTOMATION_SCRIPT_CHARS} characters`,
-    );
-  }
-  let parseError = scriptParseError(code);
-  if (parseError) {
-    return await refuse(
-      'script-error',
-      `The script ${scriptURL} doesn't parse: ${parseError}`,
-    );
+  let unrunnable = scriptRefusal(code, scriptURL);
+  if (unrunnable) {
+    return await refuse(unrunnable.reason, unrunnable.message);
   }
   let operationsAdmitted = await admitRunOperations(admission, run, {
     automation: identity.automation,

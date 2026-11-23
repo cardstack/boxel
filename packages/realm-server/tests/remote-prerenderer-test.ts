@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { createServer, type ServerResponse } from 'http';
+import { isVisitRequestFailure } from '@cardstack/runtime-common';
 import { createRemotePrerenderer } from '../prerender/remote-prerenderer.ts';
 import {
   PRERENDER_DISPATCH_DELIVERED,
@@ -665,6 +666,10 @@ module(basename(import.meta.filename), function (hooks) {
       } catch (e: any) {
         assert.ok(/status 503/.test(e.message), 'fails after retries with 503');
         assert.ok(attempts >= 2, 'retried at least configured attempts');
+        assert.true(
+          isVisitRequestFailure(e),
+          'marked a transient request failure',
+        );
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
         delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
@@ -711,6 +716,91 @@ module(basename(import.meta.filename), function (hooks) {
 
         assert.true((result as any).ok, 'eventually succeeds after 500');
         assert.ok(attempts >= 2, 'retried after 500');
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+  });
+
+  // The visit loops keep a row's last good content over a request the
+  // prerender path failed to answer, and retry it; a request it refused is
+  // the row's error, which stays visible. The client marks which is which.
+  module('remote prerenderer request-failure marker', function () {
+    let visit = (url: string) =>
+      createRemotePrerenderer(url).prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: 'realm',
+        realm: 'realm',
+        url: 'https://example.com/card',
+        auth: '{}',
+      });
+
+    test('a request that times out is marked', async function (assert) {
+      process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS = '1000';
+      let server = createServer(() => {
+        // Never answers.
+      }).listen(0);
+      try {
+        await visit(`http://127.0.0.1:${(server.address() as any).port}`);
+        assert.ok(false, 'should have thrown');
+      } catch (e: any) {
+        assert.ok(/aborted after/.test(e.message), 'the request aborted');
+        assert.true(isVisitRequestFailure(e), 'marked');
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    test('a request whose connection is refused is marked', async function (assert) {
+      process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS = '1';
+      let server = createServer().listen(0);
+      let port = (server.address() as any).port;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      try {
+        await visit(`http://127.0.0.1:${port}`);
+        assert.ok(false, 'should have thrown');
+      } catch (e: any) {
+        assert.true(isVisitRequestFailure(e), 'marked');
+      }
+    });
+
+    test('a request the prerender path refuses is not marked', async function (assert) {
+      let attempts = 0;
+      let server = createServer((_req, res) => {
+        attempts++;
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            errors: [{ status: 400, message: 'URL is required' }],
+          }),
+        );
+      }).listen(0);
+      try {
+        await visit(`http://127.0.0.1:${(server.address() as any).port}`);
+        assert.ok(false, 'should have thrown');
+      } catch (e: any) {
+        assert.ok(/status 400/.test(e.message), 'the refusal');
+        assert.strictEqual(attempts, 1, 'not retried');
+        assert.false(isVisitRequestFailure(e), 'not marked');
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    test('a response the client cannot read is not marked', async function (assert) {
+      let server = createServer((_req, res) => {
+        res.statusCode = 201;
+        res.setHeader('Content-Type', 'application/json');
+        res.end('not json');
+      }).listen(0);
+      try {
+        await visit(`http://127.0.0.1:${(server.address() as any).port}`);
+        assert.ok(false, 'should have thrown');
+      } catch (e: any) {
+        assert.ok(/parse/.test(e.message), 'the unreadable response');
+        assert.false(isVisitRequestFailure(e), 'not marked');
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }
