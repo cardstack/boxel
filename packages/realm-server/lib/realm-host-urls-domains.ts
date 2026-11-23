@@ -104,6 +104,14 @@ export class HostURLDomains {
     );
   }
 
+  // The host of the Boxel Space whose subdomain is `subdomain`, or nothing
+  // when no Boxel Space domain is configured.
+  boxelSpaceHost(subdomain: string): string | undefined {
+    return this.#boxelSpace
+      ? `${subdomain}.${this.#boxelSpace.host}`
+      : undefined;
+  }
+
   // Whether a realm may have a host URL at `hostURL`, as far as its domain
   // tells. A custom domain must be allowed for this realm, and is served at
   // its root. A site name is served at the root of its subdomain. A Boxel

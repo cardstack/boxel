@@ -224,6 +224,18 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(served.text, 'hello from the realm');
     });
 
+    test("lists the Boxel Space URL in the realm owner's Space, for any administrator", async function (assert) {
+      for (let user of [OWNER, WRITER]) {
+        let response = await list(user);
+        assert.strictEqual(response.status, 200, `HTTP 200 status for ${user}`);
+        assert.strictEqual(
+          response.body.meta?.boxelSpaceURL,
+          SPACE_URL,
+          `${user} is offered the owner's Space`,
+        );
+      }
+    });
+
     test('a later host URL is not canonical until it is marked canonical', async function (assert) {
       let first = (await mount(SPACE_URL)).body.data;
       let second = await mount(`http://${CUSTOM_DOMAIN}/`);
