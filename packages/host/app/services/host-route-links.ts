@@ -140,10 +140,10 @@ export default class HostRouteLinksService
   // last called. A click on a link with that address opens the card with
   // no lookup. Not tracked: nothing renders from it.
   //
-  // The key is the address as `hrefTo` wrote it, on the realm's URL, and a
-  // click looks it up by the link's URL on the page. The two match while a
-  // site is served at the realm's URL. Once a host URL can differ from it,
-  // the key must be the address on the host URL the page is served on.
+  // Host Mode v2: the key is the address as `hrefTo` wrote it, on the
+  // realm's URL, and a click looks it up by the link's URL on the page.
+  // Today a site is served at its realm's URL, so the two match. When a site
+  // has its own host URL, store the key as the address on that host URL.
   private linkedCards = new Map<string, string>();
 
   constructor(owner: Owner) {
@@ -373,10 +373,10 @@ export default class HostRouteLinksService
     this.realmRoutes.set(realmURL, { key, routes });
   }
 
-  // The addresses these routes give are on the realm's URL from the page
-  // config. Once a host URL can differ from the realm's URL, a page served
-  // on a host URL must give them on that host URL, while a card is still
-  // matched to the realm by the realm's URL.
+  // Host Mode v2: today a site is served at its realm's URL, so these routes
+  // give addresses on the realm's URL. When a site has its own host URL,
+  // give the addresses on the host URL the page is served on. Keep matching
+  // a card to its realm by the realm's URL.
   private routesFromPageConfig(): HostRouteLinkRoutes | undefined {
     let config = this.hostModeService.hostDynamicRoutes;
     let pageRoutes = this.pageRoutes;
