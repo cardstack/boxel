@@ -20,7 +20,10 @@ import {
   type SpendCharge,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { getAutomation } from '@cardstack/runtime-common/automations';
+import {
+  getAutomation,
+  waitForKeyApproval,
+} from '@cardstack/runtime-common/automations';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
 import {
@@ -959,6 +962,22 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(response.body.meta.keyApprovals.operations, []);
     });
 
+    test('a switch-on whose key approvals the realm can’t check, its script unreadable, is refused', async function (assert) {
+      await realm.delete(`${KEYED}-script.js`);
+      let response = await post(
+        AUTOMATION_SWITCH_ON_PATH,
+        OWNER,
+        { monthlyCredits: ROOMY_AUTOMATION_CAPS.monthlyCredits },
+        { id: cardURL(KEYED) },
+      );
+      assert.strictEqual(response.status, 422, response.text);
+      assert.strictEqual(
+        await getAutomation(dbAdapter, automationId(KEYED)),
+        undefined,
+        'nothing is switched on',
+      );
+    });
+
     test('a missing approval the payer can give: the automation switches on waiting, with no next run and nothing enqueued', async function (assert) {
       let response = await switchOn(OWNER, KEYED);
       assert.strictEqual(
@@ -1077,6 +1096,76 @@ module(basename(import.meta.filename), function (hooks) {
         ['daily'],
       );
       assert.strictEqual(version.operations.length, 1);
+    });
+
+    test('an approval landing keeps the payer’s own switch-on as the moment a revocation of the payer’s sessions is held against', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      let switched = (await switchOn(OWNER, SHARED)).body;
+      let before = await getAutomation(dbAdapter, automationId(SHARED));
+      // Another second passes, so a schedule restarted at the approval would
+      // move the anchor past the switch-on.
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      let approved = await approveOperation(
+        WRITER,
+        'shared',
+        { shareId: share.id },
+        { id: cardURL(SHARED), version: switched.meta.keyApprovals.version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      let row = await getAutomation(dbAdapter, automationId(SHARED));
+      assert.strictEqual(row?.state, 'active');
+      assert.strictEqual(
+        row?.scheduledSince,
+        before?.scheduledSince,
+        'scheduled_since stays the payer’s switch-on',
+      );
+      assert.true(
+        (row?.nextRun ?? 0) > Math.floor(Date.now() / 1000),
+        'the next run is after the approval',
+      );
+    });
+
+    test('resuming a suspended share runs an automation that waited on it again', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      let approved = await approveOperation(
+        WRITER,
+        'shared',
+        { shareId: share.id },
+        { id: cardURL(SHARED), version: shown.version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      let suspended = await request
+        .post(`/_key-shares/${share.id}/suspend`)
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(suspended.status, 200, suspended.text);
+      // A run refused share-suspended moves the automation to waiting.
+      await waitForKeyApproval(dbAdapter, automationId(SHARED), {
+        payer: OWNER,
+      });
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SHARED)))?.state,
+        'waiting-for-key-approval',
+      );
+      let ticket = (
+        await mintKeyWriteTicket(dbAdapter, WRITER, {
+          action: 'resume',
+          keyId: null,
+          realmURL: null,
+          shareId: share.id,
+        })
+      ).ticket;
+      let resumed = await request
+        .post(`/_key-shares/${share.id}/resume`)
+        .set('Authorization', auth(WRITER))
+        .set('Content-Type', 'application/json')
+        .send({ meta: { ticket } });
+      assert.strictEqual(resumed.status, 200, resumed.text);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SHARED)))?.state,
+        'active',
+        'the approval the share kept matches again',
+      );
     });
 
     test('an approval naming a version the automation no longer has is refused', async function (assert) {

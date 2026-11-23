@@ -1143,19 +1143,13 @@ export async function followKeyApprovals(
       if (automation.state !== 'waiting-for-key-approval') {
         return { kind: 'unchanged', automation };
       }
-      let schedule = startSchedule(
-        checked.declaration,
-        now,
-        automation.triggerRuns,
-      );
+      let schedule = restartSchedule(checked.declaration, now, automation);
       let [updated] = await txQuery([
         'UPDATE automations SET state =',
         param(schedule.state),
         ', trigger_runs =',
         param(JSON.stringify(schedule.triggerRuns)),
-        '::jsonb, scheduled_since =',
-        param(unixSecondsToISO(now)),
-        '::timestamptz, next_run =',
+        '::jsonb, next_run =',
         param(schedule.nextRun),
         '::timestamptz, updated_at = now() WHERE automation_id =',
         param(automationId),
@@ -1377,7 +1371,7 @@ export async function syncAutomationWithCard(
       // An edit made while the card didn't read can change what a key's
       // owner approved, so the automation resumes waiting when it did.
       let schedule = awaitingKeyApproval(
-        startSchedule(declaration, now, automation.triggerRuns),
+        restartSchedule(declaration, now, automation),
         (await options.keyApprovalsMatch?.(automation, declaration)) !== false,
       );
       let [row] = await txQuery([
@@ -1385,9 +1379,7 @@ export async function syncAutomationWithCard(
         param(schedule.state),
         ', pause_reason = NULL, paused_by = NULL, pause_problems = NULL, trigger_runs =',
         param(JSON.stringify(schedule.triggerRuns)),
-        '::jsonb, scheduled_since =',
-        param(unixSecondsToISO(now)),
-        '::timestamptz, next_run =',
+        '::jsonb, next_run =',
         param(schedule.nextRun),
         '::timestamptz, updated_at = now() WHERE automation_id =',
         param(automationId),
@@ -1830,6 +1822,43 @@ function awaitingKeyApproval(
   return keyApproved || schedule.state === 'done'
     ? schedule
     : { ...schedule, state: 'waiting-for-key-approval', nextRun: null };
+}
+
+// The state and next run of a schedule that starts again at `now` for an
+// automation that stays switched on under the same payer: a wait for key
+// approval ending, or an `invalid-declaration` pause lifting. Each trigger's
+// cursor moves up to `now`, so a slot that passed meanwhile never runs, and
+// `scheduled_since` stays as it is: it is when the payer switched the
+// automation on or last resumed it, the moment a trigger run's admission
+// holds a revocation of the payer's sessions against.
+function restartSchedule(
+  declaration: AutomationDeclaration,
+  now: number,
+  automation: Pick<AutomationRow, 'scheduledSince' | 'triggerRuns'>,
+): StartedSchedule {
+  let cursors: Record<string, AutomationTriggerRuns> = {
+    ...automation.triggerRuns,
+  };
+  for (let trigger of declaration.triggers) {
+    cursors[trigger.label] = {
+      ...(cursors[trigger.label] ?? { runs: 0 }),
+      since: now,
+    };
+  }
+  let schedule = computeAutomationSchedule({
+    triggers: declaration.triggers,
+    since: automation.scheduledSince,
+    now,
+    runState: cursors,
+  });
+  return {
+    triggerRuns: recordTriggers(cursors, declaration.triggers, schedule),
+    state: schedule.done ? 'done' : 'active',
+    nextRun:
+      schedule.nextRun === undefined
+        ? null
+        : unixSecondsToISO(schedule.nextRun),
+  };
 }
 
 // The state and next run of a schedule that starts at `now`.

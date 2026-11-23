@@ -634,7 +634,9 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
 // `monthlyCredits` must be the card's monthly credit cap. Every declared
 // operation is checked for its key approvals first, with the caller as the
 // payer: when one is missing, the automation switches on *waiting for key
-// approval*, with no next run, and runs once the last approval lands. The
+// approval*, with no next run, and runs once the last approval lands. One
+// whose approvals the realm can't check (its script can't be read) is refused
+// (422), so no automation that needs a key starts without being asked. The
 // answer's `meta.keyApprovals` says, for each operation, whether it is
 // approved or who can approve it, and names the version a confirmation
 // approving the rest names.
@@ -658,6 +660,12 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
       declaration,
       caller,
     );
+    if (!keyApprovals) {
+      throw new AutomationRouteError(
+        422,
+        "the automation's key approvals can't be checked: its script can't be read, or its realm isn't served here; fix the script link and switch it on again",
+      );
+    }
     let change = await switchOnAutomation(
       args.dbAdapter,
       {
@@ -665,7 +673,7 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
         realm: ri(args.virtualNetwork.unresolveURL(realmURL.href)),
         user: caller,
         declaration,
-        keyApproved: keyApprovals?.approved ?? true,
+        keyApproved: keyApprovals.approved,
       },
       actorOptions(args),
     );
@@ -691,9 +699,7 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
     await answerChange(ctxt, args, change, caller, 201, {
       ...(estimate ? { estimate } : {}),
       notices: switchOnNotices(declaration),
-      ...(keyApprovals
-        ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
-        : {}),
+      keyApprovals: serializeKeyApprovals(keyApprovals),
     });
   });
 }
@@ -820,21 +826,19 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
                 // isn't mounted yet; mounting it is what serving its first
                 // request would do.
                 let realm = await findOrMountRealm(realmURL, args);
-                let refusal =
-                  realm?.url === realmURL.href
-                    ? await realm.admitAutomationPayer({ declaration, payer })
-                    : {
-                        reason: 'run-admission-unavailable',
-                        message: `${realmURL.href} isn't served here, so its automation's operations can't be checked`,
-                      };
                 // A missing key approval makes the automation wait instead
-                // (`keyApproved`).
-                return refusal &&
-                  (KEY_APPROVAL_REFUSAL_REASONS as readonly string[]).includes(
-                    refusal.reason,
-                  )
-                  ? undefined
-                  : refusal;
+                // (`keyApproved`), so the realm passes over those and
+                // answers the first refusal that would stop a run.
+                return realm?.url === realmURL.href
+                  ? await realm.admitAutomationPayer({
+                      declaration,
+                      payer,
+                      passOver: KEY_APPROVAL_REFUSAL_REASONS,
+                    })
+                  : {
+                      reason: 'run-admission-unavailable',
+                      message: `${realmURL.href} isn't served here, so its automation's operations can't be checked`,
+                    };
               },
               admitSpending: (payer) =>
                 admitSpending({

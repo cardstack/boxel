@@ -15022,12 +15022,18 @@ export class Realm {
   // passes as `payer`, so each `{{userKey}}` slot fills from their own key
   // bindings. Answers the first refusal, with the code a run would end with,
   // or undefined. Nothing is recorded, since there is no run.
+  //
+  // `passOver` names refusal codes to skip, going on to the next declared
+  // operation, as a resume does for a missing key approval, which makes the
+  // automation wait rather than refusing the resume.
   async admitAutomationPayer({
     declaration,
     payer,
+    passOver = [],
   }: {
     declaration: AutomationDeclaration;
     payer: string;
+    passOver?: readonly string[];
   }): Promise<AdmissionRefusal | undefined> {
     let scriptURL = this.#virtualNetwork.toURLHref(declaration.script);
     let script = await this.#readAutomationScript(declaration);
@@ -15052,6 +15058,8 @@ export class Realm {
       admit,
       declaration.operations,
       payer,
+      undefined,
+      passOver,
     );
     return refusal
       ? { reason: refusal.code, message: operationRefusalMessage(refusal) }
@@ -15059,12 +15067,14 @@ export class Realm {
   }
 
   // The first of `operations` that `payer` may not invoke as an automation
-  // call, as `admit` answers, told to `onRefused` before it is answered.
+  // call, as `admit` answers, told to `onRefused` before it is answered. A
+  // refusal whose code `passOver` names is skipped.
   async #declaredOperationRefusal(
     admit: NonNullable<CallApiSender['admitAutomation']>,
     operations: AutomationOperationDeclaration[],
     payer: string,
     onRefused?: (refused: OperationFailure) => Promise<void>,
+    passOver: readonly string[] = [],
   ): Promise<RunAdmissionAnswer['refusal']> {
     for (let declared of operations) {
       let refused = await admit({
@@ -15074,7 +15084,7 @@ export class Realm {
         operation: declared.operation,
         payer,
       });
-      if (refused) {
+      if (refused && !passOver.includes(refused.error.code)) {
         await onRefused?.(refused);
         return {
           code: refused.error.code,
