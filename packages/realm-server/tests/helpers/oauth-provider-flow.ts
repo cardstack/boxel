@@ -23,6 +23,7 @@ import type { CallerLimit } from '../../lib/oauth-provider/caller-limit.ts';
 import { CONFIRMATION_CODE_PARAM } from '@cardstack/secure-origin/security/confirmation-code.js';
 import type { OAuthResourceDefinition } from '../../lib/oauth-provider/registry.ts';
 import type { TokenLimit } from '../../lib/oauth-provider/token-limit.ts';
+import type { ProviderTransport } from '../support/mock-oauth-client/client.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
 
 const { copySync, ensureDirSync } = fsExtra;
@@ -400,4 +401,37 @@ export interface OAuthTestUser {
 
 export function randomMatrixId(prefix: string): string {
   return `@${prefix}-${randomBytes(6).toString('hex')}:localhost`;
+}
+
+// The mock client's requests to the provider, sent to the test's realm server
+// in process, as the issuer's host.
+export function inProcessProviderTransport(
+  server: () => Server,
+): ProviderTransport {
+  let pathOf = (url: string) => {
+    let parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}`;
+  };
+  let answer = (response: supertest.Response) => ({
+    status: response.status,
+    body: response.type === 'application/json' ? response.body : undefined,
+  });
+  return {
+    async get(url) {
+      return answer(
+        await supertest(server())
+          .get(pathOf(url))
+          .set('Host', OAUTH_TEST_SERVER_URL.host),
+      );
+    },
+    async post(url, contentType, body) {
+      return answer(
+        await supertest(server())
+          .post(pathOf(url))
+          .set('Host', OAUTH_TEST_SERVER_URL.host)
+          .set('Content-Type', contentType)
+          .send(body),
+      );
+    },
+  };
 }

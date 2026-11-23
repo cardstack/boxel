@@ -4,6 +4,7 @@ date: 2026-11-06
 scope:
   - packages/realm-server/lib/oauth-provider/**
   - packages/realm-server/handlers/handle-oauth-provider-*.ts
+  - packages/realm-server/handlers/handle-mcp.ts
   - packages/realm-server/middleware/index.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
   - packages/realm-server/routes.ts

@@ -492,6 +492,7 @@ module(basename(import.meta.filename), function () {
         OPENID_DISCOVERY,
         '/_oauth-provider/auth',
         '/_oauth-provider/jwks',
+        '/mcp',
       ]) {
         let response = await request.get(path);
         assert.strictEqual(response.status, 404, `${path} is not found`);

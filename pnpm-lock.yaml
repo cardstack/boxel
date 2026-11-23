@@ -3731,6 +3731,9 @@ importers:
       '@cardstack/secure-origin':
         specifier: workspace:*
         version: link:../secure-origin
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(supports-color@8.1.1)(zod@4.4.3)
       morphdom:
         specifier: ^2.7.8
         version: 2.7.8
@@ -13004,9 +13007,6 @@ packages:
   jose@6.2.15:
     resolution: {integrity: sha512-qdF6ewcZARtef63fJ9AKKZPgxw+t7USH6HLXYcD4CrdmSvDp79rpJSPFEKc90QBeGS63u1KQtN2MZQHC0yDIzA==}
 
-  jose@6.2.3:
-    resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
-
   js-string-escape@1.0.1:
     resolution: {integrity: sha512-Smw4xcfIQ5LVjAOuJCvN/zIodzA/BBSsluuoSykP+lUvScIi4U6RJLfwHet5cxFnCswUjISV8oAXaqaJDY3chg==}
     engines: {node: '>= 0.8'}
@@ -19942,7 +19942,7 @@ snapshots:
       express: 5.2.1(supports-color@8.1.1)
       express-rate-limit: 8.5.2(express@5.2.1(supports-color@8.1.1))
       hono: 4.12.25
-      jose: 6.2.3
+      jose: 6.2.15
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
@@ -28496,8 +28496,6 @@ snapshots:
       '@standard-schema/spec': 1.1.0
 
   jose@6.2.15: {}
-
-  jose@6.2.3: {}
 
   js-string-escape@1.0.1: {}
 
