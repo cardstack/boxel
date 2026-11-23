@@ -654,37 +654,6 @@ class RealmResource {
     return this.realmPermissions;
   });
 
-  // Lets every visitor, signed in or not, read the realm. Only a direct writer
-  // of the realm may change its permissions.
-  async grantPublicRead(): Promise<void> {
-    await this.loginTask.perform();
-    let response = await this.network.authedFetch(
-      `${this.realmURL}_permissions`,
-      {
-        method: 'PATCH',
-        headers: {
-          Accept: SupportedMimeType.Permissions,
-          'Content-Type': SupportedMimeType.Permissions,
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: JSON.stringify({
-          data: {
-            id: this.realmURL,
-            type: 'permissions',
-            attributes: { permissions: { '*': ['read'] } },
-          },
-        }),
-      },
-    );
-    if (!response.ok) {
-      throw new Error(
-        `Failed to let every visitor read ${this.realmURL}: ${response.status}`,
-      );
-    }
-    this.realmPermissions = undefined;
-    await this.fetchInfo();
-  }
-
   async fetchPrivateDependencyReport(): Promise<RealmPrivateDependencyReport> {
     // Ensure the realm token is minted before the operation's authedFetch
     // routes the `_publishability` request through the per-realm token
@@ -1350,19 +1319,6 @@ export default class RealmService extends Service {
       await this.identifyRealm.perform(url);
     }
     return await resource?.fetchRealmPermissions();
-  }
-
-  async grantPublicRead(url: string): Promise<void> {
-    url = this.toLookupURL(url);
-    let resource = this.knownRealm(url);
-    if (!resource) {
-      await this.identifyRealm.perform(url);
-      resource = this.knownRealm(url);
-    }
-    if (!resource) {
-      throw new Error(`Unknown realm ${url}`);
-    }
-    await resource.grantPublicRead();
   }
 
   removeRealm(url: string) {

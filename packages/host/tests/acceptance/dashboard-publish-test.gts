@@ -16,7 +16,6 @@ import {
   setupMoreWorkspaces,
   sharedRealmURL,
 } from '../helpers/dashboard';
-import { setupFeatureFlag } from '../helpers/feature-flags';
 
 const PUBLISH_MODAL = '[data-test-publish-realm-modal]';
 
@@ -140,21 +139,5 @@ module('Acceptance | dashboard publish', function (hooks) {
 
     assert.dom('[data-test-boxel-menu-item-text="Realm Settings"]').exists();
     assert.dom('[data-test-boxel-menu-item-text="Publish"]').doesNotExist();
-  });
-
-  module('with Host Mode v2', function (hooks) {
-    setupFeatureFlag(hooks, 'hostModeV2');
-
-    test('the menu item is named for the host URL manager it opens', async function (assert) {
-      await visitOperatorMode({ workspaceChooserOpened: true });
-      await waitFor(tile('Workspace B'));
-      markPublishable(ownedRealmURL);
-      await settled();
-
-      await openMenu('Workspace B');
-
-      assert.dom('[data-test-boxel-menu-item-text="Host URLs"]').exists();
-      assert.dom('[data-test-boxel-menu-item-text="Publish"]').doesNotExist();
-    });
   });
 });

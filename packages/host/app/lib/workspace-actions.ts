@@ -33,7 +33,6 @@ import {
   type RealmIdentifier,
 } from '@cardstack/runtime-common';
 
-import ENV from '@cardstack/host/config/environment';
 import {
   realmURLDisplayText,
   urlDisplayText,
@@ -274,9 +273,7 @@ export class WorkspaceActions {
     if (this.canPublish) {
       items.push(
         new MenuItem({
-          // With Host Mode v2 it opens the host URL manager, whose button
-          // in host mode has the same name.
-          label: ENV.featureFlags?.hostModeV2 ? 'Host URLs' : 'Publish',
+          label: 'Publish',
           icon: PublishIcon,
           action: this.openToPublish,
         }),
