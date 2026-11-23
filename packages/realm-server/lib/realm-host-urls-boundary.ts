@@ -403,9 +403,13 @@ export function translateAtHostURLs(): (
     // Outbound.
     // A response on a host URL can depend on the visitor: the realm answers
     // a card or file path by the visitor's access, so one visitor can get a
-    // page where another gets a 404. A response that doesn't say how it may
-    // be cached is kept by no shared cache, and is checked again before each
-    // use.
+    // response where another gets a 404. A response that doesn't say how it
+    // may be cached is kept by no shared cache, and is checked again before
+    // each use. Most responses already have a policy here: the server marks
+    // every request whose Accept names one of the realm's types, `text/html`
+    // among them, as not to be stored before it is handled. So this reaches
+    // mostly the responses to a `*/*` request that set no policy of their
+    // own.
     if (!ctxt.response.get('Cache-Control')) {
       ctxt.set('Cache-Control', DEFAULT_CACHE_CONTROL);
     }

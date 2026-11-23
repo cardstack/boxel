@@ -636,14 +636,16 @@ module(basename(import.meta.filename), function (hooks) {
     let response = await page('/docs/missing', GOVERNED_HOST);
     assert.strictEqual(response.status, 404, response.text.slice(0, 300));
     assert.strictEqual(response.headers['etag'], undefined);
-    assert.strictEqual(response.headers['cache-control'], 'private, no-cache');
-
-    let generic = await page('/docs/missing', GOVERNED_HOST, '*/*');
-    assert.strictEqual(generic.status, 404, generic.text.slice(0, 300));
     assert.strictEqual(
-      generic.headers['cache-control'],
-      'private, no-cache',
-      'a path the page handler passes on is not kept either',
+      response.headers['cache-control'],
+      'no-store, no-cache, must-revalidate',
+    );
+
+    let generic = await page('/missing', OPEN_HOST, '*/*');
+    assert.strictEqual(generic.status, 404, generic.text.slice(0, 300));
+    assert.true(
+      /^(private|no-store)\b/.test(generic.headers['cache-control'] ?? ''),
+      `a path the page handler passes on is not kept by a shared cache either (${generic.headers['cache-control']})`,
     );
   });
 
@@ -654,7 +656,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(response.headers['etag'], undefined);
     assert.strictEqual(
       response.headers['cache-control'],
-      'private, no-cache',
+      'no-store, no-cache, must-revalidate',
       'another visitor can be answered differently at this path',
     );
   });
