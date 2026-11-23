@@ -1978,7 +1978,10 @@ module('Acceptance | automation view', function (hooks) {
       await openScreen(OFF);
       assert
         .dom('[data-test-automation-switch-on]')
-        .hasText('Turn on', 'an automation nobody turned on offers Turn on');
+        .hasText(
+          'Turn on the automation',
+          'an automation nobody turned on offers to turn the automation on',
+        );
       assert
         .dom('[data-test-automation-switch-on-fact="estimate"]')
         .hasText('1,234 credits a month');
@@ -2057,12 +2060,6 @@ module('Acceptance | automation view', function (hooks) {
     test('another monthly limit is written to the card before the automation is turned on at that limit', async function (assert) {
       await openScreen(OFF);
       await fillIn('[data-test-automation-switch-on-cap] input', '40');
-      assert
-        .dom('[data-test-automation-switch-on-screen]')
-        .doesNotIncludeText(
-          'below the estimate',
-          'hidden until the limit is under the estimate',
-        );
       await click('[data-test-automation-switch-on-confirm]');
       await waitUntil(() => posted.length > 0, { timeout: 20000 });
       assert.strictEqual(await cardCap(), 40, 'the card holds the new limit');
@@ -2071,6 +2068,36 @@ module('Acceptance | automation view', function (hooks) {
         40,
         'and the switch-on agrees to that limit',
       );
+    });
+
+    test('a monthly limit below the card’s daily limit is refused before anything is written or sent', async function (assert) {
+      await openScreen(OFF);
+      await fillIn('[data-test-automation-switch-on-cap] input', '3');
+      await click('[data-test-automation-switch-on-confirm]');
+      assert
+        .dom('[data-test-automation-switch-on-screen]')
+        .includesText(
+          'The monthly limit can’t be below the daily limit of 5 credits.',
+        );
+      assert.deepEqual(posted, [], 'the screen sends nothing');
+      assert.strictEqual(await cardCap(), 10, 'the card keeps its limit');
+    });
+
+    test('the screen says when webhook triggers can’t fire', async function (assert) {
+      estimateAnswer = estimate({
+        notices: [
+          {
+            code: 'webhook-triggers-start-no-runs',
+            message: 'webhook triggers start no runs',
+          },
+        ],
+      });
+      await openScreen(OFF);
+      assert
+        .dom('[data-test-automation-switch-on-webhook-notice]')
+        .hasText(
+          'Boxel doesn’t run automations from webhooks, so these triggers can’t fire.',
+        );
     });
 
     test('a limit below the estimate says Boxel may stop starting runs before the month ends', async function (assert) {

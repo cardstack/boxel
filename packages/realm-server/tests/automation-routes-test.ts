@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { basename, join } from 'path';
+import { existsSync, readFileSync } from 'fs';
 import { randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -45,6 +46,7 @@ import {
   insertIncomingWebhookRow,
   realmSecretSeed,
   ROOMY_AUTOMATION_CAPS,
+  realmConfigCardJSON,
   setupPermissionedRealmCached,
   setupSecretsKeyring,
   testAccountStandings,
@@ -450,6 +452,73 @@ module(basename(import.meta.filename), function (hooks) {
         assert.true((await read()).anyone, 'a `*` read row lets anyone');
       } finally {
         await insertPermissions(dbAdapter, realmURL, { users: [], '*': [] });
+      }
+    });
+
+    test('the estimate lists the grants in the realm’s policy that let every signed-in user read cards', async function (assert) {
+      let configPath = join(realm.dir!, 'realm.json');
+      let config = existsSync(configPath)
+        ? readFileSync(configPath, 'utf8')
+        : undefined;
+      let policy = `${realm.url}automation-readers-policy`;
+      await realm.write(
+        'automation-readers-policy.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              rules: [
+                {
+                  targetType: {
+                    module: '@cardstack/base/card-api',
+                    name: 'CardDef',
+                  },
+                  grants: [
+                    { operation: 'read' },
+                    { operation: 'read', where: '.cardInfo.name == actor()' },
+                  ],
+                },
+              ],
+            },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/catalog/realm-policy/realm-policy',
+                name: 'RealmPolicy',
+              },
+            },
+          },
+        }),
+      );
+      await realm.write(
+        'realm.json',
+        realmConfigCardJSON({ name: 'Automations', policy }),
+      );
+      await realm.indexing();
+      try {
+        let response = await request
+          .get(AUTOMATION_SWITCH_ON_PATH)
+          .query({ realm: realm.url, automation: cardURL() })
+          .set('Authorization', auth(OWNER));
+        assert.strictEqual(response.status, 200, response.text);
+        let { broadReaders } = response.body.data.attributes;
+        assert.strictEqual(
+          broadReaders.policy,
+          policy,
+          'from the realm’s policy',
+        );
+        assert.deepEqual(
+          broadReaders.policyGrants,
+          [{ path: 'rules[0].grants[0]', who: 'signed-in' }],
+          'a read grant with no condition is broad; one naming its callers is not',
+        );
+      } finally {
+        if (config === undefined) {
+          await realm.delete('realm.json');
+        } else {
+          await realm.write('realm.json', config);
+        }
+        await realm.delete('automation-readers-policy.json');
+        await realm.indexing();
       }
     });
 

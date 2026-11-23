@@ -2064,8 +2064,10 @@ The card calls these routes through the host's `automation-request` tool
 (`packages/host/app/tools/automation-request.ts`), which sends a request to
 one of the realm server's `/_automation-` routes with the realm-server
 session: `route`, `method`, `realm`, `automation`, `run`, `filePath`,
-`monthlyCredits` and `click` become the route's query or JSON:API body. A
-call the AI assistant makes with any method but GET waits for the person's
+`monthlyCredits` and `click` become the route's query or JSON:API body. It
+answers `ok`, `status`, the JSON document in `body`, the route's messages in
+`errors`, and a non-JSON answer's bytes (a Preview's staged file) base64 in
+`bytesBase64`. A call the AI assistant makes with any method but GET waits for the person's
 click. Host tests answer the routes with a virtual-network handler
 (`tests/acceptance/automation-view-test.gts`, the _switching on_ module).
 

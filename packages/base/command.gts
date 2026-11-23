@@ -1587,13 +1587,14 @@ export class AutomationRequestInput extends CardDef {
 }
 
 // What an automation route answered: its JSON document in `body`, or the
-// answer as text in `text` when the answer isn't JSON (a Preview's staged
-// file), and the route's own messages in `errors` when it refused.
+// answer's bytes, base64-encoded, in `bytesBase64` when the answer isn't JSON
+// (a Preview's staged file), and the route's own messages in `errors` when it
+// refused.
 export class AutomationRequestResult extends CardDef {
   @field ok = contains(BooleanField);
   @field status = contains(NumberField);
   @field body = contains(JsonField);
-  @field text = contains(StringField);
+  @field bytesBase64 = contains(StringField);
   @field errors = containsMany(StringField);
 }
 

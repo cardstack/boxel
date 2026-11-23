@@ -99,6 +99,7 @@ function classroomModule(rosterField: string) {
 type Grant = {
   operation: string;
   where?: unknown;
+  paths?: string[];
   actingUser?: unknown;
   blocklist?: unknown;
   rateLimitRequests?: unknown;
@@ -1126,14 +1127,25 @@ module(basename(import.meta.filename), function (hooks) {
       'policies/education.json',
       policyCard([
         // Every signed-in caller: no condition, a guard that only keeps out
-        // the caller who isn't signed in, and a condition on the card alone.
+        // the caller who isn't signed in, a condition on the card alone, and
+        // the two together.
         { operation: 'read' },
         { operation: 'read', where: 'actor() != "anonymous"' },
         { operation: 'read', where: '.status == "open"' },
+        {
+          operation: 'read',
+          where: 'actor() != "anonymous" and .status == "open"',
+        },
         // Anyone, signed in or not.
         { operation: 'read', where: `${ANYONE} or .status == "open"` },
-        // Callers the author names, and a grant that lets no one read.
+        // Searches, ad hoc and named, and a read limited to some paths.
+        { operation: 'query', where: '.status == "open"' },
+        { operation: 'listOpen' },
+        { operation: 'read', paths: ['open/'] },
+        // Callers the author names, a search that names them, and a grant
+        // that lets no one read.
         { operation: 'read', where: '.teacherIds | any(. == actor())' },
+        { operation: 'query', where: '.teacherIds | any(. == actor())' },
         { operation: 'update' },
       ]),
     );
@@ -1143,7 +1155,11 @@ module(basename(import.meta.filename), function (hooks) {
       { path: 'rules[0].grants[0]', who: 'signed-in' },
       { path: 'rules[0].grants[1]', who: 'signed-in' },
       { path: 'rules[0].grants[2]', who: 'signed-in' },
-      { path: 'rules[0].grants[3]', who: 'anyone' },
+      { path: 'rules[0].grants[3]', who: 'signed-in' },
+      { path: 'rules[0].grants[4]', who: 'anyone' },
+      { path: 'rules[0].grants[5]', who: 'signed-in' },
+      { path: 'rules[0].grants[6]', who: 'signed-in' },
+      { path: 'rules[0].grants[7]', who: 'signed-in' },
     ]);
 
     await writeTo(

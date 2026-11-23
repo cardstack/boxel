@@ -38,12 +38,3 @@ export function broadReadersOf(
     policy: policy?.card ?? null,
   };
 }
-
-// Whether the realm has any reader `broadReadersOf` lists.
-export function hasBroadReaders(readers: AutomationBroadReaders): boolean {
-  return (
-    readers.anyone ||
-    readers.everySignedInUser ||
-    readers.policyGrants.length > 0
-  );
-}

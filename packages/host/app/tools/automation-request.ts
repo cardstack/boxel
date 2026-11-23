@@ -9,6 +9,7 @@ import type * as BaseToolModule from '@cardstack/base/command';
 // automation routes, which act as the session's own user and answer only a
 // direct writer of the realm the request names.
 const ROUTE_PREFIX = '_automation-';
+const ROUTE_PATTERN = /^_automation-[a-z-]+$/;
 
 // The routes about one run name it in the body by `automation-run`; the rest
 // name the Automation card by `automation`.
@@ -61,7 +62,7 @@ export default class AutomationRequestTool extends HostBaseTool<
     let commandModule = await this.loadToolModule();
     const { AutomationRequestResult } = commandModule;
     let route = (input.route ?? '').replace(/^\//, '');
-    if (!route.startsWith(ROUTE_PREFIX) || !/^[a-z-]+$/.test(route)) {
+    if (!ROUTE_PATTERN.test(route)) {
       throw new Error(
         `AutomationRequestTool calls only the realm server's ${ROUTE_PREFIX} routes, not "${input.route}"`,
       );
@@ -103,12 +104,12 @@ export default class AutomationRequestTool extends HostBaseTool<
       });
     }
     let response = await this.realmServer.authedFetch(url.href, init);
-    let text = await response.text();
+    let bytes = new Uint8Array(await response.arrayBuffer());
     let body: Record<string, any> | undefined;
     let isJSON = /json/.test(response.headers.get('Content-Type') ?? '');
     if (isJSON || !response.ok) {
       try {
-        body = JSON.parse(text);
+        body = JSON.parse(new TextDecoder().decode(bytes));
       } catch {
         body = undefined;
       }
@@ -124,8 +125,18 @@ export default class AutomationRequestTool extends HostBaseTool<
       ok: response.ok,
       status: response.status,
       body: body ?? {},
-      text: body ? undefined : text,
+      // An answer that isn't JSON, such as a Preview's staged file, is the
+      // script's bytes, which may not be text.
+      bytesBase64: body ? undefined : base64Of(bytes),
       errors,
     });
   }
+}
+
+function base64Of(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
 }

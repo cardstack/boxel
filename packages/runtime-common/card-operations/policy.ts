@@ -1701,10 +1701,12 @@ async function compileDocument(
         );
         continue;
       }
+      // The predicate as it reads once the caller is known to be signed in:
+      // what is left of it after the anonymous-caller checks fold away.
       let signedIn = settleActor(outcome.body, 'signed-in');
       if (signedIn === false) {
         neverSignedIn.add(grantPath);
-      } else if (signedIn === true || !outcome.readsActor) {
+      } else if (signedIn === true || !callsActor(await loadBxl(), signedIn)) {
         everySignedIn.add(grantPath);
       }
       grants.push(
@@ -1860,9 +1862,8 @@ async function compileDocument(
         reaching.push({ rule, grant, definition, ...lane });
       }
     }
-    // A grant limited to some paths admits only the cards under them, so it
-    // doesn't make a type readable: a card of the type that a granted card
-    // links to can be anywhere (ADR 038 §1.7).
+    // A grant limited to some paths counts as a broad read too: the cards
+    // under those paths are as readable as any others.
     for (let grant of rule.grants) {
       if (!letsCallerRead(definition, grant)) {
         continue;
@@ -1876,6 +1877,9 @@ async function compileDocument(
         broadReadGrants.push({ path: grant.path, who });
       }
     }
+    // A grant limited to some paths admits only the cards under them, so it
+    // doesn't make a type readable: a card of the type that a granted card
+    // links to can be anywhere (ADR 038 §1.7).
     if (
       rule.grants.some(
         (grant) => !grant.paths && letsCallerRead(definition, grant),
