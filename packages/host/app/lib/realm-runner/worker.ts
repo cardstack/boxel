@@ -15,6 +15,7 @@ import {
   FOUND_CARD_SHAPE,
   MAX_MILESTONE_CHARS,
   MAX_MILESTONES,
+  MAX_TASK_CHARS,
   MAX_RUN_NOTIFICATION_CHARS,
   MAX_RUN_NOTIFICATIONS,
   NOTIFY_METHODS,
@@ -162,14 +163,19 @@ const BOOTSTRAP = `
       }
       return name.trim();
     };
-    const wholeNumber = (value, name) => {
-      if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    const taskText = (text) => {
+      if (typeof text !== 'string' || !text.trim() || text.length > ${MAX_TASK_CHARS}) {
         throw new TypeError(
-          'realm.progress.count ' + name + ' must be a whole number of 0 or more',
+          'realm.progress.task expects a task of 1 to ${MAX_TASK_CHARS} characters',
         );
       }
-      return value;
+      return text.trim();
     };
+    // A task belongs to the milestone the script is in, so the script marks
+    // one first. realm.progress.count records nothing: a run says once
+    // in its log that tasks take its place, and the script runs on.
+    let inMilestone = false;
+    let countRetired = false;
     // The script's own line that made the call: the first frame of the
     // script in the stack, less the line the wrapper adds above it.
     const scriptLine = () => {
@@ -285,18 +291,25 @@ const BOOTSTRAP = `
             },
             milestone: (name) => {
               notify('progress.milestone', [milestoneName(name, 'milestone')]);
+              inMilestone = true;
             },
-            count: (done, total) => {
-              wholeNumber(done, 'done');
-              if (total !== undefined && total !== null) {
-                wholeNumber(total, 'total');
-                if (done > total) {
-                  throw new TypeError(
-                    'realm.progress.count done cannot be more than total',
-                  );
-                }
+            task: (text) => {
+              const task = taskText(text);
+              if (!inMilestone) {
+                throw new TypeError(
+                  'realm.progress.task reports a task inside a milestone: call realm.progress.milestone first',
+                );
               }
-              notify('progress.count', [done, total ?? null]);
+              notify('progress.task', [task]);
+            },
+            count: () => {
+              if (!countRetired) {
+                countRetired = true;
+                notify('console.warn', [
+                  'realm.progress.count records nothing. Report each notable task inside a milestone with realm.progress.task instead.',
+                  scriptLine(),
+                ]);
+              }
             },
           },
         },

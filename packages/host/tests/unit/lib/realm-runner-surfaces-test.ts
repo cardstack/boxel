@@ -52,6 +52,7 @@ module('Unit | Lib | realm-runner surfaces', function () {
       'progress.count',
       'progress.milestone',
       'progress.plan',
+      'progress.task',
       'resolve',
     ]);
   });

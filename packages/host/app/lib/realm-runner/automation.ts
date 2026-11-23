@@ -55,8 +55,9 @@ export type RunProgressEvent =
   | { kind: 'plan'; at: number; milestones: string[] }
   // the milestone the script has reached
   | { kind: 'milestone'; at: number; name: string }
-  // how far through the current milestone: `done` of `total`
-  | { kind: 'count'; at: number; done: number; total?: number }
+  // a notable task the script did inside the current milestone, in a few
+  // plain words
+  | { kind: 'task'; at: number; text: string }
   // `line` is the script's own line number, when QuickJS reports one
   | {
       kind: 'console';

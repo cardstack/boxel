@@ -1,5 +1,5 @@
 // An automation run's log (ADR 025 §1.1): the script's console lines,
-// activity lines, run milestones and uncaught error, beside the platform's
+// activity lines, run milestones and tasks and uncaught error, beside the platform's
 // own lines for what the realm server did on the run's behalf. Each line is
 // stored in `automation_run_log` for the console, and written once to the
 // realm server's own log as an `[automation-run-log]` line, which reaches
@@ -54,6 +54,9 @@ export const RUN_LOG_SCRIPT_KINDS = [
   'activity',
   'plan',
   'milestone',
+  'task',
+  // A count inside a milestone, from a tab whose host still sends one. The
+  // log keeps the line; no milestone records it.
   'count',
   'error',
 ] as const;
@@ -103,6 +106,8 @@ export interface RunLogAppendResult {
   dropped: number;
   // The run milestones the lines marked that the run recorded.
   milestones: number;
+  // The tasks inside a milestone the lines reported that the run recorded.
+  tasks: number;
   // The run has no row.
   missing?: true;
 }
@@ -139,12 +144,12 @@ export async function appendRunLog(
   } = {},
 ): Promise<RunLogAppendResult> {
   if (lines.length === 0) {
-    return { stored: 0, dropped: 0, milestones: 0 };
+    return { stored: 0, dropped: 0, milestones: 0, tasks: 0 };
   }
   let redacted = lines.map((line) => redactLine(line, secrets));
-  let milestones = 0;
+  let recorded = { milestones: 0, tasks: 0 };
   let result = await dbAdapter.withTransaction(async (txQuery) => {
-    milestones = 0;
+    recorded = { milestones: 0, tasks: 0 };
     let [run] = (await txQuery([
       'SELECT r.automation_id, r.state, r.attempt, r.log_lines, r.log_chars, r.log_dropped, jr.job_id',
       'FROM automation_runs r LEFT JOIN job_reservations jr ON jr.id = r.attempt',
@@ -163,15 +168,15 @@ export async function appendRunLog(
     if (!run) {
       return undefined;
     }
-    // The run's milestones are recorded whether or not the log has room for
-    // their lines, and only while the run is running under the sender's
+    // The run's milestones and tasks are recorded whether or not the log has
+    // room for their lines, and only while the run is running under the sender's
     // attempt: the run's end reads them for telemetry, and an attempt that
     // takes the run over starts them afresh.
     if (
       run.state === 'running' &&
       (attempt === undefined || Number(run.attempt) === attempt)
     ) {
-      milestones = await recordRunMilestones(txQuery, runId, redacted);
+      recorded = await recordRunMilestones(txQuery, runId, redacted);
     }
     let seq = Number(run.log_lines);
     let chars = Number(run.log_chars);
@@ -237,7 +242,7 @@ export async function appendRunLog(
   });
   if (!result) {
     log.warn(`run ${runId} has no row; ${lines.length} log lines not stored`);
-    return { stored: 0, dropped: 0, milestones: 0, missing: true };
+    return { stored: 0, dropped: 0, milestones: 0, tasks: 0, missing: true };
   }
   let tags = runLogTags({
     automationId: result.automationId,
@@ -257,7 +262,7 @@ export async function appendRunLog(
       `[automation-run-log] ${tags} reached its cap of ${maxLines} lines or ${maxChars} characters; later lines are dropped`,
     );
   }
-  return { stored: result.stored.length, dropped: result.dropped, milestones };
+  return { stored: result.stored.length, dropped: result.dropped, ...recorded };
 }
 
 export interface RunLog {
@@ -635,6 +640,18 @@ function scriptLine(event: unknown): RunLogLine | undefined {
             kind: 'milestone',
             message: `Milestone: ${name}`,
             data: { name },
+          };
+    }
+    case 'task': {
+      let task = text(e.text);
+      return task === undefined
+        ? undefined
+        : {
+            at,
+            source: 'script',
+            kind: 'task',
+            message: `Task: ${task}`,
+            data: { text: task },
           };
     }
     case 'count': {
