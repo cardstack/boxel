@@ -265,6 +265,10 @@ export default class HostLinkNavigationService extends Service {
           return LEAVE;
         } else {
           // No route serves the path, so it is a card's own path or nothing.
+          // This takes the card's URL to be the path on `hostModeOrigin`,
+          // which holds while a site is served at the realm's URL. Once a
+          // host URL can differ from it, the path must be resolved against
+          // the realm's URL, since a card's id stays on the realm's URL.
           cardHref = `${this.hostModeService.hostModeOrigin}/${link.path}`;
         }
       }

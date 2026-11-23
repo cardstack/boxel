@@ -278,6 +278,9 @@ export default class HostModeService extends Service {
   //
   // This getter and `sitePath` are the only code that says which URLs are
   // inside the site.
+  //
+  // Once a host URL can differ from the realm's URL, this must be the host
+  // URL the page is served on, not the realm's URL, in both branches.
   get siteURL(): string | undefined {
     if (!this.isActive) {
       return undefined;
@@ -304,6 +307,11 @@ export default class HostModeService extends Service {
   // The path the index route takes (`resolveRoutedPath`'s `path`, with no
   // leading slash) for a URL inside this site, or `undefined` for a URL
   // outside it. The query string and the fragment are not part of it.
+  //
+  // This assumes the site is on `hostModeOrigin`, at the realm's URL. Once a
+  // host URL can differ from the realm's URL, a link is inside the site when
+  // it is under the host URL, and its path is taken relative to the host
+  // URL, not to the realm's URL.
   sitePath(url: URL): string | undefined {
     let siteURL = this.siteURL;
     let origin = this.hostModeOrigin;
@@ -404,6 +412,10 @@ export default class HostModeService extends Service {
   // the realm URL's pathname taken relative to `hostModeOrigin`, the base
   // the index route resolves a card URL against. Undefined when there are
   // no dynamic routes, or the realm is not under that origin.
+  //
+  // Once a host URL can differ from the realm's URL, the mount pathname
+  // must come from the host URL the page is served on, not from the realm's
+  // URL.
   private get dynamicRoutesMount():
     | {
         dynamicRoutes: HostDynamicRoutes;

@@ -139,6 +139,11 @@ export default class HostRouteLinksService
   // for, by address, for the links rendered since `forgetLinkedCards` was
   // last called. A click on a link with that address opens the card with
   // no lookup. Not tracked: nothing renders from it.
+  //
+  // The key is the address as `hrefTo` wrote it, on the realm's URL, and a
+  // click looks it up by the link's URL on the page. The two match while a
+  // site is served at the realm's URL. Once a host URL can differ from it,
+  // the key must be the address on the host URL the page is served on.
   private linkedCards = new Map<string, string>();
 
   constructor(owner: Owner) {
@@ -368,6 +373,10 @@ export default class HostRouteLinksService
     this.realmRoutes.set(realmURL, { key, routes });
   }
 
+  // The addresses these routes give are on the realm's URL from the page
+  // config. Once a host URL can differ from the realm's URL, a page served
+  // on a host URL must give them on that host URL, while a card is still
+  // matched to the realm by the realm's URL.
   private routesFromPageConfig(): HostRouteLinkRoutes | undefined {
     let config = this.hostModeService.hostDynamicRoutes;
     let pageRoutes = this.pageRoutes;
