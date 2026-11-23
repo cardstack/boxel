@@ -97,6 +97,11 @@ realm. A custom domain MUST be one the deployment allows for the realm.
 The code that writes a host URL and the code that resolves one MUST read one
 config of the domains a host URL can be on, so that every host URL a writer
 accepts is one the resolver looks up.
+A host URL MUST NOT be added to a realm whose home page a visitor who isn't
+signed in can't read, or whose home card's code from the realm they can't
+load. Mounting at a site name MUST bind its claim to the realm, and removing
+that host URL, or deleting the realm, MUST free the site name for anyone to
+claim.
 
 ### 1.7. A page on a host URL is server-rendered only where a visitor may read its card
 
@@ -148,6 +153,11 @@ policy, so a user who holds it administers the realm (ADR 024 §1.3). Giving
 host URLs to the same users lets a shared realm's administrators manage its
 site without its owner.
 
+No one can sign in on a host URL's origin, so every visitor there is
+anonymous. A realm whose home page an anonymous visitor can't read would
+answer every visitor with a refusal, so the realm server refuses to mount it
+and names what is closed.
+
 ## 3. Considered options
 
 - **A stored mapping keyed by the registry id, resolved first (chosen).**
@@ -164,6 +174,9 @@ site without its owner.
   and that realm-server tests cannot reach.
 - **Only the realm's owner manages host URLs.** A shared realm would need its
   owner for every change to its site.
+- **Warn, but mount a realm whose home page anonymous visitors can't read.**
+  Without sign-in on a host URL's origin, such a site shows its visitors
+  nothing.
 - **Server-render a page on a host URL only when the realm has public read,
   as on the realm's own URL.** A realm opened only by its policy would never
   be server-rendered, though its visitors may read its cards.

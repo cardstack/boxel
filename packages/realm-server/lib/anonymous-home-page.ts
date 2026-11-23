@@ -69,7 +69,20 @@ export interface AnonymousHomePageReport {
   // every one of its modules in this realm. The cards and files the home card
   // links to or shows are not checked.
   anonymousCanView: boolean;
+  // Whether the realm turned one of the check's reads away for now, with a
+  // 429 (a grant's rate limit for the check's address is used up) or a 503
+  // (the realm could not count the read). The statuses above then don't say
+  // whether a visitor may read the page, and the check is worth running again.
+  temporarilyRefused: boolean;
+  // How long the realm asked the check to wait, in seconds: the longest
+  // `Retry-After` among the reads it turned away for now. Undefined when it
+  // named none.
+  retryAfterSeconds?: number;
 }
+
+// The statuses with which the realm turns a read away for now, rather than
+// refusing it.
+const TEMPORARY_REFUSALS = new Set([429, 503]);
 
 export async function checkAnonymousHomePage(
   realm: Realm,
@@ -83,15 +96,24 @@ export async function checkAnonymousHomePage(
       homeCardStatus: undefined,
       unloadableModules: [],
       anonymousCanView: false,
+      temporarilyRefused: false,
     };
   }
   let homeCardId = home.cardId;
+  let temporarilyRefused = false;
+  let retryAfterSeconds: number | undefined;
+  let read = async (url: string, accept: string) => {
+    let { status, retryAfter } = await anonymousRead(realm, url, accept);
+    if (TEMPORARY_REFUSALS.has(status)) {
+      temporarilyRefused = true;
+      if (retryAfter !== undefined) {
+        retryAfterSeconds = Math.max(retryAfterSeconds ?? 0, retryAfter);
+      }
+    }
+    return status;
+  };
 
-  let homeCardStatus = await anonymousStatus(
-    realm,
-    homeCardId,
-    SupportedMimeType.CardJson,
-  );
+  let homeCardStatus = await read(homeCardId, SupportedMimeType.CardJson);
 
   let unloadableModules: AnonymousHomePageModule[] = [];
   for (let url of await homeCardModules(realm, homeCardId)) {
@@ -99,7 +121,7 @@ export async function checkAnonymousHomePage(
     // which asks for `*/*`: the realm's module serve answers it, and a
     // `readSource` grant is what opens that serve to a visitor who isn't
     // signed in.
-    let status = await anonymousStatus(realm, url, SupportedMimeType.All);
+    let status = await read(url, SupportedMimeType.All);
     if (status !== 200) {
       unloadableModules.push({ url, status });
     }
@@ -112,6 +134,8 @@ export async function checkAnonymousHomePage(
     homeCardStatus,
     unloadableModules,
     anonymousCanView: homeCardReadable && unloadableModules.length === 0,
+    temporarilyRefused,
+    ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
   };
 }
 
@@ -184,18 +208,19 @@ async function homeCardModules(
 }
 
 // The status the realm answers a visitor who isn't signed in with, for a
-// `GET` of `url` asking for `accept`. The request carries no credentials.
+// `GET` of `url` asking for `accept`, and the `Retry-After` it sent, in
+// seconds, when it sent one. The request carries no credentials.
 // `addressHeaders` are the client-address headers it carries, so the realm
 // admits, limits and refuses it as it would a request from that address. By
 // default it comes from the check's own address.
-export async function anonymousStatus(
+export async function anonymousRead(
   realm: Realm,
   url: string,
   accept: string,
   addressHeaders: Record<string, string> = {
     [CLIENT_IP_HEADER]: ANONYMOUS_HOME_PAGE_CHECK_ADDRESS,
   },
-): Promise<number> {
+): Promise<{ status: number; retryAfter?: number }> {
   let response: ResponseWithNodeStream | null = await realm.handle(
     new Request(url, {
       headers: {
@@ -205,10 +230,24 @@ export async function anonymousStatus(
     }),
   );
   if (!response) {
-    return 404;
+    return { status: 404 };
   }
   // Only the status matters, so release the body rather than read it.
   response.nodeStream?.destroy();
   await response.body?.cancel().catch(() => undefined);
-  return response.status;
+  let retryAfter = Number(response.headers.get('Retry-After'));
+  return {
+    status: response.status,
+    ...(Number.isFinite(retryAfter) && retryAfter > 0 ? { retryAfter } : {}),
+  };
+}
+
+// The status alone, for a caller that has no use for `Retry-After`.
+export async function anonymousStatus(
+  realm: Realm,
+  url: string,
+  accept: string,
+  addressHeaders?: Record<string, string>,
+): Promise<number> {
+  return (await anonymousRead(realm, url, accept, addressHeaders)).status;
 }

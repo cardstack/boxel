@@ -61,6 +61,11 @@ import {
   SCOPED_CSS_GC_CRON_TZ,
   createScopedCssGcCronJob,
 } from './scoped-css-gc-config.ts';
+import {
+  TRANSIENT_RENDER_RETRY_CRON_SCHEDULE,
+  TRANSIENT_RENDER_RETRY_CRON_TZ,
+  createTransientRenderRetryCronJob,
+} from './transient-render-retry-config.ts';
 
 let log = logger('cron-scheduler');
 
@@ -81,6 +86,8 @@ export function startCronJobs(): void {
   if (prerenderHtmlReconcileJob) {
     jobs.push(prerenderHtmlReconcileJob);
   }
+
+  jobs.push(startTransientRenderRetryCron());
 
   let mediaCacheGcJob = startMediaCacheGcCron();
   if (mediaCacheGcJob) {
@@ -177,6 +184,29 @@ function startPrerenderHtmlReconcileCron(): CronJob | undefined {
   job.start();
   log.info(
     `prerender-html-reconcile cron scheduled for ${PRERENDER_HTML_RECONCILE_CRON_SCHEDULE} ${PRERENDER_HTML_RECONCILE_CRON_TZ}`,
+  );
+  return job;
+}
+
+// The transient-render-failure retries, every minute: the prerender-html
+// reconcile restricted to the rows whose render failed transiently, so each
+// retry runs about when its backoff says rather than at the next hourly sweep.
+function startTransientRenderRetryCron(): CronJob {
+  let job = createTransientRenderRetryCronJob(
+    async () => {
+      try {
+        await enqueuePrerenderHtmlReconcile({ transientOnly: true });
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('transient-render-retry cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `transient-render-retry cron scheduled for ${TRANSIENT_RENDER_RETRY_CRON_SCHEDULE} ${TRANSIENT_RENDER_RETRY_CRON_TZ}`,
   );
   return job;
 }

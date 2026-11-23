@@ -19,7 +19,7 @@ import type {
   OnDemandCaptureFormat,
   CaptureManifest,
 } from './capture-spec.ts';
-import type { ErrorEntry } from './error.ts';
+import type { ErrorEntry, RenderErrorSummary } from './error.ts';
 import {
   isPrefixForm,
   rri,
@@ -470,6 +470,18 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // reconcile sweep re-drives these — and this bounds that, for a gateway
   // failure that keeps recurring rather than clearing on the next render.
   gatewayFailureRenders?: number;
+  // The transient-render-failure twin: the renders (or index visits) of this
+  // row in its current run of transient failures, the failure plus each of the
+  // reconcile sweep's retries that failed. The sweep retries the row with
+  // backoff while this is at most `TRANSIENT_RENDER_FAILURE_RETRY_CAP`; past it
+  // the row keeps its stale content and `_indexing-errors` lists it. A success
+  // ends the run, and a visit made for another reason starts a new one
+  // (`continuesTransientRenderRun`).
+  transientRenderFailureRenders?: number;
+  // The queue job whose attempt wrote that failure. A retry job enqueued
+  // after it, which finished without rewriting the row, died; the reconcile
+  // sweep counts such a job as a failed attempt.
+  transientRenderFailureJobId?: number;
   // Per-slot wall-clock of the declared captures this visit
   // performed, keyed by slot name — the per-name decomposition of the
   // `renderFormatsMs.card.captures` aggregate, so a slow capture is
@@ -1182,6 +1194,14 @@ export interface Diagnostics
   // own reasons), an empty array is never written, and absence means no
   // verdict — a reader must find its own row type listed before withholding.
   gatewayFailure?: ('instance' | 'file')[];
+  // The row types whose render failed transiently (`isTransientRenderError`:
+  // a render timeout, an aborted prerender request, a gateway failure).
+  // Unlike the two verdicts above it is stamped by the index and
+  // prerendered-html writers from the error itself, not by the prerender
+  // server, and it is withheld the same way. `transientRenderError` keeps what failed for an
+  // operator, since a withheld row carries no `error_doc`.
+  transientRenderFailure?: ('instance' | 'file')[];
+  transientRenderError?: RenderErrorSummary;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
@@ -1759,6 +1779,9 @@ export {
   type SerializedError,
   type RenderErrorSummary,
   renderErrorSummary,
+  isTransientRenderError,
+  markVisitRequestFailure,
+  isVisitRequestFailure,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,

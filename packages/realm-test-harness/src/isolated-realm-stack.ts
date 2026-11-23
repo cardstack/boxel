@@ -181,6 +181,38 @@ function tailChars(text: string, max: number): string {
   return `…${newline >= 0 ? tail.slice(newline + 1) : tail}`;
 }
 
+// Hop-by-hop headers (RFC 9110 §7.6.1) describe a single connection, so the
+// proxy forwards them in neither direction. On responses, `keep-alive` is
+// the one that matters: the
+// realm server advertises an idle timeout of over an hour (it sits behind a
+// load balancer), while this proxy's own server closes an idle client socket
+// after `keepAliveTimeout` + `keepAliveTimeoutBuffer` (6s by default). A
+// client that believed the upstream's figure would keep the socket pooled
+// past that close and send its next request onto it, which fails with
+// ECONNRESET and no response. With the header dropped, Node writes the
+// proxy's own `Keep-Alive: timeout=…`, and clients retire the socket before
+// the server closes it.
+const HOP_BY_HOP_HEADERS = new Set([
+  'connection',
+  'keep-alive',
+  'proxy-connection',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+]);
+
+function stripHopByHopHeaders(headers: Headers): void {
+  // A `Connection` header may name further per-connection headers.
+  let named = (headers.get('connection') ?? '')
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  for (let name of [...HOP_BY_HOP_HEADERS, ...named]) {
+    headers.delete(name);
+  }
+}
+
 // Connection-phase upstream failure codes worth retrying. The
 // realm-server this proxy fronts is torn down and restarted on a stable
 // port between tests, so a render's module fetch can land in the brief
@@ -369,12 +401,20 @@ export async function startCompatRealmProxy({
 
       try {
         let body = await readIncomingRequestBody(req);
-        let headers = Object.fromEntries(
-          Object.entries(req.headers).filter(
-            ([key]) => key.toLowerCase() !== 'host',
-          ),
-        ) as Record<string, string>;
-        headers['x-boxel-forwarded-url'] = incomingURL.href;
+        let headers = new Headers();
+        for (let [key, value] of Object.entries(req.headers)) {
+          if (key === 'host' || value == null) {
+            continue;
+          }
+          for (let item of Array.isArray(value) ? value : [value]) {
+            headers.append(key, item);
+          }
+        }
+        // The body is already buffered, so the upstream request carries its
+        // own framing; the client's `Transfer-Encoding` and `Keep-Alive`
+        // would be rejected by `fetch`.
+        stripHopByHopHeaders(headers);
+        headers.set('x-boxel-forwarded-url', incomingURL.href);
         let response = await fetchUpstreamWithRetry(
           upstreamURL,
           {
@@ -393,6 +433,7 @@ export async function startCompatRealmProxy({
         // compressed length don't describe them; `res.end` sets the length.
         responseHeaders.delete('content-encoding');
         responseHeaders.delete('content-length');
+        stripHopByHopHeaders(responseHeaders);
         let location = responseHeaders.get('location');
         if (location) {
           responseHeaders.set(

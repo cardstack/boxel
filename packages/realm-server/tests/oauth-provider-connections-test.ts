@@ -40,6 +40,7 @@ import { createGrant, endGrant } from '../lib/oauth-provider/grants.ts';
 import { sha256Hex } from '../lib/oauth-provider/objects.ts';
 import type { OAuthResourceDefinition } from '../lib/oauth-provider/registry.ts';
 import { withOAuthProviderSecretsLabeled } from '../lib/request-telemetry.ts';
+import { BOXEL_CLI_CLIENT_ID } from '../lib/oauth-provider/pre-registered-clients.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
 const SECURE_ORIGIN = testOAuthSecureOriginURL.origin;
@@ -126,11 +127,13 @@ module(basename(import.meta.filename), function (hooks) {
       renew = true,
       scope = 'boxel:read',
       redirectUri = OAUTH_TEST_WEB_REDIRECT_URI,
+      confirmationCode,
     }: {
       clientId?: string;
       renew?: boolean;
       scope?: string;
       redirectUri?: string;
+      confirmationCode?: string;
     } = {},
   ): Promise<Connected> {
     clientId = clientId ?? (await registerOAuthClient(server!));
@@ -139,6 +142,7 @@ module(basename(import.meta.filename), function (hooks) {
       scope,
       resources: [RESOURCE],
       redirectUri,
+      confirmationCode,
     });
     let response = await exchangeOAuthCode(server!, clientId, code, {
       redirectUri,
@@ -289,6 +293,22 @@ module(basename(import.meta.filename), function (hooks) {
           renewing: true,
         },
       ]);
+    });
+
+    test("names Boxel's own app by its entry in code", async function (assert) {
+      let who = await user();
+      await connect(who, {
+        clientId: BOXEL_CLI_CLIENT_ID,
+        redirectUri: 'http://127.0.0.1:51234/callback',
+        confirmationCode: 'WDJB-MJHT',
+      });
+      let [connection] = await listed(who);
+      assert.deepEqual(connection.app, {
+        kind: 'pre-registered',
+        shown: 'Boxel CLI',
+        verified: true,
+        place: 'this-computer',
+      });
     });
 
     test('says when a connection was last used, once a resource accepts its token', async function (assert) {

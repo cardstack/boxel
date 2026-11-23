@@ -465,11 +465,10 @@ So: use the logs to find the realm, the actor, the operation, the grant path and
 ## Calls from outside apps
 
 An outside app will call Boxel with an OAuth access token, not a session
-(the `realm-auth` skill). No production resource accepts one yet: tokens are
-issued for the MCP resource, and nothing serves `/mcp`. So a request carrying
-one today never reaches an operation, and writes nothing here. Once a
-resource does serve calls, its controller checks the token before any
-operation gate runs, so a call it refuses (401 `invalid_token`, 403
+(the `realm-auth` skill). The only resource that accepts one is the
+placeholder `/mcp`, which has no tools, so a request carrying one never
+reaches an operation, and writes nothing here. A resource's controller checks
+the token before any operation gate runs, so a call it refuses (401 `invalid_token`, 403
 `insufficient_scope`) still writes no line on this channel. Look for it on
 `boxel:oauth-provider`: `token refused: <reason>, resource …` or `token
 refused: insufficient scope, …`, plain-text lines found by their text (the
