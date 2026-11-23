@@ -1357,9 +1357,8 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // renders a card a grant admits them to fails whatever else it is loading.
 // Unlike `_info`, they also tell a caller who isn't signed in the same, where
 // the policy opens `read` or `query` to such callers (see
-// `ANONYMOUS_AUTOMATION_VIEW`). The answer runs nothing
-// a grant admits, so an archived realm gives it as it does while active, as
-// `_info` does.
+// `ANONYMOUS_AUTOMATION_VIEW`). The answer runs nothing a grant admits, so an
+// archived realm gives it as it does while active, as `_info` does.
 //
 // No other route does, but for the byte routes and the hashed scoped-CSS
 // serve described below. Each of the rest is marked `ACL_ONLY` where it is

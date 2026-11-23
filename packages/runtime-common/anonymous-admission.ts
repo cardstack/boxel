@@ -156,10 +156,10 @@ export const ANONYMOUS_STYLESHEET: AnonymousDispatch = {
 // an automation may name. A caller who isn't signed in is admitted wherever
 // the policy opens `read` or `query` to such callers, on any type, since a
 // grant like that can serve them an automation card, by a read or in a
-// search's results, whose view asks these routes. They
-// are told only that they aren't a direct writer, a fixed answer that reads
-// nothing, so it counts for nothing, and an address the rate limit turns away
-// elsewhere gets the same answer here.
+// search's results, whose view asks these routes. They are told only that
+// they aren't a direct writer, a fixed answer that reads nothing, so it
+// counts for nothing, and an address the rate limit turns away elsewhere
+// gets the same answer here.
 export const ANONYMOUS_AUTOMATION_VIEW: AnonymousDispatch = {
   operations: ['read', 'query'],
   counted: 'never',
