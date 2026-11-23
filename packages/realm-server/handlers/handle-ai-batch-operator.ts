@@ -249,9 +249,19 @@ export function handleRecordAIBatch({
       return;
     }
     let payer: { actsAs: string; realm: string; automationId: string };
+    // What the batch holds against its payer and caps until it settles: the
+    // credits its reservation holds on the run, or, with the run's row gone,
+    // twice its estimate, as admission counts a batch whose reservation is
+    // gone.
+    let reservedCredits = estimatedUsd * 2 * CREDITS_PER_USD;
     let run = await getAutomationRun(dbAdapter, runId);
     if (run) {
-      if (!(await runHoldsAIReservation(dbAdapter, runId, reservation))) {
+      let held = await creditsRunHoldsForAIReservation(
+        dbAdapter,
+        runId,
+        reservation,
+      );
+      if (held === undefined) {
         await sendResponseForBadRequest(
           ctxt,
           `Run ${runId} holds no AI reservation ${reservation}. Check the run and reservation against the Sentry event for this batch`,
@@ -266,6 +276,7 @@ export function handleRecordAIBatch({
         );
         return;
       }
+      reservedCredits = held;
       payer = {
         actsAs: run.actsAs,
         realm: run.realm,
@@ -296,6 +307,7 @@ export function handleRecordAIBatch({
       requestCount,
       estimatedUsd,
       runAIReservation: reservation,
+      reservedCredits,
       deadline: new Date(
         submittedAt.getTime() + MAX_AI_BATCH_DEADLINE_SECONDS * 1000,
       ),
@@ -399,19 +411,23 @@ async function batchNamingReservation(
   return row ? String(row.batch_id) : undefined;
 }
 
-async function runHoldsAIReservation(
+// The credits a run's AI reservation holds, or undefined when the run holds
+// no such reservation.
+async function creditsRunHoldsForAIReservation(
   dbAdapter: DBAdapter,
   runId: string,
   reservationId: string,
-): Promise<boolean> {
-  let rows = await query(dbAdapter, [
-    'SELECT 1 FROM automation_runs WHERE id =',
+): Promise<number | undefined> {
+  let [row] = await query(dbAdapter, [
+    'SELECT CAST(ai_reservations ->> CAST(',
+    param(reservationId),
+    'AS text) AS numeric) AS held FROM automation_runs WHERE id =',
     param(runId),
     'AND jsonb_exists(ai_reservations, CAST(',
     param(reservationId),
     'AS text))',
   ]);
-  return rows.length > 0;
+  return row ? Number(row.held) : undefined;
 }
 
 async function sendConflict(ctxt: Koa.Context, message: string) {

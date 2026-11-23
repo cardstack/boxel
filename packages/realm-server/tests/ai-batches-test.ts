@@ -373,13 +373,15 @@ module(basename(import.meta.filename), function () {
     async function runningRun(
       automationId = AUTOMATION,
       slot = '2026-11-11T11:30:00.000Z',
+      { dryRun = false }: { dryRun?: boolean } = {},
     ): Promise<{ run: AutomationRun; token: string }> {
       let pending = await createAutomationRun(dbAdapter, {
         automationId,
         realm: REALM,
-        trigger: 'daily',
+        trigger: dryRun ? 'manual' : 'daily',
         slot,
         actsAs: PAYER,
+        dryRun,
       });
       let started = await startAutomationRunAttempt(dbAdapter, pending.id, 1);
       if (started.kind !== 'run') {
@@ -655,6 +657,22 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.status, 403);
       assert.ok(
         response.body.errors[0].includes("hasn't turned on batched AI"),
+        response.body.errors[0],
+      );
+      assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
+    });
+
+    test('a Preview is refused a submit, since it sends its batched requests at the normal price', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun(AUTOMATION, undefined, {
+        dryRun: true,
+      });
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(response.status, 403);
+      assert.ok(
+        response.body.errors[0].includes('A Preview'),
         response.body.errors[0],
       );
       assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');

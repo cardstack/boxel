@@ -144,6 +144,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         requestCount: 2,
         estimatedUsd: 0.012,
         runAIReservation: reservationId,
+        reservedCredits: 40,
         deadline: new Date(Date.now() + 3600 * 1000),
         expiresAt: null,
         state: 'completed',
@@ -293,6 +294,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         requestCount: 2,
         estimatedUsd: 0.012,
         runAIReservation: reservationId,
+        reservedCredits: 40,
         deadline: new Date(Date.now() + 3600 * 1000),
         expiresAt: null,
         state: 'in_progress',
@@ -397,6 +399,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           requestCount: batch.requestCount,
           estimatedUsd: batch.estimatedUsd,
           runAIReservation: batch.runAIReservation,
+          reservedCredits: batch.reservedCredits,
           state: batch.state,
           submittedAt: batch.submittedAt,
           settledAt: batch.settledAt,
@@ -410,11 +413,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           requestCount: 3,
           estimatedUsd: 0.02,
           runAIReservation: reservationId,
+          reservedCredits: 40,
           state: 'in_progress',
           submittedAt: createdAt.toISOString(),
           settledAt: null,
         },
-        'the row names the run’s payer, realm and automation, and what OpenRouter listed',
+        'the row names the run’s payer, realm and automation, what its reservation holds, and what OpenRouter listed',
       );
       let unrecorded = await getUnrecordedAIBatch(
         context.dbAdapter,
@@ -494,6 +498,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       let batch = await getAIBatch(context.dbAdapter, 'batch_orphan');
       assert.strictEqual(batch?.actsAs, PAYER);
       assert.strictEqual(batch?.runId, goneRun);
+      assert.strictEqual(
+        batch?.reservedCredits,
+        24,
+        'with no run to read its reservation from, it holds twice its estimate',
+      );
     });
 
     test('an unrecorded batch another environment billed is dismissed with its reason', async function (assert) {

@@ -122,10 +122,11 @@ export interface AdmissionRefusal {
 // prices back.
 //
 // - `insufficient-credits`: the run's identity holds less than the run's
-//   minimum balance, after what their other runs in flight hold.
+//   minimum balance, after what their other runs in flight and their
+//   unsettled batches hold.
 // - `daily-credit-cap-reached`, `monthly-credit-cap-reached`: what the
 //   automation was charged this UTC day or month, plus what its other runs
-//   in flight hold, has reached the cap.
+//   in flight and its unsettled batches hold, has reached the cap.
 // - `pricing-unavailable`: the worker's pricing check failed, so it admits
 //   no run (ADR 029 §1.3).
 export { SPENDING_REFUSAL_REASONS, type SpendingRefusalReason };
