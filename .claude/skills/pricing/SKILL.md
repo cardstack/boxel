@@ -104,8 +104,9 @@ version <hash>; PRICING_…=… …`, with every value. The version is the first
   every bad variable and what is wrong with it, and the same message sent to
   Sentry tagged `pricingCheck: failed` and `process: <name>`. The Grafana
   alert `Pricing check failed` fires on the realm-server's and the worker's
-  line, one alert per service; the
-  `automation-diagnostics` skill's _Alerts_ section covers it. One bad value
+  line, one alert per service, and `Pricing check failed in the prerender
+server` fires on the prerender server's; the
+  `automation-diagnostics` skill's _Alerts_ section covers both. One bad value
   fails the whole set:
   `currentPricing()` then returns undefined, and the process admits no new
   run and submits no new batch until it restarts with good values (ADR 029
