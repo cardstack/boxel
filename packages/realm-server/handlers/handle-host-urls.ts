@@ -44,7 +44,9 @@ import {
 // announced, before the response is sent, so it takes effect at once
 // (ADR 033 §1.3).
 //
-//   GET    /_host-urls?realm=<realm URL>  the realm's host URLs
+//   GET    /_host-urls?realm=<realm URL>  the realm's host URLs, with the
+//                                         Boxel Space URL it can be mounted
+//                                         at as `meta.boxelSpaceURL`
 //   GET    /_host-urls/home-page-check?realm=<realm URL>
 //                                         whether the realm can be mounted
 //   POST   /_host-urls                    mount: add a host URL
@@ -106,8 +108,10 @@ export function handleListHostURLs(
         return;
       }
       let rows = await hostURLsOf(dbAdapterQuerier(args.dbAdapter), realm.id);
+      let boxelSpaceURL = await boxelSpaceURLOf(args, realm);
       await sendDocument(ctxt, 200, {
         data: rows.map((row) => serialize(row, realm.url, args.serverURL)),
+        meta: boxelSpaceURL ? { boxelSpaceURL } : {},
       });
     } catch (error) {
       log.error('Error listing host URLs:', error);
@@ -577,6 +581,32 @@ async function hostURLsOf(q: Querier, realmId: string): Promise<HostURLRow[]> {
 
 // A Boxel Space host URL is the realm's own name under its owner's Space
 // (ADR 033 §1.6). Undefined when it is.
+// The Boxel Space host URL the realm can be mounted at: its name, in its
+// owner's Space. An administrator who isn't the owner mounts it there too, so
+// a client can't build it from the signed-in user. Nothing when the realm has
+// no owner, or no Boxel Space domain is configured.
+async function boxelSpaceURLOf(
+  { dbAdapter, matrixClient, hostURLDomains, serverURL }: CreateRoutesArgs,
+  realm: RealmRow,
+): Promise<string | undefined> {
+  let owner = await fetchRealmOwnerUserId(
+    dbAdapter,
+    realm.url,
+    matrixClient.serverName,
+  );
+  if (!owner) {
+    return undefined;
+  }
+  let host = hostURLDomains.boxelSpaceHost(
+    publishedSpaceSubdomain(getMatrixUsername(owner)),
+  );
+  if (!host) {
+    return undefined;
+  }
+  let protocol = new URL(serverURL).protocol;
+  return `${protocol}//${host}/${deriveRealmName(realm.url)}/`;
+}
+
 async function boxelSpaceRefusal(
   { dbAdapter, matrixClient }: CreateRoutesArgs,
   realm: RealmRow,

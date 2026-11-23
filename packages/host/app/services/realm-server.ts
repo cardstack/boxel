@@ -94,6 +94,12 @@ export interface HostURL {
   isCanonical: boolean;
 }
 
+export interface HostURLList {
+  hostURLs: HostURL[];
+  // Missing when the realm has no owner, or the deployment has no Boxel Space.
+  boxelSpaceURL?: string;
+}
+
 // Whether a visitor who isn't signed in can view a realm's home page. A realm
 // can be mounted only when `anonymousCanView` is true.
 export interface HomePageCheck {
@@ -1845,11 +1851,20 @@ export default class RealmServerService
     return (await response.json()) as SubdomainAvailabilityResult;
   }
 
-  async listHostURLs(realmURL: string): Promise<HostURL[]> {
+  // The realm's host URLs, and the Boxel Space URL it can be mounted at,
+  // which is in the realm owner's Space, not the signed-in user's.
+  async listHostURLs(realmURL: string): Promise<HostURLList> {
     let url = new URL(`${this.url.href}_host-urls`);
     url.searchParams.set('realm', realmURL);
     let json = await this.hostURLRequest(url.href, { method: 'GET' });
-    return (json.data as HostURLResource[]).map(hostURLFromResource);
+    let meta = json.meta as { boxelSpaceURL?: unknown } | undefined;
+    return {
+      hostURLs: (json.data as HostURLResource[]).map(hostURLFromResource),
+      boxelSpaceURL:
+        typeof meta?.boxelSpaceURL === 'string'
+          ? meta.boxelSpaceURL
+          : undefined,
+    };
   }
 
   async mountHostURL(realmURL: string, hostURL: string): Promise<HostURL> {
@@ -1896,7 +1911,7 @@ export default class RealmServerService
   private async hostURLRequest(
     url: string,
     init: RequestInit,
-  ): Promise<{ data?: unknown }> {
+  ): Promise<{ data?: unknown; meta?: unknown }> {
     await this.login();
     let response = await this.authedFetch(url, {
       ...init,

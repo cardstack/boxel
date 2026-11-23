@@ -32,8 +32,8 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 
-// The UI builds Boxel Space and site-name URLs from these domains, which are
-// the same in the test build.
+// The UI builds site-name URLs from these domains, which are the same in the
+// test build. The server gives the Boxel Space URL, in the realm owner's Space.
 const spaceDomain = ENV.publishedRealmBoxelSpaceDomain;
 const siteDomain = ENV.publishedRealmBoxelSiteDomain;
 const SPACE_URL = `https://testuser.${spaceDomain}/test/`;
@@ -63,6 +63,7 @@ const VIEWABLE: HomePageCheck = {
 // each change in `calls`.
 class FakeHostURLs {
   hostURLs: HostURL[] = [];
+  boxelSpaceURL: string | undefined = SPACE_URL;
   homePage: HomePageCheck = VIEWABLE;
   calls: string[] = [];
   refusal: string | undefined;
@@ -77,7 +78,10 @@ class FakeHostURLs {
       realmServer[name] = fn;
       this.#restore.push(() => (realmServer[name] = original));
     };
-    stub('listHostURLs', async () => this.hostURLs.map((h) => ({ ...h })));
+    stub('listHostURLs', async () => ({
+      hostURLs: this.hostURLs.map((h) => ({ ...h })),
+      boxelSpaceURL: this.boxelSpaceURL,
+    }));
     stub('checkHomePage', async () => this.homePage);
     stub('fetchBoxelClaimedDomain', async () => this.claimedDomain);
     stub('mountHostURL', async (_realmURL: string, url: string) => {
@@ -200,6 +204,25 @@ module('Acceptance | host URL manager', function (hooks) {
     await visitOperatorMode({ submode: 'host', trail: [] });
     assert.dom('[data-test-publish-realm-button]').isDisabled();
     assert.dom('[data-test-host-url-manager]').doesNotExist();
+  });
+
+  test("offers the Boxel Space URL in the realm owner's Space, which the server gives", async function (assert) {
+    let ownerSpaceURL = `https://realm-owner.${spaceDomain}/test/`;
+    fake.boxelSpaceURL = ownerSpaceURL;
+    await openManager();
+    assert
+      .dom('[data-test-mount-target="boxel-space"]')
+      .containsText(ownerSpaceURL.replace('https://', ''));
+
+    await click('[data-test-mount="boxel-space"]');
+    await waitFor(`[data-test-host-url="${ownerSpaceURL}"]`);
+    assert.deepEqual(fake.calls, [`mount ${ownerSpaceURL}`]);
+  });
+
+  test('offers no Boxel Space target when the server gives no Boxel Space URL', async function (assert) {
+    fake.boxelSpaceURL = undefined;
+    await openManager();
+    assert.dom('[data-test-mount-target="boxel-space"]').doesNotExist();
   });
 
   test('mounts the realm in the Boxel Space, and lists the host URL as canonical', async function (assert) {

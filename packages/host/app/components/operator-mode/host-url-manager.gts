@@ -19,17 +19,12 @@ import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { modifier } from 'ember-modifier';
 
-import {
-  deriveRealmName,
-  ensureTrailingSlash,
-  resolvePublishedRealmUrl,
-} from '@cardstack/runtime-common';
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import config from '@cardstack/host/config/environment';
 
-import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
@@ -37,6 +32,7 @@ import type {
   HomePageCheck,
   HostURL,
   HostURLKind,
+  HostURLList,
 } from '@cardstack/host/services/realm-server';
 
 // Host Mode v2's publish dialog. It lists the addresses a realm is mounted at
@@ -96,11 +92,12 @@ interface MountTarget {
 // The dialog's content. The modal renders it only while the dialog is open,
 // so each opening loads the host URLs and the home page check again.
 class HostURLs extends Component<{ Args: ContentArgs }> {
-  @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
   @tracked private hostURLs: HostURL[] = [];
+  // The Boxel Space URL the realm can be mounted at, in its owner's Space.
+  @tracked private boxelSpaceURL: string | undefined;
   @tracked private homePage: HomePageCheck | undefined;
   @tracked private claimedDomain: ClaimedDomain | null = null;
   @tracked private siteName = '';
@@ -128,12 +125,12 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
   private loadTask = restartableTask(async () => {
     this.loadError = undefined;
     try {
-      let [hostURLs, homePage, claimedDomain] = await Promise.all([
+      let [list, homePage, claimedDomain] = await Promise.all([
         this.realmServer.listHostURLs(this.args.realmURL),
         this.realmServer.checkHomePage(this.args.realmURL),
         this.realmServer.fetchBoxelClaimedDomain(this.args.realmURL),
       ]);
-      this.hostURLs = hostURLs;
+      this.setHostURLs(list);
       this.homePage = homePage;
       this.claimedDomain = claimedDomain;
     } catch (error) {
@@ -157,24 +154,9 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
     );
   }
 
-  private get spaceURL(): string {
-    let matrixUsername = this.matrixService.userName;
-    if (!matrixUsername) {
-      throw new Error('Matrix username is not available');
-    }
-    return resolvePublishedRealmUrl(
-      { type: 'subdirectory', name: this.realmName },
-      {
-        protocol: 'https',
-        matrixUsername,
-        spaceDomain: config.publishedRealmBoxelSpaceDomain,
-      },
-    );
-  }
-
-  // The server requires this name in a Boxel Space host URL.
-  private get realmName(): string {
-    return deriveRealmName(this.args.realmURL);
+  private setHostURLs({ hostURLs, boxelSpaceURL }: HostURLList) {
+    this.hostURLs = hostURLs;
+    this.boxelSpaceURL = boxelSpaceURL;
   }
 
   private get siteDomain() {
@@ -190,9 +172,14 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
 
   // The addresses the realm can be mounted at, and isn't yet.
   private get mountTargets(): MountTarget[] {
-    let targets: MountTarget[] = [
-      { kind: 'boxel-space', label: 'Boxel Space', url: this.spaceURL },
-    ];
+    let targets: MountTarget[] = [];
+    if (this.boxelSpaceURL) {
+      targets.push({
+        kind: 'boxel-space',
+        label: 'Boxel Space',
+        url: this.boxelSpaceURL,
+      });
+    }
     if (this.claimedDomain) {
       targets.push({
         kind: 'site-name',
@@ -258,7 +245,7 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
   }
 
   private refreshHostURLs = async () => {
-    this.hostURLs = await this.realmServer.listHostURLs(this.args.realmURL);
+    this.setHostURLs(await this.realmServer.listHostURLs(this.args.realmURL));
   };
 
   private mountTask = task(async (url: string) => {
