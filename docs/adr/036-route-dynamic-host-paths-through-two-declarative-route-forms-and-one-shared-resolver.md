@@ -94,8 +94,9 @@ match's type MUST be read through the definitions cache
 (`lookupDefinitionEntry`), as a search reads it. A request that needs the
 routes waits for the read. On a cache miss, the read is a module visit in
 the prerender server, which ADR 015 §1.1 allows while a request waits. A
-request for a file of the realm MUST NOT read the routes, so the module
-visit's own import never waits for them. A type whose module has an error,
+script's fetch (`Sec-Fetch-Dest: empty`) and a request for a file of the
+realm MUST NOT read the routes, so the module visit's own imports never wait
+for them. A type whose module has an error,
 can't be found or has no such export makes its route invalid. A read that
 may pass when tried again (a render timeout, a prerender server that can't
 be reached) MUST fail the request with 503 (§1.4) and leave nothing cached.

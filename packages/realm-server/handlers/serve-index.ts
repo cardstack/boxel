@@ -573,9 +573,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
 
     // The realm's host routes for this request, read at most once. Reading
     // them may wait for a module visit of a field-match route's type, so a
-    // request for a file of the realm never reads them: the prerender server
-    // imports a route type's module with a generic Accept header, and that
-    // import must not wait for the validation that is visiting the module.
+    // script's fetch and a request for a file of the realm never read them:
+    // the prerender server imports a route type's module, and each module it
+    // imports, with a generic Accept header, and that import must not wait
+    // for the validation that is visiting the module.
     let requestHostRoutes: Promise<HostRoutesValidation> | undefined;
     let hostRoutesFor = (realm: Realm) =>
       (requestHostRoutes ??= realm.getHostRoutes());
@@ -657,9 +658,16 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       if (!isIndexRequest) {
         let cardURL = requestURL;
         if (!(await isCardPath(cardURL))) {
-          // A file of the realm, such as a module import ("./person"), is
-          // left to the realm before any route is read (see `hostRoutesFor`).
-          if (await isRealmFilePath(requestURL, routingDeps)) {
+          // A script's fetch never asks for a host page: the browser stamps
+          // it `Sec-Fetch-Dest: empty`, which page code can't change, where
+          // a navigation says `document` and a crawler sends none. It and a
+          // file of the realm are left to the realm before any route is read
+          // (see `hostRoutesFor`), so a module import, of a file or of a path
+          // with none, never waits on the routes.
+          if (
+            ctxt.get('sec-fetch-dest') === 'empty' ||
+            (await isRealmFilePath(requestURL, routingDeps))
+          ) {
             return next();
           }
           // A bare routed sub-path (e.g. /pricing) is not itself an indexed

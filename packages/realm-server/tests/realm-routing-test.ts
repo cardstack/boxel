@@ -1,7 +1,11 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { HostRoutesReadError, rri } from '@cardstack/runtime-common';
+import {
+  HostRoutesReadError,
+  isFilterRefersToNonexistentTypeError,
+  rri,
+} from '@cardstack/runtime-common';
 import type {
   HostFieldMatchRoute,
   LooseSingleCardDocument,
@@ -897,6 +901,26 @@ module(basename(import.meta.filename), function () {
 
       hooks.beforeEach(async function () {
         await testRealm.indexing();
+      });
+
+      test('a type in a realm whose server cannot be reached is a read that may pass', async function (assert) {
+        let ref = {
+          module: rri('http://127.0.0.1:9/unreachable-realm/thing'),
+          name: 'Thing',
+        };
+        try {
+          await definitionLookup.forRealm(testRealm).lookupDefinitionEntry(ref);
+          assert.ok(false, 'the read was expected to fail');
+        } catch (e) {
+          assert.true(
+            isFilterRefersToNonexistentTypeError(e),
+            'the read fails as a missing type',
+          );
+          assert.true(
+            (e as { transient?: boolean }).transient,
+            'the failure is transient, so a host route read throws rather than dropping the route',
+          );
+        }
       });
 
       test('reuses the validation only while the definition generation holds', async function (assert) {

@@ -1185,8 +1185,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       contextOpts,
     );
     if (!context) {
+      // A remote realm whose server can't be reached now may answer later,
+      // unlike one that answered and isn't a realm.
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Could not determine realm owner for module URL: ${codeRef.module}`,
+        transient: this.isRecordedUnreachable(canonicalModuleURL),
       });
     }
     let {
@@ -1581,6 +1584,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         prerenderUserId: requestingOwnerId,
       };
     }
+  }
+
+  // Whether the origin of `moduleURL` failed at the transport within the
+  // last `REALM_PROBE_UNREACHABLE_TTL_MS`.
+  private isRecordedUnreachable(moduleURL: string): boolean {
+    let origin = originOf(moduleURL);
+    let unreachableUntil =
+      origin !== undefined ? this.#unreachableOrigins.get(origin) : undefined;
+    return unreachableUntil !== undefined && unreachableUntil > Date.now();
   }
 
   private async probeRemoteRealm(

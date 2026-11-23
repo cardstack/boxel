@@ -517,6 +517,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'and gets the module',
         );
 
+        // What a route type's module that imports a path with no file sends.
+        let missingImport = await generic('posts/no-such-module').set(
+          'Sec-Fetch-Dest',
+          'empty',
+        );
+        assert.strictEqual(
+          missingImport.status,
+          404,
+          'a script fetch of a path with no file does not wait either',
+        );
+
         let waitingCrawler = generic('posts/hello').then(
           (response) => response,
         );
