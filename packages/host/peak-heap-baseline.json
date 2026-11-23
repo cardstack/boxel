@@ -1,48 +1,6 @@
 {
   "main": [
     {
-      "run": 43488797797,
-      "at": "2026-11-13T19:05:05Z",
-      "peakMb": 359,
-      "highestShardMb": 666,
-      "shards": 16
-    },
-    {
-      "run": 43515811330,
-      "at": "2026-11-13T22:01:47Z",
-      "peakMb": 359,
-      "highestShardMb": 680,
-      "shards": 16
-    },
-    {
-      "run": 43526480599,
-      "at": "2026-11-13T23:21:19Z",
-      "peakMb": 338,
-      "highestShardMb": 683,
-      "shards": 16
-    },
-    {
-      "run": 43706723171,
-      "at": "2026-11-15T10:59:46Z",
-      "peakMb": 353,
-      "highestShardMb": 683,
-      "shards": 16
-    },
-    {
-      "run": 43779917285,
-      "at": "2026-11-16T00:21:50Z",
-      "peakMb": 367,
-      "highestShardMb": 683,
-      "shards": 16
-    },
-    {
-      "run": 43788623134,
-      "at": "2026-11-16T01:50:46Z",
-      "peakMb": 363,
-      "highestShardMb": 682,
-      "shards": 16
-    },
-    {
       "run": 43795083081,
       "at": "2026-11-16T02:55:50Z",
       "peakMb": 355,
@@ -278,6 +236,48 @@
       "at": "2026-11-20T15:30:42Z",
       "peakMb": 351,
       "highestShardMb": 738,
+      "shards": 16
+    },
+    {
+      "run": 44787946327,
+      "at": "2026-11-20T17:55:50Z",
+      "peakMb": 409,
+      "highestShardMb": 733,
+      "shards": 16
+    },
+    {
+      "run": 44828090102,
+      "at": "2026-11-20T22:20:10Z",
+      "peakMb": 350,
+      "highestShardMb": 716,
+      "shards": 16
+    },
+    {
+      "run": 44835619054,
+      "at": "2026-11-20T23:16:58Z",
+      "peakMb": 380,
+      "highestShardMb": 737,
+      "shards": 16
+    },
+    {
+      "run": 44850238961,
+      "at": "2026-11-21T01:27:01Z",
+      "peakMb": 379,
+      "highestShardMb": 733,
+      "shards": 16
+    },
+    {
+      "run": 45012375073,
+      "at": "2026-11-22T10:25:32Z",
+      "peakMb": 384,
+      "highestShardMb": 758,
+      "shards": 16
+    },
+    {
+      "run": 45114772773,
+      "at": "2026-11-23T04:56:37Z",
+      "peakMb": 423,
+      "highestShardMb": 739,
       "shards": 16
     }
   ]

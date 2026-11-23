@@ -71,14 +71,36 @@ export interface ToolSchemaErrorEntry {
   };
 }
 
+// Resource for a row or rendering whose render kept failing transiently (it
+// timed out, or its prerender request failed) through every retry. It keeps
+// its last good content, so it reads as healthy; this is where that shows.
+// `channel` says which: the index row ('index') or the rendering ('html').
+export interface TransientRenderRetriesExhaustedEntry {
+  type: 'transient-render-retries-exhausted';
+  id: string;
+  attributes: {
+    url: string;
+    entryType: string;
+    channel: 'index' | 'html';
+    failedRenders: number | null;
+    transientRenderError: SerializedErrorLike | null;
+    diagnostics?: Record<string, unknown> | null;
+  };
+}
+
 export type IndexingErrorsEntry =
   | IndexingErrorEntry
   | BrokenLinkEntry
   | FrontmatterErrorEntry
-  | ToolSchemaErrorEntry;
+  | ToolSchemaErrorEntry
+  | TransientRenderRetriesExhaustedEntry;
 
 export interface IndexingErrorsDocument {
   data: IndexingErrorsEntry[];
+  meta?: {
+    // How many of `data` are transient-render-retries-exhausted findings.
+    transientRenderRetriesExhausted?: number;
+  };
 }
 
 // Mirror of BrokenLinkSummary from @cardstack/runtime-common, kept local
@@ -255,7 +277,25 @@ export function formatEntry(entry: IndexingErrorsEntry): string {
       entry.attributes.toolSchemaErrors,
     )}`;
   }
+  if (entry.type === 'transient-render-retries-exhausted') {
+    return `${prefix} ${url}  ${shortTransientRetriesExhausted(entry)}`;
+  }
   return `${prefix} ${url}  ${shortBrokenLinks(entry.attributes.brokenLinks)}`;
+}
+
+// One line for a row whose transient render failures used up their retries:
+// which channel, how many renders failed, and the last failure's message.
+export function shortTransientRetriesExhausted(
+  entry: TransientRenderRetriesExhaustedEntry,
+): string {
+  let { channel, failedRenders, transientRenderError } = entry.attributes;
+  let attempts =
+    typeof failedRenders === 'number'
+      ? `${failedRenders} failed render${failedRenders === 1 ? '' : 's'}`
+      : 'failed renders';
+  return collapseAndTruncate(
+    `stale: ${channel} render kept failing transiently (${attempts}): ${shortErrorMessage(transientRenderError)}`,
+  );
 }
 
 const TOOL_SCHEMA_ERRORS_MAX_LIST = 3;

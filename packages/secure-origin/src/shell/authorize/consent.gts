@@ -2,8 +2,9 @@
 // the account, what the app will be able to do at each resource, and whether
 // to keep the connection for 30 days. It draws only the details the provider
 // answered (`ConsentDetails`): the app as the provider names it, and what the
-// access means in Boxel's own words from its registry. Nothing here comes from
-// the client's request.
+// access means in Boxel's own words from its registry. The one value taken
+// from the client's request is a confirmation code, shown only in the code's
+// own form (`readConsentDetails`).
 //
 // Focus starts on the heading each time consent is drawn, never on Allow, so
 // a user who presses Enter or Space as the page appears agrees to nothing.
@@ -158,6 +159,21 @@ export default class Consent extends Component<Signature> {
           </div>
         {{else if this.ownApp}}
           <p class='note' data-test-authorize-own-app>Boxel’s own app.</p>
+        {{/if}}
+
+        {{#if this.onThisComputer}}
+          <section class='confirm' data-test-authorize-confirmation>
+            {{#if @details.confirmationCode}}
+              <p class='lead'>Check that {{this.name}} shows this code:</p>
+              <p
+                class='code'
+                data-test-authorize-confirmation-code
+              >{{@details.confirmationCode}}</p>
+            {{/if}}
+            <Alert @tone='warning' data-test-authorize-confirmation-warning>
+              {{this.confirmationWarning}}
+            </Alert>
+          </section>
         {{/if}}
 
         {{#if this.oneResource}}
@@ -332,6 +348,25 @@ export default class Consent extends Component<Signature> {
       .expiry {
         color: var(--muted-foreground);
       }
+      .confirm {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .code {
+        margin: 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--muted);
+        color: var(--foreground);
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-font-size-lg);
+        font-weight: 600;
+        line-height: var(--boxel-line-height-lg);
+        letter-spacing: var(--boxel-lsp-xl);
+        text-align: center;
+      }
       .resource {
         display: flex;
         flex-direction: column;
@@ -413,6 +448,19 @@ export default class Consent extends Component<Signature> {
 
   private get ownApp(): boolean {
     return this.args.details.app.kind === 'pre-registered';
+  }
+
+  // A pre-registered app on the user's own computer: any program there can
+  // ask as it, so the page asks the user to check they started this.
+  private get onThisComputer(): boolean {
+    return this.ownApp && this.args.details.app.place === 'this-computer';
+  }
+
+  private get confirmationWarning(): string {
+    let matches = this.args.details.confirmationCode
+      ? ' and it shows this code'
+      : '';
+    return `Only allow this if you just started signing in from ${this.name}${matches}. If someone sent you this link, or asks you to copy the address you land on, choose Deny.`;
   }
 
   private get oneResource() {

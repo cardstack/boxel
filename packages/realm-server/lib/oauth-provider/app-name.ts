@@ -5,9 +5,11 @@
 // itself is named by the registrable domain of the redirect URI it uses, beside
 // the name it gave itself, marked unverified. A loopback redirect URI could be
 // any program on the user's computer. A pre-registered client is one of
-// Boxel's own apps, named in code.
+// Boxel's own apps, named by the name its entry in code gives
+// (`pre-registered-clients.ts`).
 
 import { registrableDomain } from '../secure-window.ts';
+import type { PreRegisteredClients } from './pre-registered-clients.ts';
 import { isLoopbackRedirect } from './redirect-uris.ts';
 
 export const LOOPBACK_APP_NAME = 'an app on this computer';
@@ -32,6 +34,9 @@ export interface AppName {
   // an app on the user's own computer, or one with no redirect URI to go by.
   // A page that words the app itself reads this, never the phrase.
   standIn?: AppStandIn;
+  // Where a pre-registered app runs, from its entry in code: on the user's
+  // own computer, which the page says.
+  place?: 'this-computer';
 }
 
 export type AppStandIn = 'loopback' | 'unknown';
@@ -40,7 +45,7 @@ export type AppStandIn = 'loopback' | 'unknown';
 // registered itself gets an ID Boxel generated, never a URL.
 export function clientKind(
   clientId: string,
-  preRegistered: ReadonlySet<string>,
+  preRegistered: PreRegisteredClients,
 ): OAuthClientKind {
   if (preRegistered.has(clientId)) {
     return 'pre-registered';
@@ -52,19 +57,23 @@ export function appName({
   clientId,
   clientName,
   redirectUri,
-  preRegistered = new Set(),
+  preRegistered = new Map(),
 }: {
   clientId: string;
   clientName?: string;
   // The redirect URI the flow uses, which a client that registered itself is
   // named by.
   redirectUri?: string;
-  preRegistered?: ReadonlySet<string>;
+  preRegistered?: PreRegisteredClients;
 }): AppName {
   let kind = clientKind(clientId, preRegistered);
   switch (kind) {
-    case 'pre-registered':
-      return { kind, shown: clientName ?? clientId, verified: true };
+    case 'pre-registered': {
+      // Named by its entry in code. Boxel chose the name, but can't check
+      // that the program asking is that app (`pre-registered-clients.ts`).
+      let { metadata, place } = preRegistered.get(clientId)!;
+      return { kind, shown: metadata.client_name, verified: true, place };
+    }
     case 'metadata-document':
       return {
         kind,

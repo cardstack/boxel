@@ -61,15 +61,16 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   };
 }
 
+// A genuine render failure: a transient one (a render timeout, an aborted
+// prerender request) is not the card's render error and is never reported.
 const renderError: SerializedError = {
   status: 500,
-  title: 'Render timeout',
-  message: 'the prerender manager aborted the render after 120000 ms',
+  title: 'Error',
+  message: 'the embedded template threw',
   additionalErrors: null,
   // What the prerender pipeline keeps on a failed render for its own use: the
-  // retry lane's marker and run length, the failing render's dependencies and
-  // its timing diagnostics. None of it is the card reader's business.
-  visitRequestFailure: true,
+  // retry lane's run length, the failing render's dependencies and its timing
+  // diagnostics. None of it is the card reader's business.
   consecutiveVisitFailures: 1,
   deps: ['http://example.test/some-dependency'],
   diagnostics: { renderStage: 'awaiting-render' },

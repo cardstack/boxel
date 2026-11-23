@@ -15,12 +15,18 @@ const PRERENDER_HTML_RECONCILE_JOB_TIMEOUT_SEC = 10 * 60;
 // prerender_html repairs. The scan runs at the background tier (priority 0) so
 // it never competes with indexing or user work — it only runs when the
 // all-priority pool is otherwise idle.
+//
+// With `transientOnly`, the scan covers only the transient-render-failure
+// retries (the every-minute tick); without it, the whole sweep (the hourly
+// tick).
 export async function enqueuePrerenderHtmlReconcile({
   priority = systemInitiatedPrerenderHtmlPriority,
   migrateDB,
+  transientOnly,
 }: {
   priority?: number;
   migrateDB?: boolean;
+  transientOnly?: boolean;
 } = {}) {
   let dbAdapter = new PgAdapter({ autoMigrate: migrateDB || undefined });
   let queue = new PgQueuePublisher(dbAdapter);
@@ -31,9 +37,14 @@ export async function enqueuePrerenderHtmlReconcile({
       concurrencyGroup: 'prerender-html-reconcile',
       timeout: PRERENDER_HTML_RECONCILE_JOB_TIMEOUT_SEC,
       priority,
-      args: {},
+      args: transientOnly ? { transientOnly: true } : {},
     });
-    log.info('enqueued prerender-html-reconcile job');
+    // Every minute for the transient retries, so not worth an info line.
+    if (transientOnly) {
+      log.debug('enqueued prerender-html-reconcile job (transient retries)');
+    } else {
+      log.info('enqueued prerender-html-reconcile job');
+    }
   } catch (error) {
     Sentry.captureException(error);
     log.error('failed to enqueue prerender-html-reconcile job', error);

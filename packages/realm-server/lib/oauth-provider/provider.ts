@@ -51,6 +51,12 @@ import {
   DEFAULT_NEW_CLIENT_LIMIT,
   type NewClientLimit,
 } from './new-client-limit.ts';
+import { CONFIRMATION_CODE_PARAM } from '@cardstack/secure-origin/security/confirmation-code.js';
+import {
+  libraryClients,
+  PRE_REGISTERED_CLIENTS,
+  type PreRegisteredClients,
+} from './pre-registered-clients.ts';
 import { boxelHosts } from './redirect-uris.ts';
 import { revocationHandler } from './revocation.ts';
 import { browserOriginAllowed } from './client-cors.ts';
@@ -253,10 +259,13 @@ export function startOAuthProvider({
     publishedDomains,
   });
   let scopes = registryScopes(registry);
+  // Boxel's own apps, listed in code.
+  let preRegistered = PRE_REGISTERED_CLIENTS;
   let provider = createOAuthProvider({
     issuer,
     config,
     registry,
+    preRegistered,
     adapter: oauthProviderAdapter(dbAdapter, {
       interactionResumeURL: (id) =>
         `${issuer}${OAUTH_AUTHORIZATION_PATH}/${id}`,
@@ -273,8 +282,6 @@ export function startOAuthProvider({
       testOnlyDocumentOrigins,
     }),
   });
-  // Boxel's own apps, listed in code. None is listed yet.
-  let preRegistered: ReadonlySet<string> = new Set();
   // The token and revocation endpoints count failures in the same buckets,
   // so one alert watches both.
   let tokenFailureAlert = failureAlert(tokenLimit);
@@ -369,10 +376,13 @@ export function createOAuthProvider({
   accountExists = async () => false,
   grantTerms = async () => undefined,
   metadataDocuments,
+  preRegistered = PRE_REGISTERED_CLIENTS,
 }: {
   issuer: string;
   config: OAuthProviderConfig;
   registry: readonly OAuthResource[];
+  // Boxel's own apps, which the library finds before any stored client.
+  preRegistered?: PreRegisteredClients;
   adapter: AdapterFactory;
   renderError?: Configuration['renderError'];
   // Whether a user ID (`users.id`) names a user. A flow signs in only as
@@ -391,6 +401,11 @@ export function createOAuthProvider({
   let scopes = registryScopes(registry);
   let configuration: Configuration = {
     adapter,
+    clients: libraryClients(preRegistered),
+    // The one authorization parameter of Boxel's own that the library keeps
+    // with the flow, for consent to show; Boxel checks it before the library
+    // sees the request (`authorization.ts`).
+    extraParams: [CONFIRMATION_CODE_PARAM],
     cookies: { keys: config.cookieKeys },
     jwks: config.jwks as Configuration['jwks'],
     responseTypes: ['code'],

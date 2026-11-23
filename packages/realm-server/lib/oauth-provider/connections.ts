@@ -12,16 +12,14 @@
 // anyone else's grant, or none, is answered as unknown.
 //
 // What the access means comes from the registry, and the app's name from
-// `appName`, as consent named it for a client identified by a metadata
-// document or one that registered itself. A pre-registered client is shown by
-// its client ID until pre-registered clients carry a name this list can read:
-// none is registered yet (ADR 021's remediation lists the gap).
+// `appName`, as consent named it.
 
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
 import { appName, type AppName } from './app-name.ts';
 import { endGrant, GRANT_USABLE, isUsersGrant } from './grants.ts';
+import type { PreRegisteredClients } from './pre-registered-clients.ts';
 import type { OAuthResource } from './registry.ts';
 import {
   respond,
@@ -63,7 +61,7 @@ export interface ConnectionsResponse {
 
 export interface ConnectionsDeps extends SecureWindowDeps {
   registry: readonly OAuthResource[];
-  preRegistered: ReadonlySet<string>;
+  preRegistered: PreRegisteredClients;
 }
 
 interface ConnectionRow {

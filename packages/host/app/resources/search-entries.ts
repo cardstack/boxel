@@ -618,11 +618,15 @@ export class SearchEntriesResource extends Resource<Args> {
       // A paginated query never takes the realm-scoped path: with the held
       // rows page-limited, no whole-set total can be reconstituted from a
       // realm-subset fetch — the full re-run keeps `meta` server-accurate.
+      // Nor does a query naming no page whose held rows fall short of the
+      // total: the server pages every search, so those rows are a first page
+      // too.
       let isPartialRefresh =
         this.hasCompletedFullRun &&
         this.realmsNeedingRefresh.size > 0 &&
         query.page === undefined &&
-        !namesItsOperation(query);
+        !namesItsOperation(query) &&
+        !isShortPage(this._meta, this._entries.length);
       let realmsToFetch = isPartialRefresh
         ? [...this.realmsNeedingRefresh]
         : this.realmsToSearch;
@@ -633,9 +637,18 @@ export class SearchEntriesResource extends Resource<Args> {
         // has already resolved a no-realm card search to the current realm (see
         // modify); the flag keeps `searchEntries` from re-expanding an empty
         // list back to all realms.
-        let doc = await this.runtimeStore.searchEntries(query, realmsToFetch, {
-          cardInitiated: this.#cardInitiated,
-        });
+        let fetchEntries = (realms: string[]) =>
+          this.runtimeStore.searchEntries(query, realms, {
+            cardInitiated: this.#cardInitiated,
+          });
+        let doc = await fetchEntries(realmsToFetch);
+        // A realm-subset answer that came back short of its own total is a
+        // first page, not every row those realms hold, so merging it would
+        // drop the rest. Re-run over every realm instead.
+        if (isPartialRefresh && isShortPage(doc.meta, doc.data.length)) {
+          isPartialRefresh = false;
+          doc = await fetchEntries(this.realmsToSearch);
+        }
         await this.loadStylesheets(doc);
         let fresh = this.buildEntries(doc);
 
@@ -1047,6 +1060,16 @@ function namesItsOperation(query: SearchEntryWireQuery | undefined): boolean {
     (query as Partial<NamedQueryInvocation> | undefined)?.operation !==
     undefined
   );
+}
+
+// Whether a result holds fewer rows than its total counts. The server pages
+// every search, including one that names no page, so such a result is a first
+// page rather than every matching row.
+function isShortPage(
+  meta: EntryCollectionDocument['meta'],
+  rowCount: number,
+): boolean {
+  return (meta.page?.total ?? 0) > rowCount;
 }
 
 function buildRendering(

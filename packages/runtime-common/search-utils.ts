@@ -191,7 +191,7 @@ export type SearchOpts = {
   // opts — not only the cache key — for the subset to actually narrow results.
   cardUrls?: string[];
   // Cooperative-cancellation signal for the per-request time budget. When the
-  // search handler cuts an over-budget item-leg search off, this aborts so the
+  // search handler cuts an over-budget live search off, this aborts so the
   // engine's `loadLinks` fan-out stops promptly instead of running to
   // completion. Threaded the same way as `timings`.
   signal?: AbortSignal;

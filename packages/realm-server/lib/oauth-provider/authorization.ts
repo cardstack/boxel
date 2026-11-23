@@ -43,6 +43,11 @@ import {
   type AuthorizationErrorRecord,
   type AuthorizationRefusalReason,
 } from './objects.ts';
+import {
+  CONFIRMATION_CODE,
+  CONFIRMATION_CODE_PARAM,
+} from '@cardstack/secure-origin/security/confirmation-code.js';
+import type { PreRegisteredClients } from './pre-registered-clients.ts';
 import type { OAuthResource } from './registry.ts';
 
 const log = logger('boxel:oauth-provider');
@@ -155,7 +160,7 @@ function many(query: Query, name: string): string[] {
 function isAllowedAt(
   resource: OAuthResource,
   clientId: string,
-  preRegistered: ReadonlySet<string>,
+  preRegistered: PreRegisteredClients,
 ): boolean {
   return resource.clients === 'open' || preRegistered.has(clientId);
 }
@@ -174,7 +179,7 @@ export function checkAuthorizationRequest(
   }: {
     client: LibraryClient | undefined;
     registry: readonly OAuthResource[];
-    preRegistered: ReadonlySet<string>;
+    preRegistered: PreRegisteredClients;
   },
 ):
   | { refused: false; resources: OAuthResource[]; fromScopes: boolean }
@@ -196,7 +201,8 @@ export function checkAuthorizationRequest(
     prompt === REPEATED ||
     scopeParam === REPEATED ||
     single(query, 'redirect_uri') === REPEATED ||
-    single(query, 'state') === REPEATED
+    single(query, 'state') === REPEATED ||
+    single(query, CONFIRMATION_CODE_PARAM) === REPEATED
   ) {
     return refuse('invalid_request', 'malformed');
   }
@@ -264,6 +270,21 @@ export function checkAuthorizationRequest(
     return refuse('invalid_target', 'client-not-allowed');
   }
 
+  // Confirmation code: required from a pre-registered app on the user's
+  // computer, which consent shows it to check against, and refused from any
+  // other client, whose consent never shows one (the secure origin's
+  // `security/confirmation-code.js`).
+  let code = single(query, CONFIRMATION_CODE_PARAM);
+  let codeRequired =
+    preRegistered.get(client.clientId)?.place === 'this-computer';
+  if (
+    codeRequired
+      ? typeof code !== 'string' || !CONFIRMATION_CODE.test(code)
+      : code !== undefined
+  ) {
+    return refuse('invalid_request', 'confirmation-code');
+  }
+
   // Scopes.
   if (
     scopes.some(
@@ -305,7 +326,7 @@ export function authorizationHandler({
 }: {
   provider: Provider;
   registry: readonly OAuthResource[];
-  preRegistered: ReadonlySet<string>;
+  preRegistered: PreRegisteredClients;
   dbAdapter: DBAdapter;
   rateLimitStore: RateLimitStore;
   limit: CallerLimit;
@@ -526,7 +547,7 @@ export function errorDetailsHandler({
   provider: Provider;
   dbAdapter: DBAdapter;
   secureOriginURL: URL;
-  preRegistered: ReadonlySet<string>;
+  preRegistered: PreRegisteredClients;
 }): Koa.Middleware {
   return async function handleErrorDetails(ctxt) {
     ctxt.set('Cache-Control', 'no-store');
