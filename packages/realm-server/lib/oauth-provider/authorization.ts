@@ -189,7 +189,9 @@ function many(query: Query, name: string): string[] {
 }
 
 // The parameters a request may carry: the ones Boxel reads, and `prompt`,
-// which MCP clients send as `consent` when they ask for `offline_access`.
+// whose `login` and `consent` change nothing, since consent shows on every
+// flow and sign-in happens on the secure origin either way, so a client that
+// sends one isn't refused for it.
 // The library refuses some others itself, such as a request object, a
 // response mode or an ID token hint, and others it reads, such as `max_age`
 // and `nonce`, belong to OpenID, which the provider doesn't serve.

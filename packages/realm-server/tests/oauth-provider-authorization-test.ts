@@ -501,7 +501,7 @@ module(basename(import.meta.filename), function () {
         // The MCP SDK, which MCP Inspector and Claude Code use.
         ['the MCP SDK', validParams(clientId)],
         [
-          'the MCP SDK, asking for consent',
+          'a client asking for consent',
           validParams(clientId, { prompt: 'consent' }),
         ],
         [
