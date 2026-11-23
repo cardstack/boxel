@@ -83,6 +83,45 @@ export interface ClaimedDomain {
   sourceRealmURL: string;
 }
 
+// An address a realm is mounted at besides its own URL: a `host-url`
+// resource from `/_host-urls`.
+export type HostURLKind = 'boxel-space' | 'site-name' | 'custom-domain';
+
+export interface HostURL {
+  id: string;
+  url: string;
+  kind: HostURLKind;
+  isCanonical: boolean;
+}
+
+export interface HostURLList {
+  hostURLs: HostURL[];
+  // Missing when the realm has no owner, or the deployment has no Boxel Space.
+  boxelSpaceURL?: string;
+}
+
+// Whether a visitor who isn't signed in can view a realm's home page. A realm
+// can be mounted only when `anonymousCanView` is true.
+export interface HomePageCheck {
+  homeCardId?: string;
+  redirectTo?: string;
+  homeCardReadable: boolean;
+  homeCardStatus?: number;
+  unloadableModules: { url: string; status: number }[];
+  anonymousCanView: boolean;
+}
+
+// A request to `/_host-urls` that the server refused. `message` is the
+// server's reason, which is written for the user.
+export class HostURLRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 interface RealmServerEvent {
   eventType: string;
   data: any;
@@ -1812,6 +1851,85 @@ export default class RealmServerService
     return (await response.json()) as SubdomainAvailabilityResult;
   }
 
+  // The realm's host URLs, and the Boxel Space URL it can be mounted at,
+  // which is in the realm owner's Space, not the signed-in user's.
+  async listHostURLs(realmURL: string): Promise<HostURLList> {
+    let url = new URL(`${this.url.href}_host-urls`);
+    url.searchParams.set('realm', realmURL);
+    let json = await this.hostURLRequest(url.href, { method: 'GET' });
+    let meta = json.meta as { boxelSpaceURL?: unknown } | undefined;
+    return {
+      hostURLs: (json.data as HostURLResource[]).map(hostURLFromResource),
+      boxelSpaceURL:
+        typeof meta?.boxelSpaceURL === 'string'
+          ? meta.boxelSpaceURL
+          : undefined,
+    };
+  }
+
+  async mountHostURL(realmURL: string, hostURL: string): Promise<HostURL> {
+    let json = await this.hostURLRequest(`${this.url.href}_host-urls`, {
+      method: 'POST',
+      body: JSON.stringify({
+        data: {
+          type: 'host-url',
+          attributes: { realmURL, url: hostURL },
+        },
+      }),
+    });
+    return hostURLFromResource(json.data as HostURLResource);
+  }
+
+  async setCanonicalHostURL(id: string): Promise<void> {
+    await this.hostURLRequest(
+      `${this.url.href}_host-urls/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          data: { type: 'host-url', id, attributes: { isCanonical: true } },
+        }),
+      },
+    );
+  }
+
+  async unmountHostURL(id: string): Promise<void> {
+    await this.hostURLRequest(
+      `${this.url.href}_host-urls/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  async checkHomePage(realmURL: string): Promise<HomePageCheck> {
+    let url = new URL(`${this.url.href}_host-urls/home-page-check`);
+    url.searchParams.set('realm', realmURL);
+    let json = await this.hostURLRequest(url.href, { method: 'GET' });
+    return (json.data as { attributes: HomePageCheck }).attributes;
+  }
+
+  // Sends a request to `/_host-urls`. A refusal throws a
+  // `HostURLRequestError` with the server's reason.
+  private async hostURLRequest(
+    url: string,
+    init: RequestInit,
+  ): Promise<{ data?: unknown; meta?: unknown }> {
+    await this.login();
+    let response = await this.authedFetch(url, {
+      ...init,
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      },
+    });
+    if (response.status === 204) {
+      return {};
+    }
+    let text = await response.text();
+    if (!response.ok) {
+      throw new HostURLRequestError(response.status, refusalReason(text));
+    }
+    return JSON.parse(text);
+  }
+
   async fetchBoxelClaimedDomain(
     sourceRealmURL: string,
   ): Promise<ClaimedDomain | null> {
@@ -1944,7 +2062,7 @@ export default class RealmServerService
     );
 
     if (!response.ok) {
-      throw new Error(await response.text());
+      throw new Error(refusalReason(await response.text()));
     }
 
     return response.json();
@@ -2012,6 +2130,45 @@ export default class RealmServerService
 const sessionLocalStorageKey = RealmServerSessionLocalStorageKey;
 // How long signing the secure window out may take before it is abandoned.
 const secureWindowSignOutTimeoutMs = 10_000;
+
+interface HostURLResource {
+  id: string;
+  attributes: { url: string; kind: HostURLKind; isCanonical: boolean };
+}
+
+function hostURLFromResource({ id, attributes }: HostURLResource): HostURL {
+  return {
+    id,
+    url: attributes.url,
+    kind: attributes.kind,
+    isCanonical: attributes.isCanonical,
+  };
+}
+
+// The reason in a realm-server error body, or the body itself when it has
+// none. Each entry of `errors` is a string, or a JSON:API error object whose
+// `detail` or `title` says what went wrong.
+export function refusalReason(body: string): string {
+  try {
+    let errors: unknown = JSON.parse(body)?.errors;
+    if (Array.isArray(errors)) {
+      let reasons = errors
+        .map((error) =>
+          typeof error === 'string' ? error : (error?.detail ?? error?.title),
+        )
+        .filter(
+          (reason): reason is string =>
+            typeof reason === 'string' && reason.length > 0,
+        );
+      if (reasons.length > 0) {
+        return reasons.join(' ');
+      }
+    }
+  } catch {
+    // not JSON; the body is the reason
+  }
+  return body || 'The request failed';
+}
 
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');

@@ -67,6 +67,12 @@ import handleReindex from './handlers/handle-reindex.ts';
 import handleFullReindex from './handlers/handle-full-reindex.ts';
 import handleRemoveJob from './handlers/handle-remove-job.ts';
 import handleAddCredit from './handlers/handle-add-credit.ts';
+import {
+  handleBillAIBatch,
+  handleDismissUnrecordedAIBatch,
+  handleRecordAIBatch,
+  handleWriteOffAIBatch,
+} from './handlers/handle-ai-batch-operator.ts';
 import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
 import handleRemoveRealmUserPermission from './handlers/handle-remove-realm-user-permission.ts';
 import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
@@ -1044,6 +1050,19 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint('/_grafana-reindex', handleReindex(args));
   registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
   registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
+  registerGrafanaEndpoint('/_grafana-bill-ai-batch', handleBillAIBatch(args));
+  registerGrafanaEndpoint(
+    '/_grafana-write-off-ai-batch',
+    handleWriteOffAIBatch(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-record-ai-batch',
+    handleRecordAIBatch(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-dismiss-unrecorded-ai-batch',
+    handleDismissUnrecordedAIBatch(args),
+  );
   registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
   registerGrafanaEndpoint(
     '/_grafana-upsert-realm-user-permission',

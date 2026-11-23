@@ -277,7 +277,7 @@
           "execErrState": "Error",
           "for": "0s",
           "annotations": {
-            "summary": "{{ if $values }}A {{ $labels.service }} process logged \"pricing check failed in\" in the last 10 minutes (matching lines: {{ printf \"%.0f\" $values.B.Value }}). A process whose startup pricing check fails has no prices: it admits no new automation run (admission refuses with pricing-unavailable), submits no batch, and writes no charge (charged result no-prices) until its PRICING_* variables are fixed and it restarts. The line names every bad variable and what is wrong with it. This alert resolves 10 minutes after the line, and the process stays without prices: confirm each restarted process logged \"pricing check passed in\". The prerender server checks its prices too, but nothing it does reads them, so its failure reaches Sentry only and this rule leaves out its log stream, the busiest on Loki. The pricing skill covers the variables.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about the pricing check. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "summary": "{{ if $values }}A {{ $labels.service }} process logged \"pricing check failed in\" in the last 10 minutes (matching lines: {{ printf \"%.0f\" $values.B.Value }}). A process whose startup pricing check fails has no prices: it admits no new automation run (admission refuses with pricing-unavailable), submits no batch, and writes no metered charge (charged result no-prices) until its PRICING_* variables are fixed and it restarts. The line names every bad variable and what is wrong with it. This alert resolves 10 minutes after the line, and the process stays without prices: confirm each restarted process logged \"pricing check passed in\". The prerender server's failing check fires the separate rule Pricing check failed in the prerender server. The pricing skill covers the variables.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about the pricing check. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
             "runbook": "The automation-diagnostics skill, section Alerts."
           },
           "labels": {
@@ -373,6 +373,108 @@
           "for": "5m",
           "annotations": {
             "summary": "{{ if $values }}The oldest automation run a worker could claim has waited {{ printf \"%.0f\" $values.B.Value }} seconds, and claimable runs have waited over a minute for 5 minutes running: the lane is not keeping up. A run released after waiting behind its own automation's running run (its concurrency group) counts from its creation; a run waiting behind it is not counted. Automation runs are priority 5, and two worker pools claim them: the all-priority workers, which claim strictly oldest first, so an older system backlog such as a deploy's reindex holds runs back; and the automation workers (WORKER_AUTOMATION_PRIORITY_COUNT, 0 by default, in which case the all-priority workers are the only ones), which also take user-initiated jobs at priority 10, so a burst of saves can fill them. Read the Job Queue dashboard for what both pools are busy with; the claimed event's queueWaitMs on the boxel:automation-runs channel gives the wait each run had once claimed.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about automation runs. The query reads Postgres through the boxel-db data source: check the database and the data source's connection.{{ end }}",
+            "runbook": "The automation-diagnostics skill, section Alerts."
+          },
+          "labels": {
+            "area": "automations"
+          },
+          "isPaused": false,
+          "notification_settings": null
+        }
+      ]
+    },
+    {
+      "orgId": 1,
+      "name": "automations-prerender-group",
+      "folder": "defd2d156sav4d",
+      "interval": "5m",
+      "rules": [
+        {
+          "uid": "automations-prerender-pricing-check",
+          "title": "Pricing check failed in the prerender server",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 360,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (service) (count_over_time({service=\"prerender\"} |= \"pricing check failed in \" [6m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "type": "reduce",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "summary": "{{ if $values }}A prerender process logged \"pricing check failed in\" in the last 6 minutes (matching lines: {{ printf \"%.0f\" $values.B.Value }}). Nothing the prerender server does reads its prices, so renders and automation run tabs carry on. The failure says its task has PRICING_* variables that are missing or wrong. The prerender task takes the same SSM parameters as the realm server and the worker: a bad value fails the check of each of those that starts after the change too, leaving it without prices, and a missing variable means the prerender config was applied before the parameter existed, so applying it again wires the variable in. The line names every bad variable and what is wrong with it. This rule reads the prerender log stream, the busiest on Loki, so it evaluates every 5 minutes over 6 minutes of lines rather than every minute over 10. It resolves at the next evaluation without the line, and the process stays without prices: confirm each restarted prerender process logged \"pricing check passed in\". The pricing skill covers the variables.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about the pricing check. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
             "runbook": "The automation-diagnostics skill, section Alerts."
           },
           "labels": {

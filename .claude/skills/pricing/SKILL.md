@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens), the record of each pricing version's values and unit rates (`pricing_versions`), and the cost coverage report that compares, for a period, the credits each charge kind drew with the hosting cost of the usage it priced, by pricing version (`getCostCoverage` and the `credit_charge_costs` view). Use when asking whether the margin covers our cost, which charge kind under-charges, or what prices a pricing version stands for, when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when an automation run was refused for its balance or a credit cap (`insufficient-credits`, `daily-credit-cap-reached`, `monthly-credit-cap-reached`, `pricing-unavailable`), when asking how a run's minimum balance is computed, what runs in flight and unsettled batches hold against a balance, why an automation that turns on `batchedAI` counts its AI twice in its minimum balance and estimate (the 2× reserve), or which charges count toward an automation's daily and monthly caps, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), how and when the settle job bills a batch that has ended (its reported cost, or its estimate for an expired batch with no reported cost), why a batch's cost reads as pending, why a late batch's results are discarded, or what an `unrecorded_ai_batches` row means, when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a user, run, realm or automation was charged or how much it used or why a charge didn't write twice, or where an operator sees a user's or realm's charges and automations (the Grafana Users and Realms dashboards), when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/automation-spending.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/realm-server/lib/ai-batch-settle.ts`, `packages/runtime-common/automation-spend.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens), the record of each pricing version's values and unit rates (`pricing_versions`), and the cost coverage report that compares, for a period, the credits each charge kind drew with the hosting cost of the usage it priced, by pricing version (`getCostCoverage` and the `credit_charge_costs` view). Use when asking whether the margin covers our cost, which charge kind under-charges, or what prices a pricing version stands for, when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when an automation run was refused for its balance or a credit cap (`insufficient-credits`, `daily-credit-cap-reached`, `monthly-credit-cap-reached`, `pricing-unavailable`), when asking how a run's minimum balance is computed, what runs in flight and unsettled batches hold against a balance, why an automation that turns on `batchedAI` counts its AI twice in its minimum balance and estimate (the 2× reserve), or which charges count toward an automation's daily and monthly caps, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), how and when the settle job bills a batch that has ended (its reported cost, or its estimate for an expired batch with no reported cost), why a batch's cost reads as pending, why a late batch's results are discarded, or what an `unrecorded_ai_batches` row means, when an operator handles a batch the settle job reports (one whose charge drew nothing because the payer's balance was empty or the payer has no `users` row, or one OpenRouter lists with no `ai_batches` row), meaning how to find each, check it against both environments (staging and production share one OpenRouter workspace), and bill it later, write it off, record it or dismiss it with the `/_grafana-*-ai-batch` endpoints and the Automations dashboard's Batches panels, when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a user, run, realm or automation was charged or how much it used or why a charge didn't write twice, or where an operator sees a user's or realm's charges and automations (the Grafana Users and Realms dashboards), when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/automation-spending.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/realm-server/lib/ai-batch-settle.ts`, `packages/realm-server/handlers/handle-ai-batch-operator.ts`, `packages/runtime-common/automation-spend.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -104,8 +104,9 @@ version <hash>; PRICING_…=… …`, with every value. The version is the first
   every bad variable and what is wrong with it, and the same message sent to
   Sentry tagged `pricingCheck: failed` and `process: <name>`. The Grafana
   alert `Pricing check failed` fires on the realm-server's and the worker's
-  line, one alert per service; the
-  `automation-diagnostics` skill's _Alerts_ section covers it. One bad value
+  line, one alert per service, and `Pricing check failed in the prerender
+server` fires on the prerender server's; the
+  `automation-diagnostics` skill's _Alerts_ section covers both. One bad value
   fails the whole set:
   `currentPricing()` then returns undefined, and the process admits no new
   run and submits no new batch until it restarts with good values (ADR 029
@@ -119,11 +120,12 @@ packages/observability/scripts/tail-logs.sh --env staging --service worker \
   --regex 'pricing check' --since 1h --no-follow
 ```
 
-**The record of a version.** Every worker process also records its version
-in the database at startup (`recordCurrentPricing` in
+**The record of a version.** The realm-server and every worker process also
+record their version in the database at startup (`recordCurrentPricing` in
 `packages/realm-server/lib/metered-charge.ts`), once per version, since
-workers write the metered charges. `pricing_versions` holds the
-version and its margin, `pricing_version_values` every value by its variable
+every charge they write records it: workers write the metered and batched AI
+charges, and the realm-server the AI charges for the calls it forwards.
+`pricing_versions` holds the version and its margin, `pricing_version_values` every value by its variable
 name, and `pricing_version_rates` the USD one unit of each metered usage
 costs at those values, keyed by the `credit_charge_usage` unit. A version is a
 hash of its values, so a row is never changed. Nothing reads these rows to
@@ -566,8 +568,10 @@ differs in who pays and what the ledger row names:
 `admitRunForward` (`packages/realm-server/lib/run-token-forward.ts`) admits
 the request for the run, and the handler passes the run's charge,
 `{ kind: 'ai', realm, runId }`, to `withBillableCall`
-(`packages/realm-server/lib/billable-call.ts`), which hands it to the credit
-strategy's `spendUsageCost` when it records the cost. The request is held to
+(`packages/realm-server/lib/billable-call.ts`), which adds the realm-server's
+pricing version and hands it to the credit strategy's `spendUsageCost` when it
+records the cost. Every AI call `withBillableCall` bills records that version,
+a person's own included. The request is held to
 the person's credits like any AI request (the minimum balance to start one,
 and the per-user in-flight limit), and also to the run's caps: it counts as
 one of the run's `resolveCalls` just before it is sent, and its worst case at
@@ -712,8 +716,10 @@ never answers for can't hold back the rest), a pass reads `GET /api/v1/batches/<
 status, and settles it once it has ended (`completed`, `failed`, `expired`
 or `cancelled`):
 
-1. **The charge.** One `batched_ai` charge naming the batch, its run and
-   its realm, to `acts_as`, at 1,000 credits to the dollar with no margin,
+1. **The charge.** One `batched_ai` charge naming the batch, its run, its
+   realm and the worker's pricing version (none when the worker has no
+   prices, which never holds a batch back), to `acts_as`, at 1,000 credits
+   to the dollar with no margin,
    rounded to the nearest credit (`chargeAIBatch` in
    `packages/billing/ai-billing.ts`). It bills what OpenRouter reported in
    `usage.cost`, recorded as `ai_provider_usd` usage. **The expired-batch
@@ -749,10 +755,11 @@ What OpenRouter answers decides the rest:
 
 A charge the payer's balance can't cover draws what it holds, like any
 charge. One that draws nothing, or whose payer has no `users` row, writes
-no ledger row, and the batch is still settled; the cost coverage report
-lists it as unbilled (below). The job logs `settled batch <id> …` on the
-`ai-batch-settle` channel for each batch, with what it billed and whether
-that was the estimate.
+no ledger row, and the batch is still settled, so the job never reads it
+again; the cost coverage report lists it as unbilled (below), and
+_Batches the settle job reports_ says what an operator does about it. The
+job logs `settled batch <id> …` on the `ai-batch-settle` channel for each
+batch, with what it billed and whether that was the estimate.
 
 **A late batch.** A run that reads a batch at or after its `deadline` and
 finds it still open sends the same requests at the normal price (ADR 030
@@ -767,9 +774,11 @@ OpenRouter answers its submit. A submit whose outcome is unknown (it timed
 out, its answer couldn't be read, OpenRouter answered with a 5xx, or
 OpenRouter accepted it and named no batch) logs `batch submit outcome
 unknown`, and one whose row couldn't be written logs that it was submitted
-but not recorded; both go to Sentry with the run, identity, automation,
-model, request count, estimate and reservation in the event's extras. A
-process that stops between the answer and the insert leaves no event.
+but not recorded; both go to Sentry with the run, identity, realm,
+automation, model, request count, estimate and reservation in the event's
+extras (`runId`, `actsAs`, `realm`, `automationId`, `model`,
+`requestCount`, `estimatedUsd`, `runAIReservation`) and the tag
+`ai-batch-submit` (`outcome-unknown` or `not-recorded`). A process that stops between the answer and the insert leaves no event.
 
 Each settle pass also reads OpenRouter's batch list
 (`GET /api/v1/batches`, newest first, every key in the workspace sees the
@@ -778,10 +787,11 @@ one older than 30 minutes (three times the longest a submit waits for
 OpenRouter's answer) that has no `ai_batches` row in
 `unrecorded_ai_batches` (batch id, model, status, request count, reported
 cost, created at). Each is logged and sent to Sentry once, as `OpenRouter
-batch <id> has no ai_batches row`. Match it to a Sentry event above by its
-model, request count and time, bill it by hand from that event, and set the
-row's `resolved_at`. A row whose batch turns up in `ai_batches` after all is
-resolved by the next pass. A pass reads every page of the window, and the
+batch <id> has no ai_batches row`. Staging and production share an OpenRouter
+workspace, so it may be the other environment's batch; _Batches the settle
+job reports_ says how to tell, and how to record it from its submit's Sentry
+event or dismiss it. A row whose batch turns up in `ai_batches` after all is resolved by the next
+pass, as `recorded`. A pass reads every page of the window, and the
 job heartbeats after each batch and page, so a long pass isn't timed out:
 
 ```sql
@@ -789,12 +799,148 @@ job heartbeats after each batch and page, so a long pass isn't timed out:
 SELECT batch_id, model, status, request_count, cost_usd, created_at, found_at
 FROM unrecorded_ai_batches WHERE resolved_at IS NULL ORDER BY created_at;
 
+-- How each resolved one was resolved: `recorded`, or an operator's reason.
+SELECT batch_id, resolved_at, resolution
+FROM unrecorded_ai_batches WHERE resolved_at IS NOT NULL ORDER BY resolved_at DESC;
+
 -- Batches still unsettled a day after submission.
 SELECT batch_id, run_id, state, state_read_at, submitted_at
 FROM ai_batches
 WHERE settled_at IS NULL AND submitted_at < now() - interval '24 hours'
 ORDER BY submitted_at;
 ```
+
+## Batches the settle job reports
+
+The settle job finishes almost every batch on its own. Two cases it reports
+and leaves to an operator: a batch it billed whose charge drew nothing, and a
+batch OpenRouter lists that has no `ai_batches` row. Both are in the
+Automations dashboard's **Batches** row (Boxel Status folder), each with its
+actions, and each action is a Grafana endpoint an operator can also call with
+the Grafana secret (`curl -X POST -H "Authorization: Bearer $GRAFANA_SECRET"
+"$REALM_SERVER/_grafana-…"`, as in the `indexing-diagnostics` skill). The
+endpoints are in `packages/realm-server/handlers/handle-ai-batch-operator.ts`
+and log on the `ai-batch-settle` channel. The dashboard's **Reason** box
+holds the reason a write-off or a dismissal records; type it before
+clicking.
+
+### A batch the payer couldn't pay for
+
+**Find it.** The _Batches still to bill_ panel lists every settled batch
+whose charge drew nothing although it cost a credit or more, oldest first,
+whatever the dashboard's time range. The settle job logged `settled batch
+<id> … nothing charged: the payer's balance held nothing` (or `… no payer`,
+with a Sentry error `batch <id> is billed to <id>, who has no users row`). The
+same list, against the read-only database:
+
+```sql
+SELECT b.batch_id, b.acts_as, b.billed_usd, b.billed_at_estimate, b.settled_at, b.run_id
+FROM ai_batches b
+WHERE b.settled_at IS NOT NULL AND b.written_off_at IS NULL
+  AND ROUND(b.billed_usd * 1000) >= 1
+  AND NOT EXISTS (SELECT 1 FROM credits_ledger l
+                  WHERE l.charge_kind = 'batched_ai' AND l.batch_id = b.batch_id)
+ORDER BY b.settled_at;
+```
+
+**Check.**
+
+- Does the payer exist? A batch whose `acts_as` has no `users` row can't be
+  billed to anyone. That's worth investigating: a run acts as someone with
+  a `users` row, so the account was removed after the run, or `acts_as` was
+  recorded wrong.
+- What does the payer hold now? Their balance (Users dashboard, or
+  `sumUpAvailableCredits`) less what their runs in flight hold (_The
+  minimum balance and the credit caps_). A payer whose automations keep
+  being refused with `insufficient-credits` is still empty.
+- How much is it? `billed_usd` at 1,000 credits to the dollar, and whether
+  it is the estimate (`billed_at_estimate`).
+
+**Act.**
+
+- **Bill it** once the payer's balance covers it: the panel's _Bill_ action,
+  or `POST /_grafana-bill-ai-batch?batch=<batch id>`. It charges what the
+  settle job billed, to `acts_as`, as the settle job does, so it writes the
+  charge once however often it is called (`already-charged` the second
+  time). A charge draws what the balance holds, and a batch is charged once,
+  so whatever the balance can't cover is given up for good. So a balance
+  that can't cover the whole batch answers `409` with what it holds, and
+  writes nothing; add `&partial=true` to draw what it holds and give up the
+  rest. A payer with no `users` row answers `409` too. A written-off batch
+  is refused: the write-off stands.
+- **Write it off** when it won't be billed: the payer is gone, or the
+  amount isn't worth chasing. The panel's _Write off_ action, or
+  `POST /_grafana-write-off-ai-batch?batch=<batch id>&reason=<why>`, records
+  `written_off_at` and `write_off_reason` on the batch, and the batch leaves
+  the panel and can't be billed after. A batch that is already charged
+  can't be written off. The cost
+  coverage report's unbilled list (`getUnbilledAIBatches`) still lists it,
+  with its reason, since the platform paid for it all the same.
+
+A batch charged only in part isn't in this list: it has a charge. Its
+shortfall is the charge's `unpaid_credits` in `credit_charge_costs`.
+
+### A batch OpenRouter lists with no record
+
+**Find it.** The _OpenRouter batches with no record_ panel lists the
+unresolved `unrecorded_ai_batches` rows. Each was logged and sent to Sentry
+once, as `OpenRouter batch <id> has no ai_batches row, so nothing bills it`.
+
+**Staging and production share one OpenRouter workspace.** Both
+environments' batch system keys are the same OpenRouter key, and
+OpenRouter's batch list covers every batch in the key's workspace, with no
+field saying which key or environment submitted it. So each environment's
+settle job lists the other's batches too, and records each one as having no
+row about 30 minutes after it is submitted. Expect one report per batch the
+other environment submits.
+
+**Check both environments at once.** An operator can hold read-only
+connections to staging and production at the same time (the `aws-access`
+skill: one tunnel per environment, each on its own local port). Look the
+reported batch ids up in both:
+
+```sql
+-- Run in each environment, with the ids from the reporting environment's
+-- unrecorded_ai_batches.
+SELECT batch_id, run_id, acts_as, settled_at, billed_usd
+FROM ai_batches WHERE batch_id IN ('<batch id>', '<batch id>');
+```
+
+**Act.**
+
+- **The other environment has the row.** That environment bills it.
+  Dismiss it here: the panel's _Dismiss_ action, or
+  `POST /_grafana-dismiss-unrecorded-ai-batch?batch=<batch id>&reason=<why>`,
+  with a reason such as `production ai_batches row`. It records
+  `resolved_at` and the reason as `resolution`.
+- **Neither environment has the row.** This environment's submit may have
+  reached OpenRouter with its outcome unknown. Find its Sentry event in the
+  reporting environment: every report of such a submit carries the tag
+  `ai-batch-submit` (`outcome-unknown`, or `not-recorded` when OpenRouter
+  named the batch and the insert failed), whatever its title, so search
+  `ai-batch-submit:*` near the batch's `created_at` for the same model and
+  request count. A `not-recorded` event names the batch in `batchId`. Record
+  the batch from the event's extras:
+  `POST /_grafana-record-ai-batch?batch=<batch id>&run=<runId>&estimate=<estimatedUsd>&reservation=<runAIReservation>`.
+  That writes the `ai_batches` row the submit didn't, with the payer, realm
+  and automation from the run's row, and the model, request count, status
+  and submit time OpenRouter listed. The settle job then bills it like any
+  batch (its reported cost, or the estimate given), and settles the
+  reservation on the run's AI cap. Until then it holds what that
+  reservation holds (`reserved_credits`) against its payer's balance and
+  caps, like any unsettled batch. The reservation must be one the run still
+  holds and no other batch names, since a submit holds one reservation, so
+  an event matched to the wrong batch is refused with a `400`. When the run's row is
+  gone with its realm, also pass `acts_as`, `realm` and `automation` from the
+  event. The unrecorded row resolves as `recorded`.
+- **Neither environment has it, and no Sentry event matches.** Something
+  else in the workspace submitted it, such as someone using the key by hand.
+  Investigate who before dismissing it. The platform pays for it either way,
+  and nothing here can bill it.
+
+A batch reported less than 30 minutes after its submit isn't reported at all
+(the reconciliation's grace period), and one whose row lands after it was
+reported resolves on the next pass, so neither needs an operator.
 
 ## The daily storage charge
 
@@ -895,7 +1041,7 @@ each row says what it paid for (ADR 029 §1.6):
 | `batch_id`        | the AI provider's batch id, for `batched_ai`                                                         |
 | `automation_id`   | the automation card's identifier, for `storage`                                                      |
 | `charge_day`      | the UTC day, for `storage`                                                                           |
-| `pricing_version` | the pricing version that priced it, on `run`, `run_indexing` and `storage`                           |
+| `pricing_version` | the pricing version: what priced a `run`, `run_indexing` or `storage` row; the writer's for AI rows  |
 
 The `credits_ledger_charge_reference_check` constraint holds each kind to
 the reference it needs, so a `run` row without a run or a pricing version,
@@ -1165,7 +1311,12 @@ GROUP BY 1, 2 ORDER BY 1, 2 NULLS FIRST;
   that has no rate at its version. Read their versions from the line and look
   for the `pricing check passed` line that named them.
 - A null `pricing_version` is an AI line: the ledger requires a version on
-  every run, run-indexing and storage charge.
+  every run, run-indexing and storage charge. An AI or batched AI charge
+  records the version of the process that wrote it, so its line sits beside
+  the metered lines of the same prices, and has none when that process had no
+  prices (the AI bot's charges, a process whose check failed) or when the
+  charge was written without one. Either way it is priced at its provider's
+  cost, which needs no rate from the version.
 - **The batched AI gap.** A batch that ended with no reported cost is billed
   at its estimate, the most it could cost. Its charge is priced at that
   estimate and marked `cost_estimated` in the view; `getCostCoverage` counts
@@ -1178,7 +1329,8 @@ GROUP BY 1, 2 ORDER BY 1, 2 NULLS FIRST;
   cost a credit or more (its payer's balance held nothing, or it has no
   payer) is in no line, since the view only has charges that were written.
   `getUnbilledAIBatches(dbAdapter, { from, to })` lists them by when they
-  were settled:
+  were settled, each with `writtenOffAt` and `writeOffReason` when an
+  operator wrote it off (_Batches the settle job reports_):
 
   ```sql
   SELECT b.batch_id, b.run_id, b.acts_as, b.billed_usd, b.billed_at_estimate
