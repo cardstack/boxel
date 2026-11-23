@@ -21368,9 +21368,8 @@ export class Realm {
     let servedAtHostURL = this.#published;
     let headers = {
       'content-type': SupportedMimeType.JSON,
-      // The tree changes when the realm is indexed, and when an unavailable
-      // route's type can be read again, and carries no validator a cache
-      // could ask with.
+      // The tree changes when the realm is indexed, and carries no
+      // validator a cache could ask with.
       'cache-control': 'no-store',
     };
     if (!servedAtHostURL && isDuringPrerenderRequest(request)) {

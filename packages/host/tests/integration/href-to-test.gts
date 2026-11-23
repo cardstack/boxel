@@ -420,18 +420,16 @@ module('Integration | hrefTo', function (hooks) {
     );
   });
 
-  test('an HTML visit fails, and does not ask again, when the realm routes are not available', async function (assert) {
+  test('an HTML visit fails, and does not ask again, when the routes endpoint fails', async function (assert) {
     let links = getService('host-route-links');
     let requests = 0;
 
     await inHTMLVisit(
       () => {
         requests++;
-        // What a realm that a host URL serves answers while a route's type
-        // can't be read yet.
         return new Response(
           JSON.stringify({ errors: [{ status: 503, title: 'unavailable' }] }),
-          { status: 503, headers: { 'retry-after': '5' } },
+          { status: 503 },
         );
       },
       async () => {

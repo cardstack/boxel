@@ -38,8 +38,9 @@ const log = logger('host-route-links');
 // What an HTML visit read of its realm's routes. `routes` is `undefined`
 // when the realm is not served at a host URL, or the read got none. `key`
 // says which read it was; see `routesReadKey`. `failure` is set when the
-// read met a failure that is not about the realm's routes: the endpoint
-// could not answer yet, or the network failed.
+// read itself failed (the endpoint answered a gateway status, or the network
+// failed). That is a failure to reach the routes, never a state of them: the
+// endpoint always answers the whole tree the realm's last index stored.
 interface RealmRoutes {
   key: string;
   routes: HostRouteLinkRoutes | undefined;
@@ -75,14 +76,16 @@ type RenderGlobals = {
 // validates them again. An HTML visit reads once for each indexing job.
 // Until the read lands, and when it gets no routes, links fall back.
 //
-// One case fails the render instead. When the endpoint can't answer yet
-// (503) or the read fails on the network, the links would be stored with
-// card URLs that nothing corrects later. The visit doesn't ask again,
-// because the realm may be waiting on this visit's own tab. The link throws
-// an error marked as a gateway failure, so the HTML that is stored stays as
-// it was and the visit is tried again. A realm that is not served at a host
-// URL answers a render's request without reading its routes, so its visits
-// never meet this failure.
+// One case fails the render instead: the read of the routes fails to reach
+// them, because the endpoint answers a gateway status or the network fails.
+// That is a transport failure, not a state of the routes, which the realm
+// always answers whole. The links would otherwise be stored with card URLs
+// that nothing corrects later. The visit doesn't ask again, because the
+// realm may be waiting on this visit's own tab. The link throws an error
+// marked as a gateway failure, so the HTML that is stored stays as it was
+// and the visit is tried again. A realm that is not served at a host URL
+// answers a render's request without reading its routes, so its visits never
+// meet this failure.
 export default class HostRouteLinksService
   extends Service
   implements HostRouteLinks
@@ -251,14 +254,14 @@ export default class HostRouteLinksService
           routes: body.routes as HostRoute[],
         };
       } else {
-        // 503 while a route's type can't be read yet, or a realm this
-        // session can't read.
+        // The endpoint failed (a transport failure), or this session can't
+        // read the realm.
         log.debug(
           `no host routes from ${realmURL} for now (status ${response.status})`,
         );
         if (isGatewayFailureStatus(response.status)) {
           failure = routesReadFailure(
-            `the host routes of ${realmURL} are not available yet: ${url} answered HTTP ${response.status}`,
+            `the host routes of ${realmURL} could not be read: ${url} answered HTTP ${response.status}`,
             response.status,
           );
         }
@@ -353,8 +356,8 @@ export default class HostRouteLinksService
   };
 }
 
-// A read of a realm's routes that failed for a reason that is not about the
-// routes, as the error an HTML visit fails with. The gateway failure marker
+// A read of a realm's routes that failed to reach them, as the error an HTML
+// visit fails with. The gateway failure marker
 // makes the prerender keep the card's stored HTML and try the visit again.
 function routesReadFailure(message: string, status: number): CardError {
   let error = new CardError(message, { status });
