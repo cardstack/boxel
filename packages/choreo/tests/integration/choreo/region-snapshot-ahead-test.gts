@@ -10,6 +10,7 @@
  */
 import { Choreo } from '@cardstack/choreo';
 import { setupChoreo } from '@cardstack/choreo/test-support';
+import { htmlSafe } from '@ember/template';
 import { render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -26,11 +27,15 @@ let nest: Nest | undefined;
 /** an inner region inside an outer one, as a card's region inside the stack's */
 class Nest extends Component<{ Args: { unmounted?: boolean } }> {
   @tracked hidden = false;
+  @tracked pad = 0;
   @tracked idle = false;
   @tracked shown = !this.args.unmounted;
   @tracked shifted = false;
   get left() {
     return this.shifted ? 200 : 0;
+  }
+  get padStyle() {
+    return htmlSafe(`padding-left:${this.pad}px`);
   }
   constructor(owner: unknown, args: object) {
     super(owner as never, args as never);
@@ -38,7 +43,7 @@ class Nest extends Component<{ Args: { unmounted?: boolean } }> {
   }
   <template>
     <Choreo style='position:relative'>
-      <div hidden={{this.hidden}}>
+      <div hidden={{this.hidden}} style={{this.padStyle}}>
         {{#if this.shown}}
           <Choreo @idle={{this.idle}} style='position:relative' as |c|>
             <div
@@ -164,6 +169,34 @@ module('Integration | choreo | region snapshot ahead', function (hooks) {
 
     nest!.idle = false;
     nest!.shifted = true;
+    await nextFrame();
+    await nextFrame();
+    assert.false(unmoved(mover()), 'the participant carries a move');
+    await settled();
+  });
+
+  test('a region that wakes in a render takes its before at its own hook, after what the render patched above it', async function (assert) {
+    await render(<template><Nest /></template>);
+    await animationsSettled();
+    nest!.idle = true;
+    await settled();
+    await animationsSettled();
+
+    // a region idle at its last render is not snapshotted ahead: reading
+    // whether it wakes would evaluate its arguments ahead of the render. So
+    // the ancestor's new padding lands before this region's "before"
+    nest!.idle = false;
+    nest!.pad = 200;
+    await nextFrame();
+    await nextFrame();
+    assert.true(unmoved(mover()), 'the participant carries no move');
+    await settled();
+  });
+
+  test('a region awake under another moves what its ancestor patches', async function (assert) {
+    await render(<template><Nest /></template>);
+    await animationsSettled();
+    nest!.pad = 200;
     await nextFrame();
     await nextFrame();
     assert.false(unmoved(mover()), 'the participant carries a move');

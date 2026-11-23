@@ -157,6 +157,31 @@ module('Integration | choreo | in view', function (hooks) {
     await settled();
   });
 
+  test('switched on under another region in the render that moves its rows, it wires the rows near the view', async function (assert) {
+    class Host {
+      @tracked inView = false;
+    }
+    const host = new Host();
+    await render(
+      <template>
+        <Choreo>
+          <Stage @seize={{seize}} @inView={{host.inView}} />
+        </Choreo>
+      </template>,
+    );
+    await nextFrame();
+    await nextFrame();
+    // the outer region opens the render and snapshots this one ahead, with
+    // the arguments of its last render
+    host.inView = true;
+    stage!.above = 60;
+    await nextFrame();
+    await nextFrame();
+    assert.true(moving(0), 'a row in view glides');
+    assert.false(moving(30), 'a row far below is not wired');
+    await settled();
+  });
+
   test('a new margin widens what is wired', async function (assert) {
     class Host {
       @tracked margin = 0;

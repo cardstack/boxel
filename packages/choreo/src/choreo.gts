@@ -765,6 +765,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // (`layout` / `layoutId`) snapshot here too, so `{{motion layout=true}}`
     // works inside a <Choreo> without a <LayoutGroup> wrapped around it.
     snapshotOnRender();
+    const aheadArgs = this.renderedArgs;
     this.renderedArgs = {
       idle: Boolean(this.args.idle),
       inView: Boolean(this.args.inView),
@@ -790,8 +791,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         // taken now, ahead of what the render patches on its way to them
         snapshotEvery();
       }
-      if (this.snapshotTakenIn !== snapshotRound) {
-        // mounted after that snapshot, or idle at its last render
+      if (
+        this.snapshotTakenIn !== snapshotRound ||
+        aheadArgs.inView !== this.renderedArgs.inView ||
+        aheadArgs.inViewMargin !== this.renderedArgs.inViewMargin
+      ) {
+        // mounted after that snapshot, idle at its last render, or its view
+        // arguments changed since the snapshot ahead wired what it measured
         this.syncViewWatch();
         this.snapshot();
       }
@@ -810,8 +816,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    *
    * It reads the arguments as the region's last render left them
    * (`renderedArgs`), never the arguments themselves. A region idle at its
-   * last render is skipped. If it wakes in this render, it takes its own
-   * snapshot when the render reaches it.
+   * last render is skipped: knowing whether it wakes would mean evaluating its
+   * arguments, and measuring every idle region on every render is the cost
+   * `@idle` exists to avoid. One that wakes takes its own snapshot when the
+   * render reaches it. That moves what the render changes inside the region,
+   * while what the render patched above it (an ancestor's class or size)
+   * lands without a move. A region whose `@inView` or `@inViewMargin`
+   * changes in the render snapshots again at its own hook, with the new ones.
    */
   snapshotAhead(round: number) {
     if (!this.element || this.passPending || this.renderedArgs.idle) {
