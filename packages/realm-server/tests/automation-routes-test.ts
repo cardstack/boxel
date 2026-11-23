@@ -113,6 +113,22 @@ const inboxModule = `
 // shared key, so the share's key owner approves it.
 const SHARED = 'automation/shared';
 
+// The keyed automation's card and script, as the realm starts with them.
+function keyedFixture() {
+  return automationFixture({
+    operations: [{ type: INBOX, names: ['list'] }],
+    path: KEYED,
+    triggers: [
+      {
+        kind: 'cron',
+        label: 'daily',
+        expression: '0 9 * * *',
+        timeZone: 'UTC',
+      },
+    ],
+  });
+}
+
 const silent: PricingReporter = { info() {}, error() {}, alert() {} };
 
 function pricingEnv(): Record<string, string> {
@@ -179,18 +195,7 @@ module(basename(import.meta.filename), function (hooks) {
       }),
       [`${DAILY}-script.js`]: `return 'ok';`,
       'inbox.gts': inboxModule,
-      ...automationFixture({
-        operations: [{ type: INBOX, names: ['list'] }],
-        path: KEYED,
-        triggers: [
-          {
-            kind: 'cron',
-            label: 'daily',
-            expression: '0 9 * * *',
-            timeZone: 'UTC',
-          },
-        ],
-      }),
+      ...keyedFixture(),
       [`${KEYED}-script.js`]: `return 'ok';`,
       ...automationFixture({
         operations: [{ type: INBOX, names: ['shared'] }],
@@ -482,14 +487,13 @@ module(basename(import.meta.filename), function (hooks) {
     return response.body.data.attributes.keyApprovals;
   }
 
-  // Rewrites the automation card at `path`, changing its attributes with
-  // `change`.
+  // Rewrites the keyed automation's card as the fixture writes it, with its
+  // attributes changed by `change`.
   async function editCard(
-    path: string,
+    path: typeof KEYED,
     change: (attributes: Record<string, unknown>) => void,
   ) {
-    let file = await realm.readFileAsText(`${path}.json`);
-    let doc = JSON.parse(file!.content);
+    let doc = JSON.parse(keyedFixture()[`${path}.json`]);
     change(doc.data.attributes);
     await realm.write(`${path}.json`, JSON.stringify(doc, null, 2));
   }
