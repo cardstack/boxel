@@ -279,9 +279,9 @@ export default class HostModeService extends Service {
   // This getter and `sitePath` are the only code that says which URLs are
   // inside the site.
   //
-  // Host Mode v2: today a site is served at its realm's URL, so this returns
-  // the realm's URL. When a site has its own host URL, return the host URL
-  // the page is served on, in both branches below.
+  // When Host Mode v2 lands, return the host URL the page is served on, in
+  // both branches below. Until then a site is served at its realm's URL, so
+  // this returns the realm's URL.
   get siteURL(): string | undefined {
     if (!this.isActive) {
       return undefined;
@@ -309,10 +309,10 @@ export default class HostModeService extends Service {
   // leading slash) for a URL inside this site, or `undefined` for a URL
   // outside it. The query string and the fragment are not part of it.
   //
-  // Host Mode v2: today a site is served at its realm's URL, so this checks
-  // the link against the realm's URL. When a site has its own host URL,
-  // check that the link is under the host URL, and take its path relative
-  // to the host URL.
+  // When Host Mode v2 lands, check that the link is under the host URL the
+  // page is served on, and take its path relative to that host URL. Until
+  // then a site is served at its realm's URL, so this checks the link
+  // against the realm's URL.
   sitePath(url: URL): string | undefined {
     let siteURL = this.siteURL;
     let origin = this.hostModeOrigin;
@@ -414,9 +414,9 @@ export default class HostModeService extends Service {
   // the index route resolves a card URL against. Undefined when there are
   // no dynamic routes, or the realm is not under that origin.
   //
-  // Host Mode v2: today a site is served at its realm's URL, so the mount
-  // pathname comes from the realm's URL. When a site has its own host URL,
-  // take the mount pathname from the host URL the page is served on.
+  // When Host Mode v2 lands, take the mount pathname from the host URL the
+  // page is served on. Until then a site is served at its realm's URL, so
+  // the mount pathname comes from the realm's URL.
   private get dynamicRoutesMount():
     | {
         dynamicRoutes: HostDynamicRoutes;

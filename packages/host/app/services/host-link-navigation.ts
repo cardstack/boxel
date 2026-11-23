@@ -265,10 +265,10 @@ export default class HostLinkNavigationService extends Service {
           return LEAVE;
         } else {
           // No route serves the path, so it is a card's own path or nothing.
-          // Host Mode v2: today a site is served at its realm's URL, so the
-          // page's origin + path is the card's URL. When a site has its own
-          // host URL, build the card's URL from the realm's URL + path
-          // instead: a card's id is always on the realm's URL.
+          // When Host Mode v2 lands, build the card's URL from the realm's
+          // URL + path instead, because a card's id is always on the realm's
+          // URL. Until then a site is served at its realm's URL, so the
+          // page's origin + path is the card's URL.
           cardHref = `${this.hostModeService.hostModeOrigin}/${link.path}`;
         }
       }
