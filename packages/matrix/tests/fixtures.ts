@@ -7,9 +7,25 @@ export const test = base.extend<{ reportTestBudget: void }>({
     await routeEmailAssets(context);
     await use(context);
   },
-  page: async ({ page }, use) => {
+  // An uncaught error in the app (an Ember render assertion takes the whole
+  // app down) otherwise shows only inside the trace, while the test reports
+  // the selector that stopped appearing. When the test fails, print each one.
+  page: async ({ page }, use, testInfo) => {
+    let pageErrors: string[] = [];
+    page.on('pageerror', (error) => {
+      pageErrors.push(
+        `${new Date().toISOString()} ${error.stack ?? error.message}`,
+      );
+    });
     await setRealmRedirects(page);
     await use(page);
+    if (testInfo.status !== testInfo.expectedStatus) {
+      for (let error of pageErrors) {
+        console.log(
+          `[page-error] ${testInfo.titlePath.join(' › ')} retry=${testInfo.retry}: ${error}`,
+        );
+      }
+    }
   },
   // When a test fails or times out, print the budget it ran under next to
   // the time it used, so a timeout can be told apart from a hung step.

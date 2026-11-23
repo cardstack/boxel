@@ -13,6 +13,10 @@ import {
   chargeAutomationRun,
   createAutomationRun,
   creditsHeldByRunsInFlight,
+  AI_BATCH_HOLD_SECONDS,
+  creditsHeldByUnsettledAIBatches,
+  recordAIBatch,
+  recordAIBatchSettled,
   dbAdapterQuerier,
   holdAutomationRunCredits,
   getAutomationRun,
@@ -40,6 +44,7 @@ import {
   readAutomationDeclaration,
 } from '@cardstack/runtime-common/automation-declaration';
 import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
+import { automationCreditsSince } from '@cardstack/runtime-common/automation-spend';
 import {
   getAutomation,
   pauseAutomation,
@@ -106,10 +111,12 @@ function automationCard(
     operations = [],
     script = SCRIPT,
     caps = {},
+    batchedAI = false,
   }: {
     operations?: { targetType: typeof INBOX; operation: string }[];
     script?: string;
     caps?: Partial<Record<keyof typeof ROOMY_AUTOMATION_CAPS, number | null>>;
+    batchedAI?: boolean;
   } = {},
 ): Record<string, string> {
   let scriptName = `${path.split('/').pop()}-script.js`;
@@ -130,6 +137,7 @@ function automationCard(
           operations,
           caps: { ...ROOMY_AUTOMATION_CAPS, seconds: 300, ...caps },
           params: [],
+          ...(batchedAI ? { batchedAI: true } : {}),
         },
         relationships: {
           script: { links: { self: `./${scriptName}` } },
@@ -155,6 +163,9 @@ const SPENDING_CAPS = {
 };
 const SPENDING = 'automation/spending';
 const DAILY = 'automation/daily';
+// The spending card with `batchedAI` on: its AI counts twice, so one run's
+// cost ceiling (1,005 credits) is above the floor.
+const BATCHED = 'automation/batched';
 
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
@@ -182,6 +193,7 @@ module(basename(import.meta.filename), function (hooks) {
       ...automationCard(DAILY, {
         caps: { ...SPENDING_CAPS, dailyCredits: 600 },
       }),
+      ...automationCard(BATCHED, { caps: SPENDING_CAPS, batchedAI: true }),
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -204,7 +216,8 @@ module(basename(import.meta.filename), function (hooks) {
     {
       trigger = 'manual',
       actsAs = OWNER,
-    }: { trigger?: string; actsAs?: string } = {},
+      dryRun = false,
+    }: { trigger?: string; actsAs?: string; dryRun?: boolean } = {},
   ): Promise<AutomationRun> {
     return await createAutomationRun(dbAdapter, {
       automationId: automationId(path),
@@ -212,6 +225,7 @@ module(basename(import.meta.filename), function (hooks) {
       trigger,
       slot: randomUUID(),
       actsAs,
+      dryRun,
     });
   }
 
@@ -362,7 +376,7 @@ module(basename(import.meta.filename), function (hooks) {
       {
         runId: run.id,
         scheduledAt: new Date().toISOString(),
-        dryRun: false,
+        dryRun: run.dryRun,
         // A run started by hand says so; any other run is its trigger's.
         ...(triggerKind
           ? { triggerKind }
@@ -1239,6 +1253,335 @@ module(basename(import.meta.filename), function (hooks) {
       let next = await newRun(DAILY, { trigger: 'nightly' });
       result = await attempt(next, { checks: spending({ now: tomorrow }) });
       assert.strictEqual(result.state, 'complete');
+    });
+
+    // Records a batch `run` submitted, reserving `reservedCredits`, as the
+    // batch path leaves it.
+    async function submittedBatch(
+      run: AutomationRun,
+      reservedCredits: number,
+      estimatedUsd = 0.1,
+    ) {
+      return await recordAIBatch(dbAdapter, {
+        batchId: `batch_${randomUUID()}`,
+        runId: run.id,
+        actsAs: run.actsAs,
+        realm: run.realm,
+        automationId: run.automationId,
+        model: 'openai/gpt-4o-mini',
+        requestCount: 3,
+        estimatedUsd,
+        runAIReservation: randomUUID(),
+        reservedCredits,
+        deadline: new Date(Date.now() + 3600 * 1000),
+        expiresAt: null,
+        state: 'validating',
+      });
+    }
+
+    test('an automation that batches AI counts its AI twice in the minimum balance, and a Preview of it counts it once', async function (assert) {
+      let batchedCeiling = Math.ceil(
+        runCostCeiling({ ...SPENDING_CAPS, batchedAI: true }, testPricing())
+          .totalCredits,
+      );
+      assert.strictEqual(
+        batchedCeiling,
+        ceiling + SPENDING_CAPS.aiCredits,
+        'the AI spending cap is counted a second time',
+      );
+      assert.true(
+        batchedCeiling > testPricing().values.minimumBalanceFloorCredits,
+        'the batched card’s ceiling is above the floor',
+      );
+      await switchOn(BATCHED);
+      await fund(OWNER, batchedCeiling - 1);
+
+      let calls: RunCommandArgs[] = [];
+      let short = await newRun(BATCHED, { trigger: 'nightly' });
+      let result = await attempt(short, { calls, checks: spending() });
+      await assertRefused(assert, short, result, calls, 'insufficient-credits');
+      assert.true(
+        (await getAutomationRun(dbAdapter, short.id))?.errorMessage?.includes(
+          `${batchedCeiling} credits`,
+        ),
+        'the refusal names the doubled minimum',
+      );
+
+      await fund(OWNER, 1);
+      let run = await newRun(BATCHED, { trigger: 'nightly' });
+      result = await attempt(run, { checks: spending() });
+      assert.strictEqual(result.state, 'complete');
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, run.id))?.costCeilingCredits,
+        batchedCeiling,
+        'the admitted run holds the doubled ceiling',
+      );
+
+      await fund(OWNER, 10_000);
+      let preview = await newRun(BATCHED, { dryRun: true });
+      result = await attempt(preview, { checks: spending() });
+      assert.strictEqual(result.state, 'complete');
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, preview.id))?.costCeilingCredits,
+        ceiling,
+        'a Preview never submits a batch, so it holds its AI once',
+      );
+    });
+
+    test('an automation that doesn’t batch AI counts its AI once', async function (assert) {
+      await switchOn(SPENDING);
+      await fund(OWNER, 10_000);
+      let run = await newRun(SPENDING, { trigger: 'nightly' });
+      let result = await attempt(run, { checks: spending() });
+      assert.strictEqual(result.state, 'complete');
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, run.id))?.costCeilingCredits,
+        ceiling,
+      );
+    });
+
+    test('an unsettled batch holds what it reserved against its payer’s balance once its run stops holding, until the settle job bills it', async function (assert) {
+      let querier = dbAdapterQuerier(dbAdapter);
+      let held = () =>
+        creditsHeldByUnsettledAIBatches(querier, { actsAs: OWNER });
+      await switchOn(BATCHED);
+      let submitter = await newRun(BATCHED, { trigger: 'nightly' });
+      await query(dbAdapter, [
+        "UPDATE automation_runs SET state = 'running', attempt = 3 WHERE id =",
+        param(submitter.id),
+      ]);
+      await holdAutomationRunCredits(dbAdapter, submitter.id, 3, 1005);
+      let batch = await submittedBatch(submitter, 300);
+      assert.strictEqual(
+        await held(),
+        0,
+        'while its run holds its ceiling, that hold covers the batch',
+      );
+
+      await query(dbAdapter, [
+        "UPDATE automation_runs SET state = 'complete', finished_at = now(), credit_hold_released_at = now() WHERE id =",
+        param(submitter.id),
+      ]);
+      assert.strictEqual(
+        await held(),
+        300,
+        'once the run’s hold is released, the batch holds its reservation',
+      );
+      assert.strictEqual(
+        await creditsHeldByUnsettledAIBatches(querier, { actsAs: WRITER }),
+        0,
+        'a batch holds only against the person it is billed to',
+      );
+
+      // The floor is 1,000, so 1,299 less the batch's 300 is short.
+      await fund(OWNER, 1_299);
+      let short = await newRun(SPENDING);
+      let result = await attempt(short, { checks: spending() });
+      assert.strictEqual(
+        result.reason,
+        'insufficient-credits',
+        'the unsettled batch reduces the balance a run is admitted against',
+      );
+      assert.true(
+        (await getAutomationRun(dbAdapter, short.id))?.errorMessage?.includes(
+          'unsettled AI batches',
+        ),
+        'the refusal says unsettled batches count',
+      );
+
+      await recordAIBatchSettled(dbAdapter, batch.batchId, {
+        usd: 0.05,
+        estimated: false,
+      });
+      assert.strictEqual(await held(), 0, 'a settled batch holds nothing');
+      let run = await newRun(SPENDING);
+      result = await attempt(run, { checks: spending() });
+      assert.strictEqual(result.state, 'complete');
+
+      // Rows with no `reserved_credits`, as code that doesn't set it writes
+      // them.
+      let unrecorded = await newRun(BATCHED, { trigger: 'nightly' });
+      let unrecordedBatch = await submittedBatch(unrecorded, 400, 0.25);
+      await query(dbAdapter, [
+        'UPDATE automation_runs SET ai_reservations = jsonb_build_object(CAST(',
+        param(unrecordedBatch.runAIReservation),
+        'AS text), 400) WHERE id =',
+        param(unrecorded.id),
+      ]);
+      await query(dbAdapter, [
+        'UPDATE ai_batches SET reserved_credits = NULL WHERE run_id =',
+        param(unrecorded.id),
+      ]);
+      assert.strictEqual(
+        await held(),
+        400,
+        'a batch with no reservation recorded holds the one its run’s row names',
+      );
+      await query(dbAdapter, [
+        'DELETE FROM automation_runs WHERE id =',
+        param(unrecorded.id),
+      ]);
+      assert.strictEqual(
+        await held(),
+        500,
+        'one whose run is gone holds twice its estimate',
+      );
+
+      // OpenRouter deletes a batch's results 30 days after submit, and the
+      // settle job bills the `410` at its estimate, so a batch still
+      // unsettled past the hold's lapse is one OpenRouter doesn't know.
+      await query(dbAdapter, [
+        'UPDATE ai_batches SET submitted_at = now() - make_interval(secs =>',
+        param(AI_BATCH_HOLD_SECONDS - 60),
+        ') WHERE batch_id =',
+        param(unrecordedBatch.batchId),
+      ]);
+      assert.strictEqual(
+        await held(),
+        500,
+        'a batch holds until its hold lapses…',
+      );
+      await query(dbAdapter, [
+        'UPDATE ai_batches SET submitted_at = now() - make_interval(secs =>',
+        param(AI_BATCH_HOLD_SECONDS + 60),
+        ') WHERE batch_id =',
+        param(unrecordedBatch.batchId),
+      ]);
+      assert.strictEqual(
+        await held(),
+        0,
+        '…and one the settle job never settles stops holding then',
+      );
+    });
+
+    test('the credit caps count an automation’s unsettled batches, and leave out a Run now’s', async function (assert) {
+      let now = Date.UTC(2026, 10, 16, 12) / 1000;
+      let querier = dbAdapterQuerier(dbAdapter);
+      await switchOn(BATCHED);
+      await fund(OWNER, 10_000);
+      let scheduled = await newRun(BATCHED, { trigger: 'nightly' });
+      await submittedBatch(scheduled, 1_500);
+      let runNow = await newRun(BATCHED);
+      await submittedBatch(runNow, 700);
+      assert.strictEqual(
+        await creditsHeldByUnsettledAIBatches(querier, {
+          automationId: automationId(BATCHED),
+        }),
+        1_500,
+      );
+
+      let next = await newRun(BATCHED, { trigger: 'nightly' });
+      let result = await attempt(next, { checks: spending({ now }) });
+      assert.strictEqual(
+        result.state,
+        'complete',
+        '1,500 held is under the 2,000 cap',
+      );
+      let over = await newRun(BATCHED, { trigger: 'nightly' });
+      result = await attempt(over, { checks: spending({ now }) });
+      assert.strictEqual(
+        result.reason,
+        'monthly-credit-cap-reached',
+        'the batch and the run in flight reach the cap',
+      );
+      assert.true(
+        (await getAutomationRun(dbAdapter, over.id))?.errorMessage?.includes(
+          'unsettled AI batches',
+        ),
+      );
+    });
+
+    test('the credit caps count a batch’s charge by when it was billed, however long after its run, and once', async function (assert) {
+      let now = Date.UTC(2026, 10, 16, 12) / 1000;
+      let querier = dbAdapterQuerier(dbAdapter);
+      let id = automationId(BATCHED);
+      await switchOn(BATCHED);
+      // A run created 40 days ago whose batch the settle job bills now, as
+      // after a `410` or a wait on the platform's OpenRouter balance.
+      let old = await newRun(BATCHED, { trigger: 'nightly' });
+      await query(dbAdapter, [
+        'UPDATE automation_runs SET created_at = to_timestamp(',
+        param(now - 40 * 24 * 60 * 60),
+        ') WHERE id =',
+        param(old.id),
+      ]);
+      let batch = await submittedBatch(old, 600);
+      await charge(OWNER, 250, now - 60, {
+        kind: 'batched_ai',
+        realm: ri(realm.url),
+        runId: old.id,
+        batchId: batch.batchId,
+      });
+      assert.strictEqual(
+        await automationCreditsSince(querier, id, now - 3600),
+        0,
+        'a charge whose batch isn’t recorded as settled yet isn’t spent…',
+      );
+      assert.strictEqual(
+        await creditsHeldByUnsettledAIBatches(querier, { automationId: id }),
+        600,
+        '…it is held as unsettled, so the cap still counts it',
+      );
+      await recordAIBatchSettled(dbAdapter, batch.batchId, {
+        usd: 0.25,
+        estimated: false,
+      });
+      assert.strictEqual(
+        await automationCreditsSince(querier, id, now - 3600),
+        250,
+        'the late charge counts toward the cap',
+      );
+      assert.strictEqual(
+        await creditsHeldByUnsettledAIBatches(querier, { automationId: id }),
+        0,
+      );
+
+      // A recent run's batch counts once, not again through its run.
+      let recent = await newRun(BATCHED, { trigger: 'nightly' });
+      let recentBatch = await submittedBatch(recent, 600);
+      await charge(OWNER, 100, now - 60, {
+        kind: 'run',
+        realm: ri(realm.url),
+        runId: recent.id,
+        pricingVersion: testPricing().version,
+      });
+      await charge(OWNER, 40, now - 60, {
+        kind: 'batched_ai',
+        realm: ri(realm.url),
+        runId: recent.id,
+        batchId: recentBatch.batchId,
+      });
+      await recordAIBatchSettled(dbAdapter, recentBatch.batchId, {
+        usd: 0.04,
+        estimated: false,
+      });
+      assert.strictEqual(
+        await automationCreditsSince(querier, id, now - 3600),
+        390,
+      );
+
+      // A Run now's batch is charged to whoever clicked, outside the cap.
+      let runNow = await newRun(BATCHED);
+      let runNowBatch = await submittedBatch(runNow, 600);
+      await charge(OWNER, 70, now - 60, {
+        kind: 'batched_ai',
+        realm: ri(realm.url),
+        runId: runNow.id,
+        batchId: runNowBatch.batchId,
+      });
+      await recordAIBatchSettled(dbAdapter, runNowBatch.batchId, {
+        usd: 0.07,
+        estimated: false,
+      });
+      assert.strictEqual(
+        await automationCreditsSince(querier, id, now - 3600),
+        390,
+      );
+      assert.strictEqual(
+        await automationCreditsSince(querier, id, now),
+        0,
+        'a charge billed before the period began doesn’t count',
+      );
     });
 
     test('a worker without prices admits no run', async function (assert) {

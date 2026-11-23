@@ -60,10 +60,13 @@ const log = logger('ai-batches');
 // Only a run token reaches it, from a running run that its token's attempt
 // still owns, whose identity's sessions haven't been revoked since the token
 // was minted. An interactive session is refused: someone waiting for an
-// answer gains nothing from a batch. A submit also needs the automation's
-// payer to have turned on `batchedAI` when they switched it on or last
-// resumed it (the automation row's caps snapshot); a status read doesn't, so
-// a follow-up run can always read a batch that is already paid for.
+// answer gains nothing from a batch. A Preview's submit is refused too: a
+// Preview sends batched requests at the normal price (ADR 030 §1.1), and its
+// minimum balance counts its AI once on that basis. A submit also needs the
+// automation's payer to have turned on `batchedAI` when they switched it on
+// or last resumed it (the automation row's caps snapshot); a status read
+// doesn't, so a follow-up run can always read a batch that is already paid
+// for.
 //
 // A submit charges nothing. OpenRouter reports a batch's cost only once it
 // ends, so the submit records the batch (its run, the person that run acts
@@ -105,6 +108,13 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       return;
     }
     let { run, automation } = caller;
+    if (run.dryRun) {
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        'A Preview sends its batched requests at the normal price, so it submits no batches',
+      );
+      return;
+    }
     if (!automation.capsSnapshot.batchedAI) {
       await sendResponseForForbiddenRequest(
         ctxt,
@@ -159,7 +169,7 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
     if (!reserved) {
       return;
     }
-    let reservationId = reserved;
+    let { reservationId, reservedCredits } = reserved;
     let release = () =>
       settleAutomationRunAIRequest(dbAdapter, {
         runId: run.id,
@@ -243,6 +253,7 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
         requestCount: requests.length,
         estimatedUsd: estimated.estimate.usd,
         runAIReservation: reservationId,
+        reservedCredits,
         deadline,
         expiresAt: batch.expiresAt,
         state: batch.status,
@@ -419,9 +430,9 @@ async function batchCaller(
 // Reserves the batch on the run's AI spending cap, in one statement, at twice
 // its requests' worst case at the model's listed price: once for the batch,
 // and once for the normal-price requests it falls back to when it misses its
-// deadline. Returns the reservation's id, or answers the refusal itself and
-// returns undefined when the batch would pass the cap or the run can no
-// longer make AI requests.
+// deadline. Returns the reservation's id and the credits it holds, or answers
+// the refusal itself and returns undefined when the batch would pass the cap
+// or the run can no longer make AI requests.
 async function reserveBatch(
   ctxt: Koa.Context,
   dbAdapter: DBAdapter,
@@ -436,7 +447,7 @@ async function reserveBatch(
     listedCredits: number;
     requestCount: number;
   },
-): Promise<string | undefined> {
+): Promise<{ reservationId: string; reservedCredits: number } | undefined> {
   let credits = listedCredits * BATCHED_AI_RESERVE_FACTOR;
   let reservation = await reserveAutomationRunAICredits(
     dbAdapter,
@@ -446,7 +457,10 @@ async function reserveBatch(
   );
   switch (reservation.kind) {
     case 'reserved':
-      return reservation.reservationId;
+      return {
+        reservationId: reservation.reservationId,
+        reservedCredits: credits,
+      };
     case 'over-cap': {
       let { aiCreditsSpent, aiCreditsReserved } = reservation.run;
       await sendResponseForForbiddenRequest(
