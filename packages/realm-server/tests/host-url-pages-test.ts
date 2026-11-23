@@ -632,9 +632,30 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a not-found page on a host URL has no ETag', async function (assert) {
+  test('a not-found page on a host URL has no ETag, and no shared cache keeps it', async function (assert) {
     let response = await page('/docs/missing', GOVERNED_HOST);
     assert.strictEqual(response.status, 404, response.text.slice(0, 300));
     assert.strictEqual(response.headers['etag'], undefined);
+    assert.strictEqual(response.headers['cache-control'], 'private, no-cache');
+
+    let generic = await page('/docs/missing', GOVERNED_HOST, '*/*');
+    assert.strictEqual(generic.status, 404, generic.text.slice(0, 300));
+    assert.strictEqual(
+      generic.headers['cache-control'],
+      'private, no-cache',
+      'a path the page handler passes on is not kept either',
+    );
+  });
+
+  test('a page served with no stored markup on a host URL has no ETag, and no shared cache keeps it', async function (assert) {
+    let response = await page('/secret', GOVERNED_HOST);
+    assert.strictEqual(response.status, 200, response.text.slice(0, 300));
+    assert.false(response.text.includes('Top secret'));
+    assert.strictEqual(response.headers['etag'], undefined);
+    assert.strictEqual(
+      response.headers['cache-control'],
+      'private, no-cache',
+      'another visitor can be answered differently at this path',
+    );
   });
 });
