@@ -3513,6 +3513,27 @@ export class Batch {
     return query(this.#dbAdapter, expression, coerceTypes);
   }
 
+  // Whether the index holds a live row for `url` whose render failed.
+  private async hasErrorRow(
+    url: URL,
+    expectedType: BoxelIndexTable['type'],
+  ): Promise<boolean> {
+    let rows = (await this.#query([
+      `SELECT 1 FROM boxel_index as i WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param(expectedType)],
+        ['i.has_error = TRUE'],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+      `LIMIT 1`,
+    ] as Expression)) as unknown[];
+    return rows.length > 0;
+  }
+
   private async getProductionVersion(
     url: URL,
     expectedType: BoxelIndexTable['type'],
@@ -3615,10 +3636,17 @@ export class Batch {
     if (!types) {
       return await prior();
     }
+    let realmConfigURL = realmConfigCardURL(this.realmURL);
     let realmConfig = await this.getProductionVersion(
-      realmConfigCardURL(this.realmURL),
+      realmConfigURL,
       'instance',
     );
+    if (!realmConfig && (await this.hasErrorRow(realmConfigURL, 'instance'))) {
+      // The realm.json render failed. Its routes are kept as the last pass
+      // that rendered it validated them, as an error row keeps a card's last
+      // good data.
+      return await prior();
+    }
     let rules = readRawHostRoutingRules(realmConfig?.search_doc);
     if (
       hostRouteTypeRefs(rules).some((ref) => !types.has(typeLookupKey(ref)))

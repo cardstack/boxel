@@ -164,6 +164,7 @@ import type {
 import { HtmlResourceType } from './resource-types.ts';
 import type { HostRoutingRule } from './host-routing-validation.ts';
 import {
+  hostRouteTypeRefs,
   hostRoutingMapFromRoutes,
   readRawHostRoutingRules,
   realmConfigCardURL,
@@ -3612,6 +3613,9 @@ export class Realm {
   #cachedHostRoutingMap:
     | { validation: HostRoutesValidation; map: HostRoutingRule[] }
     | undefined;
+  // Whether this process started an index of realm.json because the index
+  // held no stored host routes.
+  #requestedHostRoutesIndex = false;
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -22279,8 +22283,14 @@ export class Realm {
       }
       // An index written before the index stored host routes. Its rules are
       // validated without type definitions, so each field-match route is
-      // dropped until the realm is indexed again.
-      return validateHostRoutes(await this.#readRawHostRoutingRules(), {
+      // dropped until the realm is indexed again, and an index of realm.json
+      // is started once to store the tree: nothing else may index this realm
+      // for a long time.
+      let rules = await this.#readRawHostRoutingRules();
+      if (hostRouteTypeRefs(rules).length > 0) {
+        this.#indexRealmConfigForHostRoutes();
+      }
+      return validateHostRoutes(rules, {
         realmURL: new URL(this.url),
         lookupType: () => 'unavailable',
       });
@@ -22288,6 +22298,24 @@ export class Realm {
       this.#log.warn(`failed to read the host routes from the index: ${e}`);
       return NO_HOST_ROUTES;
     }
+  }
+
+  // Starts an index of realm.json, once in this process, so that an index
+  // written before the index stored host routes gets them.
+  #indexRealmConfigForHostRoutes(): void {
+    if (this.#requestedHostRoutesIndex) {
+      return;
+    }
+    this.#requestedHostRoutesIndex = true;
+    void this.#realmIndexUpdater
+      .enqueueUpdate([this.paths.fileURL('realm.json')])
+      .then(({ settled }) => settled)
+      .catch((e: unknown) => {
+        this.#requestedHostRoutesIndex = false;
+        this.#log.warn(
+          `failed to index realm.json to store the host routes of ${this.url}: ${e}`,
+        );
+      });
   }
 
   // Drops the cached host routes and the map built from them.

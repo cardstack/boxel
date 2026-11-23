@@ -510,13 +510,15 @@ module(basename(import.meta.filename), function () {
   module('Realm.getHostRoutes', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-forms/');
     let testRealm: Realm;
+    let dbAdapter: PgAdapter;
 
     setupPermissionedRealmCached(hooks, {
       realmURL,
       permissions: { '*': ['read'] },
       fileSystem: makeRouteFormsFixture(),
-      onRealmSetup({ testRealm: realm }) {
+      onRealmSetup({ testRealm: realm, dbAdapter: adapter }) {
         testRealm = realm;
+        dbAdapter = adapter;
       },
     });
 
@@ -598,6 +600,58 @@ module(basename(import.meta.filename), function () {
         { path: '/', id: `${realmURL.href}home` },
         { path: '/old', redirectTo: '/', statusCode: 301 },
       ]);
+    });
+
+    test('an edit to realm.json is validated by its index and replaces the stored routes', async function (assert) {
+      let realmConfig = makeRouteFormsFixture()[
+        'realm.json'
+      ] as LooseSingleCardDocument;
+      let attributes = realmConfig.data.attributes as {
+        hostRoutingRules: unknown[];
+      };
+      attributes.hostRoutingRules = [
+        ...attributes.hostRoutingRules,
+        { path: '/older', redirectTo: '/' },
+      ];
+      await testRealm.write('realm.json', JSON.stringify(realmConfig));
+      await testRealm.incrementalIndexing();
+
+      let { routes } = await testRealm.getHostRoutes();
+      assert.deepEqual(
+        routes.map((route) => [route.kind, route.fullPath]),
+        [
+          ['fixed-card', '/'],
+          ['redirect', '/old'],
+          ['card-id', '/people/:person_id'],
+          ['field-match', '/:person_slug'],
+          ['redirect', '/older'],
+        ],
+        'the stored tree has the new route',
+      );
+    });
+
+    test('an index written before the routes were stored gets them from an index of realm.json', async function (assert) {
+      // What an index written before the index stored host routes holds.
+      await dbAdapter.execute(
+        `UPDATE realm_meta SET value = value - 'hostRoutes' WHERE realm_url = $1`,
+        { bind: [realmURL.href] },
+      );
+      testRealm.clearRealmIndexCaches();
+
+      let old = await testRealm.getHostRoutes();
+      assert.deepEqual(
+        old.routes.map((route) => route.fullPath),
+        ['/', '/old', '/people/:person_id'],
+        'until the realm is indexed, the field-match route is dropped',
+      );
+      await testRealm.incrementalIndexing();
+
+      let stored = await testRealm.getHostRoutes();
+      assert.deepEqual(
+        stored.routes.map((route) => route.fullPath),
+        ['/', '/old', '/people/:person_id', '/:person_slug'],
+        'the index of realm.json stored the whole tree',
+      );
     });
   });
 
