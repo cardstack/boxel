@@ -2180,6 +2180,12 @@ module(basename(import.meta.filename), function (hooks) {
         await writeAutomation();
         await nameAPolicy();
         await archiveRealm(policyDB, new URL(policyRealm.url));
+        let sealed = (await answers(signedIn(ADMIN, ['read', 'write']))).status;
+        assert.deepEqual(
+          [sealed.status, sealed.headers['x-boxel-realm-archived']],
+          [403, 'true'],
+          'the realm is sealed: a direct writer meets the archived seal',
+        );
         let answered = await answers(signedIn(STRANGER));
         assertToldNotADirectWriter(
           assert,

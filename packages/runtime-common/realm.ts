@@ -1347,16 +1347,17 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // (ADR 022 §1.8), so a change to whom `_info` answers changes that too.
 //
 // The automation routes a card's view, its editor and the realm config read
-// consume it the same way, and resolve no operation either:
+// consume it too, and resolve no operation either:
 // `_automation-status`, `_automation-runs`, `_automations` and
 // `_automation-webhooks`. Each shows what it serves only to a direct writer
 // of the realm whom its ACL admits, and tells anyone else that they aren't
 // one (see `#statusViewer`). So a caller the realm hands to its policy is told
 // that too, and is shown nothing about the automations, their runs or the
 // realm's webhooks, rather than refused: a 401 or 403 the host reads while it
-// renders a card a grant admits them to fails whatever else it is loading. A
-// caller who isn't signed in is told the same where the policy opens `read`
-// to such callers (see `ANONYMOUS_AUTOMATION_VIEW`). The answer runs nothing
+// renders a card a grant admits them to fails whatever else it is loading.
+// Unlike `_info`, they also tell a caller who isn't signed in the same, where
+// the policy opens `read` or `query` to such callers (see
+// `ANONYMOUS_AUTOMATION_VIEW`). The answer runs nothing
 // a grant admits, so an archived realm gives it as it does while active, as
 // `_info` does.
 //

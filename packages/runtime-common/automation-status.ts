@@ -186,7 +186,7 @@ export type AutomationStatusAnswer =
 // or loading at the time. A caller the realm hands to its policy, whom a
 // grant may admit to the card but never to the row, asks as no one, so they
 // get the same answer, as does a caller who isn't signed in where the policy
-// opens `read` to such callers.
+// opens `read` or `query` to such callers.
 export async function answerAutomationStatus({
   dbAdapter,
   realmURL,
