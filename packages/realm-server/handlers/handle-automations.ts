@@ -350,6 +350,15 @@ async function keyApprovalsOf(
     : undefined;
 }
 
+// The refusal of a switch-on or resume whose key approvals the realm can't
+// check: an automation that needs a key never starts without being asked.
+function uncheckedKeyApprovals(retry: string): AutomationRouteError {
+  return new AutomationRouteError(
+    422,
+    `the automation's key approvals can't be checked: its script can't be read, or its realm isn't served here; fix the script link and ${retry} again`,
+  );
+}
+
 // Key approvals as a route answers them: whether every one is there, the
 // version a confirmation approving the rest names (`confirmationOf`: the
 // version and its `callApiCalls` cap), and each operation's state.
@@ -661,10 +670,7 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
       caller,
     );
     if (!keyApprovals) {
-      throw new AutomationRouteError(
-        422,
-        "the automation's key approvals can't be checked: its script can't be read, or its realm isn't served here; fix the script link and switch it on again",
-      );
+      throw uncheckedKeyApprovals('switch it on');
     }
     let change = await switchOnAutomation(
       args.dbAdapter,
@@ -859,7 +865,10 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
             declaration,
             payer,
           );
-          return keyApprovals?.approved ?? true;
+          if (!keyApprovals) {
+            throw uncheckedKeyApprovals('resume it');
+          }
+          return keyApprovals.approved;
         },
       },
       actorOptions(args),

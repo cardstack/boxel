@@ -121,6 +121,9 @@ const inboxModule = `
 // An automation declaring an operation whose request carries the realm's
 // shared key, so the share's key owner approves it.
 const SHARED = 'automation/shared';
+// An automation declaring the keyed operation first, then one the Inbox
+// doesn't define.
+const KEYED_THEN_MISSING = 'automation/keyed-then-missing';
 
 // The keyed automation's card and script, as the realm starts with them.
 function keyedFixture() {
@@ -220,6 +223,19 @@ module(basename(import.meta.filename), function (hooks) {
         ],
       }),
       [`${SHARED}-script.js`]: `return 'ok';`,
+      ...automationFixture({
+        operations: [{ type: INBOX, names: ['list', 'nowhere'] }],
+        path: KEYED_THEN_MISSING,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${KEYED_THEN_MISSING}-script.js`]: `return 'ok';`,
       ...automationFixture({
         operations: [],
         path: CAPPED,
@@ -1503,6 +1519,51 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(row?.state, 'active', 'the approval landing runs it');
       assert.strictEqual(row?.payer, WRITER);
       assert.notStrictEqual(row?.nextRun, null);
+    });
+
+    test('a resume passes over a missing key approval and answers the refusal of a later operation', async function (assert) {
+      await fund(OWNER);
+      await fund(WRITER);
+      await switchOn(OWNER, KEYED_THEN_MISSING);
+      assert.strictEqual(
+        (
+          await post(
+            AUTOMATION_PAUSE_PATH,
+            OWNER,
+            {},
+            { id: cardURL(KEYED_THEN_MISSING) },
+          )
+        ).status,
+        200,
+      );
+      // WRITER has no binding for `list`, which only makes the automation
+      // wait; `nowhere` isn't an operation the Inbox defines, which a run
+      // would be refused for.
+      let refused = await resume(WRITER, KEYED_THEN_MISSING);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'target-not-found');
+      await assertStillPaused(assert, KEYED_THEN_MISSING, OWNER);
+    });
+
+    test('a resume whose key approvals the realm can’t check, its script unreadable once admitted, is refused', async function (assert) {
+      await fund(OWNER);
+      await switchOn(OWNER, KEYED);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(KEYED) }))
+          .status,
+        200,
+      );
+      // The script reads for the payer's admission and then can't be read
+      // for the key approvals check.
+      let original = realm.checkAutomationKeyApprovals.bind(realm);
+      realm.checkAutomationKeyApprovals = async () => undefined;
+      try {
+        let refused = await resume(OWNER, KEYED);
+        assert.strictEqual(refused.status, 422, refused.text);
+      } finally {
+        realm.checkAutomationKeyApprovals = original;
+      }
+      await assertStillPaused(assert, KEYED, OWNER);
     });
 
     test('a new payer whose balance is short of one run’s minimum is refused, and the automation stays paused', async function (assert) {
