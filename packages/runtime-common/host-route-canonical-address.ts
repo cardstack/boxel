@@ -97,8 +97,8 @@ export interface HostRouteCanonicalAddress {
  * The canonical address of the card served at `cardHref` (a served URL, as
  * an `href`), from the index, or `undefined` when no candidate route fits
  * the card. Rejects with what a lookup rejects with, and with
- * `HostRouteUnavailableError` when an unavailable route comes before the
- * route that fits.
+ * `HostRouteUnavailableError` when an unavailable route that the card's type
+ * may fit comes before the route that fits.
  */
 export async function hostRouteCanonicalAddress(
   cardHref: string,
@@ -113,7 +113,18 @@ export async function hostRouteCanonicalAddress(
   for (let chain of canonicalCandidateChains(options.routes)) {
     let route = chain[chain.length - 1]!;
     if (route.kind === 'unavailable') {
-      // It may be the canonical route, and whether it is isn't known.
+      // Only a card of its type may fit it, and whether that one does isn't
+      // known.
+      let ofType = await options.findCard({
+        cardHref: cardURL.href,
+        type: route.type,
+        where: undefined,
+        valueFields: [],
+        linkFields: [],
+      });
+      if (!ofType) {
+        continue;
+      }
       throw new HostRouteUnavailableError(route);
     }
     if (route.kind === 'fixed-card') {

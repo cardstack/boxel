@@ -22449,7 +22449,9 @@ export class Realm {
     } catch (e) {
       let message = `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`;
       if (!isFilterRefersToNonexistentTypeError(e) || e.transient) {
-        this.#log.warn(message);
+        // Read again on every call until it passes, so only the validation's
+        // own warning, logged once while it holds, is at warn level.
+        this.#log.debug(message);
         return 'unavailable';
       }
       try {
@@ -22465,7 +22467,7 @@ export class Realm {
           return undefined;
         }
       } catch (cacheError) {
-        this.#log.warn(`${message}; the cache read failed: ${cacheError}`);
+        this.#log.debug(`${message}; the cache read failed: ${cacheError}`);
         return 'unavailable';
       }
       this.#log.warn(message);

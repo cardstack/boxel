@@ -8,6 +8,9 @@ module(basename(import.meta.filename), function () {
   test('hostRouteCanonicalAddress: id routes agree with the reverse lookup', async function (assert) {
     await runSharedTest(hostRouteCanonicalAddressTests, assert, {});
   });
+  test('hostRouteCanonicalAddress: an unavailable route ends the walk only for a card of its type', async function (assert) {
+    await runSharedTest(hostRouteCanonicalAddressTests, assert, {});
+  });
 
   test('hostRouteCanonicalAddress: a field match reads its values from the index', async function (assert) {
     await runSharedTest(hostRouteCanonicalAddressTests, assert, {});

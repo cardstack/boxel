@@ -227,7 +227,19 @@ class Lookup {
     for (let chain of canonicalCandidateChains(this.options.routes)) {
       let route = chain[chain.length - 1]!;
       if (route.kind === 'unavailable') {
-        // It may be the canonical route, and whether it is isn't known.
+        // Only a card of its type may fit it, and whether that one does isn't
+        // known. A card that isn't loaded may be of its type.
+        let card = cards[cards.length - 1]!;
+        if (
+          typeof card !== 'string' &&
+          matchInstanceAgainstFilter(
+            card,
+            { type: route.type },
+            this.options.api,
+          ) !== 'match'
+        ) {
+          continue;
+        }
         return { ok: false, reason: 'route-unavailable', route };
       }
       if (route.kind === 'fixed-card') {
