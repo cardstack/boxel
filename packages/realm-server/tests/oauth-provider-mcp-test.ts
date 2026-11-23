@@ -1,6 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import http from 'http';
+import type { AddressInfo } from 'net';
 import { randomBytes } from 'crypto';
 import supertest from 'supertest';
 import { JSDOM } from 'jsdom';
@@ -305,6 +307,56 @@ module(basename(import.meta.filename), function (hooks) {
 
     let small = await rpc(token, 'ping');
     assert.strictEqual(small.status, 200, 'a body under it is served');
+  });
+
+  test('a body sent with no declared length is answered 413 once it passes the limit', async function (assert) {
+    let { token } = await accessToken();
+    let { port } = server!.address() as AddressInfo;
+    let chunk = 'a'.repeat(4 * 1024);
+    let chunks = Math.ceil(MCP_MAX_BODY_BYTES / chunk.length) + 2;
+    let response = await new Promise<{ status: number; body: string }>(
+      (resolve, reject) => {
+        let request = http.request({
+          host: '127.0.0.1',
+          port,
+          method: 'POST',
+          path: '/mcp',
+          headers: {
+            Host: OAUTH_TEST_SERVER_URL.host,
+            Accept: MCP_ACCEPT,
+            'Content-Type': 'application/json',
+            'MCP-Protocol-Version': '2025-06-18',
+            Authorization: `Bearer ${token}`,
+            'Transfer-Encoding': 'chunked',
+          },
+        });
+        let answered = false;
+        request.on('response', (res) => {
+          answered = true;
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (data: string) => (body += data));
+          res.on('end', () => resolve({ status: res.statusCode!, body }));
+        });
+        // The server may stop reading before the last chunk is written.
+        request.on('error', (error) => {
+          if (!answered) {
+            reject(error);
+          }
+        });
+        request.write(
+          '{"jsonrpc":"2.0","id":1,"method":"ping","params":{"padding":"',
+        );
+        for (let i = 0; i < chunks; i++) {
+          request.write(chunk);
+        }
+        request.end('"}}');
+      },
+    );
+    assert.strictEqual(response.status, 413);
+    let body = JSON.parse(response.body);
+    assert.strictEqual(body.jsonrpc, '2.0');
+    assert.strictEqual(body.id, null);
   });
 
   test('a call to /mcp logs the token nowhere and sends it nowhere', async function (assert) {
