@@ -387,6 +387,41 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     assert
       .dom('[data-test-message-field]')
       .hasValue('This is 1st sentence \nThis is 2nd sentence');
+
+    await click('[data-test-send-message-btn]');
+    await waitFor('[data-test-user-message]:not(.is-pending)');
+
+    let text = document.querySelector(
+      '[data-test-user-message-text]',
+    ) as HTMLElement;
+    assert.strictEqual(
+      text.innerText.trim(),
+      'This is 1st sentence\nThis is 2nd sentence',
+      'the sent message keeps the line break',
+    );
+  });
+
+  test('a line typed after a list in a sent message keeps its own line', async function (assert) {
+    setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await fillIn('[data-test-message-field]', 'Do these:\n- a\n- b\nThanks');
+    await click('[data-test-send-message-btn]');
+    await waitFor('[data-test-user-message]:not(.is-pending)');
+
+    let items = [
+      ...document.querySelectorAll('[data-test-user-message-text] li'),
+    ] as HTMLElement[];
+    assert.deepEqual(
+      items.map((item) => item.innerText.trim()),
+      ['a', 'b\nThanks'],
+      'the line after the list is not joined to the last item',
+    );
   });
 
   test('draft attachments persist across panel reopen without duplicating auto attachments', async function (assert) {

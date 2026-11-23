@@ -74,11 +74,6 @@ const UserMessage: TemplateOnlyComponent<Signature> = <template>
     .user-message-text > :deep(* + *) {
       margin-top: var(--step-12, 12px);
     }
-    /* Shift+Enter in the composer puts in one line break; markdown would
-       join those lines, so a paragraph keeps them as typed */
-    .user-message-text :deep(p) {
-      white-space: pre-line;
-    }
     /* the bubble steps back on --inset (the kit's default), so its card
        and file pills are outlined tokens on that inset, in ink-1 */
     .user-message-bubble {
