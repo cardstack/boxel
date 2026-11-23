@@ -2,11 +2,9 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import { parseRoutePathPattern, rri } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import type {
   CachingDefinitionLookup,
-  HostRoute,
-  HostRoutesValidation,
   LooseSingleCardDocument,
   Realm,
 } from '@cardstack/runtime-common';
@@ -223,47 +221,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       },
     });
 
-    function hostConfig(text: string) {
-      let match = text.match(
-        /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)"/,
-      );
-      if (!match) {
-        throw new Error('the page has no config meta tag');
-      }
-      return JSON.parse(decodeURIComponent(match[1]));
-    }
-
-    // Answers the realm's host routes, with or without their type reads, as
-    // `change` makes them from the realm's own validation.
-    function withHostRoutes(
-      change: (validation: HostRoutesValidation) => HostRoutesValidation,
-    ) {
-      let { getHostRoutes, getHostRoutesWithoutTypeReads } = testRealm;
-      let changed = async function (this: Realm) {
-        return change(await getHostRoutes.call(this));
-      };
-      testRealm.getHostRoutes = changed;
-      testRealm.getHostRoutesWithoutTypeReads = changed;
-      return () => {
-        testRealm.getHostRoutes = getHostRoutes;
-        testRealm.getHostRoutesWithoutTypeReads = getHostRoutesWithoutTypeReads;
-      };
-    }
-
-    // Answers the realm's host routes as an incomplete validation, as it is
-    // while a field-match route's type can't be read: the routes `keep`
-    // rejects are dropped, by default the `/posts/:slug` route.
-    function withIncompleteHostRoutes(
-      keep: (route: HostRoute) => boolean = (route) =>
-        route.fullPath !== '/posts/:slug',
-    ) {
-      return withHostRoutes((validation) => ({
-        ...validation,
-        routes: validation.routes.filter(keep),
-        complete: false,
-      }));
-    }
-
     hooks.beforeEach(async function () {
       await testRealm.indexing();
       // Cache the field-match types first, so most tests don't wait for a
@@ -392,10 +349,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.ok(match, 'the config meta tag is there');
       let config = JSON.parse(decodeURIComponent(match![1]));
       assert.strictEqual(config.hostDynamicRoutes?.realmURL, realmURL.href);
-      assert.true(
-        config.hostDynamicRoutes?.complete,
-        'the validation is complete',
-      );
       assert.deepEqual(
         config.hostDynamicRoutes?.routes.map(
           (route: { kind: string; fullPath: string }) => [
@@ -506,26 +459,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
-    test('while a route is dropped for an unavailable type, a path that resolves to nothing answers 503', async function (assert) {
-      let before = await page('c/no-such-category');
-      assert.strictEqual(before.status, 404, 'a complete validation: 404');
-
-      let restore = withIncompleteHostRoutes();
-      try {
-        let missing = await page('c/no-such-category');
-        assert.strictEqual(missing.status, 503, 'an incomplete one: 503');
-
-        let served = await page('people/robin');
-        assert.strictEqual(served.status, 200, 'a route that resolves serves');
-        assert.false(
-          hostConfig(served.text).hostDynamicRoutes.complete,
-          'the injected routes say the validation is incomplete',
-        );
-      } finally {
-        restore();
-      }
-    });
-
     test('the first request after the definitions cache is cleared serves the page', async function (assert) {
       // What a server restart does: it clears the definitions cache, and the
       // realm boots on its existing index.
@@ -556,47 +489,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.true(response.text.includes('Served Post A'), 'serves Post A');
     });
 
-    test('a path that only a route dropped for an unreadable type matches answers 503', async function (assert) {
-      let pattern = parseRoutePathPattern('/posts/:slug');
-      if (!pattern.ok) {
-        throw new Error('the pattern does not parse');
-      }
-      let restore = withHostRoutes((validation) => {
-        let posts = validation.routes.find(
-          (route) => route.fullPath === '/posts/:slug',
-        )!;
-        return {
-          routes: validation.routes.filter(
-            (route) => route.kind === 'fixed-card',
-          ),
-          warnings: [
-            {
-              code: 'type-unavailable',
-              message: 'The definition of Post is not available',
-              position: posts.position,
-              path: '/posts/:slug',
-              dropped: true,
-            },
-          ],
-          complete: false,
-          unavailableRoutePatterns: [pattern.pattern],
-        };
-      });
-      try {
-        let response = await page('posts/hello');
-        assert.strictEqual(response.status, 503, 'not a 404');
-        let other = await page('no-route/here');
-        assert.notStrictEqual(
-          other.status,
-          503,
-          'a path the dropped route does not match is served as before',
-        );
-      } finally {
-        restore();
-      }
-    });
-
-    test('while a route type is read, only a page a field-match route could answer waits for it', async function (assert) {
+    test('while a route type is read, a module import does not wait for it, and a page does', async function (assert) {
       await markRealmPublished(dbAdapter, realmURL);
       // The definitions cache holds no route type, so each one needs a
       // module visit, which the lookup below holds back.
@@ -617,9 +510,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       let generic = (path: string) =>
         request.get(`${realmPath}${path}`).set('Accept', '*/*');
       try {
-        let fixed = await page('fixed');
-        assert.strictEqual(fixed.status, 200, 'a fixed route does not wait');
-
         let module = await generic('site');
         assert.strictEqual(module.status, 200, 'a module import does not wait');
         assert.false(
@@ -627,43 +517,44 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'and gets the module',
         );
 
-        let crawler = await generic('posts/hello');
+        let waitingCrawler = generic('posts/hello').then(
+          (response) => response,
+        );
+        let waitingBrowser = page('posts/hello').then((response) => response);
+        release();
+        let [crawler, browser] = await Promise.all([
+          waitingCrawler,
+          waitingBrowser,
+        ]);
         assert.strictEqual(
           crawler.status,
-          503,
-          'a generic-Accept request does not wait for the type',
+          200,
+          'a generic-Accept request waits',
         );
-
-        let waiting = page('posts/hello').then((response) => response);
-        release();
-        let served = await waiting;
-        assert.strictEqual(served.status, 200, 'a browser waits for the type');
-        assert.true(served.text.includes('Served Post A'), 'serves Post A');
+        assert.strictEqual(browser.status, 200, 'a browser waits');
+        assert.true(browser.text.includes('Served Post A'), 'serves Post A');
       } finally {
         release();
         definitionLookup.lookupDefinitionEntryForRealm = lookup;
       }
     });
 
-    test('while every dynamic route is dropped, the injected routes still say the validation is incomplete', async function (assert) {
-      let restore = withIncompleteHostRoutes(
-        (route) => route.kind === 'fixed-card' || route.fullPath === '/tos',
-      );
+    test('a route type read that may pass answers 503, and the next request is served', async function (assert) {
+      await definitionLookup.clearRealmDefinitions(realmURL.href);
+      testRealm.clearRealmIndexCaches();
+      let lookup = definitionLookup.lookupDefinitionEntryForRealm;
+      definitionLookup.lookupDefinitionEntryForRealm = async () => {
+        throw new Error('the prerender server could not be reached');
+      };
       try {
-        let response = await page('people/robin');
-        assert.strictEqual(response.status, 200, 'the page is served');
-        let config = hostConfig(response.text);
-        assert.false(config.hostDynamicRoutes?.complete, 'incomplete');
-        assert.deepEqual(
-          config.hostDynamicRoutes?.routes.map(
-            (route: { fullPath: string }) => route.fullPath,
-          ),
-          ['/fixed', '/tos'],
-          'only the fixed routes survived',
-        );
+        let failed = await page('posts/hello');
+        assert.strictEqual(failed.status, 503, 'not a 404, and not a page');
       } finally {
-        restore();
+        definitionLookup.lookupDefinitionEntryForRealm = lookup;
       }
+      let served = await page('posts/hello');
+      assert.strictEqual(served.status, 200, 'nothing was cached');
+      assert.true(served.text.includes('Served Post A'), 'serves Post A');
     });
 
     test('a file of the realm a route pattern covers is served as before', async function (assert) {
@@ -1102,32 +993,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
-    test('while a route is dropped for an unavailable type, an alias answers 503', async function (assert) {
-      // The canonical route of a published post is dropped, so the walk
-      // would reach the archive route, which isn't canonical.
-      let { getHostRoutes, getHostRoutesWithoutTypeReads } = testRealm;
-      let incomplete = async function (this: Realm) {
-        let validation = await getHostRoutes.call(this);
-        return {
-          ...validation,
-          routes: validation.routes.filter(
-            (route) => route.fullPath !== '/posts/:slug',
-          ),
-          complete: false,
-        };
-      };
-      testRealm.getHostRoutes = incomplete;
-      testRealm.getHostRoutesWithoutTypeReads = incomplete;
-      try {
-        let response = await page('a/hello');
-        assert.strictEqual(response.status, 503, 'no redirect, and no page');
-        assert.false(response.text.includes('<meta name="@cardstack'));
-      } finally {
-        testRealm.getHostRoutes = getHostRoutes;
-        testRealm.getHostRoutesWithoutTypeReads = getHostRoutesWithoutTypeReads;
-      }
-    });
-
     test("the first alias request after the definitions cache is cleared answers 301 to the card's canonical address", async function (assert) {
       // What a server restart does: it clears the definitions cache, and the
       // realm boots on its existing index. The alias route needs no type,
@@ -1146,7 +1011,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
-    test('while a route type is read, a browser waits at an alias and a generic-Accept request gets 503', async function (assert) {
+    test('while a route type is read, every request at an alias waits for it', async function (assert) {
       await markRealmPublished(dbAdapter, aliasRealmURL);
       await definitionLookup.clearRealmDefinitions(aliasRealmURL.href);
       testRealm.clearRealmIndexCaches();
@@ -1163,23 +1028,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         return await lookup.apply(this, args);
       };
       try {
-        let crawler = await request
+        let waitingCrawler = request
           .get(`${aliasRealmPath}a/hello`)
-          .set('Accept', '*/*');
-        assert.strictEqual(
-          crawler.status,
-          503,
-          'a generic-Accept request does not wait, and gets no 200',
-        );
-
-        let waiting = page('a/hello').then((response) => response);
+          .set('Accept', '*/*')
+          .then((response) => response);
+        let waitingBrowser = page('a/hello').then((response) => response);
         release();
-        let redirected = await waiting;
-        assert.strictEqual(redirected.status, 301, 'a browser waits');
-        assert.strictEqual(
-          new URL(redirected.headers.location).pathname,
-          `${aliasRealmPath}posts/hello`,
-        );
+        let [crawler, browser] = await Promise.all([
+          waitingCrawler,
+          waitingBrowser,
+        ]);
+        for (let [name, response] of [
+          ['a generic-Accept request', crawler],
+          ['a browser', browser],
+        ] as const) {
+          assert.strictEqual(response.status, 301, `${name} waits`);
+          assert.strictEqual(
+            new URL(response.headers.location).pathname,
+            `${aliasRealmPath}posts/hello`,
+          );
+        }
       } finally {
         release();
         definitionLookup.lookupDefinitionEntryForRealm = lookup;

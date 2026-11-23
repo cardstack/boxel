@@ -7,7 +7,6 @@ import type {
   HostRouteLoad,
   HostRouteResolution,
   HostRouteSearch,
-  HostRoutesValidation,
   HostRoutingRule,
   Realm,
   ServedRealm,
@@ -18,7 +17,6 @@ import {
   fetchRealmPermissions,
   hasExtension,
   logger,
-  matchRoutePathPattern,
   param,
   query,
   RealmPaths,
@@ -285,26 +283,6 @@ function pathInRealm(requestURL: URL, realm: Realm): string | undefined {
     return undefined;
   }
   return '/' + pathname.slice(mountPathname.length);
-}
-
-// Whether a route dropped for now, because its type's definition couldn't
-// be read, matches the request path, or a route under it does. The next
-// validation may keep that route, so the path isn't known to be not found.
-export function droppedRouteMayAnswer(
-  requestURL: URL,
-  realm: Realm,
-  validation: HostRoutesValidation,
-): boolean {
-  if (validation.unavailableRoutePatterns.length === 0) {
-    return false;
-  }
-  let path = pathInRealm(requestURL, realm);
-  return (
-    path !== undefined &&
-    validation.unavailableRoutePatterns.some(
-      (pattern) => matchRoutePathPattern(pattern, path) !== undefined,
-    )
-  );
 }
 
 export async function getPublishedRealmInfo(

@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { rri } from '@cardstack/runtime-common';
+import { HostRoutesReadError, rri } from '@cardstack/runtime-common';
 import type {
   HostFieldMatchRoute,
   LooseSingleCardDocument,
@@ -594,24 +594,18 @@ module(basename(import.meta.filename), function () {
   });
 
   module(
-    'Realm.getHostRoutes with a type that has no cached definition',
+    'Realm.getHostRoutes with a type that fails to load',
     function (hooks) {
       let realmURL = new URL('http://127.0.0.1:4444/routing-unavailable/');
       let testRealm: Realm;
-      let dbAdapter: PgAdapter;
       let definitionLookup: CachingDefinitionLookup;
 
       setupPermissionedRealmCached(hooks, {
         realmURL,
         permissions: { '*': ['read'] },
         fileSystem: makeUnavailableTypeFixture(),
-        onRealmSetup({
-          testRealm: realm,
-          dbAdapter: adapter,
-          testRealmServer,
-        }) {
+        onRealmSetup({ testRealm: realm, testRealmServer }) {
           testRealm = realm;
-          dbAdapter = adapter;
           definitionLookup = serverDefinitionLookup(testRealmServer);
         },
       });
@@ -620,9 +614,13 @@ module(basename(import.meta.filename), function () {
         await testRealm.indexing();
       });
 
-      test('drops the route for now, and keeps the validation until the retry time', async function (assert) {
+      test('drops a route whose type fails to load with a warning, and serves the rest of the tree', async function (assert) {
         let first = await testRealm.getHostRoutes();
-        assert.false(first.complete, 'the validation is incomplete');
+        assert.deepEqual(
+          first.routes.map((route) => [route.kind, route.fullPath]),
+          [['fixed-card', '/']],
+          'the routes whose types load are served',
+        );
         assert.deepEqual(
           first.warnings.map((w) => [w.code, w.path, w.dropped]),
           [
@@ -633,7 +631,7 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           await testRealm.getHostRoutes(),
           first,
-          'the next call answers from the cache',
+          'the tree is final until the next index',
         );
         let map = await testRealm.getHostRoutingMap();
         assert.deepEqual(map, [{ path: '/', id: `${realmURL.href}home` }]);
@@ -642,27 +640,9 @@ module(basename(import.meta.filename), function () {
           map,
           'the fixed routing map is cached with it',
         );
-        assert.strictEqual(
-          await testRealm.getHostRoutes(),
-          first,
-          'the incomplete validation is kept until the retry time',
-        );
-        assert.strictEqual(
-          await testRealm.getHostRoutesWithoutTypeReads(),
-          first,
-          'the routes without type reads are the cached validation',
-        );
-
-        // Once the retry time passes, the routes and their types are read again.
-        testRealm.__testOnlyRetryHostRoutesNow();
-        let retried = await testRealm.getHostRoutes();
-        assert.notStrictEqual(retried, first, 'the routes are read again');
-        assert.false(retried.complete);
       });
 
-      test('a module whose cached render failed is not final', async function (assert) {
-        // Read the type the way a request may not: rendering the module,
-        // which fails and leaves an error row in the definition cache.
+      test('a module whose cached render failed makes its route invalid', async function (assert) {
         let ref = {
           module: rri(`${realmURL.href}broken`),
           name: 'Broken',
@@ -677,28 +657,19 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(
           await scoped.lookupCachedDefinitionEntry(ref),
           { status: 'module-error' },
-          'the cache-only read reports the failed render',
+          'the definitions cache holds the failed render',
         );
-        let rows = (await dbAdapter.execute(
-          `SELECT error_doc IS NOT NULL AS has_error FROM modules WHERE url = ANY($1) OR file_alias = ANY($1)`,
-          { bind: [[`${realmURL.href}broken`, `${realmURL.href}broken.gts`]] },
-        )) as { has_error: boolean }[];
-        assert.ok(rows.length > 0, 'the definition cache holds the module');
-        assert.true(
-          rows.every((row) => row.has_error),
-          'its row is an error row',
-        );
-        let { complete, warnings } = await testRealm.getHostRoutes();
-        assert.false(
-          complete,
-          'an error row does not make the validation final',
+        testRealm.clearRealmIndexCaches();
+        let { routes, warnings } = await testRealm.getHostRoutes();
+        assert.deepEqual(
+          routes.map((route) => route.fullPath),
+          ['/'],
         );
         assert.deepEqual(
           warnings
             .filter((w) => w.path === '/broken/:slug')
             .map((w) => [w.code, w.dropped]),
           [['type-unavailable', true]],
-          'the route is dropped for now, not as a missing export',
         );
       });
     },
@@ -737,7 +708,6 @@ module(basename(import.meta.filename), function () {
 
     test('drops a route whose cached module has no such export, and caches the validation', async function (assert) {
       let first = await testRealm.getHostRoutes();
-      assert.true(first.complete, 'the validation is final');
       assert.deepEqual(
         first.warnings.map((w) => [w.code, w.path, w.dropped]),
         [['not-card-type', '/nope/:slug', true]],
@@ -746,6 +716,35 @@ module(basename(import.meta.filename), function () {
         await testRealm.getHostRoutes(),
         first,
         'the next call answers from the cache',
+      );
+    });
+
+    test('a type read that may pass throws and caches nothing', async function (assert) {
+      let { lookupDefinitionEntryForRealm } = definitionLookup;
+      definitionLookup.lookupDefinitionEntryForRealm = async () => {
+        throw new Error('the prerender server could not be reached');
+      };
+      try {
+        testRealm.clearRealmIndexCaches();
+        await assert.rejects(
+          testRealm.getHostRoutes(),
+          HostRoutesReadError,
+          'no reader gets a tree that lacks the route',
+        );
+        await assert.rejects(
+          testRealm.getHostRoutingMap(),
+          HostRoutesReadError,
+          'nor a routing map built from one',
+        );
+      } finally {
+        definitionLookup.lookupDefinitionEntryForRealm =
+          lookupDefinitionEntryForRealm;
+      }
+      let { routes } = await testRealm.getHostRoutes();
+      assert.deepEqual(
+        routes.map((route) => route.fullPath),
+        ['/cities/:city'],
+        'the next read validates the whole tree',
       );
     });
 
@@ -762,7 +761,6 @@ module(basename(import.meta.filename), function () {
       // What an index does when it lands while the rules are being read.
       testRealm.clearRealmIndexCaches();
       let overtaken = await inFlight;
-      assert.true(overtaken.complete);
       let next = await testRealm.getHostRoutes();
       assert.notStrictEqual(next, overtaken, 'the next call validates again');
       assert.strictEqual(
@@ -822,7 +820,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         warnings.map((w) => [w.code, w.path, w.dropped]),
         [['type-unavailable', '/nope/:slug', true]],
-        'the missing export is dropped for now, not as final',
+        'the export the row lacks is dropped with a warning',
       );
     });
 
@@ -852,8 +850,7 @@ module(basename(import.meta.filename), function () {
       )) as { url: string }[];
       assert.ok(rows.length > 0, 'the definitions cache holds the module');
 
-      let { complete, routes } = await testRealm.getHostRoutes();
-      assert.true(complete, 'the module rendered again');
+      let { routes } = await testRealm.getHostRoutes();
       assert.deepEqual(
         routes.map((route) => route.fullPath),
         ['/cities/:city'],
@@ -866,7 +863,6 @@ module(basename(import.meta.filename), function () {
       await definitionLookup.clearRealmDefinitions(realmURL.href);
 
       let validation = await testRealm.getHostRoutes();
-      assert.true(validation.complete, 'the types are read on the first call');
       assert.deepEqual(
         validation.warnings.map((w) => [w.code, w.path, w.dropped]),
         [['not-card-type', '/nope/:slug', true]],
@@ -904,15 +900,7 @@ module(basename(import.meta.filename), function () {
       });
 
       test('reuses the validation only while the definition generation holds', async function (assert) {
-        // Cache the base type's definition for this realm first: a host
-        // route reads only cached definitions, and indexing this realm
-        // doesn't have to leave this one in its cache.
-        await definitionLookup.forRealm(testRealm).lookupDefinition({
-          module: rri('@cardstack/base/card-api'),
-          name: 'CardDef',
-        });
         let first = await testRealm.getHostRoutes();
-        assert.true(first.complete, 'the base type definition is cached');
         assert.deepEqual(
           first.routes.map((route) => [route.kind, route.fullPath]),
           [['field-match', '/cards/:name']],

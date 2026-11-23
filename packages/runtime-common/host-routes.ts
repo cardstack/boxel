@@ -293,8 +293,7 @@ export type HostRouteWarningCode =
   | 'invalid-type'
   // `type` isn't a card type the index knows.
   | 'not-card-type'
-  // The definition of `type` can't be read now. The validation is
-  // incomplete.
+  // The module of `type` has an error or can't be found.
   | 'type-unavailable'
   // `match` is missing or malformed, or doesn't match each `:name` of the
   // route's own path with exactly one field.
@@ -338,14 +337,23 @@ export interface HostRouteWarning {
 export interface HostRoutesValidation {
   routes: readonly HostRoute[];
   warnings: readonly HostRouteWarning[];
-  // False when `lookupType` answered `'unavailable'` for a type: its routes
-  // were dropped for now, and a later validation may keep them. A caller
-  // must not keep an incomplete validation as final.
-  complete: boolean;
-  // The path patterns of the routes dropped because their type was
-  // unavailable, and of the routes under them: the paths a later validation
-  // may route. Empty when the validation is complete.
-  unavailableRoutePatterns: readonly RoutePathPattern[];
+}
+
+// Thrown by a read of a realm's host routes when the definition of a type a
+// field-match route names couldn't be read for a reason that may pass: its
+// module's render timed out, or the prerender server couldn't be reached.
+// The routes are not validated without that type, so no reader gets a tree
+// that lacks its route. Nothing is cached, and the next read tries again. A
+// server answers the request with 503 (ADR 036 §1.4).
+export class HostRoutesReadError extends Error {
+  constructor(message: string, opts?: { cause?: unknown }) {
+    super(message);
+    this.name = 'HostRoutesReadError';
+    if (opts?.cause !== undefined) {
+      (this as { cause?: unknown }).cause = opts.cause;
+    }
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
 }
 
 export interface ValidateHostRoutesOptions {
@@ -353,9 +361,8 @@ export interface ValidateHostRoutesOptions {
   // must be in it.
   realmURL: URL;
   // The definition of a type a field-match route names. `undefined` when
-  // there is no such type; `'unavailable'` when its definition can't be read
-  // now (it isn't cached yet, or the read failed), which drops its routes
-  // and makes the validation incomplete.
+  // there is no such type; `'unavailable'` when the type's module has an
+  // error or can't be found. Either drops its routes.
   lookupType: (
     type: ResolvedCodeRef,
   ) => HostRouteTypeInfo | 'unavailable' | undefined;
@@ -411,7 +418,6 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
 class Validator {
   private warnings: HostRouteWarning[] = [];
-  private complete = true;
   private realmPaths: RealmPaths;
   private options: ValidateHostRoutesOptions;
 
@@ -427,32 +433,7 @@ class Validator {
     routes = this.applyRealmWideRules(routes);
     routes = this.dropRedirectCycles(routes);
     this.warnNoAddressFromOneCard(routes);
-    return {
-      routes,
-      warnings: this.warnings,
-      complete: this.complete,
-      unavailableRoutePatterns: this.unavailableRoutePatterns(),
-    };
-  }
-
-  private unavailableRoutePatterns(): RoutePathPattern[] {
-    let unavailable = this.warnings
-      .filter((w) => w.code === 'type-unavailable')
-      .map((w) => w.position);
-    let patterns: RoutePathPattern[] = [];
-    for (let warning of this.warnings) {
-      let underUnavailable = unavailable.some((position) =>
-        position.every((index, i) => warning.position[i] === index),
-      );
-      if (!warning.dropped || !underUnavailable) {
-        continue;
-      }
-      let parsed = parseRoutePathPattern(warning.path);
-      if (parsed.ok) {
-        patterns.push(parsed.pattern);
-      }
-    }
-    return patterns;
+    return { routes, warnings: this.warnings };
   }
 
   private validateList(
@@ -781,10 +762,9 @@ class Validator {
       }
       let found = this.options.lookupType(type);
       if (found === 'unavailable') {
-        this.complete = false;
         return drop(
           'type-unavailable',
-          `The definition of ${type.name} from ${type.module} is not available yet`,
+          `The definition of ${type.name} from ${type.module} could not be read`,
         );
       }
       typeInfo = found;

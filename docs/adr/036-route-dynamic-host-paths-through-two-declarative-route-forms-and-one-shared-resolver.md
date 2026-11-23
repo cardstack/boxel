@@ -91,15 +91,15 @@ The server MUST read routes only through `validateHostRoutes`
 (`Realm.getHostRoutes`), as ADR 015 §1.2 requires. A route that fails
 validation MUST be dropped with a warning, with its child routes. A field
 match's type MUST be read through the definitions cache
-(`lookupDefinitionEntry`), as a search reads it. A browser's page request
-for a path the route could answer waits for the read, and any other request
-MAY get 503 while the read runs. On a cache miss, the read is a module visit
-in the prerender server, which ADR 015 §1.1 allows while a request waits. When the
-read fails, the route MUST be dropped for now and the validation marked
-incomplete, and a path the route could answer MUST get 503, not not-found.
-A card's canonical address is known only from every route, so a browser's
-request for an alias also waits for the reads, and while the validation is
-incomplete every alias of the realm MUST answer 503, not 301 and not its card.
+(`lookupDefinitionEntry`), as a search reads it. A request that needs the
+routes waits for the read. On a cache miss, the read is a module visit in
+the prerender server, which ADR 015 §1.1 allows while a request waits. A
+request for a file of the realm MUST NOT read the routes, so the module
+visit's own import never waits for them. A type whose module has an error,
+can't be found or has no such export makes its route invalid. A read that
+may pass when tried again (a render timeout, a prerender server that can't
+be reached) MUST fail the request with 503 (§1.4) and leave nothing cached.
+A reader MUST get the whole validated tree or an error, never part of it.
 Validation MUST drop each
 dynamic route past `MAX_DYNAMIC_HOST_ROUTES`, with a warning. Validation
 SHOULD warn when a literal or fixed route takes a path that a dynamic sibling
@@ -107,8 +107,7 @@ matches.
 
 ### 1.6. Every renderer gets the server's routes
 
-The server MUST put the validated route tree, with `complete`, into the
-page's host config as `hostDynamicRoutes`. For a dynamically routed page it
+The server MUST put the validated route tree into the page's host config as `hostDynamicRoutes`. For a dynamically routed page it
 MUST also add a serve rule for exactly the requested path to
 `hostRoutingMap`. A realm MUST also serve its validated route tree from a
 read-only endpoint, which HTML visits and interact mode read once per

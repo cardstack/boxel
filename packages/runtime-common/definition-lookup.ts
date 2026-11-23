@@ -10,7 +10,11 @@ import {
   type Expression,
   type Querier,
 } from './expression.ts';
-import { clampSerializedError, type SerializedError } from './error.ts';
+import {
+  clampSerializedError,
+  isTransientRenderError,
+  type SerializedError,
+} from './error.ts';
 import { readRealmLoaderEpoch } from './loader-epoch.ts';
 import { logger } from './log.ts';
 
@@ -260,13 +264,22 @@ interface WriteToDatabaseCacheParams {
 
 export class FilterRefersToNonexistentTypeError extends Error {
   codeRef: ResolvedCodeRef;
+  // Whether the type may be readable when asked again: its module's render
+  // timed out or never reached the prerender server, or every populate was
+  // discarded by an invalidation. Otherwise the module has an error, or no
+  // such export, until it changes.
+  transient: boolean;
 
-  constructor(codeRef: ResolvedCodeRef, opts?: { cause?: unknown }) {
+  constructor(
+    codeRef: ResolvedCodeRef,
+    opts?: { cause?: unknown; transient?: boolean },
+  ) {
     super(
       `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}". If this type exists, it may be caused by a stale modules cache. Clearing the "modules" table in the database can fix this.`,
     );
     this.name = 'FilterRefersToNonexistentTypeError';
     this.codeRef = codeRef;
+    this.transient = opts?.transient ?? false;
     if (opts?.cause !== undefined) {
       (this as any).cause = opts.cause;
     }
@@ -1232,12 +1245,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         cause: exhaustedByInvalidation
           ? `Module entry not found for URL: ${codeRef.module} — every one of ${POPULATE_RACE_MAX_ATTEMPTS} populate attempts was discarded by a concurrent invalidation, so the module may be readable on disk and this is not evidence that the type is absent`
           : `Module entry not found for URL: ${codeRef.module}`,
+        transient: exhaustedByInvalidation,
       });
     }
 
     if (moduleEntry.error) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: moduleEntry.error,
+        transient: isTransientRenderError(moduleEntry.error.error),
       });
     }
 
@@ -1258,6 +1273,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
     throw new FilterRefersToNonexistentTypeError(codeRef, {
       cause: `Definition for ${codeRef.name} in module ${codeRef.module} had an error: ${defOrError.error.message ?? 'unknown error'}`,
+      transient: isTransientRenderError(defOrError.error),
     });
   }
 
