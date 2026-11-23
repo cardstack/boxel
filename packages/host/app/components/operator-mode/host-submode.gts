@@ -22,7 +22,9 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common';
 
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
+import HostURLManager from '@cardstack/host/components/operator-mode/host-url-manager';
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
+import ENV from '@cardstack/host/config/environment';
 import {
   ifConnected,
   modalFocusTrapOptions,
@@ -95,8 +97,15 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   // The visible title asks "Where to?"; the name says what is published.
+  // With Host Mode v2 nothing is published: the dialog lists the realm's
+  // host URLs.
   private get publishDialogLabel() {
-    return `Publish ${this.realm.info(this.realmURL).name}`;
+    let name = this.realmName;
+    return this.isHostModeV2 ? `Host URLs for ${name}` : `Publish ${name}`;
+  }
+
+  private get realmName() {
+    return this.realm.info(this.realmURL).name;
   }
 
   // The publish button, which becomes a "Publishing…" button while a publish
@@ -127,9 +136,24 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return this.hostModeService.realmURL;
   }
 
-  get isPublishing() {
-    return this.realm.isPublishing(this.realmURL);
+  // Host Mode v2: the dialog manages the realm's host URLs. A host URL serves
+  // the realm live, so there is no publish to wait for.
+  get isHostModeV2() {
+    return Boolean(ENV.featureFlags?.hostModeV2);
   }
+
+  get isPublishing() {
+    return !this.isHostModeV2 && this.realm.isPublishing(this.realmURL);
+  }
+
+  // The unpublish command reports a failure in its result rather than
+  // throwing, so the failure is thrown here for the host URL manager to show.
+  removeV1Site = async (publishedRealmURL: string) => {
+    let result = await this.handleUnpublish.perform(publishedRealmURL);
+    if (result?.status === 'error') {
+      throw new Error(result.error || `Could not remove ${publishedRealmURL}`);
+    }
+  };
 
   // Shown on request while a publish runs, and gone with the publish,
   // whether it succeeds or fails.
@@ -145,7 +169,21 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return this.hostModeService.publishedRealmURLs;
   }
 
+  // With no card open, Host mode falls back to a default realm, such as the
+  // user's personal workspace. The host URL manager would then act on a
+  // realm the user isn't looking at, so it waits for a card.
+  get needsCardForHostURLs() {
+    return (
+      this.isHostModeV2 && !this.operatorModeStateService.hostModePrimaryCard
+    );
+  }
+
   get publishButtonLabel() {
+    // With Host Mode v2 the realm is mounted at host URLs, not published, so
+    // the button names the dialog it opens.
+    if (this.isHostModeV2) {
+      return 'Host URLs';
+    }
     return this.hasPublishedSites ? 'Republish Site' : 'Publish Site';
   }
 
@@ -210,7 +248,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     // Unpublish through the same command exposed to boxel-cli so the UI and
     // headless callers share one path.
     let command = new UnpublishRealmTool(this.toolService.toolContext);
-    await command.execute({ realmURL: this.realmURL, publishedRealmURL });
+    return await command.execute({
+      realmURL: this.realmURL,
+      publishedRealmURL,
+    });
   });
 
   get defaultPublishedSiteURL(): string | undefined {
@@ -270,6 +311,32 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               <Refresh width='22' height='22' class='publish-icon' />
               <span class='top-bar-button-label'>Publishing…</span>
             </BoxelButton>
+          {{else if this.needsCardForHostURLs}}
+            <Tooltip class='host-urls-tooltip'>
+              <:trigger>
+                <BoxelButton
+                  @kind='primary'
+                  @size='tall'
+                  @disabled={{true}}
+                  class='publish-realm-button'
+                  data-test-publish-realm-button
+                >
+                  <PublishSiteIcon
+                    width='22'
+                    height='22'
+                    class='publish-icon'
+                  />
+                  <span
+                    class='top-bar-button-label'
+                  >{{this.publishButtonLabel}}</span>
+                </BoxelButton>
+              </:trigger>
+              <:content>
+                <span data-test-host-urls-needs-card>
+                  Open a card to manage the host URLs of its realm.
+                </span>
+              </:content>
+            </Tooltip>
           {{else}}
             <BoxelButton
               @kind='primary'
@@ -285,9 +352,11 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               >{{this.publishButtonLabel}}</span>
             </BoxelButton>
           {{/if}}
-          <PublishingRealmPopover
-            @isOpen={{this.showsPublishingRealmPopover}}
-          />
+          {{#unless this.isHostModeV2}}
+            <PublishingRealmPopover
+              @isOpen={{this.showsPublishingRealmPopover}}
+            />
+          {{/unless}}
         </div>
         {{#if this.hasPublishedSites}}
 
@@ -338,18 +407,33 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
     {{! Keyed by the realm, so another workspace gets a new dialog: it loads
         a workspace's unlisted link and domains when it's made. }}
-    {{#each this.publishDialogRealms key='@identity' as |_realmURL|}}
-      <PublishRealmModal
-        @isOpen={{this.isPublishRealmModalOpen}}
-        @onClose={{this.closePublishRealmModal}}
-        @handlePublish={{this.handlePublish}}
-        @publishError={{this.handlePublishError}}
-        @handleUnpublish={{perform this.handleUnpublish}}
-        aria-label={{this.publishDialogLabel}}
-        id={{this.publishDialogId}}
-        tabindex='-1'
-        {{focusTrap focusTrapOptions=this.publishFocusTrapOptions}}
-      />
+    {{#each this.publishDialogRealms key='@identity' as |realmURL|}}
+      {{#if this.isHostModeV2}}
+        <HostURLManager
+          @isOpen={{this.isPublishRealmModalOpen}}
+          @onClose={{this.closePublishRealmModal}}
+          @realmURL={{realmURL}}
+          @realmName={{this.realmName}}
+          @v1SiteURLs={{this.publishedRealmURLs}}
+          @removeV1Site={{this.removeV1Site}}
+          aria-label={{this.publishDialogLabel}}
+          id={{this.publishDialogId}}
+          tabindex='-1'
+          {{focusTrap focusTrapOptions=this.publishFocusTrapOptions}}
+        />
+      {{else}}
+        <PublishRealmModal
+          @isOpen={{this.isPublishRealmModalOpen}}
+          @onClose={{this.closePublishRealmModal}}
+          @handlePublish={{this.handlePublish}}
+          @publishError={{this.handlePublishError}}
+          @handleUnpublish={{perform this.handleUnpublish}}
+          aria-label={{this.publishDialogLabel}}
+          id={{this.publishDialogId}}
+          tabindex='-1'
+          {{focusTrap focusTrapOptions=this.publishFocusTrapOptions}}
+        />
+      {{/if}}
     {{/each}}
 
     <style scoped>
