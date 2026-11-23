@@ -58,6 +58,7 @@ import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import { addUserKey, mintKeyWriteTicket } from '../lib/user-keys.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { checkPricingAtStartup, currentPricing } from '../lib/pricing.ts';
+import { runCostCeiling } from '../lib/automation-estimate.ts';
 
 // The realm-server routes a direct writer drives an automation with: the
 // switch-on estimate, switch-on, Preview, Run now, pause, resume, remove and
@@ -74,6 +75,7 @@ const REALM_USER = '@node-test_realm:localhost';
 const DAILY = 'automation/daily';
 const NO_MONTHLY_CAP = 'automation/no-monthly-cap';
 const HOOKED = 'automation/hooked';
+const BATCHED = 'automation/batched';
 const HOOK_PATH = 'whk_routes';
 const OUTSIDER = '@automation-routes-outsider:localhost';
 // Automations whose daily credit cap the tests reach: one with a webhook
@@ -191,6 +193,20 @@ module(basename(import.meta.filename), function (hooks) {
         ],
       }),
       [`${BROKEN}-script.js`]: 'await realm.fs.writeText(\n',
+      ...automationFixture({
+        operations: [],
+        path: BATCHED,
+        batchedAI: true,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${BATCHED}-script.js`]: `return 'ok';`,
       ...automationFixture({
         operations: [],
         path: NO_MONTHLY_CAP,
@@ -365,6 +381,35 @@ module(basename(import.meta.filename), function (hooks) {
         currentPricing()?.version,
         'at the server’s current prices',
       );
+    });
+
+    test('a card that turns on batched AI is estimated with each run’s AI counted twice', async function (assert) {
+      let estimateOf = async (path: string) => {
+        let response = await request
+          .get(AUTOMATION_SWITCH_ON_PATH)
+          .query({ realm: realm.url, automation: cardURL(path) })
+          .set('Authorization', auth(OWNER));
+        assert.strictEqual(response.status, 200, response.text);
+        return response.body.data.attributes.estimate;
+      };
+      let plain = await estimateOf(DAILY);
+      let batched = await estimateOf(BATCHED);
+      assert.strictEqual(
+        plain.perRun.aiCredits,
+        ROOMY_AUTOMATION_CAPS.aiCredits,
+        'a card that doesn’t batch counts its AI cap once',
+      );
+      assert.strictEqual(
+        batched.perRun.aiCredits,
+        ROOMY_AUTOMATION_CAPS.aiCredits * 2,
+        'a card that batches counts it twice',
+      );
+      assert.strictEqual(
+        batched.perRun.computeCredits,
+        plain.perRun.computeCredits,
+        'only the AI part changes',
+      );
+      assert.true(batched.credits > plain.credits);
     });
 
     test('the estimate says webhook triggers start no runs, for a card with one', async function (assert) {
@@ -794,6 +839,48 @@ module(basename(import.meta.filename), function (hooks) {
         (await getAutomation(dbAdapter, automationId()))?.payer,
         WRITER,
         'once the balance covers a run, the resume makes them the payer',
+      );
+    });
+
+    test('a resume prices a card that turns on batched AI with its AI counted twice', async function (assert) {
+      await switchOn(OWNER, BATCHED);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(BATCHED) }))
+          .status,
+        200,
+      );
+      let pricing = currentPricing()!;
+      let minimum = (batchedAI: boolean) =>
+        Math.max(
+          Math.ceil(
+            runCostCeiling({ ...ROOMY_AUTOMATION_CAPS, batchedAI }, pricing)
+              .totalCredits,
+          ),
+          pricing.values.minimumBalanceFloorCredits,
+        );
+      assert.true(
+        minimum(true) > minimum(false),
+        'the doubled minimum is above the single one',
+      );
+      // Enough for a run that counts its AI once, short of one that counts
+      // it twice.
+      await fund(WRITER, minimum(false));
+
+      let refused = await resume(WRITER, BATCHED);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'insufficient-credits');
+      assert.true(
+        refused.body.errors[0].includes(`${minimum(true)} credits`),
+        'the refusal names the doubled minimum',
+      );
+      await assertStillPaused(assert, BATCHED, OWNER);
+
+      await fund(WRITER, minimum(true) - minimum(false));
+      let resumed = await resume(WRITER, BATCHED);
+      assert.strictEqual(resumed.status, 200, resumed.text);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(BATCHED)))?.payer,
+        WRITER,
       );
     });
 

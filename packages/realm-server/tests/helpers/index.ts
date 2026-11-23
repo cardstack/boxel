@@ -3982,6 +3982,7 @@ export function automationFixture({
   caps = {},
   path = TEST_AUTOMATION_PATH,
   triggers = [],
+  batchedAI = false,
 }: {
   operations: {
     type: { module: string; name: string };
@@ -3994,6 +3995,8 @@ export function automationFixture({
   // Where the card goes, relative to the realm's root, for a realm that
   // holds more than one.
   path?: string;
+  // Whether the card turns on batched AI.
+  batchedAI?: boolean;
 }): Record<string, string> {
   let scriptName = `${path.split('/').pop()}-script.js`;
   return {
@@ -4011,6 +4014,7 @@ export function automationFixture({
           ),
           caps: { ...ROOMY_AUTOMATION_CAPS, ...caps },
           params: [],
+          ...(batchedAI ? { batchedAI: true } : {}),
         },
         relationships: {
           script: { links: { self: `./${scriptName}` } },

@@ -599,6 +599,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `GET ${SupportedMimeType.JSONAPI} /_run-state`,
           `GET ${SupportedMimeType.JSON} /_automation-status`,
           `GET ${SupportedMimeType.JSON} /_automations`,
+          `GET ${SupportedMimeType.JSON} /_automation-runs`,
           `GET ${SupportedMimeType.JSON} /_automation-webhooks`,
           `GET ${SupportedMimeType.Permissions} /_permissions`,
           `PATCH ${SupportedMimeType.Permissions} /_permissions`,

@@ -249,6 +249,7 @@ module(basename(import.meta.filename), function (hooks) {
       requestCount: 2,
       estimatedUsd: ESTIMATED_USD,
       runAIReservation: reservation.reservationId,
+      reservedCredits: RESERVED_CREDITS,
       deadline: new Date(Date.now() + 3600 * 1000),
       expiresAt: null,
       state: 'validating',

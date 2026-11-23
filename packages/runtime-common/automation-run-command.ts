@@ -184,6 +184,27 @@ export type AutomationScriptErrorReason =
   | 'run-failed'
   | 'stopped';
 
+// A script error's message as the run row keeps it (`error_message`): the
+// line of the script the error points at, when known, then the error's own
+// message. `scriptErrorLine` reads the two back apart.
+export function scriptErrorText(message: string, line?: number): string {
+  return line !== undefined ? `line ${line}: ${message}` : message;
+}
+
+const SCRIPT_ERROR_LINE = /^line (\d+): ([\s\S]*)$/;
+
+// The script line and message a `script-error` run's `error_message` holds,
+// as `scriptErrorText` wrote them; a message with no line comes back whole.
+export function scriptErrorLine(text: string): {
+  line?: number;
+  message: string;
+} {
+  let match = SCRIPT_ERROR_LINE.exec(text);
+  return match
+    ? { line: Number(match[1]), message: match[2] }
+    : { message: text };
+}
+
 export function isAutomationScriptOutcome(
   value: unknown,
 ): value is AutomationScriptOutcome {
