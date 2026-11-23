@@ -7,17 +7,21 @@ import {
 } from './profile-manager.ts';
 import { SeedAuthenticator, mintRealmServerToken } from './seed-auth.ts';
 
-// A realm-server endpoint is a single underscore-prefixed segment directly
-// under the server root (`_publish-realm`, `_unpublish-realm`, …). A per-realm
-// endpoint like `<realm>/_readiness-check` carries a realm path before the
-// segment — and a realm shares the realm server's origin, so a bare
+// A realm-server endpoint is a path whose first segment under the server root
+// starts with an underscore: `_publish-realm`, `_host-urls`, or a resource
+// under one, such as `_host-urls/<id>`. A per-realm endpoint like
+// `<realm>/_readiness-check` carries a realm path before the underscore
+// segment. A realm shares the realm server's origin, so a bare
 // `startsWith(realmServerURL)` prefix can't tell the two apart.
-function isRealmServerEndpoint(url: string, realmServerURL: string): boolean {
+export function isRealmServerEndpoint(
+  url: string,
+  realmServerURL: string,
+): boolean {
   if (!url.startsWith(realmServerURL)) {
     return false;
   }
   let rest = url.slice(realmServerURL.length);
-  return /^_[^/?#]+\/?(?:[?#].*)?$/.test(rest);
+  return /^_[^/?#]+(?:[/?#].*)?$/.test(rest);
 }
 
 // Strips a trailing `_<endpoint>` segment (e.g. `_readiness-check`) to recover
