@@ -59,6 +59,7 @@ import {
   currentPricing,
   type PricingReporter,
 } from '../lib/pricing.ts';
+import { runCostCeiling } from '../lib/automation-estimate.ts';
 
 // The realm-server routes a direct writer drives an automation with: the
 // switch-on estimate, switch-on, Preview, Run now, pause, resume, remove and
@@ -237,6 +238,7 @@ module(basename(import.meta.filename), function (hooks) {
           },
         ],
       }),
+      [`${BATCHED}-script.js`]: `return 'ok';`,
       ...automationFixture({
         operations: [],
         path: NO_MONTHLY_CAP,
@@ -861,6 +863,48 @@ module(basename(import.meta.filename), function (hooks) {
         (await getAutomation(dbAdapter, automationId()))?.payer,
         WRITER,
         'once the balance covers a run, the resume makes them the payer',
+      );
+    });
+
+    test('a resume prices a card that turns on batched AI with its AI counted twice', async function (assert) {
+      await switchOn(OWNER, BATCHED);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(BATCHED) }))
+          .status,
+        200,
+      );
+      let pricing = currentPricing()!;
+      let minimum = (batchedAI: boolean) =>
+        Math.max(
+          Math.ceil(
+            runCostCeiling({ ...ROOMY_AUTOMATION_CAPS, batchedAI }, pricing)
+              .totalCredits,
+          ),
+          pricing.values.minimumBalanceFloorCredits,
+        );
+      assert.true(
+        minimum(true) > minimum(false),
+        'the doubled minimum is above the single one',
+      );
+      // Enough for a run that counts its AI once, short of one that counts
+      // it twice.
+      await fund(WRITER, minimum(false));
+
+      let refused = await resume(WRITER, BATCHED);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'insufficient-credits');
+      assert.true(
+        refused.body.errors[0].includes(`${minimum(true)} credits`),
+        'the refusal names the doubled minimum',
+      );
+      await assertStillPaused(assert, BATCHED, OWNER);
+
+      await fund(WRITER, minimum(true) - minimum(false));
+      let resumed = await resume(WRITER, BATCHED);
+      assert.strictEqual(resumed.status, 200, resumed.text);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(BATCHED)))?.payer,
+        WRITER,
       );
     });
 

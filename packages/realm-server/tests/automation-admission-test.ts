@@ -13,6 +13,7 @@ import {
   chargeAutomationRun,
   createAutomationRun,
   creditsHeldByRunsInFlight,
+  AI_BATCH_HOLD_SECONDS,
   creditsHeldByUnsettledAIBatches,
   recordAIBatch,
   recordAIBatchSettled,
@@ -1424,6 +1425,32 @@ module(basename(import.meta.filename), function (hooks) {
         await held(),
         500,
         'one whose run is gone holds twice its estimate',
+      );
+
+      // OpenRouter deletes a batch's results 30 days after submit, and the
+      // settle job bills the `410` at its estimate, so a batch still
+      // unsettled past the hold's lapse is one OpenRouter doesn't know.
+      await query(dbAdapter, [
+        'UPDATE ai_batches SET submitted_at = now() - make_interval(secs =>',
+        param(AI_BATCH_HOLD_SECONDS - 60),
+        ') WHERE batch_id =',
+        param(unrecordedBatch.batchId),
+      ]);
+      assert.strictEqual(
+        await held(),
+        500,
+        'a batch holds until its hold lapses…',
+      );
+      await query(dbAdapter, [
+        'UPDATE ai_batches SET submitted_at = now() - make_interval(secs =>',
+        param(AI_BATCH_HOLD_SECONDS + 60),
+        ') WHERE batch_id =',
+        param(unrecordedBatch.batchId),
+      ]);
+      assert.strictEqual(
+        await held(),
+        0,
+        '…and one the settle job never settles stops holding then',
       );
     });
 

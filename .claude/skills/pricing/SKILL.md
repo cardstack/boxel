@@ -475,8 +475,14 @@ their other runs' checks, and in order:
    covers the batch, since the run's ceiling includes its AI cap, so the
    batch holds nothing then. A row with no `reserved_credits` holds
    the reservation its run's row names (`ai_reservations`), or failing that
-   twice `estimated_usd` in credits (the batch price is typically half the
-   normal price). A batch whose charge is written but whose
+   twice `estimated_usd` in credits (the estimate is the most the batch can
+   be billed, so this covers its own bill with headroom; a follow-up's
+   normal-price requests are held by the follow-up run). A batch stops
+   holding 31 days after `submitted_at` (`AI_BATCH_HOLD_SECONDS`): a `410`
+   settles it at 30 days, so one still unsettled then is a `404` or a batch
+   OpenRouter won't answer for, which the settle job keeps reading and the
+   unsettled batch alert reports without it keeping the payer short. A
+   batch whose charge is written but whose
    `settled_at` isn't yet set (a settle pass that stopped partway) is still
    held, so the caps never miss it, and the balance counts it twice until
    the next pass sets `settled_at`.
@@ -525,6 +531,7 @@ SELECT b.batch_id, b.run_id, b.automation_id, b.state, b.submitted_at,
                 b.estimated_usd * 2000) AS held
 FROM ai_batches b LEFT JOIN automation_runs r ON r.id = b.run_id
 WHERE b.acts_as = '<matrix user id>' AND b.settled_at IS NULL
+  AND b.submitted_at > now() - interval '31 days'
   AND NOT (r.cost_ceiling_credits IS NOT NULL AND r.credit_hold_released_at IS NULL
            AND (r.finished_at IS NULL OR r.finished_at > now() - interval '1 hour'));
 

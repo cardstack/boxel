@@ -156,15 +156,27 @@ export interface AIBatchSettlementResult {
 //
 // A row recorded without `reserved_credits` holds the reservation its run's
 // row still names (`ai_reservations`). A row whose reservation is gone too
-// holds twice its estimate: the estimate is at the batch price, which is
-// typically half the normal price, so twice it approximates the most the
-// batch can be billed.
+// holds twice its estimate. The estimate is the most the batch can be
+// billed, so twice it covers the batch's own bill with headroom. The
+// requests a follow-up sends at the normal price are held by that follow-up
+// run, under its own AI spending cap.
+//
+// A batch stops holding `AI_BATCH_HOLD_SECONDS` after it was submitted. By
+// then OpenRouter has deleted its results (a `410`, 30 days after submit),
+// which the settle job bills at its estimate, so a batch still unsettled is
+// one OpenRouter doesn't know (`404`) or won't answer for. The settle job
+// keeps reading it and the unsettled batch alert reports it, but it no
+// longer keeps the payer short or takes from the automation's caps.
 //
 // While the submitting run's own credit hold counts
 // (`creditsHeldByRunsInFlight`), that hold already covers the batch: the
 // run's cost ceiling includes its AI spending cap, which the batch's
 // reservation counts against. So a batch holds only once its run's hold has
 // stopped counting, or its run's row is gone.
+// 30 days until OpenRouter deletes a batch's results, and a day of slack for
+// the settle pass that bills the `410`.
+export const AI_BATCH_HOLD_SECONDS = 31 * 24 * 60 * 60;
+
 export async function creditsHeldByUnsettledAIBatches(
   querier: Querier,
   filter:
@@ -175,7 +187,10 @@ export async function creditsHeldByUnsettledAIBatches(
     'SELECT COALESCE(SUM(COALESCE(b.reserved_credits, CAST(r.ai_reservations ->> b.run_ai_reservation AS numeric), b.estimated_usd *',
     param(2 * CREDITS_PER_USD),
     ')), 0) AS held FROM ai_batches b LEFT JOIN automation_runs r ON r.id = b.run_id',
-    'WHERE b.settled_at IS NULL AND',
+    'WHERE b.settled_at IS NULL',
+    'AND b.submitted_at > now() - make_interval(secs =>',
+    param(AI_BATCH_HOLD_SECONDS),
+    ') AND',
     ...((filter.actsAs !== undefined
       ? ['b.acts_as =', param(filter.actsAs)]
       : [
