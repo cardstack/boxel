@@ -30,6 +30,7 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { domainHostFromKey } from '../lib/domain-host.ts';
 import { announceHostURLChanges } from '../lib/realm-host-urls.ts';
+import { renderAgainAfterHostURLChange } from '../lib/host-url-rerender.ts';
 import type {
   AcceptedHostURL,
   HostURLKind,
@@ -315,6 +316,15 @@ export function handleMountHostURL(
       await announceHostURLChanges(dbAdapter, hostURLResolver, [
         outcome.ok.host,
       ]);
+      // Only the realm's first host URL is canonical when it is mounted.
+      if (outcome.ok.is_canonical) {
+        await renderAgainAfterHostURLChange({
+          realmURL: realm.url,
+          dbAdapter,
+          queue: args.queue,
+          reconciler,
+        });
+      }
       await sendDocument(ctxt, 201, {
         data: serialize(outcome.ok, realm.url, args.serverURL),
       });
@@ -394,7 +404,7 @@ export function handleSetCanonicalHostURL(
 export function handleUnmountHostURL(
   args: CreateRoutesArgs,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
-  let { dbAdapter, hostURLResolver } = args;
+  let { dbAdapter, hostURLResolver, queue, reconciler } = args;
   return async function (ctxt: Koa.Context) {
     try {
       let target = await administeredHostURL(ctxt, args);
@@ -451,6 +461,16 @@ export function handleUnmountHostURL(
       await announceHostURLChanges(dbAdapter, hostURLResolver, [
         outcome.ok.host,
       ]);
+      // The canonical host URL can be removed only when it is the realm's
+      // last one.
+      if (outcome.ok.is_canonical) {
+        await renderAgainAfterHostURLChange({
+          realmURL: realm.url,
+          dbAdapter,
+          queue,
+          reconciler,
+        });
+      }
       await setContextResponse(ctxt, new Response(null, { status: 204 }));
     } catch (error) {
       log.error('Error unmounting a host URL:', error);

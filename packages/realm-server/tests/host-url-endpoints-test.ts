@@ -5,9 +5,11 @@ import type { SuperTest, Test } from 'supertest';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   DEFAULT_PERMISSIONS,
+  IndexWriter,
   param,
   query,
   SupportedMimeType,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { insertPermissions } from '@cardstack/runtime-common/db-queries/realm-permission-queries';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -283,6 +285,79 @@ module(basename(import.meta.filename), function () {
         'the canonical host URL can go once it is the only one',
       );
       assert.strictEqual((await list()).body.data.length, 0);
+    });
+
+    // The index passes started on this realm after the job with id `after`.
+    async function reindexJobsAfter(after: number): Promise<number> {
+      let rows = (await query(dbAdapter, [
+        `SELECT count(*)::int AS count FROM jobs WHERE job_type = 'from-scratch-index' AND id >`,
+        param(after),
+        `AND args ->> 'realmURL' =`,
+        param(REALM_URL),
+      ])) as { count: number }[];
+      return rows[0].count;
+    }
+
+    async function lastJobId(): Promise<number> {
+      let rows = (await query(dbAdapter, [
+        `SELECT coalesce(max(id), 0)::int AS max FROM jobs`,
+      ])) as { max: number }[];
+      return rows[0].max;
+    }
+
+    async function batchRendersDefaultIndexInFull(): Promise<boolean> {
+      let batch = await new IndexWriter(dbAdapter).createBatch(
+        new URL(REALM_URL),
+        new VirtualNetwork(),
+        undefined,
+        { prerenderHtmlOnly: true },
+      );
+      return batch.prerenderDefaultIndex;
+    }
+
+    test('an index batch renders the default index card in full only while the realm has a host URL', async function (assert) {
+      assert.false(
+        await batchRendersDefaultIndexInFull(),
+        'not before the realm has a host URL',
+      );
+      let mounted = (await mount(SPACE_URL)).body.data;
+      assert.true(
+        await batchRendersDefaultIndexInFull(),
+        'once the realm has a host URL',
+      );
+      await unmount(mounted.id);
+      assert.false(
+        await batchRendersDefaultIndexInFull(),
+        'not after its last host URL is removed',
+      );
+    });
+
+    test('the realm is indexed again when it gets its first host URL or loses its last one', async function (assert) {
+      let before = await lastJobId();
+      let first = (await mount(SPACE_URL)).body.data;
+      assert.strictEqual(
+        await reindexJobsAfter(before),
+        1,
+        'the first host URL starts an index pass',
+      );
+
+      before = await lastJobId();
+      let second = (await mount(`http://${CUSTOM_DOMAIN}/`)).body.data;
+      assert.false(second.attributes.isCanonical);
+      await unmount(second.id);
+      assert.strictEqual(
+        await reindexJobsAfter(before),
+        0,
+        'a host URL that is neither the first nor the last starts none',
+      );
+
+      before = await lastJobId();
+      await unmount(first.id);
+      assert.strictEqual(
+        await reindexJobsAfter(before),
+        1,
+        'removing the last host URL starts an index pass',
+      );
     });
 
     test('a Boxel Space host URL must be the realm’s name in its owner’s Space', async function (assert) {
