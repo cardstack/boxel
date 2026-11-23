@@ -3,6 +3,7 @@ import {
   DAYS_PER_AVERAGE_MONTH,
   getAutomationRun,
   getAutomationStorage,
+  isAutomationRunId,
   isDirectWriter,
   isRealmArchived,
   logger,
@@ -11,7 +12,6 @@ import {
   query,
   RealmPaths,
   ri,
-  shareARealmGrant,
   SupportedMimeType,
   type AutomationRun,
   type DBAdapter,
@@ -38,6 +38,10 @@ import {
   type ManualRunStart,
 } from '@cardstack/runtime-common/automation-manual-runs';
 import { BYTES_PER_GB } from '@cardstack/runtime-common/metered-charges';
+import {
+  shownIdentity,
+  withHiddenIdentities,
+} from '@cardstack/runtime-common/automation-identities';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
 import {
   readRunLogPage,
@@ -99,10 +103,6 @@ const log = logger('realm-server:automations');
 // The most a request body may hold, in bytes. Every body is a small JSON
 // document.
 const MAX_BODY_BYTES = 16 * 1024;
-
-// A run's id, a UUID. Anything else names no run.
-const RUN_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 class AutomationRouteError extends Error {
   readonly status: number;
@@ -523,7 +523,7 @@ async function estimateFor(
   let recent = await recentPreviewCredits(args.dbAdapter, automationId, caller);
   return estimateAutomationCost({
     triggers: declaration.triggers,
-    caps: declaration.caps,
+    caps: { ...declaration.caps, batchedAI: declaration.batchedAI },
     pricing,
     now: Math.floor(now() / 1000),
     ...(row ? { since: row.scheduledSince, runState: row.triggerRuns } : {}),
@@ -752,6 +752,7 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
                   payer,
                   automationId,
                   caps: declaration.caps,
+                  batchedAI: declaration.batchedAI,
                   firstRunAt: firstRun.at,
                 }),
             },
@@ -812,7 +813,7 @@ export function handleAutomationRunLog(args: CreateRoutesArgs): Handler {
       );
     }
     let levels = levelsParam(params.get(AUTOMATION_RUN_LOG_LEVEL_PARAM));
-    let seen = RUN_ID.test(runId)
+    let seen = isAutomationRunId(runId)
       ? await getAutomationRun(args.dbAdapter, runId)
       : undefined;
     if (!seen || args.virtualNetwork.toURLHref(seen.realm) !== realmURL.href) {
@@ -914,7 +915,7 @@ export function handleAutomationRunCancel(args: CreateRoutesArgs): Handler {
       caller,
       attributes.realm,
     );
-    let seen = RUN_ID.test(id)
+    let seen = isAutomationRunId(id)
       ? await getAutomationRun(args.dbAdapter, id)
       : undefined;
     if (!seen || args.virtualNetwork.toURLHref(seen.realm) !== realmURL.href) {
@@ -941,48 +942,6 @@ const MAX_PATH_CHARS = 4096;
 // first.
 const STORAGE_CHARGES_LISTED = 30;
 
-// A person's Matrix id as `viewer` may see it (ADR 011 §1.2): shown to the
-// person themselves and to a viewer who shares a named realm grant with them,
-// and null to anyone else.
-async function shownIdentity(
-  dbAdapter: DBAdapter,
-  viewer: string,
-  person: string | null,
-): Promise<string | null> {
-  if (person === null) {
-    return null;
-  }
-  if (person === viewer) {
-    return person;
-  }
-  return (await shareARealmGrant(dbAdapter, viewer, person)) ? person : null;
-}
-
-// A Matrix user id, as the run's messages spell one: `@localpart:server`.
-const MATRIX_ID = /@[a-z0-9._=/+-]+:[a-z0-9.-]+(?::\d+)?/gi;
-
-// `text` with every Matrix id in it that `viewer` may not see (see
-// `shownIdentity`) replaced by "someone". A run's error message can name the
-// person the run acts as or the automation's payer, whichever wrote it.
-async function withHiddenIdentities(
-  dbAdapter: DBAdapter,
-  viewer: string,
-  text: string | null,
-): Promise<string | null> {
-  if (text === null) {
-    return null;
-  }
-  let hidden = new Set<string>();
-  for (let id of new Set(text.match(MATRIX_ID) ?? [])) {
-    if ((await shownIdentity(dbAdapter, viewer, id)) === null) {
-      hidden.add(id);
-    }
-  }
-  return hidden.size === 0
-    ? text
-    : text.replace(MATRIX_ID, (id) => (hidden.has(id) ? 'someone' : id));
-}
-
 // The run a console read names, in the realm it names, once the caller is
 // known to directly write that realm. A run of another realm answers as no
 // run, so the read learns nothing about realms the caller doesn't write.
@@ -998,7 +957,7 @@ async function requestedRun(
     ctxt.URL.searchParams.get(AUTOMATION_ROUTE_REALM_PARAM),
   );
   let runId = ctxt.URL.searchParams.get(AUTOMATION_ROUTE_RUN_PARAM) ?? '';
-  let run = RUN_ID.test(runId)
+  let run = isAutomationRunId(runId)
     ? await getAutomationRun(args.dbAdapter, runId)
     : undefined;
   if (!run || args.virtualNetwork.toURLHref(run.realm) !== realmURL.href) {

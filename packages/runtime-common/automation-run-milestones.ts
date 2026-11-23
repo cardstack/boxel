@@ -19,7 +19,14 @@
 import type { AutomationRun, AutomationRunState } from './automation-runs.ts';
 import type { RunLogLine } from './automation-run-log.ts';
 import type { DBAdapter } from './db.ts';
-import { param, query, type Expression, type Querier } from './expression.ts';
+import {
+  addExplicitParens,
+  param,
+  query,
+  separatedByCommas,
+  type Expression,
+  type Querier,
+} from './expression.ts';
 import { logger } from './log.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 
@@ -376,6 +383,13 @@ interface RunRow {
   milestones_dropped: number;
 }
 
+interface MilestoneRow {
+  name: string;
+  started_at: string | Date;
+  count_done: number | null;
+  count_total: number | null;
+}
+
 async function milestonesOf(
   dbAdapter: DBAdapter,
   run: RunRow,
@@ -385,12 +399,52 @@ async function milestonesOf(
     'SELECT name, started_at, count_done, count_total FROM automation_run_milestones WHERE run_id =',
     param(String(run.id)),
     'ORDER BY position',
-  ])) as {
-    name: string;
-    started_at: string | Date;
-    count_done: number | null;
-    count_total: number | null;
-  }[];
+  ])) as unknown as MilestoneRow[];
+  return milestonesFrom(run, rows, now);
+}
+
+// Many runs' milestones at once, by run id, as `readRunMilestones` reads each
+// one: two queries however many runs, for a page of runs. A run id that
+// names no run is left out.
+export async function readRunMilestonesFor(
+  dbAdapter: DBAdapter,
+  runIds: string[],
+  { now = Date.now() }: { now?: number } = {},
+): Promise<Map<string, RunMilestones>> {
+  let found = new Map<string, RunMilestones>();
+  if (runIds.length === 0) {
+    return found;
+  }
+  let ids = separatedByCommas(runIds.map((id) => [param(id)]));
+  let runs = (await query(dbAdapter, [
+    'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped FROM automation_runs WHERE id IN',
+    ...(addExplicitParens(ids) as Expression),
+  ])) as unknown as RunRow[];
+  let rows = (await query(dbAdapter, [
+    'SELECT run_id, name, started_at, count_done, count_total FROM automation_run_milestones WHERE run_id IN',
+    ...(addExplicitParens(ids) as Expression),
+    'ORDER BY run_id, position',
+  ])) as unknown as (MilestoneRow & { run_id: string })[];
+  let byRun = new Map<string, MilestoneRow[]>();
+  for (let row of rows) {
+    let list = byRun.get(String(row.run_id)) ?? [];
+    list.push(row);
+    byRun.set(String(row.run_id), list);
+  }
+  for (let run of runs) {
+    found.set(
+      String(run.id),
+      milestonesFrom(run, byRun.get(String(run.id)) ?? [], now),
+    );
+  }
+  return found;
+}
+
+function milestonesFrom(
+  run: RunRow,
+  rows: MilestoneRow[],
+  now: number,
+): RunMilestones {
   let plan = planOf(run.milestone_plan);
   let planned = new Set(plan);
   let finishedAt = run.finished_at ? new Date(run.finished_at) : undefined;
