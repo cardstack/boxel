@@ -126,8 +126,17 @@ function assignByWeight(modules, timings, shard, totalShards) {
   return bins[shard - 1].modules.sort();
 }
 
-function modulesForShard(shard, totalShards, dir = testsDir) {
-  const allModules = collectTestModules(dir, '').sort();
+// The shards split one suite (scripts/test-suites.cjs); the pull-request
+// shards in ci.yaml run the platform suite, the default.
+function modulesForShard(
+  shard,
+  totalShards,
+  dir = testsDir,
+  suite = 'platform',
+) {
+  // Required here, not at the top: test-suites.cjs requires this file too.
+  const { modulesInSuite } = require('./test-suites.cjs'); // eslint-disable-line @typescript-eslint/no-var-requires
+  const allModules = modulesInSuite(suite, collectTestModules(dir, '').sort());
   const timings = loadTimings(dir);
   return timings
     ? assignByWeight(allModules, timings, shard, totalShards)
@@ -137,15 +146,16 @@ function modulesForShard(shard, totalShards, dir = testsDir) {
 function main(argv) {
   const shard = parseInt(argv[2], 10);
   const totalShards = parseInt(argv[3], 10);
+  const suite = argv[4] ?? 'platform';
 
   if (!shard || !totalShards || shard < 1 || shard > totalShards) {
     console.error(
-      `Usage: shard-test-modules.cjs <shard> <totalShards>  (got shard=${argv[2]}, totalShards=${argv[3]})`,
+      `Usage: shard-test-modules.cjs <shard> <totalShards> [suite]  (got shard=${argv[2]}, totalShards=${argv[3]})`,
     );
     process.exit(1);
   }
 
-  const shardModules = modulesForShard(shard, totalShards);
+  const shardModules = modulesForShard(shard, totalShards, testsDir, suite);
   if (shardModules.length === 0) {
     console.error(`Shard ${shard}/${totalShards} has no test modules.`);
     process.exit(1);
