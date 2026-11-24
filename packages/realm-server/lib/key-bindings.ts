@@ -612,6 +612,9 @@ export async function approveBindings(
   let approved: ApprovedBinding[] = [];
   let affected: ChangedAutomation[] = [];
   await dbAdapter.withTransaction(async (txQuery) => {
+    // A retried attempt starts over: only the committed one is answered.
+    approved = [];
+    affected = [];
     let shareKeys = new Map<string, string>();
     for (let shareId of [...filledShares].sort()) {
       shareKeys.set(
