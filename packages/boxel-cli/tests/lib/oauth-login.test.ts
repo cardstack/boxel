@@ -291,6 +291,24 @@ describe('refreshTokens', () => {
     ).rejects.toBeInstanceOf(OAuthConnectionEndedError);
   });
 
+  it('gives up on a token endpoint that does not answer', async () => {
+    let fetchFn = ((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () =>
+          reject(init.signal!.reason),
+        );
+      })) as typeof fetch;
+
+    await expect(
+      refreshTokens(PROVIDER, 'refresh-token-placeholder', {
+        fetchFn,
+        timeoutMs: 50,
+      }),
+    ).rejects.toThrow(
+      "The realm server's token endpoint didn't answer within 0.05s.",
+    );
+  });
+
   it("doesn't report a server failure as an ended connection", async () => {
     let fetchFn = (async () =>
       new Response('upstream failed', { status: 502 })) as typeof fetch;

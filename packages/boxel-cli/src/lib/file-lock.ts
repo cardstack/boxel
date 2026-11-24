@@ -65,6 +65,59 @@ function tryTake(lockPath: string, holder: LockHolder): boolean {
   }
 }
 
+// Whether the lock `holder` (as read from the file) was left behind. A lock
+// that reads as nothing is one its process is still writing, or one left
+// half-written: it is abandoned once its file is older than `staleMs`.
+function isAbandoned(
+  path: string,
+  holder: LockHolder | null,
+  staleMs: number,
+): boolean {
+  return holder
+    ? !isProcessAlive(holder.pid) || Date.now() - holder.takenAt > staleMs
+    : olderThan(path, staleMs);
+}
+
+// A guard is held for a few file operations, so one this old was left by a
+// process that stopped while holding it.
+const GUARD_STALE_MS = 10_000;
+
+// Runs `fn`, which must be synchronous, while this process alone holds the
+// guard beside the lock file. Every removal of the lock file happens under
+// the guard: taking over an abandoned lock, and a holder letting go of its
+// own. A removal decided outside it could remove a lock another process took
+// since. Creating the lock needs no guard, since only one process can create
+// a file that doesn't exist.
+async function underGuard(
+  lockPath: string,
+  pollMs: number,
+  fn: () => void,
+): Promise<void> {
+  let guardPath = `${lockPath}.guard`;
+  let guard: LockHolder = {
+    pid: process.pid,
+    id: randomUUID(),
+    takenAt: Date.now(),
+  };
+  while (!tryTake(guardPath, guard)) {
+    // Taking over a guard can itself race, but only after a process stopped
+    // in the moment it held one.
+    if (isAbandoned(guardPath, readHolder(guardPath), GUARD_STALE_MS)) {
+      fs.rmSync(guardPath, { force: true });
+      continue;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+    guard.takenAt = Date.now();
+  }
+  try {
+    fn();
+  } finally {
+    if (readHolder(guardPath)?.id === guard.id) {
+      fs.rmSync(guardPath, { force: true });
+    }
+  }
+}
+
 // Runs `fn` while this process alone holds the lock file at `lockPath`, for
 // work that two processes must never do at once. Other processes wait for it.
 // A lock whose process is gone, or that is older than `staleMs`, is taken
@@ -81,14 +134,14 @@ export async function withFileLock<T>(
   };
   let deadline = Date.now() + timeoutMs;
   while (!tryTake(lockPath, holder)) {
-    let current = readHolder(lockPath);
-    // A lock that reads as nothing is one its process is still writing, or
-    // one left half-written: it is abandoned once it is older than `staleMs`.
-    let abandoned = current
-      ? !isProcessAlive(current.pid) || Date.now() - current.takenAt > staleMs
-      : olderThan(lockPath, staleMs);
-    if (abandoned) {
-      fs.rmSync(lockPath, { force: true });
+    if (isAbandoned(lockPath, readHolder(lockPath), staleMs)) {
+      // Decided again under the guard, from the lock as it is then: a lock
+      // another waiter took over meanwhile is live, and stays.
+      await underGuard(lockPath, pollMs, () => {
+        if (isAbandoned(lockPath, readHolder(lockPath), staleMs)) {
+          fs.rmSync(lockPath, { force: true });
+        }
+      });
       continue;
     }
     if (Date.now() > deadline) {
@@ -102,8 +155,10 @@ export async function withFileLock<T>(
   } finally {
     // Removed only while it is still this process's: one taken over as
     // stale belongs to the process that took it.
-    if (readHolder(lockPath)?.id === holder.id) {
-      fs.rmSync(lockPath, { force: true });
-    }
+    await underGuard(lockPath, pollMs, () => {
+      if (readHolder(lockPath)?.id === holder.id) {
+        fs.rmSync(lockPath, { force: true });
+      }
+    });
   }
 }

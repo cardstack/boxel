@@ -239,6 +239,10 @@ export class ProfileManager implements RealmAuthenticator {
   private renameFileFn: (from: string, to: string) => void;
   private refreshTokensFn: typeof refreshTokens;
   private now: () => number;
+  // OAuth access tokens this process has seen the realm server accept, or
+  // has just been given by a renewal. A 401 on one of these is about the
+  // route, not the token (see `oauthFetch`).
+  private liveOAuthTokens = new Set<string>();
   // Set when a profiles file exists on disk but couldn't be read as a profiles
   // store (unparseable, or a shape we don't recognize). The manager still
   // starts empty so `profile add` can recover, but discovery callers must be
@@ -886,11 +890,11 @@ export class ProfileManager implements RealmAuthenticator {
     return this.renewOAuth(active.id, oauth.accessToken);
   }
 
+  // A connection that doesn't renew keeps its access token to the end: with
+  // nothing to renew it with, giving it up early only loses the last minute.
   private isOAuthNearExpiry(oauth: OAuthSessionRecord): boolean {
-    return (
-      Date.parse(oauth.accessExpiresAt) - this.now() <
-      OAUTH_ACCESS_EXPIRY_MARGIN_MS
-    );
+    let margin = oauth.refreshToken ? OAUTH_ACCESS_EXPIRY_MARGIN_MS : 0;
+    return Date.parse(oauth.accessExpiresAt) - this.now() < margin;
   }
 
   // Renews a profile's OAuth tokens, `stale` being the access token this
@@ -971,11 +975,14 @@ export class ProfileManager implements RealmAuthenticator {
     });
   }
 
-  // A request with the active profile's OAuth access token. A 401 is
-  // retried once with a renewed token. The Boxel API answers 401 both for a
-  // token that has run out and for a route it doesn't offer, so a retry that
-  // is refused again is returned as it is. A connection that doesn't renew
-  // has nothing to retry with.
+  // A request with the active profile's OAuth access token. The Boxel API
+  // answers 401 both for a token that no longer works and for a route it
+  // doesn't offer. A 401 on a token this process hasn't seen work is retried
+  // once with a renewed token. A 401 on one it has seen work, or was just
+  // given by a renewal, is returned as it is: the route refused it, and
+  // renewing for every such request would spend the provider's limit on
+  // renewals, which the connection needs to keep working. A connection that
+  // doesn't renew has nothing to retry with.
   private async oauthFetch(
     input: string | URL | Request,
     init: RequestInit | undefined,
@@ -989,13 +996,18 @@ export class ProfileManager implements RealmAuthenticator {
       ...init,
       headers: this.buildHeaders(input, init, `Bearer ${token}`),
     });
+    if (response.status !== 401) {
+      this.liveOAuthTokens.add(token);
+      return response;
+    }
     if (
-      response.status !== 401 ||
+      this.liveOAuthTokens.has(token) ||
       !this.getActiveProfile()?.profile.oauth?.refreshToken
     ) {
       return response;
     }
     let renewed = await this.getOAuthAccessToken(token);
+    this.liveOAuthTokens.add(renewed);
     return fetchFn(input, {
       ...init,
       headers: this.buildHeaders(input, init, `Bearer ${renewed}`),

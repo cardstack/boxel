@@ -242,12 +242,39 @@ interface TokenResponse {
   error_description?: unknown;
 }
 
+// How long a token request may take, the response body included. A renewal
+// runs under the profiles lock, which other commands take over as abandoned
+// after a minute; a renewal still waiting then could see its refresh token
+// sent a second time, so this stays well under that.
+export const TOKEN_REQUEST_TIMEOUT_MS = 20_000;
+
 async function tokenRequest(
   provider: Pick<BoxelApiProvider, 'resource' | 'tokenEndpoint'>,
   params: Record<string, string>,
   fetchFn: typeof fetch,
+  timeoutMs = TOKEN_REQUEST_TIMEOUT_MS,
+): Promise<TokenResponse & { status: number }> {
+  let signal = AbortSignal.timeout(timeoutMs);
+  try {
+    return await sendTokenRequest(provider, params, fetchFn, signal);
+  } catch (e) {
+    if (signal.aborted) {
+      throw new Error(
+        `The realm server's token endpoint didn't answer within ${timeoutMs / 1000}s.`,
+      );
+    }
+    throw e;
+  }
+}
+
+async function sendTokenRequest(
+  provider: Pick<BoxelApiProvider, 'resource' | 'tokenEndpoint'>,
+  params: Record<string, string>,
+  fetchFn: typeof fetch,
+  signal: AbortSignal,
 ): Promise<TokenResponse & { status: number }> {
   let response = await fetchFn(provider.tokenEndpoint, {
+    signal,
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -340,7 +367,8 @@ export async function refreshTokens(
   {
     fetchFn = fetch,
     now = Date.now,
-  }: { fetchFn?: typeof fetch; now?: () => number } = {},
+    timeoutMs,
+  }: { fetchFn?: typeof fetch; now?: () => number; timeoutMs?: number } = {},
 ): Promise<
   Pick<
     OAuthTokens,
@@ -353,6 +381,7 @@ export async function refreshTokens(
     provider,
     { grant_type: 'refresh_token', refresh_token: refreshToken },
     fetchFn,
+    timeoutMs,
   );
   if (body.status === 400 && body.error === 'invalid_grant') {
     throw new OAuthConnectionEndedError(

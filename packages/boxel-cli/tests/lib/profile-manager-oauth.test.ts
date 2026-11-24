@@ -223,6 +223,35 @@ describe('ProfileManager on an OAuth profile', () => {
     expect(next.status).toBe(200);
   });
 
+  it('renews at most once for a route that keeps refusing the token', async () => {
+    let pm = manager();
+
+    for (let i = 0; i < 5; i++) {
+      let response = await pm.authedRealmServerFetch(
+        `${REALM_SERVER_URL}_run-command`,
+        { method: 'POST' },
+      );
+      expect(response.status).toBe(401);
+    }
+
+    expect(server.refreshRequests).toHaveLength(1);
+    expect(server.seen).toHaveLength(6);
+  });
+
+  it("doesn't renew for a route's refusal once the token has worked", async () => {
+    let pm = manager();
+    await pm.authedRealmFetch(`${REALM_URL}_info`);
+
+    let response = await pm.authedRealmServerFetch(
+      `${REALM_SERVER_URL}_run-command`,
+      { method: 'POST' },
+    );
+
+    expect(response.status).toBe(401);
+    expect(server.seen).toHaveLength(2);
+    expect(server.refreshRequests).toHaveLength(0);
+  });
+
   it("doesn't retry a refusal on a connection that doesn't renew", async () => {
     fs.rmSync(path.join(dir, 'profiles.json'));
     manager().addOAuthProfile(
@@ -304,6 +333,26 @@ describe('ProfileManager on an OAuth profile', () => {
       /ended at 2026-12-24T00:00:00.000Z, 30 days after it was signed in/,
     );
     expect(server.refreshRequests).toHaveLength(0);
+  });
+
+  it("uses the access token of a connection that doesn't renew until it runs out", async () => {
+    fs.rmSync(path.join(dir, 'profiles.json'));
+    manager().addOAuthProfile(
+      USER_ID,
+      oauthRecord({ refreshToken: undefined }),
+      {
+        matrixUrl: 'https://matrix.example.test/',
+        realmServerUrl: REALM_SERVER_URL,
+      },
+    );
+    clock.now = START + 10 * MINUTE - 45_000;
+
+    let response = await manager().authedRealmFetch(`${REALM_URL}_info`);
+
+    expect(response.status).toBe(200);
+    expect(server.seen.map((r) => r.authorization)).toEqual([
+      'Bearer access-0',
+    ]);
   });
 
   it("says a connection that doesn't renew ends with its access token", async () => {

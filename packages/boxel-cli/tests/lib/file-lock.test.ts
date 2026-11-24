@@ -1,10 +1,18 @@
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { FileLockTimeoutError, withFileLock } from '../../src/lib/file-lock.ts';
+
+const CONTENDER = fileURLToPath(
+  new URL('../fixtures/lock-contender.mjs', import.meta.url),
+);
+const FILE_LOCK_MODULE = new URL('../../src/lib/file-lock.ts', import.meta.url)
+  .href;
 
 describe('withFileLock', () => {
   let dir: string;
@@ -64,6 +72,45 @@ describe('withFileLock', () => {
       'ran',
     );
   });
+
+  it('gives a lock left by a process that is gone to only one of many processes', async () => {
+    let contenders = 16;
+    for (let trial = 0; trial < 5; trial++) {
+      let trialDir = fs.mkdtempSync(path.join(dir, 'trial-'));
+      let trialLock = path.join(trialDir, 'profiles.json.lock');
+      let gone = spawnSync(process.execPath, ['-e', '0']).pid;
+      fs.writeFileSync(
+        trialLock,
+        JSON.stringify({ pid: gone, id: 'gone', takenAt: Date.now() }),
+      );
+      let startAt = Date.now() + 1000;
+      let exits = await Promise.all(
+        Array.from(
+          { length: contenders },
+          () =>
+            new Promise<number | null>((resolve) => {
+              spawn(
+                process.execPath,
+                [
+                  CONTENDER,
+                  FILE_LOCK_MODULE,
+                  trialLock,
+                  trialDir,
+                  `${startAt}`,
+                ],
+                { stdio: 'inherit' },
+              ).on('exit', resolve);
+            }),
+        ),
+      );
+
+      expect(exits).toEqual(Array(contenders).fill(0));
+      expect(
+        fs.readdirSync(trialDir).filter((f) => f.startsWith('overlap.')),
+      ).toEqual([]);
+      expect(fs.existsSync(trialLock)).toBe(false);
+    }
+  }, 60_000);
 
   it('takes over a lock older than the stale limit', async () => {
     fs.writeFileSync(
