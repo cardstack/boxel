@@ -1966,6 +1966,7 @@ export * from './index-query-engine.ts';
 export * from './index-writer.ts';
 export * from './index-structure.ts';
 export * from './db.ts';
+export * from './sql-literal.ts';
 export * from './tasks/index.ts';
 export * from './worker.ts';
 export * from './stream.ts';
