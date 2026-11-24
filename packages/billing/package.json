@@ -19,7 +19,8 @@
     "@cardstack/local-types": "workspace:*",
     "@glint/ember-tsc": "catalog:",
     "@types/node": "catalog:",
-    "concurrently": "catalog:"
+    "concurrently": "catalog:",
+    "eslint": "catalog:"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
