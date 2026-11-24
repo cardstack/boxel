@@ -338,7 +338,7 @@ module('Acceptance | automation edit format', function (hooks) {
                 verificationType: 'HMAC_SHA256_HEADER',
               },
             })),
-            meta: { directWriter: true, webhookDeliveriesStartRuns: false },
+            meta: { directWriter: true },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
@@ -665,11 +665,6 @@ module('Acceptance | automation edit format', function (hooks) {
         messageOf('Webhook', item),
         'Required: pick one of this workspace’s incoming webhooks',
       );
-      assert
-        .dom('[data-test-automation-webhook-notice]', item)
-        .hasText(
-          'This trigger can’t fire, Boxel doesn’t run automations from webhooks.',
-        );
       let options = await openPicker(item);
       assert.deepEqual(
         options.map((option) =>

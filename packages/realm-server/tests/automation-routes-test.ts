@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { randomUUID } from 'crypto';
+import { createHmac, randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -276,6 +276,7 @@ module(basename(import.meta.filename), function (hooks) {
           { kind: 'webhook', label: 'deliveries', webhookPath: HOOK_PATH },
         ],
       }),
+      [`${HOOKED}-script.js`]: `return 'ok';`,
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -596,25 +597,6 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(batched.credits > plain.credits);
     });
 
-    test('the estimate says webhook triggers start no runs, for a card with one', async function (assert) {
-      let hooked = await request
-        .get(AUTOMATION_SWITCH_ON_PATH)
-        .query({ realm: realm.url, automation: cardURL(HOOKED) })
-        .set('Authorization', auth(OWNER));
-      assert.strictEqual(hooked.status, 200, hooked.text);
-      assert.deepEqual(
-        hooked.body.data.attributes.notices.map(
-          ({ code }: { code: string }) => code,
-        ),
-        ['webhook-triggers-start-no-runs'],
-      );
-      let daily = await request
-        .get(AUTOMATION_SWITCH_ON_PATH)
-        .query({ realm: realm.url, automation: cardURL() })
-        .set('Authorization', auth(OWNER));
-      assert.deepEqual(daily.body.data.attributes.notices, []);
-    });
-
     test('a caller who is not a direct writer is refused', async function (assert) {
       let response = await request
         .get(AUTOMATION_SWITCH_ON_PATH)
@@ -674,7 +656,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test("switch-on refuses a webhook trigger naming a webhook the realm can't use, and says webhook triggers start no runs once on", async function (assert) {
+    test("switch-on refuses a webhook trigger naming a webhook the realm can't use", async function (assert) {
       let switchOnHooked = () =>
         post(
           AUTOMATION_SWITCH_ON_PATH,
@@ -719,10 +701,6 @@ module(basename(import.meta.filename), function (hooks) {
         on.status,
         201,
         `another direct writer's webhook is the realm's: ${on.text}`,
-      );
-      assert.deepEqual(
-        on.body.meta.notices.map(({ code }: { code: string }) => code),
-        ['webhook-triggers-start-no-runs'],
       );
     });
 
@@ -807,6 +785,143 @@ module(basename(import.meta.filename), function (hooks) {
         { id: 'http://127.0.0.1:4444/another-realm/automation/daily' },
       );
       assert.strictEqual(response.status, 400, response.text);
+    });
+  });
+
+  module('webhook deliveries', function (hooks) {
+    // The incoming webhook the hooked automation's trigger names, made by a
+    // direct writer who isn't the payer.
+    const SECRET = 'writer-secret';
+
+    hooks.beforeEach(async function () {
+      await insertIncomingWebhookRow(dbAdapter, {
+        username: WRITER,
+        webhookPath: HOOK_PATH,
+        signingSecret: SECRET,
+      });
+    });
+
+    async function switchOnHooked() {
+      await fund(OWNER);
+      await switchOn(OWNER, HOOKED);
+    }
+
+    async function deliver(deliveryId: string, payload: unknown) {
+      let body = JSON.stringify(payload);
+      let signature =
+        'sha256=' +
+        createHmac('sha256', SECRET).update(body, 'utf8').digest('hex');
+      return await request
+        .post(`/_webhooks/${HOOK_PATH}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Delivery', deliveryId)
+        .send(body);
+    }
+
+    async function runsOfHooked(): Promise<AutomationRun[]> {
+      let rows = (await dbAdapter.execute(
+        `SELECT id FROM automation_runs WHERE automation_id = $1 ORDER BY created_at`,
+        { bind: [automationId(HOOKED)] },
+      )) as { id: string }[];
+      return (await Promise.all(
+        rows.map(({ id }) => getAutomationRun(dbAdapter, id)),
+      )) as AutomationRun[];
+    }
+
+    test('a delivery starts a run of the webhook trigger with the payload, acting as the payer', async function (assert) {
+      await switchOnHooked();
+      let payload = { action: 'opened', number: 7 };
+      let response = await deliver('delivery-1', payload);
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 1);
+
+      let [run, ...others] = await runsOfHooked();
+      assert.strictEqual(others.length, 0, 'one run');
+      assert.strictEqual(run.trigger, 'deliveries', 'the webhook trigger');
+      assert.strictEqual(
+        run.slot,
+        'delivery-1',
+        "the delivery's id is the slot",
+      );
+      assert.strictEqual(
+        run.actsAs,
+        OWNER,
+        "it acts as the payer, not the webhook's owner",
+      );
+      let [job] = (await dbAdapter.execute(
+        `SELECT args FROM jobs WHERE args->>'dedupeKey' = $1`,
+        {
+          bind: [`automation:${automationId(HOOKED)}:deliveries:delivery-1`],
+        },
+      )) as { args: { commandInput: Record<string, unknown> } }[];
+      assert.deepEqual(
+        job?.args.commandInput.webhookPayload,
+        payload,
+        "the run's job carries the payload",
+      );
+      let ranAs = await ended(run.id);
+      assert.strictEqual(
+        ranAs.state,
+        'complete',
+        `it runs (${ranAs.errorReason}: ${ranAs.errorMessage})`,
+      );
+    });
+
+    test('a redelivery joins the run the first delivery started', async function (assert) {
+      await switchOnHooked();
+      let first = await deliver('delivery-2', { attempt: 1 });
+      assert.strictEqual(first.body.automationRunsStarted, 1, first.text);
+      let again = await deliver('delivery-2', { attempt: 2 });
+      assert.strictEqual(again.status, 200, again.text);
+      assert.strictEqual(again.body.automationRunsStarted, 0);
+      let runs = await runsOfHooked();
+      assert.strictEqual(runs.length, 1, 'no second run');
+      await ended(runs[0].id);
+      let late = await deliver('delivery-2', { attempt: 3 });
+      assert.strictEqual(late.body.automationRunsStarted, 0, late.text);
+      assert.strictEqual(
+        (await runsOfHooked()).length,
+        1,
+        'a redelivery after the run ended starts nothing either',
+      );
+    });
+
+    test('a paused automation takes no delivery', async function (assert) {
+      await switchOnHooked();
+      let paused = await post(
+        AUTOMATION_PAUSE_PATH,
+        OWNER,
+        {},
+        { id: cardURL(HOOKED) },
+      );
+      assert.strictEqual(paused.status, 200, paused.text);
+      let response = await deliver('delivery-3', { paused: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
+    });
+
+    test('a delivery to a webhook whose owner lost write pauses the automation and starts no run', async function (assert) {
+      await switchOnHooked();
+      await dbAdapter.execute(
+        `DELETE FROM realm_user_permissions WHERE username = $1 AND realm_url = $2`,
+        { bind: [WRITER, realm.url] },
+      );
+      let response = await deliver('delivery-4', { foreign: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
+      let automation = await getAutomation(dbAdapter, automationId(HOOKED));
+      assert.strictEqual(automation?.state, 'paused');
+      assert.strictEqual(automation?.pauseReason, 'webhook-owner-lost-access');
+    });
+
+    test('an automation that is off takes no delivery', async function (assert) {
+      let response = await deliver('delivery-5', { off: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), []);
     });
   });
 

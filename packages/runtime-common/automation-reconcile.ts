@@ -29,6 +29,11 @@
 //   whose extra job was lost too is ended the same way, as is a scheduled run
 //   whose automation is paused, waiting for key approval or no longer switched on, or whose trigger is
 //   gone from its card.
+//
+//   A webhook run is ended too, never enqueued again: its delivery's payload
+//   lived only in its job, so a job made again would run the script without
+//   it. A cron trigger on the same card is what makes up a delivery that was
+//   lost (see `automation-webhook-runs.ts`).
 // - **A due time that passed with nothing enqueued.** An automation whose
 //   next run is `graceSeconds` or more behind is one the minute tick missed
 //   (the tick was down, or its worker manager just started). Reconcile hands
@@ -335,6 +340,15 @@ async function reconcileLostRun(
     // doesn't read, so no run is left pending for good.
     let read = await options.readDeclaration(automationId);
     let declaration = read.ok ? read.declaration : undefined;
+    let trigger = declaration?.triggers.find(
+      ({ label }) => label === run.trigger,
+    );
+    if (scheduled && trigger?.kind === 'webhook') {
+      return await end(
+        run,
+        "it is a webhook delivery's run, and the delivery's payload lived only in its job",
+      );
+    }
     if (
       scheduled &&
       declaration &&
@@ -362,8 +376,17 @@ async function reconcileLostRun(
       trigger: run.trigger,
       slot: run.slot,
       secondsCap: declaration?.caps.seconds ?? MAX_RUN_SECONDS,
+      // A scheduled run's slot is its instant. A webhook run's slot is its
+      // delivery's id, and a webhook run whose card can't be read is
+      // enqueued here too, so its admission ends it with the reason.
       input: scheduled
-        ? { runId, scheduledAt: run.slot, dryRun: false }
+        ? {
+            runId,
+            scheduledAt: Number.isNaN(Date.parse(run.slot))
+              ? run.createdAt
+              : run.slot,
+            dryRun: false,
+          }
         : {
             runId,
             scheduledAt: run.createdAt,
