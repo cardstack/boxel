@@ -23,6 +23,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import DanglingRoutingWarning from '@cardstack/host/components/operator-mode/dangling-routing-warning';
 import config from '@cardstack/host/config/environment';
 
 import type RealmService from '@cardstack/host/services/realm';
@@ -533,6 +534,7 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
         </:action>
       </Alert>
     {{else}}
+      <DanglingRoutingWarning @realmURL={{@realmURL}} />
       <section class='section' aria-labelledby='host-urls-mounted'>
         <h3 id='host-urls-mounted' class='section-title'>Mounted at</h3>
         {{#if this.hostURLs.length}}
