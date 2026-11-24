@@ -330,6 +330,72 @@ export async function logoutMatrixAccessToken({
   }
 }
 
+export interface MatrixAdmin {
+  matrixURL: URL;
+  adminUsername: string;
+  adminPassword: string;
+}
+
+// Runs `fn` with an access token for `userId` minted through the admin API,
+// and logs that token out afterwards, whatever `fn` did. Undefined when the
+// Matrix server has no such account. A failed logout is passed to
+// `onLogoutError` rather than thrown, so it never changes `fn`'s outcome.
+export async function withImpersonatedUser<T>(
+  admin: MatrixAdmin,
+  userId: string,
+  fn: (accessToken: string) => Promise<T>,
+  onLogoutError: (e: unknown) => void,
+): Promise<T | undefined> {
+  let accessToken: string;
+  try {
+    accessToken = await impersonateAsMatrixAdmin({ ...admin, userId });
+  } catch (e: any) {
+    if (e?.status === 404 || e?.status === 400) {
+      return undefined;
+    }
+    throw e;
+  }
+  try {
+    return await fn(accessToken);
+  } finally {
+    await logoutMatrixAccessToken({
+      matrixURL: admin.matrixURL,
+      accessToken,
+    }).catch(onLogoutError);
+  }
+}
+
+// The display name of `userId` as the admin API reports it: null when the
+// account has none, undefined when the Matrix server has no such account.
+export async function fetchDisplayName(
+  admin: MatrixAdmin,
+  userId: string,
+): Promise<string | null | undefined> {
+  let path = `_synapse/admin/v2/users/${encodeURIComponent(userId)}`;
+  let request = async (adminAccessToken: string) =>
+    await fetch(new URL(path, admin.matrixURL), {
+      headers: { Authorization: `Bearer ${adminAccessToken}` },
+    });
+  let adminAccessToken = await getMatrixAdminToken(admin);
+  let response = await request(adminAccessToken);
+  if (response.status === 401) {
+    response = await request(
+      await getMatrixAdminToken({ ...admin, stale: adminAccessToken }),
+    );
+  }
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw new MatrixHttpError(
+      `matrix admin user lookup for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
+      response.status,
+    );
+  }
+  let { displayname } = (await response.json()) as { displayname?: unknown };
+  return typeof displayname === 'string' && displayname ? displayname : null;
+}
+
 // Append a single realm URL to a user's `app.boxel.realms` account_data,
 // preserving any existing entries. Idempotent: if `realmURL` is already in
 // the user's `realms` array, no PUT is fired and `{ alreadyPresent: true }`
@@ -557,8 +623,9 @@ export async function fetchAccountData(
     return {};
   }
   if (!response.ok) {
-    throw new Error(
+    throw new MatrixHttpError(
       `matrix GET ${eventType} for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
+      response.status,
     );
   }
   return (await response.json()) as Record<string, unknown>;
@@ -581,8 +648,9 @@ async function putAccountData(
     body: JSON.stringify(content),
   });
   if (!response.ok) {
-    throw new Error(
+    throw new MatrixHttpError(
       `matrix PUT ${eventType} for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
+      response.status,
     );
   }
 }

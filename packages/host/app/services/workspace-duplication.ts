@@ -117,9 +117,10 @@ export default class WorkspaceDuplicationService extends Service {
 
       await this.matrixService.appendRealmToAccountData(newRealmURL.href);
     } catch (error) {
-      // A cancelled or failed copy leaves a partial realm that never joined
-      // the user's realm list; remove it rather than stranding an invisible
-      // orphan. Best-effort — the original failure is what gets reported.
+      // A cancelled or failed copy leaves a partial realm; remove it rather
+      // than stranding it, which also takes it off the user's realm list the
+      // realm server put it on when it was created. Best-effort — the
+      // original failure is what gets reported.
       try {
         await this.realmServer.deleteRealm(newRealmURL.href);
       } catch {

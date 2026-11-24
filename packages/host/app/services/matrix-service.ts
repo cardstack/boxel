@@ -1142,13 +1142,17 @@ export default class MatrixService extends Service {
         APP_BOXEL_REALMS_EVENT_TYPE,
       )) as { realms: string[] }) ?? {};
 
-    // Clone the account data instead of using it directly,
-    // since mutating the original object would modify the Matrix client’s store
-    // and prevent updates from being sent back to the server.
-    let newRealms = [...realms, realmURLString];
-    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
-      realms: newRealms,
-    });
+    // The realm server adds a realm it creates to the list itself, so the
+    // list usually names it already; writing it again would list it twice.
+    if (!realms.includes(realmURLString)) {
+      // Clone the account data instead of using it directly,
+      // since mutating the original object would modify the Matrix client’s store
+      // and prevent updates from being sent back to the server.
+      let newRealms = [...realms, realmURLString];
+      await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+        realms: newRealms,
+      });
+    }
     // The legacy `app.boxel.realms` write above is persistence only. On a
     // trusted-realm-servers session the in-memory list also holds realms
     // granted via `_realm-auth` that the legacy list never contained, so
@@ -1169,10 +1173,14 @@ export default class MatrixService extends Service {
         APP_BOXEL_REALMS_EVENT_TYPE,
       )) as { realms: string[] }) ?? {};
 
-    let newRealms = realms.filter((realmURL) => realmURL !== realmURLString);
-    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
-      realms: newRealms,
-    });
+    // The realm server takes a realm it deletes off the list itself, so the
+    // list usually no longer names it, and there is nothing to write.
+    if (realms.includes(realmURLString)) {
+      let newRealms = realms.filter((realmURL) => realmURL !== realmURLString);
+      await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+        realms: newRealms,
+      });
+    }
     // Drop only the removed realm from the current in-memory list; see
     // appendRealmToAccountData for why the legacy list can't be used here.
     await this.realmServer.setAvailableRealmIdentifiers(

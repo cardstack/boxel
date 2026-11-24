@@ -173,6 +173,9 @@ const BOXEL_API_READ_ROUTES: readonly OAuthRoute[] = [
   ),
   server('GET', '/_archived-realms'),
   server('GET', '/_publish-progress'),
+  // The caller's own workspace list and display name.
+  server('GET', '/_user-realms'),
+  server('GET', '/_user-display-name'),
 ];
 
 const BOXEL_API_WRITE_ROUTES: readonly OAuthRoute[] = [
@@ -195,7 +198,9 @@ const BOXEL_API_WRITE_ROUTES: readonly OAuthRoute[] = [
   // Creating a workspace writes only its caller's own owner row, on a realm
   // that didn't exist, and publishing writes read for everyone only on the
   // published copy, never on the realm published from, so neither changes
-  // who can reach an existing realm of the user's (§1.6).
+  // who can reach an existing realm of the user's (§1.6). Creating and
+  // deleting a workspace also edit the caller's own workspace list, which
+  // names realms and grants nothing.
   server('POST', '/_create-realm'),
   server('DELETE', '/_delete-realm'),
   server('POST', '/_publish-realm'),
