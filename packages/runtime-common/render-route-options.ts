@@ -27,6 +27,11 @@ export interface RenderRouteOptions {
   // for, then records it — one reset per tab per module change.
   loaderEpoch?: string;
   cardRender?: true;
+  // Render the realm's default index card (CardsGrid or Workspace) in full,
+  // where the route otherwise stores a placeholder for it. The index visits
+  // set it when the realm has a host URL, because a page on a host URL is
+  // served from the stored HTML (ADR 033 §1.7).
+  prerenderDefaultIndex?: true;
   fileExtract?: true;
   fileRender?: true;
   fileDefCodeRef?: ResolvedCodeRef;
@@ -62,6 +67,9 @@ export function parseRenderRouteOptions(
     }
     if (parsed.cardRender) {
       options.cardRender = true;
+    }
+    if (parsed.prerenderDefaultIndex) {
+      options.prerenderDefaultIndex = true;
     }
     if (parsed.fileExtract) {
       options.fileExtract = true;
@@ -108,6 +116,9 @@ export function serializeRenderRouteOptions(
   }
   if (options.cardRender) {
     serialized.cardRender = true;
+  }
+  if (options.prerenderDefaultIndex) {
+    serialized.prerenderDefaultIndex = true;
   }
   if (options.fileExtract) {
     serialized.fileExtract = true;

@@ -1119,6 +1119,10 @@ async function visitForPrerenderedHtml({
   let renderOptions: RenderRouteOptions = {
     fileDefCodeRef,
     ...(parsedCardResource ? { cardRender: true } : {}),
+    // A realm with a host URL stores its default index card in full.
+    ...(parsedCardResource && batch.prerenderDefaultIndex
+      ? { prerenderDefaultIndex: true }
+      : {}),
     fileRender: true,
     // The standalone visit resolves the file's resource + types from source
     // via the extract pass — no chaining off a prior index visit, no

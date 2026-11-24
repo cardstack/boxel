@@ -969,6 +969,68 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('from-scratch dedup: a pass that asks for a fresh pass does NOT attach to an in-flight from-scratch', async function (assert) {
+      // The caller changed something a pass reads only when it starts (a
+      // row's modified time, whether the realm has a host URL). The running
+      // pass read it before the change.
+      await runner.destroy();
+      let realmURL = 'http://example.com/from-scratch-fresh-pass/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'from-scratch-fresh-pass-worker',
+      });
+      worker.register('from-scratch-index', async () => {
+        started.fulfill();
+        await release.promise;
+        return {
+          invalidations: [],
+          ignoreData: {},
+          stats: {
+            instancesIndexed: 0,
+            filesIndexed: 0,
+            instanceErrors: 0,
+            fileErrors: 0,
+            totalIndexEntries: 0,
+          },
+        };
+      });
+
+      try {
+        await worker.start();
+
+        let first = await publishFromScratchIndexJob({
+          priority: 0,
+          args: { realmURL, realmUsername: 'owner', realmEvents: false },
+        });
+        await started.promise;
+
+        let second = await publishFromScratchIndexJob({
+          priority: userInitiatedPriority,
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            realmEvents: false,
+            freshPass: true,
+          },
+        });
+
+        assert.notStrictEqual(
+          first.id,
+          second.id,
+          'a pass that asks for a fresh pass does not attach to the in-flight job',
+        );
+
+        release.fulfill();
+        await Promise.all([first.done, second.done]);
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
     test('from-scratch dedup: a pass that announces does not attach to a running pass that announces nothing', async function (assert) {
       // A running job's args can no longer change, so a publish attaching to
       // a silent pass would never have its pass announced.

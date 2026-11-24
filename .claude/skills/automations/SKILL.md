@@ -2135,6 +2135,45 @@ other kind of run, a run that already ended or whose commit was claimed; 400
 for a malformed body, an automation outside the realm, or a missing click.
 The error body is `{ "errors": [<message>] }`.
 
+### The switch-on screen
+
+The Automation card's isolated view turns an automation on through a
+switch-on screen, a Pret UI `Dialog` (`SwitchOnDialog` in the catalog's
+`automation/automation.gts`). A direct writer opens it from the _Status_
+section: **Turn on** for an automation that isn't switched on, and **Review
+and resume** for one paused with `caps-raised` or `batched-ai-enabled`. Any
+other state offers no button. The screen:
+
+- reads `GET /_automation-switch-on` and shows the estimate: the most one run
+  can cost (`perRun.totalCredits`), the runs counted in a month, the
+  estimate's `credits`, and beside them the caller's
+  `recentPreviewCredits`, which the estimate leaves out;
+- lists what the estimate leaves out: the indexing a run's writes cause, the
+  daily storage, and runs a webhook delivery starts (naming the card's
+  `webhookTriggers`);
+- asks for the monthly limit, filled in from the card's
+  `caps.monthlyCredits`, and refuses an empty one before sending anything;
+- says the person becomes the payer, and what that means;
+- posts `POST /_automation-switch-on`, or `POST /_automation-resume` for
+  **Review and resume**, with the monthly limit, and shows a refusal's
+  message (`errors[0]`) in the screen.
+
+The routes take only the card's own monthly cap (409 otherwise), so a person
+who enters another limit gets that limit written to the card first. The
+screen then reads the estimate again until the server reads the card with the
+new limit (up to 30 seconds), and only then posts.
+
+The card calls these routes through the host's `automation-request` tool
+(`packages/host/app/tools/automation-request.ts`), which sends a request to
+one of the realm server's `/_automation-` routes with the realm-server
+session: `route`, `method`, `realm`, `automation`, `run`, `filePath`,
+`monthlyCredits` and `click` become the route's query or JSON:API body. It
+answers `ok`, `status`, the JSON document in `body`, the route's messages in
+`errors`, and a non-JSON answer's bytes (a Preview's staged file) base64 in
+`bytesBase64`. A call the AI assistant makes with any method but GET waits for the person's
+click. Host tests answer the routes with a virtual-network handler
+(`tests/acceptance/automation-view-test.gts`, the _switching on_ module).
+
 ### The console's reads
 
 The three GETs take the realm and the run or card as query parameters, check
