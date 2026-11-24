@@ -117,6 +117,53 @@ module('Unit | Lib | run log sink', function () {
     assert.deepEqual(errors, [], 'the task lands');
   });
 
+  test('a realm that reads neither tasks nor the transform line gets the batch without the transform line, then without tasks, and the later batches leave both out', async function (assert) {
+    let sent: RunProgressEvent[][] = [];
+    let errors: string[] = [];
+    let fetch = (async (_url: string, init: RequestInit) => {
+      let events = JSON.parse(String(init.body)).events as RunProgressEvent[];
+      sent.push(events);
+      return new Response('{}', {
+        status: events.some(
+          (event) => event.kind === 'task' || event.kind === 'transform',
+        )
+          ? 400
+          : 200,
+      });
+    }) as unknown as typeof globalThis.fetch;
+    let sink = new RunLogSink({
+      realmURL: REALM,
+      runToken: TOKEN,
+      fetch,
+      onError: (message) => errors.push(message),
+    });
+    sink.record({ kind: 'milestone', at: 1, name: 'Reshape' });
+    sink.record({ kind: 'task', at: 2, text: 'Reshaped 40 orders' });
+    sink.record({
+      kind: 'transform',
+      at: 3,
+      calls: 1,
+      failed: 0,
+      ms: 12,
+      inBytes: 900,
+      outBytes: 300,
+    });
+    await sink.flush();
+    sink.record({ kind: 'task', at: 4, text: 'Wrote the report' });
+    sink.record(line(5));
+    await sink.flush();
+    assert.deepEqual(
+      sent.map((events) => events.map(({ kind }) => kind)),
+      [
+        ['milestone', 'task', 'transform'],
+        ['milestone', 'task'],
+        ['milestone'],
+        ['console'],
+      ],
+    );
+    assert.deepEqual(errors, [], 'the rest of the log lands');
+  });
+
   test('a full batch is sent without waiting, and the rest follows in order', async function (assert) {
     let { sent, fetch } = recordingFetch();
     let sink = new RunLogSink({ realmURL: REALM, runToken: TOKEN, fetch });

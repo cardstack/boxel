@@ -1,3 +1,5 @@
+import { isTesting } from '@embroider/macros';
+
 import { SKILLS_REALM_PREFIX } from '@cardstack/runtime-common';
 import { isPlainObject } from '@cardstack/runtime-common/is-plain-object';
 
@@ -54,6 +56,9 @@ let timeLimits = TRANSFORM_TIME_LIMITS;
 export function setTransformTimeLimitsForTests(
   limits: TransformTimeLimits | undefined,
 ): void {
+  if (!isTesting()) {
+    throw new Error('setTransformTimeLimitsForTests is only for tests');
+  }
   timeLimits = limits ?? TRANSFORM_TIME_LIMITS;
 }
 

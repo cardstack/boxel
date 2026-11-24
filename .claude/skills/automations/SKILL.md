@@ -1178,14 +1178,14 @@ ms, inBytes, outBytes }` event when the script made any call, before the
   none.
 
 Author guidance for writing a transform in an automation is boxel-skills'
-automation-writing skill.
+`automation-authoring` skill.
 
 ### Progress and redaction
 
 The run's progress goes to the `RunProgressSink` the caller passes, one
 `RunProgressEvent` at a time, in the order the script made them: `activity`
 lines, the milestone `plan`, each `milestone` reached, the `task`s reported
-inside one, one `transform` line as the run settles (below), and `console` lines with their level and script line (a value that isn't a
+inside one, one `transform` line as the run settles (_`realm.transform` in a run_, above), and `console` lines with their level and script line (a value that isn't a
 string is shown as JSON, an `Error` as `Name: message`; a line past 10,000
 characters is cut and says how many it lost). Each event's time is `at`.
 

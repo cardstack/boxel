@@ -191,8 +191,10 @@ time their programs ran in the transform worker) and `data.inBytes` /
 that made a call. A run that ran out of time with a large `data.ms` spent its
 time transforming; failed calls are each in the script's own `error` or
 console line when the script reported them. A run whose log has no
-`transform` line made no call, or its tab reached a realm server that reads no
-`transform` line and sent the rest of the log without it.
+`transform` line made no call; or its tab never settled the run (a lost tab, a
+`job-lost` run), so it never sent the line; or its log reached its line cap
+first; or its tab reached a realm server that reads no `transform` line and
+sent the rest of the log without it.
 
 The same lines reach Loki, anchored on their tags. Whichever process stored a
 line logs it: the realm server for the tab's lines and its own calls, the
