@@ -410,6 +410,54 @@ export abstract class SearchPipeline extends StoreBlend {
         });
       }
     }
+    // A paged html search lists the error cards its filter matches, which
+    // the value store does not hold, so it reads with `includeErrors`, and
+    // every value-store path stands aside for it. Where the realm holds no
+    // non-live row, or none its filter matches (counted off their own
+    // indexes, as the counts-only split below counts them), its rows are
+    // exactly a live search's, so it runs as one, and the store may answer
+    // it. `includeErrors` decides only which rows a search admits; the html
+    // a row carries is read the same either way. Where an error row
+    // matches, the search keeps the general read.
+    if (
+      page &&
+      Number(page.size) > 0 &&
+      opts.includeErrors &&
+      !opts.countsOnlySplit &&
+      !opts.nonLiveOnly &&
+      this.dialect.valueStore &&
+      !isRealmUnion(realmURL) &&
+      tableFromOpts(opts) === 'boxel_index' &&
+      entryType !== 'file'
+    ) {
+      let { includeErrors: _listed, ...live } = opts;
+      let [held] = await this.queryCards(
+        realmHoldsNonLiveRows(realmURL),
+        opts.timings,
+        opts,
+      );
+      let matched = 0;
+      if (held?.held) {
+        let { facets: _facets, sort: _sort, ...counted } = asWritten as Query;
+        let nonLive = await this._search(
+          realmURL,
+          { ...counted, page: { size: 0 } } as Query,
+          { ...opts, countsOnlySplit: true, nonLiveOnly: true },
+          selectClauseExpression,
+          entryType,
+        );
+        matched = Number(nonLive.meta.page?.total ?? 0);
+      }
+      if (matched === 0) {
+        return await this._search(
+          realmURL,
+          asWritten,
+          live,
+          selectClauseExpression,
+          entryType,
+        );
+      }
+    }
     // A counts-only html search answers what a paged html search of the
     // same query answers: its total and facets cover the cards it lists,
     // error cards included, an error card counted by its last good values.

@@ -128,11 +128,12 @@ const brandOf = (i: number) => brands[i % 3 === 0 ? 1 : 0];
 module(basename(import.meta.filename), function (hooks) {
   let adapter: PgAdapter;
   let search: RealmIndexQueryEngine;
+  let virtualNetwork: VirtualNetwork;
 
   hooks.beforeEach(async function () {
     prepareTestDB();
     adapter = await createTestPgAdapter();
-    let virtualNetwork = new VirtualNetwork();
+    virtualNetwork = new VirtualNetwork();
     let lookup = makeDefinitionLookup();
     search = new RealmIndexQueryEngine({
       realm: {
@@ -212,7 +213,35 @@ module(basename(import.meta.filename), function (hooks) {
       ],
     });
 
+  // A paged html search lists the error cards its filter matches, so with
+  // one in the realm it keeps the general read, whose facets join the
+  // matches to the value-store cards. Its last good values still count.
+  async function errorCard(i: number) {
+    let batch = await new IndexWriter(adapter).createBatch(
+      new URL(testRealm),
+      virtualNetwork,
+      undefined,
+      { splitPrerenderHtml: false },
+    );
+    let url = new URL(`${testRealm}Product/p${i}.json`);
+    await batch.invalidate([url]);
+    await batch.updateEntry(url, {
+      type: 'instance-error',
+      error: {
+        id: url.href,
+        status: 500,
+        title: 'broken',
+        message: 'a render that failed',
+        additionalErrors: null,
+        deps: [],
+      },
+    });
+    await batch.done();
+    await adapter.execute('ANALYZE');
+  }
+
   test("a search's facets read only its own realm's value-store cards", async function (assert) {
+    await errorCard(0);
     let found: Awaited<ReturnType<RealmIndexQueryEngine['searchEntryRows']>>;
     let statements = await captureStatements(adapter, async () => {
       found = await search.searchEntryRows(productSearch({ size: 10 }));
@@ -250,6 +279,49 @@ module(basename(import.meta.filename), function (hooks) {
       scans,
       [],
       `no scan of the value-store cards reads past this realm's ${own.n} cards`,
+    );
+  });
+
+  test('with no error card the filter matches, the search reads its facets from the value store, with the same rows and counts', async function (assert) {
+    let general = await search.searchEntryRows(productSearch({ size: 10 }), {
+      countsOnlySplit: true,
+    } as any);
+    let found: Awaited<ReturnType<RealmIndexQueryEngine['searchEntryRows']>>;
+    let statements = await captureStatements(adapter, async () => {
+      found = await search.searchEntryRows(productSearch({ size: 10 }));
+    });
+    assert.deepEqual(
+      found!.results.map((row) => row.url),
+      general.results.map((row) => row.url),
+      'the same page of rows as the general read',
+    );
+    assert.strictEqual(found!.results.length, 10, 'a page of rows');
+    assert.deepEqual(
+      found!.meta.facets,
+      general.meta.facets,
+      'the same facets',
+    );
+    assert.deepEqual(found!.meta.facets?.['brand.name'], [
+      { value: 'acme', count: (PRODUCTS * 2) / 3 },
+      { value: 'globex', count: PRODUCTS / 3 },
+    ]);
+    assert.strictEqual(found!.meta.page?.total, general.meta.page?.total);
+    assert.deepEqual(
+      statements
+        .filter((s) => isRead(s) && /boxel_index_value_cards/.test(s.sql))
+        .map((s) => s.sql.replace(/\s+/g, ' ').slice(0, 80)),
+      [],
+      'no statement reads the value-store cards',
+    );
+    assert.true(
+      statements.some(
+        (s) =>
+          isRead(s) &&
+          /json_object_agg\(r\.id, r\.realm_url\) FROM boxel_index_value_realms/.test(
+            s.sql,
+          ),
+      ),
+      'the value store decides the match set',
     );
   });
 });
