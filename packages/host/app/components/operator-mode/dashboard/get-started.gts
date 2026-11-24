@@ -446,55 +446,66 @@ export default class GetStarted extends Component<Signature> {
       >
         <div class='get-started-body'>
           <header class='get-started-head'>
-            <h2 class='get-started-title' id={{this.titleId}}>Get started</h2>
-            <ProgressBar
-              class='get-started-progress'
-              @value={{this.doneCount}}
-              @max={{this.steps.length}}
-              aria-labelledby={{this.titleId}}
-            />
-            <p class='get-started-count' data-test-get-started-count>
-              {{this.doneCount}}
-              of
-              {{this.steps.length}}
-              done
-              {{#unless this.isExpanded}}
-                {{#if this.nextStep}}
-                  · Next:
-                  {{this.nextStep.title}}
-                {{/if}}
-              {{/unless}}
-            </p>
-            <Button
-              class='get-started-dismiss'
-              @tone='danger'
-              @appearance='link'
-              @size='s'
-              @busy={{this.dismissTask.isRunning}}
-              aria-describedby={{if
-                (eq this.failedControl 'dismiss')
-                this.errorId
-              }}
-              {{on 'click' this.dismissTask.perform}}
-              {{this.focusIfNext 'dismiss'}}
-              data-test-get-started-dismiss
-            >
-              Dismiss
-            </Button>
-            {{! The minimize button sits at the far end. Its tooltip wraps it,
-                so this wrapper is what the layout places. }}
-            <div class='get-started-actions'>
-              <IconButton
-                @icon={{if this.isExpanded ChevronUp ChevronDown}}
-                @label={{if this.isExpanded 'Minimize steps' 'Expand steps'}}
-                @tooltip={{if this.isExpanded 'Minimize steps' 'Expand steps'}}
-                @appearance='plain'
-                @size='s'
-                aria-expanded={{if this.isExpanded 'true' 'false'}}
-                aria-controls={{if this.isExpanded this.stepsId}}
-                {{on 'click' this.toggleExpanded}}
-                data-test-get-started-toggle
+            {{! The title, progress and count wrap among themselves, so a long
+                count drops under the title while Dismiss and the minimize
+                button stay at the end of the row. }}
+            <div class='get-started-summary'>
+              <h2 class='get-started-title' id={{this.titleId}}>Get started</h2>
+              <ProgressBar
+                class='get-started-progress'
+                @value={{this.doneCount}}
+                @max={{this.steps.length}}
+                aria-labelledby={{this.titleId}}
               />
+              <p class='get-started-count' data-test-get-started-count>
+                {{this.doneCount}}
+                of
+                {{this.steps.length}}
+                done
+                {{#unless this.isExpanded}}
+                  {{#if this.nextStep}}
+                    · Next:
+                    {{this.nextStep.title}}
+                  {{/if}}
+                {{/unless}}
+              </p>
+            </div>
+            <div class='get-started-controls'>
+              <Button
+                class='get-started-dismiss'
+                @tone='danger'
+                @appearance='link'
+                @size='s'
+                @busy={{this.dismissTask.isRunning}}
+                aria-describedby={{if
+                  (eq this.failedControl 'dismiss')
+                  this.errorId
+                }}
+                {{on 'click' this.dismissTask.perform}}
+                {{this.focusIfNext 'dismiss'}}
+                data-test-get-started-dismiss
+              >
+                Dismiss
+              </Button>
+              {{! The minimize button sits at the far end. Its tooltip wraps it,
+                  so this wrapper is what the layout places. }}
+              <div class='get-started-actions'>
+                <IconButton
+                  @icon={{if this.isExpanded ChevronUp ChevronDown}}
+                  @label={{if this.isExpanded 'Minimize steps' 'Expand steps'}}
+                  @tooltip={{if
+                    this.isExpanded
+                    'Minimize steps'
+                    'Expand steps'
+                  }}
+                  @appearance='plain'
+                  @size='s'
+                  aria-expanded={{if this.isExpanded 'true' 'false'}}
+                  aria-controls={{if this.isExpanded this.stepsId}}
+                  {{on 'click' this.toggleExpanded}}
+                  data-test-get-started-toggle
+                />
+              </div>
             </div>
             {{#if (eq this.failedControl 'dismiss')}}
               <p
@@ -676,6 +687,22 @@ export default class GetStarted extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xs) var(--boxel-sp);
       }
+      /* A zero basis keeps the summary from pushing the controls onto a
+         line of their own; it takes the room they leave and wraps inside. */
+      .get-started-summary {
+        display: flex;
+        flex: 1 1 0;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xs) var(--boxel-sp);
+        min-width: 0;
+      }
+      .get-started-controls {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: var(--boxel-sp);
+      }
       .get-started-title {
         margin: 0;
         font-size: var(--boxel-font-size);
@@ -688,10 +715,6 @@ export default class GetStarted extends Component<Signature> {
         margin: 0;
         font-size: var(--boxel-font-size-sm);
         color: var(--muted-foreground);
-      }
-      /* Dismiss and the minimize button sit together at the far end. */
-      .get-started-dismiss {
-        margin-inline-start: auto;
       }
       .get-started-actions {
         display: flex;
@@ -784,7 +807,9 @@ export default class GetStarted extends Component<Signature> {
           align-items: center;
           gap: var(--boxel-sp-xs);
         }
-        .get-started-head {
+        .get-started-head,
+        .get-started-summary,
+        .get-started-controls {
           display: contents;
         }
         .get-started-steps {
