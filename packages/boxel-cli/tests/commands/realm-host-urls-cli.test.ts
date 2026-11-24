@@ -20,7 +20,7 @@ import {
   ensureSiteNameClaimed,
   findHostURL,
   hostURLAddress,
-  siteNameHostname,
+  siteNameAt,
 } from '../../src/lib/host-urls.ts';
 
 const REALM = 'https://app.example.test/mango/blog/';
@@ -177,25 +177,30 @@ describe('site name detection', () => {
 
   it('does not ask the server about a URL with a path', async () => {
     expect(
-      await siteNameHostname(noRequests, 'https://mango.boxel.space/blog/'),
+      await siteNameAt(noRequests, 'https://mango.boxel.space/blog/'),
     ).toBeUndefined();
   });
 
   it('does not ask the server about a host with one label', async () => {
-    expect(
-      await siteNameHostname(noRequests, 'http://localhost/'),
-    ).toBeUndefined();
+    expect(await siteNameAt(noRequests, 'http://localhost/')).toBeUndefined();
   });
 });
 
 describe('site name claims', () => {
-  // A server whose site domain is `boxel.site`. The caller has no claim of
-  // its own for the realm, and the claim endpoint answers with `claimStatus`
-  // and `claimError`.
-  function siteServer(
-    claimStatus: number,
-    claimError = 'Hostname is already claimed',
-  ) {
+  // A server whose site domain is `boxel.site`. It answers the availability
+  // check with `availability`, the home page check with `anonymousCanView`,
+  // and a claim with `claimStatus`.
+  function siteServer({
+    available = true,
+    error,
+    anonymousCanView = true,
+    claimStatus = 201,
+  }: {
+    available?: boolean;
+    error?: string;
+    anonymousCanView?: boolean;
+    claimStatus?: number;
+  } = {}) {
     let requests: string[] = [];
     let client: RealmClient = {
       realmServerURL: 'https://app.example.test/',
@@ -206,20 +211,40 @@ describe('site name claims', () => {
         requests.push(`${method} ${url.pathname}`);
         if (url.pathname === '/_check-boxel-domain-availability') {
           return Response.json({
-            available: false,
+            available,
             hostname: `${url.searchParams.get('subdomain')}.boxel.site`,
+            ...(error ? { error } : {}),
           });
         }
-        if (url.pathname === '/_boxel-claimed-domains' && method === 'GET') {
-          return Response.json(
-            { errors: ['No hostname claim found for this realm'] },
-            { status: 404 },
-          );
+        if (url.pathname === '/_host-urls/home-page-check') {
+          return Response.json({
+            data: {
+              type: 'home-page-check',
+              id: url.searchParams.get('realm'),
+              attributes: {
+                homeCardReadable: anonymousCanView,
+                unloadableModules: [],
+                anonymousCanView,
+              },
+            },
+          });
         }
         if (url.pathname === '/_boxel-claimed-domains' && method === 'POST') {
+          if (claimStatus !== 201) {
+            return Response.json(
+              { errors: ['Internal server error'] },
+              { status: claimStatus },
+            );
+          }
           return Response.json(
-            { errors: [claimError] },
-            { status: claimStatus },
+            {
+              data: {
+                type: 'claimed-domain',
+                id: '1',
+                attributes: { hostname: 'mango.boxel.site' },
+              },
+            },
+            { status: 201 },
           );
         }
         throw new Error(`unexpected request to ${url}`);
@@ -228,10 +253,26 @@ describe('site name claims', () => {
     return { client, requests };
   }
 
+  it('claims a name no one has claimed, for a realm the mount accepts', async () => {
+    let { client, requests } = siteServer();
+    expect(
+      await ensureSiteNameClaimed(client, REALM, 'https://mango.boxel.site/'),
+    ).toEqual({
+      claimed: true,
+      hostname: 'mango.boxel.site',
+      alreadyClaimed: false,
+    });
+    expect(requests).toEqual([
+      'GET /_check-boxel-domain-availability',
+      'GET /_host-urls/home-page-check',
+      'POST /_boxel-claimed-domains',
+    ]);
+  });
+
   it('leaves a name that is claimed already to the mount', async () => {
     // Another administrator may have claimed the name for this realm. The
-    // caller can't see that claim, and the mount accepts it.
-    let { client, requests } = siteServer(422);
+    // mount accepts that claim, and refuses one that another user made.
+    let { client, requests } = siteServer({ available: false });
     expect(
       await ensureSiteNameClaimed(client, REALM, 'https://mango.boxel.site/'),
     ).toEqual({
@@ -239,18 +280,30 @@ describe('site name claims', () => {
       hostname: 'mango.boxel.site',
       alreadyClaimed: true,
     });
-    expect(requests).toContain('POST /_boxel-claimed-domains');
+    expect(requests).not.toContain('POST /_boxel-claimed-domains');
   });
 
-  it('stops on a claim refusal for another reason', async () => {
-    let { client } = siteServer(422, 'Subdomain must be lowercase');
+  it('claims nothing for a realm whose home page the mount refuses', async () => {
+    let { client, requests } = siteServer({ anonymousCanView: false });
+    expect(
+      await ensureSiteNameClaimed(client, REALM, 'https://mango.boxel.site/'),
+    ).toEqual({ claimed: false });
+    expect(requests).not.toContain('POST /_boxel-claimed-domains');
+  });
+
+  it('stops on a name that can never be claimed, with the reason', async () => {
+    let { client, requests } = siteServer({
+      available: false,
+      error: 'Subdomain must be lowercase',
+    });
     await expect(
       ensureSiteNameClaimed(client, REALM, 'https://mango.boxel.site/'),
     ).rejects.toThrow('Subdomain must be lowercase');
+    expect(requests).not.toContain('POST /_boxel-claimed-domains');
   });
 
-  it('stops on a claim failure that is not a refusal', async () => {
-    let { client } = siteServer(500);
+  it('stops on a claim failure', async () => {
+    let { client } = siteServer({ claimStatus: 500 });
     await expect(
       ensureSiteNameClaimed(client, REALM, 'https://mango.boxel.site/'),
     ).rejects.toBeInstanceOf(RealmOperationError);

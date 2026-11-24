@@ -23,8 +23,9 @@ import { runBoxel } from '../helpers/run-boxel.ts';
 //
 // This harness uses a noop prerenderer, so the anonymous home page check that
 // a mount runs can't pass. The tests that need a host URL insert its row
-// directly, and the mount tests assert on the refusals and on the site name
-// claim, which the server makes before that check.
+// directly, and the mount tests assert on the refusals. The unit tests in
+// `tests/commands/realm-host-urls-cli.test.ts` cover a site name claim for a
+// realm the mount accepts.
 
 const OWNER_USER_ID = `@${TEST_USERNAME}:localhost`;
 
@@ -83,6 +84,36 @@ async function insertHostURL(
     { bind: [await realmId(realmURL), host, isCanonical, OWNER_USER_ID] },
   );
   return `http://${host}/`;
+}
+
+async function insertClaim(realmURL: string, host: string): Promise<void> {
+  let db = getTestDbAdapter()!;
+  let [user] = (await db.execute(
+    `SELECT id FROM users WHERE matrix_user_id = $1`,
+    { bind: [OWNER_USER_ID] },
+  )) as { id: string }[];
+  await db.execute(
+    `INSERT INTO claimed_domains_for_sites (user_id, hostname, realm_id, source_realm_url, claimed_at)
+     VALUES ($1, $2, $3, $4, $5)`,
+    {
+      bind: [
+        user.id,
+        host,
+        await realmId(realmURL),
+        realmURL,
+        Math.floor(Date.now() / 1000),
+      ],
+    },
+  );
+}
+
+async function claimsOn(
+  host: string,
+): Promise<{ hostname: string; realm_id: string }[]> {
+  return (await getTestDbAdapter()!.execute(
+    `SELECT hostname, realm_id FROM claimed_domains_for_sites WHERE hostname = $1 AND removed_at IS NULL`,
+    { bind: [host] },
+  )) as { hostname: string; realm_id: string }[];
 }
 
 function uniqueSiteHost(): string {
@@ -266,47 +297,38 @@ describe('realm mount (integration)', () => {
     expect(res.stderr).toContain('Give a <host-url> or --space, not both.');
   });
 
-  it('claims a site name before the mount, and only once', async () => {
+  it('claims no site name for a realm the mount refuses', async () => {
     let { realmUrl } = await createTestRealmViaCli(home);
     let host = uniqueSiteHost();
-    let siteURL = `http://${host}/`;
 
-    let first = await runBoxel(['realm', 'mount', realmUrl, siteURL], {
+    let res = await runBoxel(['realm', 'mount', realmUrl, `http://${host}/`], {
       home,
     });
-    expect(first.stderr).toContain(`Claimed the site name ${host}`);
-    let claims = (await getTestDbAdapter()!.execute(
-      `SELECT hostname, realm_id FROM claimed_domains_for_sites WHERE hostname = $1 AND removed_at IS NULL`,
-      { bind: [host] },
-    )) as { hostname: string; realm_id: string }[];
-    expect(claims).toEqual([
-      { hostname: host, realm_id: await realmId(realmUrl) },
-    ]);
-
-    // The name is claimed for this realm now, so a second mount doesn't
-    // claim it again.
-    let second = await runBoxel(['realm', 'mount', realmUrl, siteURL], {
-      home,
-    });
-    expect(second.stderr).not.toContain('Claimed the site name');
-    expect(second.stderr).not.toContain('already claimed');
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain("The realm can't be mounted");
+    expect(res.stderr).not.toContain('Claimed the site name');
+    expect(await claimsOn(host)).toEqual([]);
   });
 
   it('leaves a site name that is claimed already to the mount', async () => {
     let { realmUrl: claimingRealm } = await createTestRealmViaCli(home);
     let { realmUrl: otherRealm } = await createTestRealmViaCli(home);
     let host = uniqueSiteHost();
-    let siteURL = `http://${host}/`;
+    await insertClaim(claimingRealm, host);
 
-    await runBoxel(['realm', 'mount', claimingRealm, siteURL], { home });
-
-    // The claim endpoint refuses a second claim on the name. The command
-    // sends the mount anyway, and the mount decides whether the realm may
-    // use the claim.
-    let res = await runBoxel(['realm', 'mount', otherRealm, siteURL], {
-      home,
-    });
+    // The command doesn't try to claim the name. The mount answers, here
+    // with its home page refusal, which it gives before it checks a claim.
+    let res = await runBoxel(
+      ['realm', 'mount', otherRealm, `http://${host}/`],
+      {
+        home,
+      },
+    );
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain("The realm can't be mounted");
     expect(res.stderr).not.toContain('Hostname is already claimed');
-    expect(res.stderr).not.toContain('Claimed the site name');
+    expect(await claimsOn(host)).toEqual([
+      { hostname: host, realm_id: await realmId(claimingRealm) },
+    ]);
   });
 });

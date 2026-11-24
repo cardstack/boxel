@@ -2,9 +2,10 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import type { RealmClient } from '@cardstack/runtime-common/realm-client';
 import {
   checkDomainAvailability,
+  checkHostURLHomePage,
   claimSiteName,
-  fetchClaimedSiteName,
   RealmOperationError,
+  type DomainAvailability,
   type HostURL,
 } from '@cardstack/runtime-common/realm-operations';
 import { buildCliRealmClient } from './realm-client.ts';
@@ -80,17 +81,18 @@ export function findHostURL(
   return hostURLs.find((hostURL) => hostURLAddress(hostURL.url) === address);
 }
 
-// The hostname of the site name that `url` is at, in the form the server
-// stores claims in. Undefined when `url` is not at a site name.
+// The site name that `url` is at: its hostname, in the form the server
+// stores claims in, and the server's answer about that name's availability.
+// Undefined when `url` is not at a site name.
 //
 // A site name is at the root of a one-label subdomain of the site domain. The
 // CLI does not know the site domain, so it asks the server for the hostname
 // that the first label of `url` gives on that domain. When that hostname is
 // the host of `url`, `url` is at a site name.
-export async function siteNameHostname(
+export async function siteNameAt(
   client: RealmClient,
   url: string,
-): Promise<string | undefined> {
+): Promise<{ hostname: string; availability: DomainAvailability } | undefined> {
   let parsed = new URL(url);
   if (parsed.pathname !== '/') {
     return undefined;
@@ -114,7 +116,7 @@ export async function siteNameHostname(
   }
   let siteHostname = availability.hostname?.toLowerCase();
   if (siteHostname === host || siteHostname === hostname) {
-    return availability.hostname;
+    return { hostname: availability.hostname, availability };
   }
   return undefined;
 }
@@ -123,48 +125,42 @@ export type SiteNameClaim =
   | { claimed: false }
   | { claimed: true; hostname: string; alreadyClaimed: boolean };
 
-// Makes sure the site name that `url` is at is claimed for the realm, before a
-// mount there. Claims the name when the caller has no claim on it for the
-// realm. When the name is claimed already, the mount decides whether the realm
-// may use it. Returns `{ claimed: false }` when `url` is not at a site name.
+// Claims the site name that `url` is at for the realm, before a mount there,
+// when no one has claimed it. Returns `{ claimed: false }` when `url` is not
+// at a site name, or when the command made no claim because the mount will
+// refuse the realm.
+//
+// - A name that can never be claimed stops here, with the server's reason.
+// - A name that is claimed already is left to the mount. The claim can be the
+//   caller's, or one that another administrator made for this realm, which
+//   the mount accepts. The mount refuses a name that another user claimed,
+//   and gives its reason.
+// - The mount refuses a realm whose home page a visitor who isn't signed in
+//   can't view, and it checks that before the claim. So the command doesn't
+//   claim a name for such a realm, which would keep the name held after the
+//   refusal. The mount then gives the reason.
 export async function ensureSiteNameClaimed(
   client: RealmClient,
   realmURL: string,
   url: string,
 ): Promise<SiteNameClaim> {
-  let hostname = await siteNameHostname(client, url);
-  if (!hostname) {
+  let site = await siteNameAt(client, url);
+  if (!site) {
     return { claimed: false };
   }
-  let existing = await fetchClaimedSiteName(client, { realmURL });
-  if (existing?.hostname.toLowerCase() === hostname.toLowerCase()) {
+  let { hostname, availability } = site;
+  if (availability.error) {
+    throw new RealmOperationError(availability.error, { status: 422 });
+  }
+  if (!availability.available) {
     return { claimed: true, hostname, alreadyClaimed: true };
   }
-  try {
-    let claim = await claimSiteName(client, { realmURL, hostname });
-    return { claimed: true, hostname: claim.hostname, alreadyClaimed: false };
-  } catch (error) {
-    // The claim lookup above finds only the caller's own claims. A name that
-    // another administrator claimed for this realm is refused here, but the
-    // mount accepts it. So a claim refused because the name is claimed
-    // doesn't stop the mount: the mount checks the claim, and refuses a name
-    // that another user claimed. Any other refusal, such as a name that isn't
-    // valid, stops here with its own reason.
-    if (isAlreadyClaimedRefusal(error)) {
-      return { claimed: true, hostname, alreadyClaimed: true };
-    }
-    throw error;
+  let homePage = await checkHostURLHomePage(client, { realmURL });
+  if (!homePage.anonymousCanView) {
+    return { claimed: false };
   }
-}
-
-const ALREADY_CLAIMED = 'Hostname is already claimed';
-
-function isAlreadyClaimedRefusal(error: unknown): boolean {
-  return (
-    error instanceof RealmOperationError &&
-    error.status === 422 &&
-    error.message.includes(ALREADY_CLAIMED)
-  );
+  let claim = await claimSiteName(client, { realmURL, hostname });
+  return { claimed: true, hostname: claim.hostname, alreadyClaimed: false };
 }
 
 export interface HostURLErrorReport {

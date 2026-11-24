@@ -379,6 +379,37 @@ export const listHostURLs: RealmOperation<
   };
 };
 
+export interface HostURLHomePage {
+  homeCardId?: string;
+  // Set when the realm's root redirects, so it serves no home page.
+  redirectTo?: string;
+  homeCardReadable: boolean;
+  homeCardStatus?: number;
+  unloadableModules: { url: string; status: number }[];
+  // A mount refuses a realm unless this is true.
+  anonymousCanView: boolean;
+}
+
+export interface CheckHostURLHomePageInput {
+  realmURL: string;
+}
+
+// Asks whether a visitor who isn't signed in can view the realm's home page,
+// with `GET /_host-urls/home-page-check?realm=`. The server refuses to mount a
+// realm whose home page such a visitor can't view.
+export const checkHostURLHomePage: RealmOperation<
+  CheckHostURLHomePageInput,
+  HostURLHomePage
+> = async (client, input) => {
+  let url = new URL(`${hostURLEndpoint(client)}/home-page-check`);
+  url.searchParams.set('realm', ensureTrailingSlash(input.realmURL));
+  let response = await hostURLRequest(client, url.href, { method: 'GET' });
+  let json = (await response.json()) as {
+    data: { attributes: HostURLHomePage };
+  };
+  return json.data.attributes;
+};
+
 export interface MountHostURLInput {
   realmURL: string;
   url: string;
