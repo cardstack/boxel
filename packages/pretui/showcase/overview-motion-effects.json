@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Pret UI Motion & Effects"
+      },
+      "category": "Motion & Effects"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../pretui-overview",
+        "name": "PretUIOverview"
+      }
+    }
+  }
+}

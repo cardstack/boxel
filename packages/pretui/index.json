@@ -1,10 +1,16 @@
 {
   "data": {
     "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Pret UI",
+        "summary": "A Boxel UI kit of typed, themeable components, shown live."
+      }
+    },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/workspace",
-        "name": "Workspace"
+        "module": "./pretui-home",
+        "name": "PretUIHome"
       }
     }
   }
