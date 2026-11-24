@@ -1749,6 +1749,14 @@ module('Unit | index-writer', function (hooks) {
             generation: 1,
             realm_url: testRealmURL,
             host_shell_generation: PUBLISHED_GENERATION,
+            // A published instance row holds its types, as the writer
+            // requires of every instance row that is not an error row.
+            types: [
+              { module: rri(`./person`), name: 'Person' },
+              baseCardRef,
+            ].map((i) =>
+              internalKeyFor(i, new URL(testRealmURL), virtualNetwork),
+            ),
             pristine_doc: {
               id: `${testRealmURL}1.json`,
               type: 'card',

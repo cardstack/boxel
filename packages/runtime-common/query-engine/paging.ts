@@ -113,6 +113,7 @@ export abstract class Paging extends PlainPaging {
     everyCondition,
     limitClause,
     facets,
+    matches: given,
   }: {
     opts: QueryOptions;
     sort: Sort | undefined;
@@ -122,9 +123,12 @@ export abstract class Paging extends PlainPaging {
     limitClause: string[];
     // The facets' CTEs and columns over the match set `m` (`facetSql`).
     facets?: { ctes: CardExpression[]; columns: CardExpression };
+    // The match set `m` as given, `WITH` included, in place of the one read
+    // by `everyCondition` (a counts-only page, so no sort column).
+    matches?: CardExpression;
   }): CardExpression {
     let { innerSortColumns, outerOrderBy } = this.wrappedOrderExpression(sort);
-    let matches: CardExpression = [
+    let matches: CardExpression = given ?? [
       'WITH m AS MATERIALIZED (',
       'SELECT i.url AS url, i.type AS type',
       ...(facets
