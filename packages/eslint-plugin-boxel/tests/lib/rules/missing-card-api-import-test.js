@@ -148,7 +148,6 @@ ruleTester.run('missing-card-api-import', rule, {
 
       errors: [
         {
-          type: 'Identifier',
           message: rule.meta.messages['missing-card-api-import'],
         },
       ],
@@ -197,7 +196,6 @@ ruleTester.run('missing-card-api-import', rule, {
 
       errors: [
         {
-          type: 'Identifier',
           message: rule.meta.messages['missing-card-api-import'],
         },
       ],
@@ -240,7 +238,6 @@ ruleTester.run('missing-card-api-import', rule, {
       ],
       errors: [
         {
-          type: 'Identifier',
           message: rule.meta.messages['missing-card-api-import'],
         },
       ],
@@ -278,7 +275,6 @@ ruleTester.run('missing-card-api-import', rule, {
 
       errors: [
         {
-          type: 'Identifier',
           message: rule.meta.messages['missing-card-api-import'],
         },
       ],
@@ -316,7 +312,6 @@ import {
       ],
       errors: [
         {
-          type: 'Identifier',
           message: rule.meta.messages['missing-card-api-import'],
         },
       ],
@@ -357,7 +352,6 @@ export class CurrencyField extends FieldDef {
       ],
       errors: [
         {
-          type: 'Identifier',
           message: rule.meta.messages['missing-card-api-import'],
         },
       ],

@@ -95,7 +95,6 @@ ruleTester.run('template-missing-invokable', rule, {
 
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],
@@ -123,7 +122,6 @@ ruleTester.run('template-missing-invokable', rule, {
       ],
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],
@@ -151,7 +149,6 @@ ruleTester.run('template-missing-invokable', rule, {
       ],
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],
@@ -181,7 +178,6 @@ ruleTester.run('template-missing-invokable', rule, {
       ],
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],
@@ -232,15 +228,12 @@ ruleTester.run('template-missing-invokable', rule, {
       ],
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],
@@ -273,7 +266,6 @@ ruleTester.run('template-missing-invokable', rule, {
 
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],

@@ -63,7 +63,6 @@ ruleTester.run('no-css-position-fixed', rule, {
       `,
       errors: [
         {
-          type: 'GlimmerTextNode',
           message: rule.meta.messages['no-css-position-fixed'],
         },
       ],
@@ -81,7 +80,6 @@ ruleTester.run('no-css-position-fixed', rule, {
       `,
       errors: [
         {
-          type: 'GlimmerTextNode',
           message: rule.meta.messages['no-css-position-fixed'],
         },
       ],
@@ -99,7 +97,6 @@ ruleTester.run('no-css-position-fixed', rule, {
       `,
       errors: [
         {
-          type: 'GlimmerTextNode',
           message: rule.meta.messages['no-css-position-fixed'],
         },
       ],
@@ -120,11 +117,9 @@ ruleTester.run('no-css-position-fixed', rule, {
       `,
       errors: [
         {
-          type: 'GlimmerTextNode',
           message: rule.meta.messages['no-css-position-fixed'],
         },
         {
-          type: 'GlimmerTextNode',
           message: rule.meta.messages['no-css-position-fixed'],
         },
       ],
