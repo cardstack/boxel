@@ -35,6 +35,7 @@ import {
   setupDB,
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
+import { syncSeededValueStore } from './helpers/seed-index-rows.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { policyWarningsDuring } from './helpers/policy-log.ts';
 import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
@@ -740,6 +741,7 @@ module(basename(import.meta.filename), function (hooks) {
          WHERE url IN ($1, $2) AND type = 'instance'`,
         { bind: [`${ROOM_204}.json`, `${ROOM_205}.json`] },
       );
+      await syncSeededValueStore(db, EDUCATION);
 
       let own = await getCard(ROOM_204, AUTH.teacher());
       assert.strictEqual(own.status, 200, 'a teacher reads their classroom');

@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
+import { request as httpRequest } from 'http';
 import { dirSync } from 'tmp';
 import type {
   LooseSingleCardDocument,
@@ -35,6 +36,7 @@ import {
 import {
   closeServer,
   connectionTenantsDuring,
+  createJWT,
   createVirtualNetwork,
   definitionCacheReads,
   indexReads,
@@ -266,6 +268,94 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
     }
+
+    // Sends a search over a raw connection the test can tear down mid-flight,
+    // which supertest cannot.
+    function sendAbandonable(path: string, token: string, body: unknown) {
+      let url = new URL(path, testRealm.url);
+      let client = httpRequest({
+        host: url.hostname,
+        port: url.port,
+        method: 'POST',
+        path: url.pathname,
+        headers: {
+          Accept: 'application/vnd.card+json',
+          'Content-Type': 'application/json',
+          'X-HTTP-Method-Override': 'QUERY',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      client.on('error', () => {});
+      client.end(JSON.stringify(body));
+      return client;
+    }
+
+    // Holds each search of `realm` until it is aborted, recording that it was.
+    function holdSearchesUntilAborted(realm: Realm) {
+      let state = { started: 0, aborted: 0, withoutSignal: 0 };
+      let original = realm.searchEntries;
+      realm.searchEntries = ((_query, opts) => {
+        state.started++;
+        let signal = opts?.signal;
+        if (!signal) {
+          state.withoutSignal++;
+          return original.call(realm, _query, opts);
+        }
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              state.aborted++;
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        });
+      }) as Realm['searchEntries'];
+      return {
+        state,
+        restore: () => {
+          realm.searchEntries = original;
+        },
+      };
+    }
+
+    test('a federated search whose client goes away is stopped in each realm', async function (assert) {
+      let held = holdSearchesUntilAborted(testRealm);
+      try {
+        let client = sendAbandonable(
+          new URL('/_federated-search', testRealm.url).pathname,
+          ownerToken(),
+          { filter: personFilter(), realms: [testRealm.url] },
+        );
+        await waitUntil(() => held.state.started > 0, 'the realm search');
+        assert.strictEqual(held.state.withoutSignal, 0, 'it carries a signal');
+        assert.strictEqual(held.state.aborted, 0, 'still running');
+        client.destroy();
+        await waitUntil(() => held.state.aborted > 0, 'the abort');
+        assert.strictEqual(held.state.aborted, 1, "the realm's search stopped");
+      } finally {
+        held.restore();
+      }
+    });
+
+    test("a realm's _search whose client goes away is stopped", async function (assert) {
+      let held = holdSearchesUntilAborted(testRealm);
+      try {
+        let client = sendAbandonable(
+          new URL('_search', testRealm.url).pathname,
+          createJWT(testRealm, readerUserId, ['read']),
+          { filter: personFilter() },
+        );
+        await waitUntil(() => held.state.started > 0, 'the realm search');
+        assert.strictEqual(held.state.withoutSignal, 0, 'it carries a signal');
+        client.destroy();
+        await waitUntil(() => held.state.aborted > 0, 'the abort');
+        assert.strictEqual(held.state.aborted, 1, 'the search stopped');
+      } finally {
+        held.restore();
+      }
+    });
 
     test('QUERY /_federated-search federates entry results across realms', async function (assert) {
       let response = await postSearch({
@@ -793,6 +883,31 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
           200,
           'a request naming no page is clamped to the default, not rejected',
         );
+        // By realm, the two realms share the maximum of 3, so each answers one
+        // of its two rows, and the answer says it left matches out.
+        let noticeOf = (body: any) =>
+          (body.meta.warnings ?? []).find(
+            (w: { code: string }) => w.code === 'default-page-truncated',
+          );
+        assert.strictEqual(unpaged.body.meta.page.total, 4);
+        assert.strictEqual(unpaged.body.data.length, 2);
+        assert.notStrictEqual(noticeOf(unpaged.body), undefined, 'the notice');
+        // Merged, the union takes one global default page of 2 of the 4, and
+        // the answer says so.
+        let merged = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+          realms: [testRealm.url, secondaryRealm.url],
+          federation: { results: 'merged' },
+        });
+        assert.strictEqual(merged.status, 200);
+        assert.strictEqual(merged.body.data.length, 2);
+        assert.strictEqual(merged.body.meta.page.total, 4);
+        assert.true(merged.body.meta.page.hasMore);
+        assert.strictEqual(
+          noticeOf(merged.body)?.message,
+          'Returned the first 2 of 4 matches; pass page.size or page through the results',
+        );
 
         // A multi-realm request within the ceiling is accepted — the realms
         // fan-out is not capped server-side — and both realms are searched.
@@ -1065,7 +1180,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       assert.strictEqual(
         reader.text,
         owner.text,
-        'two independent computes produce a byte-identical body',
+        'two independent computes produce a byte-identical body, but for the measured time',
       );
     });
 

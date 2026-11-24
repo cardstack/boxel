@@ -11,6 +11,8 @@ import {
   isMatchesFilter,
   isNotFilter,
   isRangeFilter,
+  splitTypeAheadQuery,
+  typeAheadWords,
 } from '../query.ts';
 
 const sampleRef = {
@@ -140,6 +142,86 @@ const tests = Object.freeze({
       () => assertQuery({ filter: { matches: { query: 'x' } } }),
       InvalidQueryError,
     );
+  },
+  'assertQuery accepts a boolean prefix beside matches': async (assert) => {
+    assertQuery({ filter: { matches: 'kleppm', prefix: true } });
+    assertQuery({
+      filter: { on: sampleRef, matches: 'kleppm', prefix: false },
+    });
+    assert.ok(true, 'no error thrown');
+  },
+
+  'assertQuery rejects a non-boolean prefix': async (assert) => {
+    assert.throws(
+      () => assertQuery({ filter: { matches: 'kleppm', prefix: 'yes' } }),
+      /prefix must be a boolean/,
+    );
+  },
+
+  'assertQuery rejects prefix away from matches': async (assert) => {
+    assert.throws(
+      () => assertQuery({ filter: { eq: { name: 'x' }, prefix: true } }),
+      /prefix belongs beside matches/,
+    );
+    assert.throws(
+      () => assertQuery({ filter: { prefix: true } }),
+      /prefix belongs beside matches/,
+    );
+  },
+
+  'splitTypeAheadQuery separates the unfinished last word': async (assert) => {
+    assert.deepEqual(splitTypeAheadQuery('steve jo'), {
+      words: 'steve ',
+      partial: 'jo',
+    });
+    assert.deepEqual(splitTypeAheadQuery('Kleppm'), {
+      words: '',
+      partial: 'kleppm',
+    });
+    assert.deepEqual(splitTypeAheadQuery('steve '), {
+      words: 'steve ',
+      partial: undefined,
+    });
+    assert.deepEqual(splitTypeAheadQuery("o'rei"), {
+      words: "o'",
+      partial: 'rei',
+    });
+    assert.deepEqual(splitTypeAheadQuery('café crè'), {
+      words: 'café ',
+      partial: 'crè',
+    });
+  },
+  'assertQuery accepts type-ahead as a title-scoped prefix matches and refuses typeahead':
+    async (assert) => {
+      assertQuery({
+        filter: {
+          on: sampleRef,
+          matches: 'steve jo',
+          prefix: true,
+          scope: 'title',
+        },
+      });
+      assert.throws(
+        () => assertQuery({ filter: { on: sampleRef, typeahead: 'steve jo' } }),
+        /"typeahead" is not a filter operator; write type-ahead as \{ matches, prefix: true, scope: 'title' \}/,
+      );
+      assert.throws(
+        () => assertQuery({ filter: { typeahead: 'x', matches: 'y' } }),
+        /"typeahead" is not a filter operator/,
+      );
+    },
+
+  'typeAheadWords splits on anything but letters and digits': async (
+    assert,
+  ) => {
+    assert.deepEqual(typeAheadWords("Steve Jobs's iPod-2"), [
+      'steve',
+      'jobs',
+      's',
+      'ipod',
+      '2',
+    ]);
+    assert.deepEqual(typeAheadWords('  —  '), []);
   },
 } as SharedTests<{}>);
 

@@ -118,7 +118,7 @@ module('normalizeQueryDefinition', function () {
     });
   });
 
-  test('injects on into leaf filter inside not', function (assert) {
+  test('anchors a not, and the leaf filter inside it', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let relativeTo = new URL('https://realm.example/cards/1');
     let targetRef = codeRefWithAbsoluteIdentifier(
@@ -139,8 +139,11 @@ module('normalizeQueryDefinition', function () {
     });
 
     assert.ok(normalized, 'normalization succeeded');
+    // The `not` itself is anchored too, so it keeps to the field's type
+    // rather than returning every card of every other type.
     assert.deepEqual(normalized?.query.filter, {
       not: { eq: { name: 'foo' }, on: targetRef },
+      on: targetRef,
     });
   });
 
@@ -242,7 +245,7 @@ module('normalizeQueryDefinition', function () {
             { eq: { name: 'bar' }, on: targetRef },
           ],
         },
-        { not: { contains: { title: 'baz' }, on: targetRef } },
+        { not: { contains: { title: 'baz' }, on: targetRef }, on: targetRef },
       ],
     });
   });
