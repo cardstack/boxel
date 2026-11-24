@@ -408,12 +408,12 @@ module(basename(import.meta.filename), function (hooks) {
     ).ticket;
   }
 
-  // Adds a key of `user`'s own.
-  async function addKey(user: string) {
+  // Adds a key of `user`'s own, named `name`.
+  async function addKey(user: string, name = 'vendor') {
     return await addUserKey(dbAdapter, secretsKeyring(), {
       owner: user,
-      name: 'vendor',
-      value: `sk-${user.slice(1, 12)}-routes-key`,
+      name,
+      value: `sk-${user.slice(1, 12)}-${name}-routes-key`,
       ticket: await keyWriteTicket(user, 'add'),
     });
   }
@@ -1605,7 +1605,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('approving a slot again with another key sends an automation event for the automation whose approval it ended', async function (assert) {
       await switchOnApproved();
-      let other = await addKey(OWNER);
+      let other = await addKey(OWNER, 'vendor-backup');
       let sent = await automationEventsDuring(async () => {
         let approved = await approveOperation(OWNER, 'list', {
           keyId: other.id,
