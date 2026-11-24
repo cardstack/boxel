@@ -1713,8 +1713,28 @@ module(basename(import.meta.filename), function (hooks) {
         });
 
         test('a Preview’s call refused for a key approval ends the run, and leaves the automation as it is', async function (assert) {
+          // The automation is active with the Preview's starter as payer, so
+          // a run of its triggers refused the same way would move it to
+          // waiting for key approval.
+          await fund(WRITER);
+          let shown = (await switchOn(WRITER, SHARED)).body.meta.keyApprovals;
+          assert201(
+            await approveOperation(
+              OWNER,
+              'shared',
+              { shareId },
+              { id: cardURL(SHARED), version: shown.version },
+            ),
+          );
           let before = await getAutomation(dbAdapter, automationId(SHARED));
-          let { token, run } = await previewBy(WRITER);
+          assert.strictEqual(before?.state, 'active');
+          let [versionKey, cap] = shown.version.split('.');
+          let { token, run } = await runReading(
+            SHARED,
+            WRITER,
+            `${'0'.repeat(versionKey.length)}.${cap}`,
+            { manual: true },
+          );
           let body = await invokeAs(token, 'shared');
           assert.strictEqual(
             body.errors?.[0]?.code,
@@ -1728,7 +1748,7 @@ module(basename(import.meta.filename), function (hooks) {
             'interactive-use-not-approved',
           );
           let after = await getAutomation(dbAdapter, automationId(SHARED));
-          assert.strictEqual(after?.state, before?.state);
+          assert.strictEqual(after?.state, 'active');
           assert.strictEqual(after?.nextRun, before?.nextRun);
         });
 
