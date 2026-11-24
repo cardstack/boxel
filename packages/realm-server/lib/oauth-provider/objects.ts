@@ -353,6 +353,7 @@ export const AUTHORIZATION_REFUSAL_REASONS = Object.freeze([
   'unknown-resource',
   'no-resource-for-scopes',
   'client-not-allowed',
+  'confirmation-code',
   'unknown-scope',
   'unregistered-scope',
   'missing-scope',

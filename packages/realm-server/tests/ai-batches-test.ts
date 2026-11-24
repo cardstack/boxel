@@ -39,14 +39,10 @@ import {
   setupDB,
   setupSecretsKeyring,
   setupTestDatabaseTemplate,
+  setupProcessPricing,
 } from './helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
-import {
-  checkPricingAtStartup,
-  currentPricing,
-  type PricingReporter,
-} from '../lib/pricing.ts';
 import { mintRunToken } from '../lib/run-token.ts';
 import { BATCHED_AI_RESERVE_FACTOR } from '../lib/automation-ai-spending.ts';
 import { OPENROUTER_MODELS_REALM } from '../lib/ai-batch-estimate.ts';
@@ -68,32 +64,6 @@ const BATCH_PROMPT_USD = 0.000001;
 const BATCH_COMPLETION_USD = 0.000005;
 
 const SYSTEM_KEY = 'sk-or-v1-batches-3a7c91e0d2f4b685';
-
-const silent: PricingReporter = {
-  info() {},
-  error() {},
-  alert() {},
-};
-
-function pricingEnv(): Record<string, string> {
-  return {
-    PRICING_PRERENDER_USD_PER_VCPU_HOUR: '0.04048',
-    PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR: '0.004445',
-    PRICING_PRERENDER_TASK_VCPUS: '4',
-    PRICING_PRERENDER_TASK_MEMORY_GB: '16',
-    PRICING_PRERENDER_TASK_TABS: '8',
-    PRICING_WORKER_USD_PER_VCPU_HOUR: '0.03238',
-    PRICING_WORKER_USD_PER_MEMORY_GB_HOUR: '0.00356',
-    PRICING_WORKER_TASK_VCPUS: '2',
-    PRICING_WORKER_TASK_MEMORY_GB: '4',
-    PRICING_WORKER_TASK_PROCESSES: '2',
-    PRICING_USD_PER_DOWNLOADED_GB: '0.045',
-    PRICING_USD_PER_FILE_STORAGE_GB_MONTH: '0.30',
-    PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH: '0.115',
-    PRICING_MARGIN: '2',
-    PRICING_MINIMUM_BALANCE_FLOOR_CREDITS: '1000',
-  };
-}
 
 function declaration(
   automationId = AUTOMATION,
@@ -201,16 +171,7 @@ module(basename(import.meta.filename), function () {
 
     setupSecretsKeyring(hooks);
 
-    let pricedBefore = currentPricing() !== undefined;
-    hooks.before(function () {
-      checkPricingAtStartup('ai-batches-test', pricingEnv(), silent);
-    });
-    hooks.after(function () {
-      if (!pricedBefore) {
-        // Leaves the process without prices again, as it started.
-        checkPricingAtStartup('ai-batches-test', {}, silent);
-      }
-    });
+    setupProcessPricing(hooks, 'ai-batches-test');
 
     setupDB(hooks, {
       templateDatabase,
@@ -373,13 +334,15 @@ module(basename(import.meta.filename), function () {
     async function runningRun(
       automationId = AUTOMATION,
       slot = '2026-11-11T11:30:00.000Z',
+      { dryRun = false }: { dryRun?: boolean } = {},
     ): Promise<{ run: AutomationRun; token: string }> {
       let pending = await createAutomationRun(dbAdapter, {
         automationId,
         realm: REALM,
-        trigger: 'daily',
+        trigger: dryRun ? 'manual' : 'daily',
         slot,
         actsAs: PAYER,
+        dryRun,
       });
       let started = await startAutomationRunAttempt(dbAdapter, pending.id, 1);
       if (started.kind !== 'run') {
@@ -655,6 +618,22 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.status, 403);
       assert.ok(
         response.body.errors[0].includes("hasn't turned on batched AI"),
+        response.body.errors[0],
+      );
+      assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
+    });
+
+    test('a Preview is refused a submit, since it sends its batched requests at the normal price', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun(AUTOMATION, undefined, {
+        dryRun: true,
+      });
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(response.status, 403);
+      assert.ok(
+        response.body.errors[0].includes('A Preview'),
         response.body.errors[0],
       );
       assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');

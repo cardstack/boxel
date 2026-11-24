@@ -16,6 +16,7 @@
 // name another of the realm server's routes. It is never put in an error's
 // message, which telemetry records.
 
+import { CONFIRMATION_CODE } from './confirmation-code.js';
 import { SecureSessionError, timedFetch } from './session.js';
 import type { Session } from './session.js';
 
@@ -57,6 +58,8 @@ export interface AppName {
   // ("an app on this computer", "an unknown app"), rather than a name. A
   // page words the app by this, never by comparing the phrase.
   standIn?: 'loopback' | 'unknown';
+  // Where a pre-registered app runs: on the user's own computer.
+  place?: 'this-computer';
 }
 
 export interface ConsentScope {
@@ -85,6 +88,9 @@ export interface ConsentDetails {
   resources: ConsentResource[];
   account: AccountContact;
   renewalOffered: boolean;
+  // The code the app showed where the user started signing in, for the user
+  // to check against. Only a pre-registered app on this computer sends one.
+  confirmationCode?: string;
 }
 
 // The provider's refusals, as fixed codes. Anything else is `failed`.
@@ -231,6 +237,9 @@ export function readConsentDetails(json: unknown): ConsentDetails {
       ...(typeof app.claimedName === 'string' && app.claimedName
         ? { claimedName: app.claimedName }
         : {}),
+      ...(kind === 'pre-registered' && app.place === 'this-computer'
+        ? { place: 'this-computer' as const }
+        : {}),
     },
     outsideApp: body.outsideApp === true,
     resources,
@@ -239,6 +248,10 @@ export function readConsentDetails(json: unknown): ConsentDetails {
         ? { email: account.email }
         : { displayName: text(account.displayName) },
     renewalOffered: body.renewalOffered === true,
+    ...(typeof body.confirmationCode === 'string' &&
+    CONFIRMATION_CODE.test(body.confirmationCode)
+      ? { confirmationCode: body.confirmationCode }
+      : {}),
   };
 }
 

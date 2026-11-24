@@ -41,6 +41,7 @@ import {
   leave as leavePass,
   letGo,
   type Pass,
+  passOpen,
   setBeforeMeasure,
   setPassScheduler,
 } from './far.ts';
@@ -408,6 +409,36 @@ function scrollerOf(el: Element): HTMLElement | null {
 setPassScheduler((run) => postRender(run));
 setBeforeMeasure(() => flushPendingMounts());
 
+/**
+ * Every mounted region, so that one render takes one "before".
+ *
+ * A region's render hook runs when the render reaches its own template. By
+ * then Glimmer has patched everything it rendered earlier: the region's
+ * ancestors and whatever comes before it in the document. What a modifier
+ * writes lands only after the render. A snapshot taken at that point is of a
+ * page that never stood: an ancestor's new class with its old inline size.
+ * A stack card coming out from under another is that case. Its cover comes
+ * off as a class and its width arrives through a modifier, so a region
+ * inside it would measure its participants in the covered card's layout and
+ * then move every one of them to where the uncovered card puts them.
+ *
+ * So the first region a render reaches snapshots every mounted region, and
+ * each region uses that snapshot when the render reaches it. The earlier in
+ * the document that first region is, the less of the render has landed
+ * before it. Under an outer region (the stack's own, around its cards)
+ * nothing of the cards has.
+ */
+const regions = new Set<Choreo>();
+/** counts the renders that took a snapshot of every region */
+let snapshotRound = 0;
+
+function snapshotEvery() {
+  snapshotRound++;
+  for (const region of regions) {
+    region.snapshotAhead(snapshotRound);
+  }
+}
+
 export class Choreo extends Component<Signature> implements ChoreoHost {
   private element?: HTMLDivElement;
   private orphanLayer?: HTMLDivElement;
@@ -457,6 +488,25 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   /** where the run stopped by a cover had its loops: the next run carries them on */
   private coveredLoops?: LoopPhases;
   private rootSnapshot?: DOMRect;
+  /** the `snapshotRound` this region's snapshot was taken ahead in, if any */
+  private snapshotTakenIn = 0;
+  /**
+   * The arguments the snapshot reads, as this region's own render hook last
+   * read them. A snapshot taken ahead runs inside another region's render
+   * hook, and evaluating this region's arguments there would consume them
+   * before Glimmer reaches this region. An argument derived from an `{{#each}}`
+   * index or item is then updated after it was read in the same render: a
+   * message whose index shifts when a message is inserted above it. Glimmer
+   * rejects that update. So the ahead snapshot works from this record, and
+   * only the region's own render hook evaluates its arguments.
+   */
+  private renderedArgs: {
+    idle: boolean;
+    inView: boolean;
+    inViewMargin: number | undefined;
+  } = { idle: true, inView: false, inViewMargin: undefined };
+  /** set while a snapshot is taken ahead, so it reads `renderedArgs` */
+  private aheadOfRender = false;
   private passPending = false;
   private rendered = false;
   run?: ChoreoRun;
@@ -495,7 +545,9 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
       return false;
     });
+    regions.add(this);
     registerDestructor(this, () => {
+      regions.delete(this);
       stopProbe();
       leavePass(this);
       this.run?.cancel();
@@ -579,13 +631,23 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   /** the `@inViewMargin` the current observer was made with */
   private viewMarginUsed?: number;
 
+  private get inView() {
+    return this.aheadOfRender
+      ? this.renderedArgs.inView
+      : Boolean(this.args.inView);
+  }
+
   private get viewMargin() {
-    return this.args.inViewMargin ?? 1;
+    return (
+      (this.aheadOfRender
+        ? this.renderedArgs.inViewMargin
+        : this.args.inViewMargin) ?? 1
+    );
   }
 
   private watchView(node: ChoreoNode) {
     const el = node.element;
-    if (!this.args.inView || !el) {
+    if (!this.inView || !el) {
       return;
     }
     if (!this.viewObserver) {
@@ -624,7 +686,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    */
   private syncViewWatch() {
     if (
-      this.args.inView &&
+      this.inView &&
       this.viewObserver &&
       this.viewMarginUsed !== this.viewMargin
     ) {
@@ -634,7 +696,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       this.viewObserver = undefined;
       this.nearView.clear();
     }
-    if (this.args.inView && !this.viewObserver) {
+    if (this.inView && !this.viewObserver) {
       for (const node of this.participants) {
         this.watchView(node);
       }
@@ -647,7 +709,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           }
         }
       }
-    } else if (!this.args.inView && this.viewObserver) {
+    } else if (!this.inView && this.viewObserver) {
       this.viewObserver.disconnect();
       this.viewObserver = undefined;
       this.viewRoot = null;
@@ -695,8 +757,16 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // (`layout` / `layoutId`) snapshot here too, so `{{motion layout=true}}`
     // works inside a <Choreo> without a <LayoutGroup> wrapped around it.
     snapshotOnRender();
-    if (this.args.idle) {
+    const aheadArgs = this.renderedArgs;
+    this.renderedArgs = {
+      idle: Boolean(this.args.idle),
+      inView: Boolean(this.args.inView),
+      inViewMargin: this.args.inViewMargin,
+    };
+    if (this.renderedArgs.idle) {
       this.slept = true;
+      // a snapshot taken ahead of this render is not this region's to keep
+      this.snapshotTakenIn = 0;
       return undefined;
     }
     if (this.slept) {
@@ -708,8 +778,21 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     }
     if (!this.passPending) {
       this.passPending = true;
-      this.syncViewWatch();
-      this.snapshot();
+      if (!passOpen()) {
+        // the first region this render reaches: every region's "before" is
+        // taken now, ahead of what the render patches on its way to them
+        snapshotEvery();
+      }
+      if (
+        this.snapshotTakenIn !== snapshotRound ||
+        aheadArgs.inView !== this.renderedArgs.inView ||
+        aheadArgs.inViewMargin !== this.renderedArgs.inViewMargin
+      ) {
+        // mounted after that snapshot, idle at its last render, or its view
+        // arguments changed since the snapshot ahead wired what it measured
+        this.syncViewWatch();
+        this.snapshot();
+      }
       // every region announces here, while Glimmer is still rendering, so the
       // barrier knows the whole cast before anybody measures
       joinPass(this);
@@ -717,6 +800,35 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     return undefined;
   }
   /* eslint-enable ember/no-side-effects */
+
+  /**
+   * Take this region's "before" as the first region of the render takes its
+   * own (see `regions`). The region still joins the pass from its own render
+   * hook, so the cast and its order are what they were.
+   *
+   * It reads the arguments as the region's last render left them
+   * (`renderedArgs`), never the arguments themselves. A region idle at its
+   * last render is skipped: knowing whether it wakes would mean evaluating its
+   * arguments, and measuring every idle region on every render is the cost
+   * `@idle` exists to avoid. One that wakes takes its own snapshot when the
+   * render reaches it. That moves what the render changes inside the region,
+   * while what the render patched above it (an ancestor's class or size)
+   * lands without a move. A region whose `@inView` or `@inViewMargin`
+   * changes in the render snapshots again at its own hook, with the new ones.
+   */
+  snapshotAhead(round: number) {
+    if (!this.element || this.passPending || this.renderedArgs.idle) {
+      return;
+    }
+    this.aheadOfRender = true;
+    try {
+      this.syncViewWatch();
+      this.snapshot();
+    } finally {
+      this.aheadOfRender = false;
+    }
+    this.snapshotTakenIn = round;
+  }
 
   private snapshot() {
     this.snapshots.clear();
@@ -732,7 +844,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     this.shownAnimations = this.element
       ? readAnimations(this.element)
       : new Map();
-    const wired = this.args.inView ? this.nearView : undefined;
+    const wired = this.inView ? this.nearView : undefined;
     for (const node of this.participants) {
       const el = node.element;
       if (

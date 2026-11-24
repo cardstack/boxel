@@ -69,15 +69,16 @@ import {
   type SecureOrigin,
 } from './lib/secure-origin.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
-import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import { HostURLResolver, resolveHostURLs } from './lib/realm-host-urls.ts';
 import {
-  HostURLResolver,
+  HostURLDomains,
   hostURLDomainFilter,
-  resolveHostURLs,
-} from './lib/realm-host-urls.ts';
+} from './lib/realm-host-urls-domains.ts';
 import { translateAtHostURLs } from './lib/realm-host-urls-boundary.ts';
 import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
+import { matrixAccountStanding } from './lib/automation-admission-checks.ts';
+import type { AccountStanding } from '@cardstack/runtime-common/automation-admission';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
 const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
@@ -733,6 +734,7 @@ export class RealmServer {
   private matrixRegistrationSecret: string | undefined;
   private matrixAdminUsername: string | undefined;
   private matrixAdminPassword: string | undefined;
+  private automationAccountStanding: (user: string) => Promise<AccountStanding>;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
@@ -746,6 +748,12 @@ export class RealmServer {
         boxelSite?: string;
       }
     | undefined;
+  // The domains a host URL can be on. The resolver and the code that writes
+  // host URLs both read it.
+  private hostURLDomains: HostURLDomains;
+  // This process's cache of host URLs. A writer drops a host from it before
+  // it answers, so its change takes effect here at once (ADR 033 §1.3).
+  private hostURLResolver: HostURLResolver;
   private prerenderer: Prerenderer | undefined;
   private reportHostShell: (() => Promise<void>) | undefined;
   private reconciler: RealmRegistryReconciler;
@@ -782,6 +790,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     matrixAdminUsername,
     matrixAdminPassword,
+    automationAccountStanding,
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
@@ -833,6 +842,10 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     matrixAdminUsername?: string;
     matrixAdminPassword?: string;
+    // What the Matrix server says of an account, for the admission a resume
+    // makes of its new payer. Defaults to asking the Matrix server's admin
+    // API with `matrixAdminUsername` and `matrixAdminPassword`.
+    automationAccountStanding?: (user: string) => Promise<AccountStanding>;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
     domainsForPublishedRealms?: {
@@ -939,8 +952,25 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixAdminUsername = matrixAdminUsername;
     this.matrixAdminPassword = matrixAdminPassword;
+    this.automationAccountStanding =
+      automationAccountStanding ??
+      ((user) =>
+        matrixAccountStanding(
+          {
+            matrixURL: matrixClient.matrixURL,
+            matrixAdminUsername,
+            matrixAdminPassword,
+          },
+          user,
+        ));
     this.getRegistrationSecret = getRegistrationSecret;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
+    this.hostURLDomains = HostURLDomains.fromDeployment(
+      domainsForPublishedRealms,
+    );
+    this.hostURLResolver = new HostURLResolver(this.dbAdapter, {
+      mayHaveHostURLs: hostURLDomainFilter(this.hostURLDomains),
+    });
     // Pass-by-reference: handlers and the reconciler both mutate this
     // array. Copying it would create two divergent views of mounted
     // realms — a bug under multi-instance Phase 3 semantics. The legacy
@@ -1036,20 +1066,7 @@ export class RealmServer {
       .use(compressResponse)
       // A request on a host URL is made to name its realm's URL here, ahead
       // of every route that looks a realm up (ADR 033 §1.2).
-      .use(
-        resolveHostURLs(
-          new HostURLResolver(this.dbAdapter, {
-            mayHaveHostURLs: hostURLDomainFilter({
-              ...this.domainsForPublishedRealms,
-              customDomains: Object.values(
-                getPublishedRealmDomainOverrides(
-                  process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
-                ),
-              ),
-            }),
-          }),
-        ),
-      )
+      .use(resolveHostURLs(this.hostURLResolver))
       // Then the rest of the request is translated to the realm's URL, and
       // its response back to the host URL it came in on (ADR 033 §1.5).
       .use(translateAtHostURLs())
@@ -1172,7 +1189,10 @@ export class RealmServer {
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           matrixAdminUsername: this.matrixAdminUsername,
           matrixAdminPassword: this.matrixAdminPassword,
+          automationAccountStanding: this.automationAccountStanding,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
+          hostURLDomains: this.hostURLDomains,
+          hostURLResolver: this.hostURLResolver,
           prerenderer: this.prerenderer,
           reportHostShell: this.reportHostShell,
           reconciler: this.reconciler,

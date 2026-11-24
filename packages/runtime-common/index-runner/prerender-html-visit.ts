@@ -57,6 +57,7 @@ import {
   CardError,
   coerceErrorMessage,
   isCardError,
+  isVisitRequestFailure,
   serializableError,
 } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
@@ -1368,16 +1369,23 @@ async function visitForPrerenderedHtml({
 // batch's generation and the last-known-good HTML is preserved beneath the
 // error like any other render failure's row.
 //
-// The error is marked `visitRequestFailure` because this failure describes
-// the request, not the content — the render never returned a verdict, so a
-// retry can legitimately succeed (e.g. an abort under temporary prerender
-// congestion). The reconcile sweep gives such rows a bounded retry lane:
-// re-rendered at most `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP` consecutive
-// times, spaced by the sweep cadence, then terminal exactly like a
-// deterministic render error. The bound is what protects the fleet — each
-// retry of a genuinely pathological visit burns its realm's prerender
-// affinity lane for the full request timeout, so retries must converge to
-// "recorded error, move on" rather than repeat indefinitely.
+// A rejection the prerender client marked transient (`markVisitRequestFailure`:
+// the request aborted, met a 5xx on the prerender path or lost its connection)
+// is recorded as `visitRequestFailure`, because it describes the request, not
+// the content: the render never returned a verdict, so a retry can
+// legitimately succeed (e.g. an abort under temporary prerender congestion).
+// The marker makes the failure transient (`isTransientRenderError`): the
+// writer keeps a prior good render in place of the error, and the reconcile
+// sweep's transient lane retries the row with backoff up to
+// `TRANSIENT_RENDER_FAILURE_RETRY_CAP` times, with no render to keep as well.
+// The visit-failure lane (`PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP`) retries
+// only a row recorded without the transient verdict. The bounds are
+// what protect the fleet — each retry of a genuinely pathological visit burns
+// its realm's prerender affinity lane for the full request timeout, so retries
+// must converge to "recorded outcome, move on" rather than repeat
+// indefinitely. A rejection without the marker (a request the prerender path
+// refused, a response it could not read) is a deterministic failure, recorded
+// like any render error.
 async function handleVisitFailure({
   url,
   err,
@@ -1416,7 +1424,9 @@ async function handleVisitFailure({
         }),
       );
   error.message = message;
-  error.visitRequestFailure = true;
+  if (isVisitRequestFailure(err)) {
+    error.visitRequestFailure = true;
+  }
   await batch.updatePrerenderedHtmlEntry(url, { type: 'file-error', error });
   stats.fileErrors++;
   // The up-front seeding tombstoned every type this URL previously had in

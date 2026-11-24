@@ -7,22 +7,33 @@ import { indexURLCandidates, pageRowExpressions } from './index-url-utils.ts';
 // and `foo/index.json`), and whatever governs the markup is that card's.
 export interface RetrievedMarkup {
   html: string | null;
-  // The card or file whose row the markup came from, as the URL it is read
-  // by; null when no row held any.
-  readURL: URL | null;
+  // The card or file whose row the markup came from; null when no row held
+  // any.
+  read: PageRead | null;
+}
+
+// The card or file a page's markup came from, as it is read: its URL, and
+// whether it is read as a card or as a file. The row's type says which, not
+// the URL, since a card's id can end in what looks like an extension
+// (`/notes/release-2.0`).
+export interface PageRead {
+  url: URL;
+  isCard: boolean;
 }
 
 // A card's row is keyed by its `.json` source and the card is read without
 // the extension; a file is read by its own URL, extension and all.
-function matchedReadURL(
+export function matchedRead(
   row: { url?: string; type?: string } | undefined,
-): URL | null {
+): PageRead | null {
   if (!row?.url) {
     return null;
   }
-  return new URL(
-    row.type === 'instance' ? row.url.replace(/\.json$/, '') : row.url,
-  );
+  let isCard = row.type === 'instance';
+  return {
+    url: new URL(isCard ? row.url.replace(/\.json$/, '') : row.url),
+    isCard,
+  };
 }
 
 export async function retrieveHeadHTML({
@@ -44,7 +55,7 @@ export async function retrieveHeadHTML({
 
   if (candidates.length === 0) {
     log?.debug(`No head candidates for ${cardURL.href}`);
-    return { html: null, readURL: null };
+    return { html: null, read: null };
   }
 
   // The head HTML lives on prerendered_html; the boxel_index join scopes the
@@ -87,7 +98,7 @@ export async function retrieveHeadHTML({
   }
   return {
     html: headRow?.head_html ?? null,
-    readURL: matchedReadURL(headRow),
+    read: matchedRead(headRow),
   };
 }
 
@@ -110,7 +121,7 @@ export async function retrieveIsolatedHTML({
 
   if (candidates.length === 0) {
     log?.debug(`No isolated candidates for ${cardURL.href}`);
-    return { html: null, readURL: null };
+    return { html: null, read: null };
   }
 
   // The isolated HTML lives on prerendered_html; the boxel_index join scopes
@@ -154,7 +165,7 @@ export async function retrieveIsolatedHTML({
 
   return {
     html: isolatedRow?.isolated_html ?? null,
-    readURL: matchedReadURL(isolatedRow),
+    read: matchedRead(isolatedRow),
   };
 }
 

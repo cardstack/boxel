@@ -248,6 +248,62 @@ export async function getAutomationRun(
   return row ? runFromRow(row) : undefined;
 }
 
+// One page of an automation's runs, newest first by when they were made:
+// every run a trigger, a Preview or a Run now made, from the moment the run
+// is made, whether it still waits in the queue, runs or has ended. `page`
+// counts from 1, and
+// `total` is how many runs the automation has, so a reader can tell how
+// many pages there are. Both reads walk the runs' `(automation_id,
+// created_at)` index.
+export async function listAutomationRuns(
+  querier: Querier,
+  automationId: RealmResourceIdentifier,
+  { page, limit }: { page: number; limit: number },
+): Promise<{ runs: AutomationRun[]; total: number }> {
+  let [counted] = (await querier([
+    'SELECT count(*) AS total FROM automation_runs WHERE automation_id =',
+    param(automationId),
+  ] as Expression)) as { total: PgPrimitive }[];
+  let rows = (await querier([
+    'SELECT * FROM automation_runs WHERE automation_id =',
+    param(automationId),
+    'ORDER BY created_at DESC, id DESC LIMIT',
+    param(limit),
+    'OFFSET',
+    param((page - 1) * limit),
+  ] as Expression)) as Record<string, PgPrimitive>[];
+  return {
+    runs: rows.map(runFromRow),
+    total: Number(counted?.total ?? 0),
+  };
+}
+
+// An automation's runs waiting for their first attempt or running, oldest
+// first by when they were made: the runs the automation's queue holds, which
+// it runs one at a time.
+export async function listActiveRuns(
+  querier: Querier,
+  automationId: RealmResourceIdentifier,
+): Promise<AutomationRun[]> {
+  let rows = (await querier([
+    'SELECT * FROM automation_runs WHERE automation_id =',
+    param(automationId),
+    "AND state IN ('pending', 'running')",
+    'ORDER BY created_at, id',
+  ] as Expression)) as Record<string, PgPrimitive>[];
+  return rows.map(runFromRow);
+}
+
+// Whether `id` can name a run: a run's id is a UUID, so anything else names
+// no run, and a read can answer so without asking the database, which would
+// refuse to compare it with the column.
+export function isAutomationRunId(id: string): boolean {
+  return RUN_ID.test(id);
+}
+
+const RUN_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Why a run-token call was refused by the run's row: there is no such run,
 // it isn't running (it finished, was canceled or hasn't started), or another
 // attempt owns it.
@@ -431,7 +487,7 @@ export async function releaseAutomationRunCreditHold(
 export const UNRELEASED_RUN_HOLD_SECONDS = 60 * 60;
 
 // The credits held by admitted runs whose holds haven't been released, other
-// than `excludeRunId`: those of `actsAs` (the balance check), or those of
+// than `excludeRunId` when one is named: those of `actsAs` (the balance check), or those of
 // `automationId`'s runs that aren't Previews or Run nows (the credit caps).
 //
 // A run holds its cost ceiling, less what the ledger has charged it for AI
@@ -446,14 +502,15 @@ export async function creditsHeldByRunsInFlight(
   filter: (
     | { actsAs: string; automationId?: undefined }
     | { automationId: RealmResourceIdentifier; actsAs?: undefined }
-  ) & { excludeRunId: string },
+  ) & { excludeRunId?: string },
 ): Promise<number> {
   let [row] = await querier([
     'SELECT COALESCE(SUM(GREATEST(r.cost_ceiling_credits - COALESCE(ai.charged, 0), 0)), 0) AS held',
     'FROM automation_runs r LEFT JOIN LATERAL (',
     "SELECT -SUM(l.credit_amount) AS charged FROM credits_ledger l WHERE l.run_id = r.id AND l.charge_kind = 'ai'",
     ') ai ON true',
-    'WHERE r.cost_ceiling_credits IS NOT NULL AND r.credit_hold_released_at IS NULL',
+    'WHERE',
+    ...runCreditHoldCounts('r'),
     ...((filter.actsAs !== undefined
       ? ['AND r.acts_as =', param(filter.actsAs)]
       : [
@@ -462,12 +519,23 @@ export async function creditsHeldByRunsInFlight(
           'AND r.trigger <>',
           param(MANUAL_RUN_TRIGGER),
         ]) as Expression),
-    'AND (r.finished_at IS NULL OR r.finished_at > now() - make_interval(secs =>',
-    param(UNRELEASED_RUN_HOLD_SECONDS),
-    ')) AND r.id <>',
-    param(filter.excludeRunId),
+    ...((filter.excludeRunId !== undefined
+      ? ['AND r.id <>', param(filter.excludeRunId)]
+      : []) as Expression),
   ] as Expression);
   return Number(row?.held ?? 0);
+}
+
+// The condition under which the run aliased `alias` holds its cost ceiling
+// (`creditsHeldByRunsInFlight`): admitted, its hold not released, and either
+// not finished or finished within `UNRELEASED_RUN_HOLD_SECONDS`.
+export function runCreditHoldCounts(alias: string): Expression {
+  return [
+    `(${alias}.cost_ceiling_credits IS NOT NULL AND ${alias}.credit_hold_released_at IS NULL`,
+    `AND (${alias}.finished_at IS NULL OR ${alias}.finished_at > now() - make_interval(secs =>`,
+    param(UNRELEASED_RUN_HOLD_SECONDS),
+    ')))',
+  ] as Expression;
 }
 
 // Claims the run's one commit for `attempt`. The claim is refused unless the
@@ -898,8 +966,22 @@ export async function countAutomationRunCall(
 // The error reason of a run that a call past one of its caps ended.
 export const HIT_A_CAP_REASON = 'hit-a-cap';
 
+// The message a run past one of its caps ends with, naming the cap.
+// `endAutomationRunAtCap` writes it and `capInErrorText` reads the cap back,
+// so the run list's `cap` and the stored message share one format.
+export function capErrorText(cap: string): string {
+  return `The run hit its ${cap} cap`;
+}
+
+const CAP_ERROR_TEXT = /^The run hit its (\w+) cap$/;
+
+// The cap `capErrorText` named in `text`, or null for any other message.
+export function capInErrorText(text: string): string | null {
+  return CAP_ERROR_TEXT.exec(text)?.[1] ?? null;
+}
+
 // Ends a run that a call past one of its caps stopped: an error with reason
-// `hit-a-cap`, whose message names the cap. Owner only, like any finish; a
+// `hit-a-cap`, whose message names the cap (`capErrorText`). Owner only, like any finish; a
 // run that already finished, or that another attempt took over, is left as
 // it is.
 export async function endAutomationRunAtCap(
@@ -911,7 +993,7 @@ export async function endAutomationRunAtCap(
   return await finishAutomationRun(dbAdapter, id, attempt, {
     state: 'error',
     reason: HIT_A_CAP_REASON,
-    message: `The run hit its ${cap} cap`,
+    message: capErrorText(cap),
   });
 }
 

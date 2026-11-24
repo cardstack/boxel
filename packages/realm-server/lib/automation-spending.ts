@@ -10,11 +10,13 @@ import type {
 } from '@cardstack/runtime-common/automation-admission';
 import {
   creditsHeldByRunsInFlight,
+  creditsHeldByUnsettledAIBatches,
   holdAutomationRunCredits,
   dbAdapterQuerier,
   type AutomationRun,
   type DBAdapter,
   type Querier,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { AutomationRow } from '@cardstack/runtime-common/automations';
 import {
@@ -22,26 +24,29 @@ import {
   utcDayStart,
   utcMonthStart,
 } from '@cardstack/runtime-common/automation-spend';
-import { runCostCeiling } from './automation-estimate.ts';
+import { runCostCeiling, type RunCostCaps } from './automation-estimate.ts';
 import { currentPricing, type Pricing } from './pricing.ts';
 
 // An automation run's spending check, the last step of its admission (ADR 029
 // §1.5). Under the cost lock of the person the run acts as, in order:
 //
 // 1. The run's identity's balance. Their balance, less what their other runs
-//    in flight hold, must be at least the run's minimum balance: the most one
-//    run can cost under its caps (`runCostCeiling`, the same per-run cost the
-//    switch-on estimate shows), never below the configured floor. The
-//    minimum covers the whole run because `spendCredits` charges only what
-//    the balance holds. It comes first, so a refusal for a cap means the
-//    balance was enough, and admission can tell the automation is no longer
-//    waiting for credits.
+//    in flight and their unsettled batches hold, must be at least the run's
+//    minimum balance: the most one run can cost under its caps
+//    (`runCostCeiling`, the same per-run cost the switch-on estimate shows),
+//    never below the configured floor. The minimum covers the whole run
+//    because `spendCredits` charges only what the balance holds. A batch is
+//    billed only when it ends, after its run has stopped holding, so until
+//    then it holds what it reserved (`creditsHeldByUnsettledAIBatches`). This
+//    check comes first, so a refusal for a cap means the balance was enough,
+//    and admission can tell the automation is no longer waiting for credits.
 // 2. The automation's credit caps. For a run of the automation's own (a
 //    trigger's or a batch's follow-up, not a Preview or a Run now, which are
 //    charged to whoever clicked), what the automation was charged this UTC
-//    day and this UTC month, plus what its other runs in flight hold, must be
-//    under the daily and monthly caps its payer agreed to (the caps
-//    snapshot). Each cap covers every charge kind that names the automation:
+//    day and this UTC month, plus what its other runs in flight and its
+//    unsettled batches hold, must be under the daily and monthly caps its
+//    payer agreed to (the caps snapshot). Each cap covers every charge kind
+//    that names the automation:
 //    its runs' compute, network, indexing and AI, its batches and its
 //    storage. A run admitted under a cap can take the automation past it by
 //    at most what that run costs.
@@ -50,8 +55,15 @@ import { currentPricing, type Pricing } from './pricing.ts';
 //    lock, counts it. Two runs can't both pass on one run's worth of balance.
 //
 // The ceiling is priced from the caps snapshot where the automation is
-// switched on, and from the run's caps otherwise. It leaves out the indexing
-// a run's writes cause, as ADR 029 §1.5 requires.
+// switched on, and from the run's caps otherwise. It counts the run's AI
+// twice when the payer turned on `batchedAI` and the run isn't a Preview,
+// which never submits a batch (ADR 030 §1.1, §1.4). It leaves out the
+// indexing a run's writes cause, as ADR 029 §1.5 requires.
+//
+// A resume asks the same of the person it would make the payer
+// (`buildAdmitPayerSpending`), with the caps they would agree to and no run
+// to hold against, so an automation never goes active under a payer whose
+// first run this check would refuse.
 
 export interface AutomationSpendingOptions {
   dbAdapter: DBAdapter;
@@ -70,105 +82,229 @@ export function buildAdmitSpending({
 }: AutomationSpendingOptions): NonNullable<
   AutomationAdmissionChecks['admitSpending']
 > {
-  return async ({ run, automation, caps, kind }) => {
-    let prices = pricing();
-    if (!prices) {
+  return async ({ run, automation, caps, kind }) =>
+    await spendingRefusal(dbAdapter, {
+      prices: pricing(),
+      now: now(),
+      actsAs: run.actsAs,
+      ceilingCaps: ceilingCaps(run, caps, automation),
+      creditCaps:
+        kind !== 'manual' && automation
+          ? {
+              automationId: run.automationId,
+              dailyCredits: automation.capsSnapshot.dailyCredits,
+              monthlyCredits: automation.capsSnapshot.monthlyCredits,
+            }
+          : undefined,
+      run,
+      hold: async (ceiling) => {
+        if (run.attempt !== null) {
+          await holdAutomationRunCredits(
+            dbAdapter,
+            run.id,
+            run.attempt,
+            ceiling,
+          );
+        }
+      },
+    });
+}
+
+// The spending check a resume makes for the person it would make the
+// automation's payer: their balance against one run's minimum balance at the
+// caps the card sets, which they would agree to, and what the automation was
+// charged this UTC day and month against those caps' daily and monthly
+// credits. A cap is held to only when the automation's first run after the
+// resume (`firstRunAt`, unix seconds, null when nothing would run) falls in
+// the day or month it counts, since a run in a later one starts that cap
+// afresh. `batchedAI` is whether the card turns on batched AI, which the
+// resume also agrees to. Nothing is held, since no run is admitted.
+export function buildAdmitPayerSpending({
+  dbAdapter,
+  pricing = currentPricing,
+  now = () => Math.floor(Date.now() / 1000),
+}: AutomationSpendingOptions): (args: {
+  payer: string;
+  automationId: RealmResourceIdentifier;
+  caps: AutomationCaps;
+  batchedAI?: boolean;
+  firstRunAt: number | null;
+}) => Promise<AdmissionRefusal | undefined> {
+  return async ({ payer, automationId, caps, batchedAI, firstRunAt }) =>
+    await spendingRefusal(dbAdapter, {
+      prices: pricing(),
+      now: now(),
+      actsAs: payer,
+      ceilingCaps: {
+        seconds: caps.seconds,
+        responseBytes: caps.responseBytes,
+        aiCredits: caps.aiCredits,
+        batchedAI: batchedAI === true,
+      },
+      creditCaps: {
+        automationId,
+        dailyCredits: caps.dailyCredits,
+        monthlyCredits: caps.monthlyCredits,
+        firstRunAt,
+      },
+    });
+}
+
+// The check both share, under `actsAs`'s cost lock: the balance, then the
+// credit caps when `creditCaps` names them, then `hold`, which is given the
+// run's ceiling once both pass. `run`, when there is one, is left out of
+// what runs in flight hold.
+async function spendingRefusal(
+  dbAdapter: DBAdapter,
+  {
+    prices,
+    now,
+    actsAs,
+    ceilingCaps,
+    creditCaps,
+    run,
+    hold,
+  }: {
+    prices: Pricing | undefined;
+    now: number;
+    actsAs: string;
+    ceilingCaps: RunCostCaps;
+    creditCaps: CreditCaps | undefined;
+    run?: AutomationRun;
+    hold?: (ceiling: number) => Promise<void>;
+  },
+): Promise<AdmissionRefusal | undefined> {
+  if (!prices) {
+    return refuse(
+      'pricing-unavailable',
+      'This server has no prices, so it admits no automation run',
+    );
+  }
+  let ceiling = Math.ceil(runCostCeiling(ceilingCaps, prices).totalCredits);
+  let minimum = Math.max(ceiling, prices.values.minimumBalanceFloorCredits);
+  let user = await getUserByMatrixUserId(dbAdapter, actsAs);
+  let querier = dbAdapterQuerier(dbAdapter);
+
+  return await dbAdapter.withUserCostLock(actsAs, async () => {
+    let balance = user ? await sumUpAvailableCredits(dbAdapter, user.id) : 0;
+    let held =
+      (await creditsHeldByRunsInFlight(querier, {
+        actsAs,
+        excludeRunId: run?.id,
+      })) + (await creditsHeldByUnsettledAIBatches(querier, { actsAs }));
+    if (balance - held < minimum) {
+      // The message reaches the run's row and log, which every direct
+      // writer of the realm reads, so it never says what the person holds.
       return refuse(
-        'pricing-unavailable',
-        'This worker has no prices, so it admits no automation run',
+        'insufficient-credits',
+        `The credits available to ${actsAs}, after their other automation runs in flight and their unsettled AI batches, are below ${run ? "this run's" : "one run's"} minimum balance of ${minimum} credits`,
       );
     }
-    let ceiling = Math.ceil(
-      runCostCeiling(ceilingCaps(caps, automation), prices).totalCredits,
-    );
-    let minimum = Math.max(ceiling, prices.values.minimumBalanceFloorCredits);
-    let user = await getUserByMatrixUserId(dbAdapter, run.actsAs);
-    let querier = dbAdapterQuerier(dbAdapter);
-
-    return await dbAdapter.withUserCostLock(run.actsAs, async () => {
-      let balance = user ? await sumUpAvailableCredits(dbAdapter, user.id) : 0;
-      let held = await creditsHeldByRunsInFlight(querier, {
-        actsAs: run.actsAs,
-        excludeRunId: run.id,
+    if (creditCaps) {
+      let capRefusal = await checkCreditCaps(querier, creditCaps, {
+        excludeRunId: run?.id,
+        now,
       });
-      if (balance - held < minimum) {
-        // The message reaches the run's row and log, which every direct
-        // writer of the realm reads, so it never says what the person holds.
-        return refuse(
-          'insufficient-credits',
-          `The credits available to ${run.actsAs}, after their other automation runs in flight, are below this run's minimum balance of ${minimum} credits`,
-        );
+      if (capRefusal) {
+        return capRefusal;
       }
-      if (kind !== 'manual' && automation) {
-        let capRefusal = await checkCreditCaps(querier, run, automation, now());
-        if (capRefusal) {
-          return capRefusal;
-        }
-      }
-      if (run.attempt !== null) {
-        await holdAutomationRunCredits(dbAdapter, run.id, run.attempt, ceiling);
-      }
-      return undefined;
-    });
-  };
+    }
+    await hold?.(ceiling);
+    return undefined;
+  });
 }
 
 // The caps one run's cost ceiling is priced from: the payer's caps snapshot
 // once the automation is switched on, falling back to the run's caps for a
-// cap the snapshot predates; the run's caps when it has no row.
+// cap the snapshot predates; the run's caps when it has no row. A run batches
+// AI requests only when the snapshot turned on `batchedAI` (the batch path
+// refuses a submit otherwise) and it isn't a Preview (the batch path refuses
+// a Preview's submit too).
 function ceilingCaps(
+  run: AutomationRun,
   caps: AutomationCaps,
   automation: AutomationRow | undefined,
-): Pick<AutomationCaps, 'seconds' | 'responseBytes' | 'aiCredits'> {
+): RunCostCaps {
   let snapshot = automation?.capsSnapshot;
   return {
     seconds: snapshot?.seconds ?? caps.seconds,
     responseBytes: snapshot?.responseBytes ?? caps.responseBytes,
     aiCredits: snapshot?.aiCredits ?? caps.aiCredits,
+    batchedAI: !run.dryRun && snapshot?.batchedAI === true,
   };
+}
+
+// An automation's daily and monthly credit caps. `firstRunAt`, when given,
+// limits the check to the day or month the run it admits for falls in (see
+// `buildAdmitPayerSpending`); a run's own check leaves it out and is held to
+// both.
+interface CreditCaps {
+  automationId: RealmResourceIdentifier;
+  dailyCredits: number | null | undefined;
+  monthlyCredits: number | null | undefined;
+  firstRunAt?: number | null;
 }
 
 async function checkCreditCaps(
   querier: Querier,
-  run: AutomationRun,
-  automation: AutomationRow,
-  nowSeconds: number,
+  { automationId, dailyCredits, monthlyCredits, firstRunAt }: CreditCaps,
+  { excludeRunId, now }: { excludeRunId: string | undefined; now: number },
 ): Promise<AdmissionRefusal | undefined> {
-  let { dailyCredits, monthlyCredits } = automation.capsSnapshot;
   if (typeof dailyCredits !== 'number' && typeof monthlyCredits !== 'number') {
     return undefined;
   }
-  let held = await creditsHeldByRunsInFlight(querier, {
-    automationId: run.automationId,
-    excludeRunId: run.id,
-  });
-  let caps: [SpendingRefusalReason, string, number | null, number][] = [
+  let held =
+    (await creditsHeldByRunsInFlight(querier, {
+      automationId,
+      excludeRunId,
+    })) + (await creditsHeldByUnsettledAIBatches(querier, { automationId }));
+  let caps: [
+    SpendingRefusalReason,
+    string,
+    number | null | undefined,
+    number,
+    number,
+  ][] = [
     [
       'daily-credit-cap-reached',
       'today (UTC)',
       dailyCredits,
-      utcDayStart(nowSeconds),
+      utcDayStart(now),
+      utcDayStart(now) + 24 * 60 * 60,
     ],
     [
       'monthly-credit-cap-reached',
       'this month (UTC)',
       monthlyCredits,
-      utcMonthStart(nowSeconds),
+      utcMonthStart(now),
+      nextUTCMonthStart(now),
     ],
   ];
-  for (let [reason, period, cap, since] of caps) {
+  for (let [reason, period, cap, since, until] of caps) {
     if (typeof cap !== 'number') {
       continue;
     }
-    let spent = await automationCreditsSince(querier, run.automationId, since);
+    if (
+      firstRunAt !== undefined &&
+      (firstRunAt === null || firstRunAt >= until)
+    ) {
+      continue;
+    }
+    let spent = await automationCreditsSince(querier, automationId, since);
     if (spent + held >= cap) {
       return refuse(
         reason,
-        `The automation was charged ${spent} credits ${period}, and its other runs in flight hold ${held}, which reaches its cap of ${cap}`,
+        `The automation was charged ${spent} credits ${period}, and its other runs in flight and its unsettled AI batches hold ${held}, which reaches its cap of ${cap}`,
       );
     }
   }
   return undefined;
+}
+
+// Unix seconds: the start of the UTC month after the one `now` falls in.
+function nextUTCMonthStart(now: number): number {
+  let date = new Date(now * 1000);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) / 1000;
 }
 
 function refuse(

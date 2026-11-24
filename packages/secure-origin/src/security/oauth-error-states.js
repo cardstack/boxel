@@ -18,6 +18,7 @@ export const ERROR_STATE_BY_REASON = Object.freeze({
   'unknown-resource': 'not-offered',
   'no-resource-for-scopes': 'not-offered',
   'client-not-allowed': 'not-allowed',
+  'confirmation-code': 'unsupported',
   'unknown-scope': 'not-offered',
   'unregistered-scope': 'unsupported',
   'missing-scope': 'not-offered',

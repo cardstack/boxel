@@ -14,6 +14,11 @@ import {
   type SpawningIndexPass,
 } from './jobs/prerender-html.ts';
 import { laneFamiliesPredicate, laneFamilyOf } from './jobs/lane-family.ts';
+import {
+  TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS,
+  TRANSIENT_RENDER_FAILURE_RETRY_CAP,
+  transientRenderErrorSQL,
+} from './error.ts';
 
 // The catch-up sweep's read side. It reconciles two independently-advancing
 // channels — the search-doc index (`boxel_index`) and the prerendered HTML
@@ -99,6 +104,123 @@ export const STALE_SHELL_FAILURE_RETRY_MIN_AGE_MS = 10 * 60 * 1000;
 export const GATEWAY_FAILURE_RETRY_CAP = 3;
 export const GATEWAY_FAILURE_RETRY_MIN_AGE_MS = 5 * 60 * 1000;
 
+// The transient-render-failure lane. The writer stamps a render that did not
+// finish (`isTransientRenderError`: a render timeout, a prerender request that
+// failed transiently) as `diagnostics.transientRenderFailure` instead of
+// publishing it as the card's error, so the row reads as current and nothing
+// else asks for the re-render. This lane re-drives it with backoff: retry n of
+// `TRANSIENT_RENDER_FAILURE_RETRY_CAP` waits `transientRenderRetryBackoffMs(n)`
+// after the last attempt, time for an overloaded prerender service to drain,
+// which is the cause it expects. Past the cap the row keeps its stale render
+// and `_indexing-errors` lists it. Both channels take these retries: the
+// renderings (`findTransientRetryPrerenderedHtmlRows`) and the index rows
+// (`findTransientIndexRetryRows`). The reconcile task runs them every minute
+// on their own (`transientOnly`), and again within the hourly sweep.
+export {
+  TRANSIENT_RENDER_FAILURE_RETRY_CAP,
+  TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS,
+};
+
+// A row stamped with a transient failure. The text matches the predicate of
+// the partial indexes on `boxel_index` and `prerendered_html` (migration
+// `add-transient-render-failure-indexes`), so the every-minute sweep reads
+// only the stamped rows.
+function transientRenderFailureStampedSQL(alias: string): string {
+  return `jsonb_typeof(${alias}.diagnostics -> 'transientRenderFailure') = 'array'`;
+}
+
+// The attempts the lane made at a row that died before writing it: finished
+// `jobType` jobs that took the row's URL after its last failed attempt was
+// written (their ids are above `transientRenderFailureJobId`, the job that
+// wrote it) but never rewrote it, as a rejected or timed-out retry leaves
+// things. They count as failed attempts, so the cap and the backoff bound a
+// retry that keeps dying the way they bound one that keeps failing; otherwise
+// the row would stay due and be re-enqueued on every sweep. Read over a
+// primary-key range from that write, and only until the attempts pass the cap:
+// a row whose run has used up its retries reads no jobs at all, and one whose
+// retries died stops at the one that used them up, so a row that stays stamped
+// costs the same however long ago it was written. Joined as `unwritten`; a row
+// with no recorded job counts none.
+function unwrittenAttemptsJoin(
+  alias: string,
+  jobType: 'incremental-index' | 'prerender_html',
+): string {
+  return `LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS attempts, MAX(d.finished_at) AS last_finished_at
+         FROM (
+           SELECT (EXTRACT(EPOCH FROM j.finished_at) * 1000)::bigint AS finished_at
+             FROM jobs j
+            WHERE ${alias}.diagnostics ->> 'transientRenderFailureJobId' IS NOT NULL
+              AND j.id > (${alias}.diagnostics ->> 'transientRenderFailureJobId')::int
+              AND j.job_type = '${jobType}'
+              AND j.status IN ('resolved', 'rejected')
+              AND j.args->>'realmURL' = ${alias}.realm_url
+              AND EXISTS (
+                SELECT 1 FROM jsonb_array_elements(j.args->'changes') AS c
+                WHERE c->>'url' = ${alias}.url)
+            ORDER BY j.id
+            LIMIT GREATEST(${TRANSIENT_RENDER_FAILURE_RETRY_CAP} + 1 - ${transientRunSQL(alias)}, 0)
+         ) AS d
+     ) AS unwritten ON TRUE`;
+}
+
+// The row's run of failed renders as its writer recorded it.
+function transientRunSQL(alias: string): string {
+  return `COALESCE((${alias}.diagnostics->>'transientRenderFailureRenders')::int, 1)`;
+}
+
+// The attempts at a row stamped with a transient failure that died before
+// writing it, and when the last of them finished (epoch ms), as the sweep
+// counts them (`unwrittenAttemptsJoin`): for the writer about to record the
+// row's next failed attempt, so the run it writes carries them
+// (`continuesTransientRenderRun`). Postgres only.
+export async function unwrittenTransientAttempts(
+  dbAdapter: DBAdapter,
+  row: {
+    table: 'boxel_index' | 'prerendered_html';
+    realmURL: string;
+    url: string;
+    type: string;
+  },
+): Promise<{ attempts: number; lastFinishedAt: number | null }> {
+  let jobType: 'incremental-index' | 'prerender_html' =
+    row.table === 'boxel_index' ? 'incremental-index' : 'prerender_html';
+  let [found] = (await query(dbAdapter, [
+    `SELECT unwritten.attempts, unwritten.last_finished_at
+       FROM ${row.table} r
+       ${unwrittenAttemptsJoin('r', jobType)}
+      WHERE r.realm_url =`,
+    param(row.realmURL),
+    'AND r.url =',
+    param(row.url),
+    'AND r.type =',
+    param(row.type),
+  ] as Expression)) as {
+    attempts: number | string | null;
+    last_finished_at: number | string | null;
+  }[];
+  return {
+    attempts: Number(found?.attempts ?? 0),
+    lastFinishedAt:
+      found?.last_finished_at == null ? null : Number(found.last_finished_at),
+  };
+}
+
+// Whether a row stamped with a transient failure is due its next retry:
+// `alias` is the row, joined with `unwrittenAttemptsJoin`, and `attemptedAt`
+// its column holding when the last attempt was written (epoch ms). Its failed
+// attempts are its run plus the retries that died, and the backoff runs from
+// the later of its last write and the last of those. Postgres only.
+function transientRetryDueSQL(alias: string, attemptedAt: string): string {
+  let attempts = `(${transientRunSQL(alias)} + COALESCE(unwritten.attempts, 0))`;
+  let lastAttempt = `GREATEST(${alias}.${attemptedAt}, COALESCE(unwritten.last_finished_at, 0))`;
+  return `(${transientRenderFailureStampedSQL(alias)}
+           AND ${attempts} <= ${TRANSIENT_RENDER_FAILURE_RETRY_CAP}
+           AND ${lastAttempt}
+             < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               - ${TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS} * power(2, GREATEST(${attempts} - 1, 0))::bigint)`;
+}
+
 export const DECLARED_CAPTURE_RETRY_CAP = 3;
 export const DECLARED_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 
@@ -118,7 +240,9 @@ export const DECLARED_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 // repairable even at a current generation — the failure describes the
 // request rather than the content — until its consecutive-failure run
 // reaches `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP`, after which it reads as
-// terminal exactly like a deterministic render error.
+// terminal exactly like a deterministic render error. A row that also carries
+// the writer's transient verdict is left to the transient lane, so one lane,
+// schedule and cap govern each row.
 //
 // A fourth arm admits the declared-capture retry lane: a *healthy*
 // published row (no `error_doc`) whose `diagnostics.captureErrors`
@@ -148,6 +272,18 @@ export const DECLARED_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 // recurring stops costing renders at the cap. Their caps and min ages are
 // tuned per cause (see the constants above).
 //
+// The seventh arm re-renders, once, a legacy row: a transient render error
+// stored as the row's error without the writer's verdict
+// (`transientRenderErrorSQL` on a row without the stamp). The re-render's write
+// either succeeds or carries the stamp, so the arm cannot fire for the same
+// row twice. A visit-request failure is left to its own lane (the third arm)
+// until that lane's cap, and re-rendered once here after it: the visit loop
+// that recorded it marked every rejected request, so it may be a deterministic
+// failure, and the search gate still counts it, but the re-render now tells
+// the two apart. Rows that carry the verdict take the transient lane's retries
+// instead (`findTransientRetryPrerenderedHtmlRows`), which the reconcile task
+// adds to these.
+//
 // The jsonb operators here are Postgres-only, like the `jobs`-table scans
 // in this module: the reconcile task that issues this query runs solely
 // behind the Postgres queue.
@@ -165,6 +301,7 @@ export async function findStalePrerenderedHtmlRows(
        AND (ph.url IS NULL
          OR ph.generation < i.generation
          OR ((ph.error_doc->>'visitRequestFailure')::boolean IS TRUE
+           AND ph.diagnostics->'transientRenderFailure' IS NULL
            AND COALESCE((ph.error_doc->>'consecutiveVisitFailures')::int, 1)
              < ${PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP}
            AND ph.rendered_at
@@ -195,7 +332,16 @@ export async function findStalePrerenderedHtmlRows(
              < ${GATEWAY_FAILURE_RETRY_CAP}
            AND ph.rendered_at
              < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
-               - ${GATEWAY_FAILURE_RETRY_MIN_AGE_MS}))`,
+               - ${GATEWAY_FAILURE_RETRY_MIN_AGE_MS})
+         OR (ph.error_doc IS NOT NULL
+           AND ph.diagnostics->'transientRenderFailure' IS NULL
+           AND NOT ((ph.error_doc->>'visitRequestFailure')::boolean IS TRUE
+             AND COALESCE((ph.error_doc->>'consecutiveVisitFailures')::int, 1)
+               < ${PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP})
+           AND ${transientRenderErrorSQL('ph')}
+           AND ph.rendered_at
+             < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               - ${TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS}))`,
   ] as Expression)) as {
     realm_url: string;
     url: string;
@@ -206,6 +352,107 @@ export async function findStalePrerenderedHtmlRows(
     url: row.url,
     generation: Number(row.generation),
   }));
+}
+
+// Renderings due a retry of a transient failure: the writer kept the prior
+// render over a render that did not finish (or, with none to keep, stored the
+// failure as the row's error) and stamped `diagnostics.transientRenderFailure`.
+// Due by `transientRetryDueSQL`, timed from the row's `rendered_at`, counting
+// prerender_html repairs that died as attempts. Restricted, like the stale
+// rows, to live index rows that are not errored. Postgres only; it reads only
+// the stamped rows, through the partial index on their predicate, so the
+// every-minute sweep can afford it.
+export async function findTransientRetryPrerenderedHtmlRows(
+  dbAdapter: DBAdapter,
+): Promise<StalePrerenderedHtmlRow[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT i.realm_url, i.url, i.generation
+     FROM prerendered_html ph
+     JOIN boxel_index i
+       ON i.url = ph.url AND i.realm_url = ph.realm_url AND i.type = ph.type
+     ${unwrittenAttemptsJoin('ph', 'prerender_html')}
+     WHERE ${transientRenderFailureStampedSQL('ph')}
+       AND ph.is_deleted IS NOT TRUE
+       AND i.is_deleted IS NOT TRUE
+       AND i.has_error IS NOT TRUE
+       AND i.error_doc IS NULL
+       AND ${transientRetryDueSQL('ph', 'rendered_at')}
+     ORDER BY i.realm_url, i.url`,
+  ] as Expression)) as {
+    realm_url: string;
+    url: string;
+    generation: number | string;
+  }[];
+  return rows.map((row) => ({
+    realmURL: row.realm_url,
+    url: row.url,
+    generation: Number(row.generation),
+  }));
+}
+
+// Index rows due a retry of a transient failure: the index pass kept the
+// file's or card's previous good row over a visit that timed out or whose
+// prerender request failed transiently (or, with no good row, stored the
+// failure as the row's error) and stamped `diagnostics.transientRenderFailure`.
+// Same backoff and cap as the renderings' lane (`transientRetryDueSQL`), timed
+// from the row's `indexed_at` and counting incremental passes that died as
+// attempts; the repair is an incremental index of exactly those URLs. Rows an
+// index job already queued or running for the realm names are left to it.
+//
+// With `includeLegacy` (the hourly sweep), it also re-indexes, once, a legacy
+// row: a transient render error stored as the row's error without the
+// writer's verdict. The re-index either succeeds or writes the verdict, and
+// one that dies is not repeated (no finished incremental pass may have taken
+// the URL since the row was written), so a row is re-driven at most once.
+// That arm reads the errored rows, and jobs by creation time, which the
+// every-minute sweep leaves alone. Postgres only.
+export async function findTransientIndexRetryRows(
+  dbAdapter: DBAdapter,
+  opts: { includeLegacy?: boolean } = {},
+): Promise<Map<string, string[]>> {
+  let legacyArm = opts.includeLegacy
+    ? `OR (i.has_error IS TRUE
+           AND i.diagnostics -> 'transientRenderFailure' IS NULL
+           AND ${transientRenderErrorSQL('i')}
+           AND NOT EXISTS (
+             SELECT 1 FROM jobs j
+             WHERE j.job_type = 'incremental-index'
+               AND j.status IN ('resolved', 'rejected')
+               AND j.created_at > to_timestamp(i.indexed_at / 1000.0)
+               AND j.args->>'realmURL' = i.realm_url
+               AND EXISTS (
+                 SELECT 1 FROM jsonb_array_elements(j.args->'changes') AS c
+                 WHERE c->>'url' = i.url))
+           AND i.indexed_at
+             < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               - ${TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS})`
+    : '';
+  let rows = (await query(dbAdapter, [
+    `SELECT i.realm_url, i.url
+     FROM boxel_index i
+     ${unwrittenAttemptsJoin('i', 'incremental-index')}
+     WHERE i.is_deleted IS NOT TRUE
+       AND (${transientRetryDueSQL('i', 'indexed_at')} ${legacyArm})
+       AND NOT EXISTS (
+         SELECT 1 FROM jobs j
+         WHERE j.job_type IN ('incremental-index', 'from-scratch-index')
+           AND j.status = 'unfulfilled'
+           AND j.args->>'realmURL' = i.realm_url
+           AND (j.job_type = 'from-scratch-index'
+             OR EXISTS (
+               SELECT 1 FROM jsonb_array_elements(j.args->'changes') AS c
+               WHERE c->>'url' = i.url)))
+     ORDER BY i.realm_url, i.url`,
+  ] as Expression)) as { realm_url: string; url: string }[];
+  let byRealm = new Map<string, string[]>();
+  for (let row of rows) {
+    let urls = byRealm.get(row.realm_url) ?? [];
+    if (!urls.includes(row.url)) {
+      urls.push(row.url);
+    }
+    byRealm.set(row.realm_url, urls);
+  }
+  return byRealm;
 }
 
 // The highest generation at which a still-pending prerender_html job is on

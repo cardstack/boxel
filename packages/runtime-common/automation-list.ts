@@ -131,9 +131,8 @@ export interface AutomationListAnswer {
 // listens for it (the prerender routes, and `CardPrerender`, the in-page
 // indexer tests mount) it fails the loads in flight. The realm config asks
 // while it renders, so a refusal here failed the config card's other loads in
-// the test indexer. A caller only a policy grant admits gets the ACL's
-// refusal, since the route is `ACL_ONLY` and the ACL refuses before the route
-// runs.
+// the test indexer. A caller the realm hands to its policy asks as no one,
+// so they get the same answer.
 export async function answerAutomationList({
   dbAdapter,
   realmURL,

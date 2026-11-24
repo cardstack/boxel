@@ -10,6 +10,7 @@ import { array } from '@ember/helper';
 import { find, findAll, render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import { setupRenderingTest } from 'ember-qunit';
 import { motion, Presence } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
@@ -106,6 +107,43 @@ class Covered extends Component {
 
 let covered: Covered | undefined;
 
+/** a width written after the render, as a modifier that owns the inline style writes it */
+const sized = modifier((el: HTMLElement, [width]: [number]) => {
+  el.style.width = `${width}px`;
+});
+
+/**
+ * A region inside a card that an outer region's card buries: the cover comes
+ * off in the render (an attribute), and the card's size lands after it (a
+ * modifier), as a stack card's does.
+ */
+class Buried extends Component {
+  @tracked buried = false;
+  get width() {
+    return this.buried ? 200 : 400;
+  }
+  constructor(owner: unknown, args: object) {
+    super(owner as never, args as never);
+    buried = this;
+  }
+  <template>
+    <Choreo>
+      <div hidden={{this.buried}} {{sized this.width}}>
+        <Choreo as |c|>
+          <div
+            data-inner
+            style='margin-left:50%;width:40px;height:20px'
+            {{motion id='inner' role='inner'}}
+          ></div>
+          <c.Move @of={{c.moved 'inner'}} @duration={{1}} @ease='linear' />
+        </Choreo>
+      </div>
+    </Choreo>
+  </template>
+}
+
+let buried: Buried | undefined;
+
 const wires = () => findAll('[data-choreo-tether]');
 
 /** how many changes the page's DOM takes over a run of frames */
@@ -142,6 +180,7 @@ module('Integration | choreo | hidden participant', function (hooks) {
     stage = undefined;
     fold = undefined;
     covered = undefined;
+    buried = undefined;
   });
 
   test('a participant shown again arrives in place instead of moving from the origin', async function (assert) {
@@ -213,5 +252,26 @@ module('Integration | choreo | hidden participant', function (hooks) {
     assert.strictEqual(wires().length, 1, 'the wire is drawn again');
     const d = wires()[0]!.getAttribute('d') ?? '';
     assert.false(d.startsWith('M 0 '), `drawn from its sprite: ${d}`);
+  });
+
+  test('a region uncovered by an ancestor whose size lands after the render does not move what it holds', async function (assert) {
+    await render(<template><Buried /></template>);
+    await animationsSettled();
+    buried!.buried = true;
+    await settled();
+    await nextFrame();
+
+    buried!.buried = false;
+    await nextFrame();
+    await nextFrame();
+    const inner = document.querySelector('[data-inner]') as HTMLElement;
+    assert.strictEqual(
+      inner.getBoundingClientRect().left -
+        inner.parentElement!.getBoundingClientRect().left,
+      200,
+      'the participant stands where the uncovered layout puts it',
+    );
+    assert.true(unmoved(inner), 'and carries no move transform');
+    await settled();
   });
 });

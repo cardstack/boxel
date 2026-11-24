@@ -5,6 +5,10 @@ import { randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  addToCreditsLedger,
+  getUserByMatrixUserId,
+} from '@cardstack/billing/billing-queries';
+import {
   archiveRealm,
   createAutomationRun,
   getAutomationRun,
@@ -12,6 +16,7 @@ import {
   rri,
   type AutomationRun,
   type Realm,
+  type SpendCharge,
 } from '@cardstack/runtime-common';
 import { getAutomation } from '@cardstack/runtime-common/automations';
 import {
@@ -35,19 +40,25 @@ import {
 import {
   automationFixture,
   createAutomationRunToken,
+  ensureTestUser,
   insertIncomingWebhookRow,
   realmSecretSeed,
   ROOMY_AUTOMATION_CAPS,
   setupPermissionedRealmCached,
   setupSecretsKeyring,
+  testAccountStandings,
+  setupProcessPricing,
+  silentPricingReporter,
+  testPricingEnv,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { secureSessionAuth } from './helpers/secure-session.ts';
+import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
+import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
+import { addUserKey, mintKeyWriteTicket } from '../lib/user-keys.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
-import {
-  checkPricingAtStartup,
-  currentPricing,
-  type PricingReporter,
-} from '../lib/pricing.ts';
+import { checkPricingAtStartup, currentPricing } from '../lib/pricing.ts';
+import { runCostCeiling } from '../lib/automation-estimate.ts';
 
 // The realm-server routes a direct writer drives an automation with: the
 // switch-on estimate, switch-on, Preview, Run now, pause, resume, remove and
@@ -55,6 +66,7 @@ import {
 // writer of the realm the request names.
 
 const realmURL = new URL('http://127.0.0.1:4444/automation-routes-test/');
+const secureOriginURL = new URL('https://secure.automation-routes.test/secure');
 const OWNER = '@automation-routes-owner:localhost';
 const WRITER = '@automation-routes-writer:localhost';
 const READER = '@automation-routes-reader:localhost';
@@ -63,52 +75,49 @@ const REALM_USER = '@node-test_realm:localhost';
 const DAILY = 'automation/daily';
 const NO_MONTHLY_CAP = 'automation/no-monthly-cap';
 const HOOKED = 'automation/hooked';
+const BATCHED = 'automation/batched';
 const HOOK_PATH = 'whk_routes';
 const OUTSIDER = '@automation-routes-outsider:localhost';
+// Automations whose daily credit cap the tests reach: one with a webhook
+// trigger, whose first run after a resume can start at once, and one whose
+// next run is next new year's day.
+const CAPPED = 'automation/capped';
+const CAPPED_HOOK_PATH = 'whk_routes_capped';
+const CAPPED_LATER = 'automation/capped-later';
+const DAILY_CAP = 600;
+// An automation whose script doesn't parse.
+const BROKEN = 'automation/broken';
+// An automation declaring an operation whose request carries the payer's
+// own key, so each payer needs their own binding for it.
+const KEYED = 'automation/keyed';
+const VENDOR = 'http://127.0.0.1:4547';
+const INBOX = { module: `${realmURL.href}inbox`, name: 'Inbox' };
+const inboxModule = `
+  import { CardDef } from "@cardstack/base/card-api";
+  import { operation } from "@cardstack/base/operations";
 
-const silent: PricingReporter = { info() {}, error() {}, alert() {} };
-
-function pricingEnv(): Record<string, string> {
-  return {
-    PRICING_PRERENDER_USD_PER_VCPU_HOUR: '0.04048',
-    PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR: '0.004445',
-    PRICING_PRERENDER_TASK_VCPUS: '4',
-    PRICING_PRERENDER_TASK_MEMORY_GB: '16',
-    PRICING_PRERENDER_TASK_TABS: '8',
-    PRICING_WORKER_USD_PER_VCPU_HOUR: '0.03238',
-    PRICING_WORKER_USD_PER_MEMORY_GB_HOUR: '0.00356',
-    PRICING_WORKER_TASK_VCPUS: '2',
-    PRICING_WORKER_TASK_MEMORY_GB: '4',
-    PRICING_WORKER_TASK_PROCESSES: '2',
-    PRICING_USD_PER_DOWNLOADED_GB: '0.045',
-    PRICING_USD_PER_FILE_STORAGE_GB_MONTH: '0.30',
-    PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH: '0.115',
-    PRICING_MARGIN: '2',
-    PRICING_MINIMUM_BALANCE_FLOOR_CREDITS: '1000',
-  };
-}
+  export class Inbox extends CardDef {
+    @operation static list = {
+      base: 'callApi',
+      url: '${VENDOR}/echo/list',
+      headers: { authorization: 'Bearer {{userKey}}' },
+    };
+  }
+`;
 
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
   let dbAdapter: PgAdapter;
   let request: SuperTest<Test>;
 
-  let pricedBefore = currentPricing() !== undefined;
-  hooks.before(function () {
-    checkPricingAtStartup('automation-routes-test', pricingEnv(), silent);
-  });
-  hooks.after(function () {
-    if (!pricedBefore) {
-      // Leaves the process without prices again, as it started.
-      checkPricingAtStartup('automation-routes-test', {}, silent);
-    }
-  });
+  setupProcessPricing(hooks, 'automation-routes-test');
 
   setupCatalogTestSubset(hooks);
   // The tests seal incoming webhooks' signing secrets.
   setupSecretsKeyring(hooks);
   setupPermissionedRealmCached(hooks, {
     realmURL,
+    secureOriginURL,
     permissions: {
       [OWNER]: ['read', 'write'],
       [WRITER]: ['read', 'write'],
@@ -130,6 +139,74 @@ module(basename(import.meta.filename), function (hooks) {
         ],
       }),
       [`${DAILY}-script.js`]: `return 'ok';`,
+      'inbox.gts': inboxModule,
+      ...automationFixture({
+        operations: [{ type: INBOX, names: ['list'] }],
+        path: KEYED,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${KEYED}-script.js`]: `return 'ok';`,
+      ...automationFixture({
+        operations: [],
+        path: CAPPED,
+        caps: { dailyCredits: DAILY_CAP },
+        triggers: [
+          {
+            kind: 'webhook',
+            label: 'deliveries',
+            webhookPath: CAPPED_HOOK_PATH,
+          },
+        ],
+      }),
+      [`${CAPPED}-script.js`]: `return 'ok';`,
+      ...automationFixture({
+        operations: [],
+        path: CAPPED_LATER,
+        caps: { dailyCredits: DAILY_CAP },
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'new-year',
+            expression: '0 0 1 1 *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${CAPPED_LATER}-script.js`]: `return 'ok';`,
+      ...automationFixture({
+        operations: [],
+        path: BROKEN,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${BROKEN}-script.js`]: 'await realm.fs.writeText(\n',
+      ...automationFixture({
+        operations: [],
+        path: BATCHED,
+        batchedAI: true,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${BATCHED}-script.js`]: `return 'ok';`,
       ...automationFixture({
         operations: [],
         path: NO_MONTHLY_CAP,
@@ -229,6 +306,50 @@ module(basename(import.meta.filename), function (hooks) {
     }
   }
 
+  // Gives `user` `credits` more credits to spend: enough by default for a
+  // run at the roomy caps, whose minimum balance a resume's payer must hold.
+  async function fund(user: string, credits = 1_000_000) {
+    await ensureTestUser(dbAdapter, user);
+    let { id } = (await getUserByMatrixUserId(dbAdapter, user))!;
+    await addToCreditsLedger(dbAdapter, {
+      userId: id,
+      creditAmount: credits,
+      creditType: 'extra_credit',
+      subscriptionCycleId: null,
+    });
+  }
+
+  // Charges `credits` to `user` as the automation at `path`'s storage, now,
+  // which its daily and monthly credit caps count.
+  async function chargeAutomation(user: string, path: string, credits: number) {
+    await ensureTestUser(dbAdapter, user);
+    let { id: userId } = (await getUserByMatrixUserId(dbAdapter, user))!;
+    let charge: SpendCharge = {
+      kind: 'storage',
+      realm: ri(realm.url),
+      automationId: automationId(path),
+      day: new Date().toISOString().slice(0, 10),
+      pricingVersion: currentPricing()!.version,
+    };
+    await addToCreditsLedger(dbAdapter, {
+      userId,
+      creditAmount: -credits,
+      creditType: 'extra_credit_used',
+      subscriptionCycleId: null,
+      charge,
+      chargeId: randomUUID(),
+    });
+  }
+
+  async function resume(user: string, path = DAILY) {
+    return await post(
+      AUTOMATION_RESUME_PATH,
+      user,
+      { monthlyCredits: ROOMY_AUTOMATION_CAPS.monthlyCredits },
+      { id: cardURL(path) },
+    );
+  }
+
   module('the switch-on estimate', function () {
     test('a direct writer reads the estimate and the monthly cap the card sets', async function (assert) {
       let response = await request
@@ -262,6 +383,35 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a card that turns on batched AI is estimated with each run’s AI counted twice', async function (assert) {
+      let estimateOf = async (path: string) => {
+        let response = await request
+          .get(AUTOMATION_SWITCH_ON_PATH)
+          .query({ realm: realm.url, automation: cardURL(path) })
+          .set('Authorization', auth(OWNER));
+        assert.strictEqual(response.status, 200, response.text);
+        return response.body.data.attributes.estimate;
+      };
+      let plain = await estimateOf(DAILY);
+      let batched = await estimateOf(BATCHED);
+      assert.strictEqual(
+        plain.perRun.aiCredits,
+        ROOMY_AUTOMATION_CAPS.aiCredits,
+        'a card that doesn’t batch counts its AI cap once',
+      );
+      assert.strictEqual(
+        batched.perRun.aiCredits,
+        ROOMY_AUTOMATION_CAPS.aiCredits * 2,
+        'a card that batches counts it twice',
+      );
+      assert.strictEqual(
+        batched.perRun.computeCredits,
+        plain.perRun.computeCredits,
+        'only the AI part changes',
+      );
+      assert.true(batched.credits > plain.credits);
+    });
+
     test('the estimate says webhook triggers start no runs, for a card with one', async function (assert) {
       let hooked = await request
         .get(AUTOMATION_SWITCH_ON_PATH)
@@ -290,7 +440,11 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a server without prices answers 503', async function (assert) {
-      checkPricingAtStartup('automation-routes-test', {}, silent);
+      checkPricingAtStartup(
+        'automation-routes-test',
+        {},
+        silentPricingReporter,
+      );
       try {
         let response = await request
           .get(AUTOMATION_SWITCH_ON_PATH)
@@ -298,7 +452,11 @@ module(basename(import.meta.filename), function (hooks) {
           .set('Authorization', auth(OWNER));
         assert.strictEqual(response.status, 503, response.text);
       } finally {
-        checkPricingAtStartup('automation-routes-test', pricingEnv(), silent);
+        checkPricingAtStartup(
+          'automation-routes-test',
+          testPricingEnv(),
+          silentPricingReporter,
+        );
       }
     });
   });
@@ -471,6 +629,7 @@ module(basename(import.meta.filename), function (hooks) {
   module('pause, resume and remove', function () {
     test('a direct writer pauses, resumes and removes an automation', async function (assert) {
       await switchOn(OWNER);
+      await fund(WRITER);
 
       let paused = await post(AUTOMATION_PAUSE_PATH, WRITER, {});
       assert.strictEqual(paused.status, 200, paused.text);
@@ -538,6 +697,280 @@ module(basename(import.meta.filename), function (hooks) {
       let row = await getAutomation(dbAdapter, automationId());
       assert.strictEqual(row?.state, 'active', 'the automation is untouched');
       assert.strictEqual(row?.payer, OWNER);
+    });
+  });
+
+  module('admitting the payer a resume makes', function (hooks) {
+    hooks.beforeEach(function () {
+      configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+    });
+    hooks.afterEach(function () {
+      resetOutbound();
+      testAccountStandings.clear();
+    });
+
+    // Adds a key for `user` and approves the keyed automation's `list`
+    // operation with it, for automations, as the approval screen does.
+    async function approveOwnKey(user: string) {
+      let ticket = async (action: 'add') =>
+        (
+          await mintKeyWriteTicket(dbAdapter, user, {
+            action,
+            keyId: null,
+            realmURL: null,
+            shareId: null,
+          })
+        ).ticket;
+      let key = await addUserKey(dbAdapter, secretsKeyring(), {
+        owner: user,
+        name: 'vendor',
+        value: `sk-${user.slice(1, 12)}-routes-key`,
+        ticket: await ticket('add'),
+      });
+      let authorization = await secureSessionAuth(dbAdapter, user);
+      let shown = (
+        await request
+          .get('/_key-bindings/preview')
+          .query({
+            realm: realmURL.href,
+            module: INBOX.module,
+            name: INBOX.name,
+            operation: 'list',
+          })
+          .set('Authorization', authorization)
+      ).body.data.attributes;
+      let [slot] = shown.slots;
+      let approved = await request
+        .post('/_key-bindings')
+        .set('Authorization', authorization)
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'key-binding-approval',
+            attributes: {
+              realm: realmURL.href,
+              operations: [
+                {
+                  codeRef: INBOX,
+                  operation: 'list',
+                  expectedDestination: shown.destination,
+                  slots: {
+                    [slot.slot]: {
+                      keyId: key.id,
+                      expectedFingerprint: slot.fingerprint,
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        });
+      if (approved.status !== 201) {
+        throw new Error(
+          `approving list answered ${approved.status}: ${approved.text}`,
+        );
+      }
+    }
+
+    async function assertStillPaused(
+      assert: Assert,
+      path: string,
+      payer: string,
+    ) {
+      let row = await getAutomation(dbAdapter, automationId(path));
+      assert.strictEqual(row?.state, 'paused', 'the automation stays paused');
+      assert.strictEqual(row?.pauseReason, 'requested');
+      assert.strictEqual(row?.payer, payer, 'the payer is unchanged');
+    }
+
+    test('a new payer with no binding of their own for a {{userKey}} slot is refused, and the automation stays paused', async function (assert) {
+      await fund(OWNER);
+      await fund(WRITER);
+      await approveOwnKey(OWNER);
+      await switchOn(OWNER, KEYED);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(KEYED) }))
+          .status,
+        200,
+      );
+
+      let refused = await resume(WRITER, KEYED);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'binding-not-approved');
+      assert.true(
+        refused.body.errors[0].startsWith(
+          'The declared operation "list" on Inbox',
+        ),
+        'the refusal says which operation the new payer has no binding for',
+      );
+      await assertStillPaused(assert, KEYED, OWNER);
+
+      let resumed = await resume(OWNER, KEYED);
+      assert.strictEqual(
+        resumed.status,
+        200,
+        `the payer whose own key fills the slot resumes it: ${resumed.text}`,
+      );
+      assert.strictEqual(resumed.body.data.attributes.state, 'active');
+    });
+
+    test('a new payer whose balance is short of one run’s minimum is refused, and the automation stays paused', async function (assert) {
+      await switchOn(OWNER);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {})).status,
+        200,
+      );
+      await fund(WRITER, 10);
+
+      let refused = await resume(WRITER);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'insufficient-credits');
+      assert.false(
+        refused.body.errors[0].includes(' 10 '),
+        'the refusal never says what the person holds',
+      );
+      await assertStillPaused(assert, DAILY, OWNER);
+
+      await fund(WRITER);
+      let resumed = await resume(WRITER);
+      assert.strictEqual(resumed.status, 200, resumed.text);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId()))?.payer,
+        WRITER,
+        'once the balance covers a run, the resume makes them the payer',
+      );
+    });
+
+    test('a resume prices a card that turns on batched AI with its AI counted twice', async function (assert) {
+      await switchOn(OWNER, BATCHED);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(BATCHED) }))
+          .status,
+        200,
+      );
+      let pricing = currentPricing()!;
+      let minimum = (batchedAI: boolean) =>
+        Math.max(
+          Math.ceil(
+            runCostCeiling({ ...ROOMY_AUTOMATION_CAPS, batchedAI }, pricing)
+              .totalCredits,
+          ),
+          pricing.values.minimumBalanceFloorCredits,
+        );
+      assert.true(
+        minimum(true) > minimum(false),
+        'the doubled minimum is above the single one',
+      );
+      // Enough for a run that counts its AI once, short of one that counts
+      // it twice.
+      await fund(WRITER, minimum(false));
+
+      let refused = await resume(WRITER, BATCHED);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'insufficient-credits');
+      assert.true(
+        refused.body.errors[0].includes(`${minimum(true)} credits`),
+        'the refusal names the doubled minimum',
+      );
+      await assertStillPaused(assert, BATCHED, OWNER);
+
+      await fund(WRITER, minimum(true) - minimum(false));
+      let resumed = await resume(WRITER, BATCHED);
+      assert.strictEqual(resumed.status, 200, resumed.text);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(BATCHED)))?.payer,
+        WRITER,
+      );
+    });
+
+    test('a new payer whose account can’t sign in is refused, and the automation stays paused', async function (assert) {
+      await fund(WRITER);
+      await switchOn(OWNER);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {})).status,
+        200,
+      );
+      testAccountStandings.set(WRITER, 'deactivated');
+
+      let refused = await resume(WRITER);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'account-deactivated');
+      await assertStillPaused(assert, DAILY, OWNER);
+    });
+
+    test('a resume whose first run falls on a day the automation has spent its daily cap is refused, and the automation stays paused', async function (assert) {
+      await fund(WRITER);
+      await insertIncomingWebhookRow(dbAdapter, {
+        username: OWNER,
+        webhookPath: CAPPED_HOOK_PATH,
+        signingSecret: 'capped-secret',
+      });
+      await switchOn(OWNER, CAPPED);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(CAPPED) }))
+          .status,
+        200,
+      );
+      await chargeAutomation(OWNER, CAPPED, DAILY_CAP);
+
+      let refused = await resume(WRITER, CAPPED);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'daily-credit-cap-reached');
+      await assertStillPaused(assert, CAPPED, OWNER);
+    });
+
+    test('a cap spent today doesn’t refuse a resume whose first run falls on a later day', async function (assert) {
+      await fund(WRITER);
+      await switchOn(OWNER, CAPPED_LATER);
+      assert.strictEqual(
+        (
+          await post(
+            AUTOMATION_PAUSE_PATH,
+            OWNER,
+            {},
+            { id: cardURL(CAPPED_LATER) },
+          )
+        ).status,
+        200,
+      );
+      await chargeAutomation(OWNER, CAPPED_LATER, DAILY_CAP);
+
+      let resumed = await resume(WRITER, CAPPED_LATER);
+      assert.strictEqual(resumed.status, 200, resumed.text);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(CAPPED_LATER)))?.payer,
+        WRITER,
+      );
+    });
+
+    test('a script that doesn’t parse refuses the resume, and the automation stays paused', async function (assert) {
+      await fund(WRITER);
+      await switchOn(OWNER, BROKEN);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(BROKEN) }))
+          .status,
+        200,
+      );
+
+      let refused = await resume(WRITER, BROKEN);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'script-error');
+      assert.true(
+        refused.body.errors[0].includes("doesn't parse"),
+        refused.body.errors[0],
+      );
+      await assertStillPaused(assert, BROKEN, OWNER);
+    });
+
+    test('an automation that isn’t paused is refused as not paused, whatever its new payer could pay', async function (assert) {
+      await switchOn(OWNER);
+      let refused = await resume(WRITER);
+      assert.strictEqual(refused.status, 409, refused.text);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId()))?.payer,
+        OWNER,
+      );
     });
   });
 

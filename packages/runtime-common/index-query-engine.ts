@@ -63,6 +63,7 @@ import {
   renderErrorSummary,
   type RenderErrorSummary,
   type SerializedError,
+  ungatedRenderErrorSQL,
 } from './error.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
@@ -317,12 +318,13 @@ export interface IndexedInstanceSource {
   types: string[] | null;
   instance: CardResource | null;
   error: SerializedError | null;
-  // Whether the latest visit failed for a reason the prerender server did not
-  // attribute to the card: a stale host shell, or a gateway failure on a fetch
-  // the visit made. The index keeps such a failure off the row, so the row
-  // reads as healthy, and everything on it, `instance` and `sourceContentHash`
-  // included, is what an earlier visit recorded. The card's source may have
-  // changed since.
+  // Whether the latest visit failed for a reason that is not the card's: a
+  // stale host shell or a gateway failure on a fetch the visit made (the
+  // prerender server's verdicts), or a render that did not finish, timing out
+  // or losing its prerender request (`transientRenderFailure`). The index keeps
+  // such a failure off the row, so the row reads as healthy, and everything on
+  // it, `instance` and `sourceContentHash` included, is what an earlier visit
+  // recorded. The card's source may have changed since.
   failureWithheld: boolean;
 }
 
@@ -2754,7 +2756,15 @@ export function prerenderedJoin(opts?: WIPOptions) {
 // the liveness gates of the capture routes, publishing. A reader of the
 // card's data asks the index channel alone (`INDEX_HAS_ERROR`), because a
 // render failure leaves the data the index visit read intact.
-const RENDER_ERROR_IS_CURRENT = `(ph.url IS NOT NULL AND ph.error_doc IS NOT NULL AND ph.generation >= i.generation)`;
+// A transient render failure (a render timeout, a prerender request that
+// failed transiently, a gateway failure: `isTransientRenderError`) says the
+// render did not finish, not that the card is broken. The writer keeps the
+// last good render over one instead of storing it as an error, and one stored
+// on a row with no good render to keep (`noGoodRowToKeep`) counts. A transient
+// error stored without that mark is legacy data, which this ignores
+// (`ungatedRenderErrorSQL`, apart from a visit-request failure) and the
+// reconcile sweep re-renders.
+const RENDER_ERROR_IS_CURRENT = `(ph.url IS NOT NULL AND ph.error_doc IS NOT NULL AND ph.generation >= i.generation AND NOT ${ungatedRenderErrorSQL('ph')})`;
 
 const INDEX_HAS_ERROR = `COALESCE(i.has_error, FALSE)`;
 

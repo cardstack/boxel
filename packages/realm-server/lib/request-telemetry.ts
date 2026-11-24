@@ -18,9 +18,15 @@
 //   is no help in triage and is a liability once stored.
 // - On every event, a breadcrumb that names a proxy route's or a key route's
 //   URL (the request log line, kept by Sentry's console integration) loses
-//   that URL's query string. Nothing here looks for header values in a
-//   breadcrumb: the request log's header line masks the credential headers
-//   before it is written.
+//   that URL's query string. A breadcrumb that carries the realm sessions of
+//   a render (the prerender server's reproduce line at debug) has them masked.
+//   Nothing here looks for header values in a breadcrumb: the request log's
+//   header line masks the credential headers before it is written.
+// - A process that calls `keepMethodAndPathOnlyForEveryRequest()`, such as the
+//   prerender server and the prerender manager, treats every request as the
+//   first bullet does, and its breadcrumbs lose the query string of every URL
+//   and path they name. Its callers are other boxel processes, and a render
+//   request's body carries the sessions for the realms it renders.
 // - A transaction carries the incoming URL again in its spans' data: the
 //   server span's `http.url`, `http.target` and `http.query`, which the trace
 //   context holds as the transaction's own data, and the like on each child
@@ -305,9 +311,36 @@ function withOAuthProviderSecretsLabeledDeep(
   );
 }
 
-function withoutProxyRouteQueries(value: unknown, depth = 0): unknown {
+let everyRequestKeepsMethodAndPathOnly = false;
+
+// Makes telemetry about every request this process handles or sends keep only
+// its method and the origin and path of its URLs, whatever the route. For a
+// process whose callers are other boxel processes that put realm sessions in
+// the request body, such as the prerender server and the prerender manager.
+// `false` turns it off again.
+export function keepMethodAndPathOnlyForEveryRequest(on = true): void {
+  everyRequestKeepsMethodAndPathOnly = on;
+}
+
+// Any URL or absolute path followed by a query string, for a process in which
+// every request keeps only its method and path.
+const anyURLQuery =
+  /((?:https?:\/\/[^\s/?#"'<>]+)?\/[^\s?#"'<>]*)\?[^\s"'<>]*/gi;
+
+// The prerender server's debug line that tells a developer how to reproduce a
+// render ends with the realm sessions the render used.
+const renderSessions = /(boxel-session = ).*$/s;
+
+// A string with the query strings removed from the URLs it names (those of
+// proxy routes and key routes, and of every URL in a process that keeps only
+// the method and path of every request) and any realm sessions masked.
+function scrubbedStrings(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') {
-    return value
+    let withoutSessions = value.replace(renderSessions, `$1${MASKED}`);
+    if (everyRequestKeepsMethodAndPathOnly) {
+      return withoutSessions.replace(anyURLQuery, '$1');
+    }
+    return withoutSessions
       .replace(proxyRouteQuery, '$1$2')
       .replace(keyRouteQuery, '$1$2');
   }
@@ -315,12 +348,12 @@ function withoutProxyRouteQueries(value: unknown, depth = 0): unknown {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((item) => withoutProxyRouteQueries(item, depth + 1));
+    return value.map((item) => scrubbedStrings(item, depth + 1));
   }
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
-      withoutProxyRouteQueries(item, depth + 1),
+      scrubbedStrings(item, depth + 1),
     ]),
   );
 }
@@ -438,14 +471,17 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
 }
 
 // Whether telemetry about this request keeps only its method and the origin
-// and path of its URLs: a request to the secure origin, to a proxy route, to a
-// system-key route or to a key route (whose bodies can carry a key's value).
-// `url` is the full request URL; `headers` supply the host when they carry
-// one.
+// and path of its URLs: every request in a process that asked for that, and
+// otherwise a request to the secure origin, to a proxy route, to a system-key
+// route or to a key route (whose bodies can carry a key's value). `url` is the
+// full request URL; `headers` supply the host when they carry one.
 export function keepsMethodAndPathOnly(request: {
   url?: string;
   headers?: Record<string, string | string[] | undefined>;
 }): boolean {
+  if (everyRequestKeepsMethodAndPathOnly) {
+    return true;
+  }
   if (isSecureOriginRequestData(request)) {
     return true;
   }
@@ -525,7 +561,7 @@ function scrubURLAttributes(
   let scrubbed: SpanData = {};
   for (let [name, value] of Object.entries(data)) {
     if (typeof value !== 'string') {
-      scrubbed[name] = withoutProxyRouteQueries(value);
+      scrubbed[name] = scrubbedStrings(value);
     } else if (fullURLAttributes.includes(name)) {
       let parsed = parseURL(value);
       scrubbed[name] = pathOnly
@@ -546,7 +582,7 @@ function scrubURLAttributes(
         scrubbed[name] = value;
       }
     } else {
-      scrubbed[name] = withoutProxyRouteQueries(value);
+      scrubbed[name] = scrubbedStrings(value);
     }
   }
   return scrubbed;
@@ -565,13 +601,13 @@ function scrubBreadcrumbs(
   return breadcrumbs.map((breadcrumb) => ({
     ...breadcrumb,
     ...(breadcrumb.message !== undefined
-      ? { message: withoutProxyRouteQueries(breadcrumb.message) as string }
+      ? { message: scrubbedStrings(breadcrumb.message) as string }
       : {}),
     ...(breadcrumb.data !== undefined
       ? {
           data: isPlainObject(breadcrumb.data)
             ? scrubURLAttributes(breadcrumb.data, methodAndPathOnly)
-            : withoutProxyRouteQueries(breadcrumb.data),
+            : scrubbedStrings(breadcrumb.data),
         }
       : {}),
   }));

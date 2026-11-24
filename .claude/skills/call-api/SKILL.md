@@ -46,7 +46,8 @@ what `callApi` exists to prevent.
 ```
 
 `method` (absent: GET without a body, POST with one), `url`, `path`,
-`headers`, `query`, and one body: `json`, or `graphql: { document, variables }`.
+`headers`, `query`, and one body: `json`, `graphql: { document, variables }`,
+or `form: { name: value }`.
 `output` is the optional response mapping; it runs over `{status, headers,
 body}` and has to produce an object, since the answer stands alone in the
 batch's results, where a list reads as a group's answers and `null` as a
@@ -90,6 +91,29 @@ A credential is written inside a string as a slot:
 doesn't parse is `invalid-slot`; any other `{{…}}` is the author's own text
 (a template the vendor fills) and is sent as written.
 
+### Form bodies
+
+`form` is for an API that takes only `application/x-www-form-urlencoded`
+(Twilio, Stripe). Each field lowers as a JSON body's values do: a slot may
+stand in a value (placement `body`, `at: 'form.<name>'`), never in a name, and
+`actor()` in a value makes the operation `readsActor`, so an anonymous caller
+is refused as for a JSON body. At build, `encodeFormBody` turns the filled
+fields into text: a scalar is one pair; an object's members are
+`name[member]` (a member named `x[]` becomes `name[x][]`); a field whose
+value is a list repeats the field's name for each scalar item and numbers each
+object or list item (`line_items[0][price]`); a list nested in an object or a
+list is numbered item by item (`line_items[0][tax_rates][1]`), because a
+parser that keeps the last of a repeated name (Rack, PHP, Stripe) would read a
+repeated nested name as one value, and a member named `x[]` is the one
+exception; null, an empty list and an empty object are left out. Fields and
+members go out sorted by name at every depth: the lowered entry comes back
+from the definition cache's `jsonb` column with its keys in `jsonb`'s own
+order, so declaration order would hold only for the call that filled the
+cache. The built request carries
+`bodyEncoding: 'form'`, and the outbound client fills a slot's token in a form
+body form-encoded rather than JSON-escaped, so a value holding `&` or `=` stays
+one field.
+
 ## Lowering checks
 
 All in `lowerCallApi`. Each records an issue, so the entry is stored
@@ -98,15 +122,15 @@ All in `lowerCallApi`. Each records an issue, so the entry is stored
 known, one body, no body on GET); everything below is lowering's, so it holds
 for a stored entry whatever produced it.
 
-| Code                       | Raised for                                                                                                                                                                                                                                                                                                                                   |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `slot-placed-twice`        | the same slot name, same key, in two places                                                                                                                                                                                                                                                                                                  |
-| `slot-name-reused`         | one name used for a `userKey` slot and an `apiKey` slot                                                                                                                                                                                                                                                                                      |
-| `slot-out-of-place`        | a slot in the URL as written, a header or query _name_, or a GraphQL document                                                                                                                                                                                                                                                                |
-| `unencoded-path-parameter` | a `{name}` that isn't a whole path segment (in the host, part of a segment, `{+name}`), a `{name}` that `path` doesn't fill, or a typed reference spliced into URL or path text (`[object Object]`)                                                                                                                                          |
-| `string-built-graphql`     | a document that is a marker or program, or has a reference spliced into it                                                                                                                                                                                                                                                                   |
-| `invalid-slot`             | a malformed slot or an unknown transform                                                                                                                                                                                                                                                                                                     |
-| `invalid-request`          | not an absolute http(s) URL, userinfo in the URL, a `*` in the host (written or as `%2A`), a trailing dot on the host, a `path` key no segment takes, a `path` value written as text that is `''`, `.` or `..` or holds `/` or `\`, an `X-Boxel-*` or non-token header name, an object or list where text is sent, two bodies, a body on GET |
+| Code                       | Raised for                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `slot-placed-twice`        | the same slot name, same key, in two places                                                                                                                                                                                                                                                                                                                                                             |
+| `slot-name-reused`         | one name used for a `userKey` slot and an `apiKey` slot                                                                                                                                                                                                                                                                                                                                                 |
+| `slot-out-of-place`        | a slot in the URL as written, a header, query or form field _name_, or a GraphQL document                                                                                                                                                                                                                                                                                                               |
+| `unencoded-path-parameter` | a `{name}` that isn't a whole path segment (in the host, part of a segment, `{+name}`), a `{name}` that `path` doesn't fill, or a typed reference spliced into URL or path text (`[object Object]`)                                                                                                                                                                                                     |
+| `string-built-graphql`     | a document that is a marker or program, or has a reference spliced into it                                                                                                                                                                                                                                                                                                                              |
+| `invalid-slot`             | a malformed slot or an unknown transform                                                                                                                                                                                                                                                                                                                                                                |
+| `invalid-request`          | not an absolute http(s) URL, userinfo in the URL, a `*` in the host (written or as `%2A`), a trailing dot on the host, a `path` key no segment takes, a `path` value written as text that is `''`, `.` or `..` or holds `/` or `\`, an `X-Boxel-*` or non-token header name, an object or list where text is sent, a `form` that isn't an object or has a field with no name, two bodies, a body on GET |
 
 **Before indexing, `boxel lint` reports the same issues.** The realm's `_lint`
 engine (`tasks/lint-engines.ts`) runs two rules from `tasks/lint-call-api.ts`,
@@ -221,7 +245,8 @@ invoking user's own key`, `… for the realm's key`, from `describeSlots`),
    rule by the outbound client (`applySubstitutions`), which refuses it
    `guard-refused` with `meta.reason: 'invalid-url'`. Query values are
    appended with `URLSearchParams`. A JSON body gets `content-type:
-application/json` unless the declaration set one.
+application/json`, and a form body `application/x-www-form-urlencoded`,
+   unless the declaration set one.
 5. **`guard-refused`** (502, `meta.reason: 'destination'`) — the built URL
    is not covered by the lowered `destination`, or by the destination stored
    on the grant a filled slot's key is sent under. Every value is encoded
@@ -270,7 +295,8 @@ The sender hands the client `substitutions: [{token, value}]`. `outboundFetch`
 then:
 
 - checks the destination on the request _as given_, then fills the tokens:
-  URL-encoded in the URL, as-is in headers, JSON-escaped in a string body;
+  URL-encoded in the URL, as-is in headers, JSON-escaped in a JSON body and
+  form-encoded in a form body (`bodyEncoding`);
 - refuses if filling changed the origin (a slot can only stand in a path or
   query value, so this is a guard against a bug, not a route);
 - registers every value with the scrubber before anything is sent;

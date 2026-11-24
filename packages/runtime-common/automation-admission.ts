@@ -80,6 +80,7 @@ import type { DBAdapter } from './db.ts';
 import { isSessionRevoked } from './db-queries/user-queries.ts';
 import { param, query } from './expression.ts';
 import { logger } from './log.ts';
+import { MAX_AUTOMATION_SCRIPT_CHARS } from './automation-run-command.ts';
 import { wrapRealmRunnerScript } from './realm-runner-script.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -121,10 +122,11 @@ export interface AdmissionRefusal {
 // prices back.
 //
 // - `insufficient-credits`: the run's identity holds less than the run's
-//   minimum balance, after what their other runs in flight hold.
+//   minimum balance, after what their other runs in flight and their
+//   unsettled batches hold.
 // - `daily-credit-cap-reached`, `monthly-credit-cap-reached`: what the
 //   automation was charged this UTC day or month, plus what its other runs
-//   in flight hold, has reached the cap.
+//   in flight and its unsettled batches hold, has reached the cap.
 // - `pricing-unavailable`: the worker's pricing check failed, so it admits
 //   no run (ADR 029 §1.3).
 export { SPENDING_REFUSAL_REASONS, type SpendingRefusalReason };
@@ -272,15 +274,12 @@ export async function admitRunIdentity(
       `This worker can't ask the Matrix server whether ${actsAs}'s account can still sign in`,
     );
   }
-  let standing: AccountStanding;
-  try {
-    standing = await ctx.checks.accountStanding(actsAs);
-  } catch (e: any) {
-    // The failure can name the platform's Matrix admin account, so it goes
-    // to the server's log, never to the run, which the realm's writers read.
-    log.warn(
-      `run ${run.id}: couldn't ask the Matrix server about ${actsAs}'s account: ${e?.message ?? e}`,
-    );
+  let standing = await askAccountStanding(
+    ctx.checks.accountStanding,
+    actsAs,
+    `run ${run.id}`,
+  );
+  if (standing === 'unverifiable') {
     return refuse(
       'account-unverifiable',
       `The Matrix server couldn't be asked whether ${actsAs}'s account can still sign in`,
@@ -297,6 +296,29 @@ export async function admitRunIdentity(
     );
   }
   return { ok: true, automation };
+}
+
+// Why the script at `scriptURL`, whose text is `code`, can't run (step 3):
+// it is empty, longer than `MAX_AUTOMATION_SCRIPT_CHARS`, or doesn't parse.
+// Undefined when it can.
+export function scriptRefusal(
+  code: string,
+  scriptURL: string,
+): AdmissionRefusal | undefined {
+  if (!code.trim() || code.length > MAX_AUTOMATION_SCRIPT_CHARS) {
+    return {
+      reason: 'script-error',
+      message: `The script ${scriptURL} must be between 1 and ${MAX_AUTOMATION_SCRIPT_CHARS} characters`,
+    };
+  }
+  let parseError = scriptParseError(code);
+  if (parseError) {
+    return {
+      reason: 'script-error',
+      message: `The script ${scriptURL} doesn't parse: ${parseError}`,
+    };
+  }
+  return undefined;
 }
 
 // Whether the script parses as the Realm Runner wraps it (step 3). It is
@@ -341,12 +363,7 @@ export async function admitRunOperations(
   }
   let { refusal } = asked.answer;
   if (refusal) {
-    return refuse(
-      refusal.code,
-      refusal.operation
-        ? `The declared operation "${refusal.operation}"${refusal.targetType ? ` on ${refusal.targetType.name}` : ''} was refused: ${refusal.detail}`
-        : refusal.detail,
-    );
+    return refuse(refusal.code, operationRefusalMessage(refusal));
   }
   let spending = await ctx.checks?.admitSpending?.({
     run,
@@ -377,6 +394,82 @@ export async function admitRunOperations(
     return { ok: false, ...spending };
   }
   return { ok: true, operations: asked.answer.operations ?? 0 };
+}
+
+// What a resume's admission asks, for the person who would become the
+// automation's payer (see `admitPayer`).
+export interface PayerAdmissionChecks {
+  // Asks the Matrix server about the person's account, as
+  // `AutomationAdmissionChecks.accountStanding` does. Undefined when it
+  // can't be asked.
+  accountStanding?(user: string): Promise<AccountStanding>;
+  // The automation's realm checks the script and every declared operation
+  // as the person, as it checks them for a run (`Realm.admitAutomationPayer`).
+  admitInRealm(payer: string): Promise<AdmissionRefusal | undefined>;
+  // The person's spending, as their first run's spending check would find
+  // it: their balance against one run's minimum balance, and what the
+  // automation was charged this UTC day and month against the caps they
+  // would agree to. Undefined admits every payer.
+  admitSpending?(payer: string): Promise<AdmissionRefusal | undefined>;
+}
+
+// Admits `payer`, who resuming the automation would make its payer, the way
+// a run of its triggers is admitted, so the automation never goes active
+// under a payer whose first run would be refused. The checks follow a run's
+// order: the account can sign in (`account-deactivated`, or
+// `account-unverifiable` when the Matrix server can't be asked), the script
+// reads and parses and every declared operation passes as them (a
+// `{{userKey}}` slot fills from their own key bindings), and their spending
+// passes. Answers the first refusal, with the code a run would get, or
+// undefined.
+//
+// Direct write is the resume's own check, made under its locks, and the
+// person's sessions are checked when their request is accepted. Each run is
+// still admitted on its own, since anything here can change after the
+// resume.
+export async function admitPayer(
+  checks: PayerAdmissionChecks,
+  payer: string,
+): Promise<AdmissionRefusal | undefined> {
+  if (!checks.accountStanding) {
+    return {
+      reason: 'account-unverifiable',
+      message: `This server can't ask the Matrix server whether ${payer}'s account can still sign in`,
+    };
+  }
+  let standing = await askAccountStanding(
+    checks.accountStanding,
+    payer,
+    `resume as ${payer}`,
+  );
+  if (standing === 'unverifiable') {
+    return {
+      reason: 'account-unverifiable',
+      message: `The Matrix server couldn't be asked whether ${payer}'s account can still sign in`,
+    };
+  }
+  if (standing !== 'usable') {
+    return {
+      reason: 'account-deactivated',
+      message:
+        standing === 'missing'
+          ? `${payer} has no account on the Matrix server`
+          : `The account of ${payer} is ${standing}`,
+    };
+  }
+  return (
+    (await checks.admitInRealm(payer)) ?? (await checks.admitSpending?.(payer))
+  );
+}
+
+// What a run, or a resume, is told of the realm's refusal of a declared
+// operation.
+export function operationRefusalMessage(
+  refusal: NonNullable<RunAdmissionAnswer['refusal']>,
+): string {
+  return refusal.operation
+    ? `The declared operation "${refusal.operation}"${refusal.targetType ? ` on ${refusal.targetType.name}` : ''} was refused: ${refusal.detail}`
+    : refusal.detail;
 }
 
 // Moves the run's automation into or out of *waiting for credits*, telling
@@ -437,6 +530,25 @@ async function askRealm(
     return { answer };
   } catch (e: any) {
     return { failure: redact(String(e?.message ?? e)) };
+  }
+}
+
+// What the Matrix server says of `user`'s account, or `unverifiable` when it
+// can't be asked. The failure can name the platform's Matrix admin account,
+// so it goes to the server's log, tagged `tag`, and never to a run or an
+// answer, which the realm's writers read.
+async function askAccountStanding(
+  accountStanding: (user: string) => Promise<AccountStanding>,
+  user: string,
+  tag: string,
+): Promise<AccountStanding | 'unverifiable'> {
+  try {
+    return await accountStanding(user);
+  } catch (e: any) {
+    log.warn(
+      `${tag}: couldn't ask the Matrix server about ${user}'s account: ${e?.message ?? e}`,
+    );
+    return 'unverifiable';
   }
 }
 

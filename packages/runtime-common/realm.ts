@@ -5,6 +5,7 @@ import {
   type AnonymousRateLimit,
 } from './anonymous-access.ts';
 import {
+  ANONYMOUS_AUTOMATION_VIEW,
   ANONYMOUS_BYTES_READ,
   ANONYMOUS_CAPABILITY_CHECK,
   ANONYMOUS_CARD_READ,
@@ -58,7 +59,6 @@ import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
   applyServerSearchPageBound,
   assembledLinkResourceBudget,
-  isItemLegSearch,
   runWithSearchTimeBudget,
   SearchBoundError,
 } from './search-bounds.ts';
@@ -262,6 +262,15 @@ import {
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
 } from './automation-admission-route.ts';
+import {
+  operationRefusalMessage,
+  scriptRefusal,
+  type AdmissionRefusal,
+} from './automation-admission.ts';
+import type {
+  AutomationDeclaration,
+  AutomationOperationDeclaration,
+} from './automation-declaration.ts';
 import { RUN_STATE_PATH } from './automation-run-command.ts';
 import {
   RUN_LOG_MAX_REQUEST_BYTES,
@@ -313,6 +322,8 @@ import {
   formattedError,
   stringifyErrorForLog,
   unsupportedMediaType,
+  TRANSIENT_RENDER_FAILURE_RETRY_CAP,
+  transientRenderRetriesExhausted,
   type RenderErrorSummary,
   type SerializedError,
 } from './error.ts';
@@ -1335,6 +1346,20 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // policy judges them, and runs the assistant's scripts for such a caller
 // (ADR 022 §1.8), so a change to whom `_info` answers changes that too.
 //
+// The automation routes a card's view, its editor and the realm config read
+// consume it too, and resolve no operation either:
+// `_automation-status`, `_automation-runs`, `_automations` and
+// `_automation-webhooks`. Each shows what it serves only to a direct writer
+// of the realm whom its ACL admits, and tells anyone else that they aren't
+// one (see `#statusViewer`). So a caller the realm hands to its policy is told
+// that too, and is shown nothing about the automations, their runs or the
+// realm's webhooks, rather than refused: a 401 or 403 the host reads while it
+// renders a card a grant admits them to fails whatever else it is loading.
+// Unlike `_info`, they also tell a caller who isn't signed in the same, where
+// the policy opens `read` or `query` to such callers (see
+// `ANONYMOUS_AUTOMATION_VIEW`). The answer runs nothing a grant admits, so an
+// archived realm gives it as it does while active, as `_info` does.
+//
 // No other route does, but for the byte routes and the hashed scoped-CSS
 // serve described below. Each of the rest is marked `ACL_ONLY` where it is
 // declared, or serves code and the file tree (`COARSE_READ_ONLY`), and each
@@ -1356,16 +1381,6 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   read.
 // - `_sign-capture-urls` signs the URLs of the capture serve, which the ACL
 //   alone admits a caller to.
-// - `_automation-status` answers an automation's server row, which only the
-//   realm's direct writers are shown (see `automation-status.ts`). A grant
-//   reaches a card, not the row.
-// - `_automations` lists every automation in the realm with its row's state,
-//   payer and spend, which only the realm's direct writers see (see
-//   `automation-list.ts`). A grant reaches a card, not the rows.
-// - `_automation-webhooks` lists the incoming webhooks the realm's
-//   automations may name, which only the realm's direct writers are listed
-//   (see `automation-webhooks.ts`). A grant reaches a card, not the realm's
-//   webhooks.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
 // differently on some of them (see `#refusalUnderPolicy`), as does the
@@ -1402,6 +1417,13 @@ const ACL_ONLY = { aclOnly: true } as const;
 const APPLIES_ARCHIVED_SEAL = {
   consumesCoarseOutcome: true,
   appliesArchivedSeal: true,
+} as const;
+// The automation routes, which tell a caller the realm hands to its policy
+// that they aren't a direct writer, and never apply the archived seal, since
+// that answer runs nothing a grant admits (see `CONSUMES_COARSE_OUTCOME`).
+const AUTOMATION_VIEW_ROUTE = {
+  ...APPLIES_ARCHIVED_SEAL,
+  anonymous: ANONYMOUS_AUTOMATION_VIEW,
 } as const;
 // The realm's search routes. A verified user the ACL refuses is admitted to
 // them whether or not the realm names a policy, and a realm with none has no
@@ -3351,6 +3373,10 @@ export interface ServedRealm {
   mount(): Promise<Realm | undefined>;
 }
 
+// An index row or rendering whose run of transient render failures has used up
+// its retries (`transientRenderRetriesExhausted`). Postgres only, like the
+// `_indexing-errors` query that reads it.
+const transientRetriesExhaustedSQL = `(jsonb_typeof(diagnostics->'transientRenderFailure') = 'array' AND COALESCE((diagnostics->>'transientRenderFailureRenders')::int, 1) > ${TRANSIENT_RENDER_FAILURE_RETRY_CAP})`;
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
@@ -4002,33 +4028,45 @@ export class Realm {
         ACL_ONLY,
       )
       // An automation card's switched-on state, payer and each trigger's runs
-      // left, for the card's view. Answered on the realm ACL; a caller who
-      // isn't a direct writer is shown nothing (see `automation-status.ts`).
+      // left, for the card's view. A caller who isn't a direct writer,
+      // including one the realm hands to its policy, is shown nothing (see
+      // `automation-status.ts`).
       .get(
         '/_automation-status',
         SupportedMimeType.JSON,
         this.automationStatus.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
       )
       // Every automation in the realm, with its state, next run, payer, cap,
       // spend this month and last result, for the realm config's Automations
-      // section, the automations console. Answered on the realm ACL; a caller
-      // who isn't a direct writer is listed nothing (see
-      // `automation-list.ts`).
+      // section, the automations console. A caller who isn't a direct
+      // writer, including one the realm hands to its policy, is listed
+      // nothing (see `automation-list.ts`).
       .get(
         '/_automations',
         SupportedMimeType.JSON,
         this.automationList.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
+      )
+      // An automation's runs, newest first, a page at a time, for the
+      // Automation card's isolated view. A caller who isn't a direct writer,
+      // including one the realm hands to its policy, is listed nothing (see
+      // `automation-run-list.ts`).
+      .get(
+        '/_automation-runs',
+        SupportedMimeType.JSON,
+        this.automationRunList.bind(this),
+        AUTOMATION_VIEW_ROUTE,
       )
       // The incoming webhooks an automation card's webhook trigger may name,
-      // for the card's editor. Answered on the realm ACL; a caller who isn't
-      // a direct writer is listed nothing (see `automation-webhooks.ts`).
+      // for the card's editor. A caller who isn't a direct writer, including
+      // one the realm hands to its policy, is listed nothing (see
+      // `automation-webhooks.ts`).
       .get(
         '/_automation-webhooks',
         SupportedMimeType.JSON,
         this.automationWebhooks.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
       )
       .get(
         READINESS_CHECK_PATH,
@@ -14861,15 +14899,11 @@ export class Realm {
         refusal: { code: 'not-an-automation', detail: limits.message },
       });
     }
-    for (let declared of limits.operations) {
-      let refused = await admit({
-        core: this.operationCore,
-        realmURL: new URL(this.url),
-        codeRef: declared.targetType,
-        operation: declared.operation,
-        payer: call.actsAs,
-      });
-      if (refused) {
+    let refusal = await this.#declaredOperationRefusal(
+      admit,
+      limits.operations,
+      call.actsAs,
+      async (refused) => {
         // A credential only a person can fix is recorded on the run, with
         // the share or key the refused slot is filled from, before the
         // worker ends it: the run's notices are read against it.
@@ -14882,20 +14916,89 @@ export class Realm {
             credentialRefusalOf(refused.error, subject),
           );
         }
-        return answer({
-          refusal: {
-            code: refused.error.code,
-            detail: refused.error.detail,
-            operation: declared.operation,
-            targetType: {
-              module: String(declared.targetType.module),
-              name: declared.targetType.name,
-            },
+      },
+    );
+    return answer(
+      refusal
+        ? { refusal }
+        : { refusal: null, operations: limits.operations.length },
+    );
+  }
+
+  // Checks, before a resume makes `payer` the payer of the automation
+  // `declaration` reads from, what its first run's admission would check in
+  // this realm: the script reads and parses, and every declared operation
+  // passes as `payer`, so each `{{userKey}}` slot fills from their own key
+  // bindings. Answers the first refusal, with the code a run would end with,
+  // or undefined. Nothing is recorded, since there is no run.
+  async admitAutomationPayer({
+    declaration,
+    payer,
+  }: {
+    declaration: AutomationDeclaration;
+    payer: string;
+  }): Promise<AdmissionRefusal | undefined> {
+    let scriptURL = this.#virtualNetwork.toURLHref(declaration.script);
+    let script = this.paths.inRealm(new URL(scriptURL))
+      ? await this.readFileAsText(this.paths.local(new URL(scriptURL)))
+      : undefined;
+    if (!script) {
+      return {
+        reason: 'missing-script',
+        message: `The script ${scriptURL} could not be read`,
+      };
+    }
+    let unrunnable = scriptRefusal(script.content, scriptURL);
+    if (unrunnable) {
+      return unrunnable;
+    }
+    let admit = this.#callApi?.admitAutomation;
+    if (!admit) {
+      return {
+        reason: 'run-admission-unavailable',
+        message: "This realm can't check an automation's operations",
+      };
+    }
+    let refusal = await this.#declaredOperationRefusal(
+      admit,
+      declaration.operations,
+      payer,
+    );
+    return refusal
+      ? { reason: refusal.code, message: operationRefusalMessage(refusal) }
+      : undefined;
+  }
+
+  // The first of `operations` that `payer` may not invoke as an automation
+  // call, as `admit` answers, told to `onRefused` before it is answered.
+  async #declaredOperationRefusal(
+    admit: NonNullable<CallApiSender['admitAutomation']>,
+    operations: AutomationOperationDeclaration[],
+    payer: string,
+    onRefused?: (refused: OperationFailure) => Promise<void>,
+  ): Promise<RunAdmissionAnswer['refusal']> {
+    for (let declared of operations) {
+      let refused = await admit({
+        core: this.operationCore,
+        realmURL: new URL(this.url),
+        codeRef: declared.targetType,
+        operation: declared.operation,
+        payer,
+      });
+      if (refused) {
+        await onRefused?.(refused);
+        return {
+          code: refused.error.code,
+          detail: refused.error.detail,
+          operation: declared.operation,
+          targetType: {
+            module: String(declared.targetType.module),
+            name: declared.targetType.name,
           },
-        });
+        };
       }
     }
-    return answer({ refusal: null, operations: limits.operations.length });
+    return null;
   }
 
   // Answers a run's own call that the run is running: the admission in
@@ -18457,10 +18560,10 @@ export class Realm {
       resolveLinksOnly:
         this.#decideLinkShape(request, 'single-row')?.mode === 'links-only',
       // The assembled-resource budget bounds live reads. This branch exempts a
-      // read carrying the during-prerender marker, for the same reason the
-      // prerendered-HTML leg is exempt from the page and time bounds: what a
-      // render assembles is baked into cached HTML, so a ceiling that clipped
-      // it would serve a short closure from cache long after the pressure that
+      // read carrying the during-prerender marker, for the same reason a
+      // render's search is exempt from the time budget: what a render
+      // assembles is baked into cached HTML, so a ceiling that clipped it
+      // would serve a short closure from cache long after the pressure that
       // justified it had passed.
       //
       // It is defensive rather than load-bearing. No caller attaches that
@@ -20121,22 +20224,24 @@ export class Realm {
           return noRows();
         }
       }
-      // Two bounds hold server-side on the live item leg (never during
-      // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
-      // and the wall-clock time budget. Both hold for every caller — a page
-      // ceiling bounds the result set even when the client card cap was
-      // skipped, and a wall-clock cutoff can't live client-side. The realms and
-      // concurrency caps stay on the card `@context` surface.
-      let itemLegBounded =
-        isItemLegSearch(searchEntryQuery.fieldset) && !duringPrerender;
-      // Clamp an absent page to the default so the query carries a LIMIT, and
-      // an over-maximum explicit one to the maximum (logged, so a short page
-      // has an explanation somewhere).
-      if (itemLegBounded) {
-        searchEntryQuery.itemQuery = applyServerSearchPageBound(
-          searchEntryQuery.itemQuery,
-        );
-      }
+      // Two bounds hold server-side: a hard page-size ceiling and the
+      // wall-clock time budget. A page ceiling bounds the result set even when
+      // the client card cap was skipped, and a wall-clock cutoff can't live
+      // client-side. The realms and concurrency caps stay on the card
+      // `@context` surface.
+      //
+      // The time budget holds on every live search, on either leg. A render's
+      // search is exempt: cutting it off would fail the render, whose own
+      // timeout already bounds it.
+      let timeBudgeted = !duringPrerender;
+      // The page ceiling holds on every search, on either leg and whoever
+      // sends it — a render's own searches included, since the header that
+      // marks a render is set by the caller. Clamp an absent page to the
+      // default so the query carries a LIMIT, and an over-maximum explicit one
+      // to the maximum (logged, so a short page has an explanation somewhere).
+      searchEntryQuery.itemQuery = applyServerSearchPageBound(
+        searchEntryQuery.itemQuery,
+      );
       // Classified from the page the query will actually run with — the clamp
       // above has already been applied — because that is the only bound on
       // this read's result count available before it runs, and the link mode
@@ -20170,10 +20275,10 @@ export class Realm {
           ...(duringPrerender ? {} : { unshareableFormats }),
           ...(signal ? { signal } : {}),
         });
-      // Cut an over-budget item-leg search off (408) rather than run it to
+      // Cut an over-budget live search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
       let doc = markPolicyScoped(
-        itemLegBounded
+        timeBudgeted
           ? await runWithSearchTimeBudget(runSearch)
           : await runSearch(),
         scopedRealms,
@@ -20814,6 +20919,7 @@ export class Realm {
       `    jsonb_typeof(diagnostics->'toolSchemaErrors') = 'array'`,
       `    AND jsonb_array_length(diagnostics->'toolSchemaErrors') > 0`,
       `  )`,
+      `  OR ${transientRetriesExhaustedSQL}`,
       `)`,
       `ORDER BY type, url`,
     ])) as {
@@ -20881,7 +20987,8 @@ export class Realm {
             | 'indexing-error'
             | 'broken-link'
             | 'frontmatter-error'
-            | 'tool-schema-error';
+            | 'tool-schema-error'
+            | 'transient-render-retries-exhausted';
           attributes: Record<string, unknown>;
         }[] = [];
         if (hasError) {
@@ -20912,6 +21019,24 @@ export class Realm {
               attributes: { ...baseAttributes, brokenLinks },
             });
           }
+          // The row kept its last good content because its visit kept
+          // failing transiently through every retry.
+          if (
+            Array.isArray(row.diagnostics?.transientRenderFailure) &&
+            transientRenderRetriesExhausted(
+              row.diagnostics?.transientRenderFailureRenders as number,
+            )
+          ) {
+            findings.push({
+              type: 'transient-render-retries-exhausted',
+              attributes: {
+                ...baseAttributes,
+                channel: 'index',
+                failedRenders: row.diagnostics?.transientRenderFailureRenders,
+                transientRenderError: row.diagnostics?.transientRenderError,
+              },
+            });
+          }
         }
         return findings.map((finding) => ({
           type: finding.type,
@@ -20929,14 +21054,53 @@ export class Realm {
       }),
     };
 
+    // Renderings whose transient render failures used up their retries: the
+    // HTML channel's twin of the index rows the query above admits by the
+    // same test. One that had a good render keeps it and reads as healthy, so
+    // this is where that shows; one that had none (`noGoodRowToKeep`) shows as
+    // errored as well.
+    let staleRenderings = (await query(this.#dbAdapter, [
+      `SELECT url, type, diagnostics FROM prerendered_html WHERE realm_url =`,
+      param(sourceRealmURL),
+      `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      `AND ${transientRetriesExhaustedSQL}`,
+      `ORDER BY type, url`,
+    ])) as {
+      url: string;
+      type: string;
+      diagnostics: Record<string, unknown> | null;
+    }[];
+    let renderingFindings = staleRenderings.map((row) => ({
+      type: 'transient-render-retries-exhausted',
+      id: `html::${row.type}::${row.url}::transient-render-retries-exhausted`,
+      attributes: {
+        url: row.url,
+        entryType: row.type,
+        channel: 'html',
+        failedRenders: row.diagnostics?.transientRenderFailureRenders ?? null,
+        transientRenderError: row.diagnostics?.transientRenderError ?? null,
+      },
+    }));
+    let data = [...renderingFindings, ...doc.data];
+    let body = {
+      data,
+      meta: {
+        // How many index rows and renderings are stale because their
+        // transient render failures used up their retries.
+        transientRenderRetriesExhausted: data.filter(
+          (finding) => finding.type === 'transient-render-retries-exhausted',
+        ).length,
+      },
+    };
+
     // The stored error documents carry the stacks an error response would
     // withhold, and this answers with a 200, so `createResponse` leaves it be.
     if (withholdsStacksFrom(requestContext)) {
-      removeStacks(doc.data);
+      removeStacks(body.data);
     }
 
     return createResponse({
-      body: JSON.stringify(doc, null, 2),
+      body: JSON.stringify(body, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.JSONAPI },
       },
@@ -21085,6 +21249,54 @@ export class Realm {
     });
   }
 
+  private async automationRunList(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    // Loaded on first use, like `automation-status.ts`: only a realm server
+    // has the runs to list.
+    let {
+      answerAutomationRunList,
+      AUTOMATION_RUN_LIST_AUTOMATION_PARAM,
+      AUTOMATION_RUN_LIST_PAGE_PARAM,
+      AUTOMATION_RUN_LIST_LIMIT_PARAM,
+    } = await import('./automation-run-list.ts');
+    let params = new URL(request.url).searchParams;
+    let answer = await answerAutomationRunList({
+      dbAdapter: this.#dbAdapter,
+      realmURL: new URL(this.url),
+      matrixServerName: this.#matrixClient.serverName,
+      virtualNetwork: this.#virtualNetwork,
+      viewer: await this.#statusViewer(requestContext),
+      automation: params.get(AUTOMATION_RUN_LIST_AUTOMATION_PARAM),
+      page: params.get(AUTOMATION_RUN_LIST_PAGE_PARAM),
+      limit: params.get(AUTOMATION_RUN_LIST_LIMIT_PARAM),
+    });
+    if (answer.status !== 200) {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [{ status: String(answer.status), detail: answer.message }],
+        }),
+        init: {
+          status: answer.status,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+        requestContext,
+      });
+    }
+    return createResponse({
+      body: JSON.stringify(answer.document),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          // Runs start, move and end without the realm hearing of it.
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
+  }
+
   private async automationStatus(
     request: Request,
     requestContext: RequestContext,
@@ -21135,16 +21347,23 @@ export class Realm {
     });
   }
 
-  // Who asks for an automation's status, for the realm's automations, or for
-  // the webhooks the realm's automations may name: the session the realm vouches for
-  // (`#sessionPrincipal`), so a revoked session or one delegated to another
-  // realm asks as no one. A realm-authority session is a realm rendering its
+  // Who asks for an automation's status or runs, for the realm's
+  // automations, or for the webhooks the realm's automations may name: the
+  // session the realm vouches for (`#sessionPrincipal`), so a revoked session
+  // or one delegated to another realm asks as no one. A realm-authority session is a realm rendering its
   // own cards, and a diagnostic session is an operator reading as a user;
-  // neither is a person looking at the card, so neither sees the payer.
+  // neither is a person looking at the card, so neither sees the payer. A
+  // caller the realm ACL refused, whom the realm handed to its policy, asks as
+  // no one too: no grant reaches what these routes serve, so they are told
+  // they aren't a direct writer, which reads nothing about the realm.
   async #statusViewer(
     requestContext: RequestContext,
   ): Promise<string | undefined> {
-    if (requestContext.realmAuthority || requestContext.diagnosticSession) {
+    if (
+      requestContext.coarseAllowed === false ||
+      requestContext.realmAuthority ||
+      requestContext.diagnosticSession
+    ) {
       return undefined;
     }
     return await this.#sessionPrincipal(requestContext);

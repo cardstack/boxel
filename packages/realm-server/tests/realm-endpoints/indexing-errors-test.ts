@@ -8,6 +8,7 @@ import { rri } from '@cardstack/runtime-common';
 import {
   DEFAULT_PERMISSIONS,
   SupportedMimeType,
+  TRANSIENT_RENDER_FAILURE_RETRY_CAP,
 } from '@cardstack/runtime-common';
 
 import {
@@ -18,6 +19,7 @@ import {
   type RealmRequest,
   withRealmPath,
 } from '../helpers/index.ts';
+import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
 
 const ownerUserId = '@mango:localhost';
 
@@ -364,6 +366,95 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         null,
         'errorDoc passes through as null',
       );
+    });
+
+    test('lists the rows and renderings whose transient render failures used up their retries, and counts them', async function (assert) {
+      await sourceRealm.realmIndexUpdater.fullIndex();
+      // Any rendering job in flight lands first, so it cannot overwrite the
+      // rows this test stamps.
+      await settlePrerenderHtmlJobs(dbAdapter, sourceRealm.url, {
+        timeout: 60_000,
+      });
+      let cardURL = `${sourceRealm.url}broken-instance.json`;
+      let stamp = (renders: number) =>
+        JSON.stringify({
+          transientRenderFailure: ['instance'],
+          transientRenderFailureRenders: renders,
+          transientRenderError: {
+            status: 504,
+            message: 'Render timed-out after 60000 ms',
+          },
+        });
+      let get = async () =>
+        await request
+          .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
+          .set('Accept', SupportedMimeType.JSONAPI)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+          );
+      let exhausted = (body: {
+        data: Array<{ type: string; attributes: Record<string, unknown> }>;
+      }) =>
+        body.data
+          .filter((e) => e.type === 'transient-render-retries-exhausted')
+          .map((e) => `${e.attributes.channel}:${e.attributes.url}`)
+          .sort();
+      let stampBoth = async (renders: number | null) => {
+        let diagnostics = renders === null ? null : stamp(renders);
+        await dbAdapter.execute(
+          `UPDATE boxel_index SET has_error = FALSE, error_doc = NULL, diagnostics = $1::jsonb
+           WHERE url = $2 AND realm_url = $3 AND type = 'instance'`,
+          { bind: [diagnostics, cardURL, sourceRealm.url] },
+        );
+        await dbAdapter.execute(
+          `INSERT INTO prerendered_html (url, file_alias, realm_url, type, generation, diagnostics)
+           VALUES ($1, $1, $2, 'instance', 0, $3::jsonb)
+           ON CONFLICT (url, realm_url, type)
+           DO UPDATE SET error_doc = NULL, diagnostics = EXCLUDED.diagnostics`,
+          { bind: [cardURL, sourceRealm.url, diagnostics] },
+        );
+      };
+
+      try {
+        // Still within its retries: nothing to report yet.
+        await stampBoth(TRANSIENT_RENDER_FAILURE_RETRY_CAP);
+        let response = await get();
+        assert.strictEqual(response.status, 200);
+        assert.deepEqual(exhausted(response.body), []);
+        assert.strictEqual(
+          response.body.meta.transientRenderRetriesExhausted,
+          0,
+        );
+
+        // The last retry failed too: both channels kept their stale content.
+        await stampBoth(TRANSIENT_RENDER_FAILURE_RETRY_CAP + 1);
+        response = await get();
+        assert.deepEqual(exhausted(response.body), [
+          `html:${cardURL}`,
+          `index:${cardURL}`,
+        ]);
+        assert.strictEqual(
+          response.body.meta.transientRenderRetriesExhausted,
+          2,
+          'counted',
+        );
+        let finding = response.body.data.find(
+          (e: { type: string; attributes: { channel: string } }) =>
+            e.type === 'transient-render-retries-exhausted' &&
+            e.attributes.channel === 'html',
+        );
+        assert.strictEqual(
+          finding.attributes.failedRenders,
+          TRANSIENT_RENDER_FAILURE_RETRY_CAP + 1,
+        );
+        assert.strictEqual(
+          finding.attributes.transientRenderError.message,
+          'Render timed-out after 60000 ms',
+        );
+      } finally {
+        await stampBoth(null);
+      }
     });
 
     test('surfaces broken-link rows even when has_error is FALSE', async function (assert) {

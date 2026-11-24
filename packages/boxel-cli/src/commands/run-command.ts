@@ -6,6 +6,7 @@ import {
 import { FG_GREEN, FG_RED, FG_CYAN, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
 import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
+import { describeFetchError } from '../lib/describe-fetch-error.ts';
 
 export interface RunCommandResult {
   status: 'ready' | 'error' | 'unusable';
@@ -73,7 +74,7 @@ export async function runCommand(
   } catch (err) {
     return {
       status: 'error',
-      error: `run-command fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `run-command fetch failed: ${describeFetchError(err)}`,
     };
   }
 

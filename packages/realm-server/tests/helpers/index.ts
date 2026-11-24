@@ -388,7 +388,13 @@ import {
 } from '../../lib/policy-share-audit.ts';
 import { realmPolicyPointer } from '../../lib/realm-policy-pointer.ts';
 import { meteredChargesFor } from '../../lib/metered-charge.ts';
-import { readPricing, type Pricing } from '../../lib/pricing.ts';
+import {
+  checkPricingAtStartup,
+  currentPricing,
+  readPricing,
+  type Pricing,
+  type PricingReporter,
+} from '../../lib/pricing.ts';
 export { realmInfoExtraKeys, withoutRealmInfoExtras };
 
 // Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
@@ -1998,6 +2004,7 @@ export async function runTestRealmServer({
     reconciler,
     virtualNetwork,
     matrixClient,
+    automationAccountStanding: testAutomationAdmissionChecks.accountStanding,
     realmServerSecretSeed,
     realmSecretSeed,
     matrixRegistrationSecret,
@@ -2221,6 +2228,7 @@ export async function runTestRealmServerWithRealms({
     reconciler,
     virtualNetwork,
     matrixClient,
+    automationAccountStanding: testAutomationAdmissionChecks.accountStanding,
     realmServerSecretSeed,
     realmSecretSeed,
     matrixRegistrationSecret,
@@ -2424,7 +2432,16 @@ export async function insertUser(
 // (4 × 0.04048 + 16 × 0.004445) / 8 / 3600 USD a second and a worker process
 // (2 × 0.03238 + 4 × 0.00356) / 2 / 3600 USD a second, at a margin of 2.
 export function testPricing(): Pricing {
-  let check = readPricing({
+  let check = readPricing(testPricingEnv());
+  if (!check.ok) {
+    throw new Error(`test pricing failed: ${JSON.stringify(check.problems)}`);
+  }
+  return check.pricing;
+}
+
+// The `PRICING_*` environment `testPricing` reads.
+export function testPricingEnv(): Record<string, string> {
+  return {
     PRICING_PRERENDER_USD_PER_VCPU_HOUR: '0.04048',
     PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR: '0.004445',
     PRICING_PRERENDER_TASK_VCPUS: '4',
@@ -2440,11 +2457,31 @@ export function testPricing(): Pricing {
     PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH: '0.115',
     PRICING_MARGIN: '2',
     PRICING_MINIMUM_BALANCE_FLOOR_CREDITS: '1000',
+  };
+}
+
+// A pricing reporter that logs nothing, for tests that run the startup check.
+export const silentPricingReporter: PricingReporter = {
+  info() {},
+  error() {},
+  alert() {},
+};
+
+// Gives this test process `testPricing()` as the prices it checked at
+// startup, for the module's tests, as a realm server or worker whose pricing
+// check passed has them (`currentPricing()`). A process that had no prices
+// before the module is left without them after it.
+export function setupProcessPricing(hooks: NestedHooks, processName: string) {
+  let pricedBefore = false;
+  hooks.before(function () {
+    pricedBefore = currentPricing() !== undefined;
+    checkPricingAtStartup(processName, testPricingEnv(), silentPricingReporter);
   });
-  if (!check.ok) {
-    throw new Error(`test pricing failed: ${JSON.stringify(check.problems)}`);
-  }
-  return check.pricing;
+  hooks.after(function () {
+    if (!pricedBefore) {
+      checkPricingAtStartup(processName, {}, silentPricingReporter);
+    }
+  });
 }
 
 export async function ensureTestUser(
@@ -3573,6 +3610,7 @@ async function buildBaseRealmTemplate(
       reconciler: makeTestReconciler(dbAdapter, [base]),
       virtualNetwork,
       matrixClient,
+      automationAccountStanding: testAutomationAdmissionChecks.accountStanding,
       realmServerSecretSeed,
       realmSecretSeed,
       grafanaSecret,
@@ -3944,6 +3982,7 @@ export function automationFixture({
   caps = {},
   path = TEST_AUTOMATION_PATH,
   triggers = [],
+  batchedAI = false,
 }: {
   operations: {
     type: { module: string; name: string };
@@ -3956,6 +3995,8 @@ export function automationFixture({
   // Where the card goes, relative to the realm's root, for a realm that
   // holds more than one.
   path?: string;
+  // Whether the card turns on batched AI.
+  batchedAI?: boolean;
 }): Record<string, string> {
   let scriptName = `${path.split('/').pop()}-script.js`;
   return {
@@ -3973,6 +4014,7 @@ export function automationFixture({
           ),
           caps: { ...ROOMY_AUTOMATION_CAPS, ...caps },
           params: [],
+          ...(batchedAI ? { batchedAI: true } : {}),
         },
         relationships: {
           script: { links: { self: `./${scriptName}` } },
@@ -4160,3 +4202,12 @@ export const testAccountStandings = new Map<string, AccountStanding>();
 export const testAutomationAdmissionChecks: AutomationAdmissionChecks = {
   accountStanding: async (user) => testAccountStandings.get(user) ?? 'usable',
 };
+
+// A resume's admission that admits every payer, for a test of what resuming
+// does once its payer is admitted.
+export async function admitAnyPayer(
+  _payer: string,
+  _firstRun: { at: number | null },
+): Promise<undefined> {
+  return undefined;
+}

@@ -125,6 +125,40 @@ describe("a flow's consent details", () => {
     assert.deepEqual(details, DETAILS);
   });
 
+  test("keeps where Boxel's own app runs, and a confirmation code of its form", () => {
+    let own = {
+      ...DETAILS,
+      app: {
+        kind: 'pre-registered',
+        shown: 'Boxel CLI',
+        verified: true,
+        place: 'this-computer',
+      },
+      outsideApp: false,
+      confirmationCode: 'WDJB-MJHT',
+    };
+    assert.deepEqual(readConsentDetails(own), own);
+    for (let code of ['wdjb-mjht', 'WDJB-MJHA', 'WDJBMJHT', '<b>WDJB</b>', 7]) {
+      assert.ok(
+        !(
+          'confirmationCode' in
+          readConsentDetails({ ...own, confirmationCode: code })
+        ),
+        `drops ${String(code)}`,
+      );
+    }
+    assert.ok(
+      !(
+        'place' in
+        readConsentDetails({
+          ...DETAILS,
+          app: { ...DETAILS.app, place: 'this-computer' },
+        }).app
+      ),
+      "an outside app's place is dropped",
+    );
+  });
+
   test('refuses a response without what the page needs', () => {
     assert.throws(() => readConsentDetails({ ...DETAILS, resources: [] }));
     assert.throws(() =>

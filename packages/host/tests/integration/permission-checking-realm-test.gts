@@ -1,4 +1,4 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { click, settled, waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -10,6 +10,7 @@ import {
   ri,
   rri,
   type LooseSingleCardDocument,
+  type Realm,
 } from '@cardstack/runtime-common';
 import { isCardErrorJSONAPI } from '@cardstack/runtime-common/error';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -57,6 +58,8 @@ const SCHOOL_ADMIN = '@school-admin:localhost';
 const ROOM_204 = `${SCHOOL}classrooms/room-204`;
 const SCHOOL_ICON = 'https://boxel-images.boxel.ai/icons/Letter-s.png';
 const ROOM_205 = `${SCHOOL}classrooms/room-205`;
+const ROOM_206 = `${SCHOOL}classrooms/room-206`;
+const NIGHTLY = `${SCHOOL}automations/nightly`;
 
 // Is the caller one of the classroom's teachers.
 const TEACHES = '.teacherIds | any(. == actor())';
@@ -135,6 +138,51 @@ const REALM_POLICY = {
   name: 'RealmPolicy',
 };
 
+const AUTOMATION = {
+  module: rri('@cardstack/catalog/automation/automation'),
+  name: 'Automation',
+};
+
+// An automation the school runs every night. It names no script, so its view
+// asks the realm for nothing but the automation's status and runs.
+const nightlyAutomation: LooseSingleCardDocument = {
+  data: {
+    type: 'card',
+    attributes: {
+      cardInfo: { name: 'Nightly roll call', summary: null },
+      triggers: [
+        {
+          kind: 'cron',
+          label: 'nightly',
+          expression: '30 2 * * *',
+          timeZone: 'America/Chicago',
+          untilDate: null,
+          untilTime: null,
+          count: null,
+          date: null,
+          time: null,
+          webhookPath: null,
+        },
+      ],
+      operations: [],
+      caps: {
+        callApiCalls: 0,
+        responseBytes: 0,
+        resolveCalls: 0,
+        writes: 1,
+        seconds: 60,
+        dailyCredits: 5,
+        monthlyCredits: 10,
+        aiCredits: 0,
+      },
+      params: [],
+      batchedAI: false,
+      batchDeadlineMinutes: null,
+    },
+    meta: { adoptsFrom: AUTOMATION },
+  },
+};
+
 const classroomPolicy: LooseSingleCardDocument = {
   data: {
     type: 'card',
@@ -148,6 +196,24 @@ const classroomPolicy: LooseSingleCardDocument = {
             { operation: 'rename', where: TEACHES },
           ],
         },
+      ],
+    },
+    meta: { adoptsFrom: REALM_POLICY },
+  },
+};
+
+// Lets any signed-in caller read a classroom or an automation.
+const classroomAndAutomationPolicy: LooseSingleCardDocument = {
+  data: {
+    type: 'card',
+    attributes: {
+      cardInfo: { name: 'Classrooms and automations' },
+      rules: [
+        {
+          targetType: { module: `${DEFINITIONS}classroom`, name: 'Classroom' },
+          grants: [{ operation: 'read' }],
+        },
+        { targetType: AUTOMATION, grants: [{ operation: 'read' }] },
       ],
     },
     meta: { adoptsFrom: REALM_POLICY },
@@ -214,6 +280,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
   setupLocalIndexing(hooks);
 
   let loader: Loader;
+  let school: Realm;
   let operations: (typeof OperationsModule)['operations'];
   let hostTransport: unknown;
 
@@ -243,12 +310,15 @@ module('Integration | a realm that checks permissions', function (hooks) {
     enforcePermissions,
     readableByTestUser,
     policy = classroomPolicy,
+    contents = {},
   }: {
     enforcePermissions?: true;
     // Gives the test user read on the school realm, and nothing more.
     readableByTestUser?: true;
     // The policy card the school names, or null for a school that names none.
     policy?: LooseSingleCardDocument | null;
+    // More files the school holds.
+    contents?: Record<string, LooseSingleCardDocument>;
   }): Promise<TestRealmAdapter> {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -259,7 +329,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
         'classroom.gts': CLASSROOM_MODULE,
       },
     });
-    let { adapter } = await setupIntegrationTestRealm({
+    let { adapter, realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       realmURL: SCHOOL,
       enforcePermissions,
@@ -276,8 +346,10 @@ module('Integration | a realm that checks permissions', function (hooks) {
         'classrooms/room-204.json': classroom('Room 204', [TEST_USER]),
         'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
         ...(policy ? { 'policies/classrooms.json': policy } : {}),
+        ...contents,
       },
     });
+    school = realm;
     // Imported through the loader the realm's instances were built by, since
     // `operations()` asks what a card is an instance of.
     ({ operations } = await loader.import<typeof OperationsModule>(
@@ -349,6 +421,80 @@ module('Integration | a realm that checks permissions', function (hooks) {
         `[data-test-stack-card-header] [data-test-card-header-realm-icon="${SCHOOL_ICON}"]`,
       )
       .exists('with the realm’s icon in its header');
+  });
+
+  // An Automation card's view asks the realm for the automation's status and
+  // runs while it renders. The host takes a 401 or 403 from either as an auth
+  // failure, and the in-browser renderer fails the next render it runs on
+  // one, so a card the realm indexes while the automation is open would fail
+  // to load. A user the realm admits only through its policy is told that
+  // they aren't a direct writer instead.
+  test('a user the policy admits opens an automation, and a card the realm indexes beside it still loads', async function (assert) {
+    await setupSchool({
+      enforcePermissions: true,
+      policy: classroomAndAutomationPolicy,
+      contents: { 'automations/nightly.json': nightlyAutomation },
+    });
+    let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
+    await realmService.login(SCHOOL);
+    assert.false(
+      realmService.canRead(SCHOOL),
+      'the school realm’s ACL gives the test user nothing',
+    );
+
+    let operatorModeState = getService('operator-mode-state-service');
+    operatorModeState.restore({
+      stacks: [[{ id: NIGHTLY, format: 'isolated' }]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(
+      `[data-test-stack-card="${NIGHTLY}"] [data-test-automation]`,
+      {
+        timeout: 10000,
+      },
+    );
+    await settled();
+    assert
+      .dom(`[data-test-stack-card="${NIGHTLY}"] [data-test-automation-status]`)
+      .doesNotExist('the view shows no server state to a non-direct-writer');
+
+    await school.write(
+      'classrooms/room-206.json',
+      JSON.stringify(classroom('Room 206', [TEST_USER])),
+    );
+    await settleRealmRenders();
+    operatorModeState.restore({
+      stacks: [
+        [{ id: NIGHTLY, format: 'isolated' }],
+        [{ id: ROOM_206, format: 'isolated' }],
+      ],
+    });
+    await waitFor(
+      `[data-test-stack-card="${ROOM_206}"] [data-test-classroom-title]`,
+      { timeout: 10000 },
+    );
+    assert
+      .dom(`[data-test-stack-card="${ROOM_206}"] [data-test-classroom-title]`)
+      .hasText('Room 206', 'the classroom indexed beside the automation loads');
+    assert
+      .dom(`[data-test-stack-card="${NIGHTLY}"] [data-test-automation]`)
+      .exists('and the automation is still open');
+
+    await settleRealmRenders();
+    let status = await getService('network').authedFetch(
+      `${SCHOOL}_automation-status?automation=${encodeURIComponent(NIGHTLY)}`,
+      { headers: { Accept: 'application/json' } },
+    );
+    assert.deepEqual(
+      [status.status, await status.text()],
+      [200, JSON.stringify({ data: null, meta: { directWriter: false } })],
+      'the realm tells the user that they aren’t a direct writer',
+    );
   });
 
   test('the AI context tells a user who can only read the realm what its policy grants', async function (assert) {

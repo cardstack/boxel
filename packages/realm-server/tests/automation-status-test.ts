@@ -4,12 +4,13 @@ import { randomUUID } from 'crypto';
 import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
 import jsonwebtoken from 'jsonwebtoken';
-import type { PgAdapter } from '@cardstack/postgres';
+import { PgQueuePublisher, type PgAdapter } from '@cardstack/postgres';
 import {
   addToCreditsLedger,
   getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
 import {
+  archiveRealm,
   insertPermissions,
   internalKeyFor,
   param,
@@ -29,13 +30,20 @@ import {
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
 import type { AutomationStatusDocument } from '@cardstack/runtime-common/automation-status';
 import type { AutomationListDocument } from '@cardstack/runtime-common/automation-list';
+import type { AutomationRunListDocument } from '@cardstack/runtime-common/automation-run-list';
+import { scriptErrorText } from '@cardstack/runtime-common/automation-run-command';
+import { tickAutomations } from '@cardstack/runtime-common/automation-tick';
 import { appendRunLog } from '@cardstack/runtime-common/automation-run-log';
 import {
+  cancelAutomationRun,
   createAutomationRun,
+  endAutomationRunAtCap,
   finishAutomationRun,
+  recordAutomationRunAdmitted,
   startAutomationRunAttempt,
 } from '@cardstack/runtime-common/automation-runs';
 import {
+  checkAutomationCaps,
   pauseAutomation,
   switchOnAutomation,
   type AutomationActorOptions,
@@ -48,6 +56,7 @@ import {
   ensureTestUser,
   insertIncomingWebhookRow,
   insertUser,
+  realmConfigCardJSON,
   realmSecretSeed,
   setupPermissionedRealmCached,
   setupSecretsKeyring,
@@ -899,6 +908,548 @@ module(basename(import.meta.filename), function (hooks) {
       });
     });
 
+    // The route the Automation card's isolated view lists the automation's
+    // runs from.
+    module("an automation's runs", function () {
+      function runsOf(
+        user: string,
+        permissions: ('read' | 'write')[],
+        query: Record<string, string> | null = {
+          automation: automationURL(),
+        },
+      ) {
+        let search = query ? `?${new URLSearchParams(query)}` : '';
+        return request
+          .get(`/_automation-runs${search}`)
+          .set('Accept', SupportedMimeType.JSON)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, user, permissions)}`,
+          );
+      }
+
+      async function listed(
+        user = ADMIN,
+        query?: Record<string, string>,
+      ): Promise<AutomationRunListDocument> {
+        let response = await runsOf(user, ['read', 'write'], {
+          automation: automationURL(),
+          ...query,
+        });
+        if (response.status !== 200) {
+          throw new Error(
+            `expected the runs, got ${response.status}: ${response.text}`,
+          );
+        }
+        return response.body as AutomationRunListDocument;
+      }
+
+      // A run of the automation, made `minutesAgo` minutes before the others
+      // so the list's order is the order the test made them in, and started
+      // by its first attempt unless it is `waiting`.
+      async function made(
+        trigger: string,
+        slot: string,
+        minutesAgo: number,
+        extra: { dryRun?: boolean; actsAs?: string; waiting?: boolean } = {},
+      ) {
+        let run = await createAutomationRun(dbAdapter, {
+          automationId: rri(automationURL()),
+          realm: ri(testRealm.url),
+          trigger,
+          slot,
+          actsAs: extra.actsAs ?? ADMIN,
+          dryRun: extra.dryRun,
+        });
+        await query(dbAdapter, [
+          `UPDATE automation_runs SET created_at = now() - make_interval(mins =>`,
+          param(minutesAgo),
+          `) WHERE id =`,
+          param(run.id),
+        ]);
+        if (!extra.waiting) {
+          await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        }
+        return run;
+      }
+
+      async function ended(
+        runId: string,
+        outcome:
+          | { state: 'complete' }
+          | { state: 'error'; reason: string; message: string },
+        { admit = true }: { admit?: boolean } = {},
+      ) {
+        await startAutomationRunAttempt(dbAdapter, runId, 1);
+        if (admit) {
+          await recordAutomationRunAdmitted(dbAdapter, runId, 1);
+        }
+        await finishAutomationRun(dbAdapter, runId, 1, outcome);
+      }
+
+      test('an automation with no runs lists none', async function (assert) {
+        await writeAutomation();
+        let response = await runsOf(ADMIN, ['read', 'write']);
+        assert.strictEqual(response.status, 200, 'HTTP 200');
+        assert.strictEqual(response.headers['cache-control'], 'no-store');
+        assert.deepEqual(response.body, {
+          data: [],
+          meta: { directWriter: true, page: 1, pages: 1, total: 0 },
+        });
+      });
+
+      test('each run lists what started it, its state and step, newest first, from the moment the run is made', async function (assert) {
+        await writeAutomation();
+        let scheduled = await made('nightly', '2026-11-10T08:30:00.000Z', 40);
+        await ended(scheduled.id, { state: 'complete' });
+        let preview = await made('manual', randomUUID(), 30, { dryRun: true });
+        await ended(preview.id, { state: 'complete' });
+        let runNow = await made('manual', randomUUID(), 20);
+        await recordAutomationRunAdmitted(dbAdapter, runNow.id, 1);
+        let waiting = await made('hourly', '2026-11-10T18:00:00.000Z', 10, {
+          waiting: true,
+        });
+
+        let { data, meta } = await listed();
+        assert.deepEqual(
+          data.map(({ id, attributes: a }) => [
+            id,
+            a.startedBy,
+            a.trigger,
+            a.slot,
+            a.state,
+            a.step,
+          ]),
+          [
+            [
+              waiting.id,
+              'trigger',
+              'hourly',
+              '2026-11-10T18:00:00.000Z',
+              'pending',
+              null,
+            ],
+            [runNow.id, 'run-now', null, null, 'running', 'script'],
+            [preview.id, 'preview', null, null, 'complete', 'script'],
+            [
+              scheduled.id,
+              'trigger',
+              'nightly',
+              '2026-11-10T08:30:00.000Z',
+              'complete',
+              'script',
+            ],
+          ],
+          "a run still waiting for its first attempt is listed, and a click's slot means nothing to a person, so a Preview and a Run now list none",
+        );
+        assert.deepEqual(
+          [meta.page, meta.pages, meta.total],
+          [1, 1, 4],
+          'one page holds them all',
+        );
+        assert.deepEqual(
+          data.map(({ attributes: a }) => a.waitingFor),
+          [
+            {
+              kind: 'run',
+              runId: runNow.id,
+              startedBy: 'run-now',
+              trigger: null,
+              slot: null,
+              state: 'running',
+            },
+            null,
+            null,
+            null,
+          ],
+          'a waiting run names the run ahead of it in the automation’s queue',
+        );
+        let complete = data[3].attributes;
+        assert.ok(complete.startedAt, 'with when it started');
+        assert.ok(complete.finishedAt, 'and when it ended');
+        assert.strictEqual(complete.errorReason, null);
+        assert.deepEqual(complete.joined, []);
+      });
+
+      test("an error lists its reason and message, a script's error the line it points at, and a capped run its cap", async function (assert) {
+        await writeAutomation();
+        let threw = await made('nightly', '2026-11-08T08:30:00.000Z', 50);
+        await ended(threw.id, {
+          state: 'error',
+          reason: 'script-error',
+          message: scriptErrorText('TypeError: feed.items is undefined', 7),
+        });
+        let timedOut = await made('nightly', '2026-11-09T08:30:00.000Z', 40);
+        await ended(timedOut.id, {
+          state: 'error',
+          reason: 'timed-out',
+          message: 'The run reached its 300-second time limit',
+        });
+        let capped = await made('nightly', '2026-11-10T08:30:00.000Z', 30);
+        await startAutomationRunAttempt(dbAdapter, capped.id, 1);
+        await recordAutomationRunAdmitted(dbAdapter, capped.id, 1);
+        await endAutomationRunAtCap(dbAdapter, capped.id, 1, 'writes');
+        let refused = await made('hourly', '2026-11-10T18:00:00.000Z', 20);
+        await ended(
+          refused.id,
+          {
+            state: 'error',
+            reason: 'insufficient-credits',
+            message: `${PAYER} has 2 credits, less than the run's minimum of 5`,
+          },
+          { admit: false },
+        );
+
+        let { data } = await listed();
+        assert.deepEqual(
+          data.map(({ attributes: a }) => [
+            a.state,
+            a.step,
+            a.errorReason,
+            a.errorMessage,
+            a.scriptLine,
+            a.cap,
+          ]),
+          [
+            [
+              'error',
+              'admission',
+              'insufficient-credits',
+              `${PAYER} has 2 credits, less than the run's minimum of 5`,
+              null,
+              null,
+            ],
+            [
+              'error',
+              'script',
+              'hit-a-cap',
+              'The run hit its writes cap',
+              null,
+              'writes',
+            ],
+            [
+              'error',
+              'script',
+              'timed-out',
+              'The run reached its 300-second time limit',
+              null,
+              null,
+            ],
+            [
+              'error',
+              'script',
+              'script-error',
+              'TypeError: feed.items is undefined',
+              7,
+              null,
+            ],
+          ],
+          'a run admission refused stays at the admission step: its script never started',
+        );
+      });
+
+      test('each run lists its milestones: the one a running run is in, and the one a failed run failed in', async function (assert) {
+        await writeAutomation();
+        let plan = ['Fetch open issues', 'Group by label', 'Write digest'];
+        async function reached(runId: string, names: string[]) {
+          let at = Date.parse('2026-11-10T18:00:00.000Z');
+          await appendRunLog(dbAdapter, runId, [
+            {
+              at,
+              source: 'script',
+              kind: 'plan',
+              message: `Plan: ${plan.join(' → ')}`,
+              data: { milestones: plan },
+            },
+            ...names.map((name, index) => ({
+              at: at + index * 1_000,
+              source: 'script' as const,
+              kind: 'milestone' as const,
+              message: `Milestone: ${name}`,
+              data: { name },
+            })),
+          ]);
+        }
+        let failed = await made('nightly', '2026-11-09T08:30:00.000Z', 20);
+        await recordAutomationRunAdmitted(dbAdapter, failed.id, 1);
+        await reached(failed.id, ['Fetch open issues', 'Group by label']);
+        await finishAutomationRun(dbAdapter, failed.id, 1, {
+          state: 'error',
+          reason: 'script-error',
+          message: scriptErrorText('TypeError: labels is undefined', 12),
+        });
+        let running = await made('nightly', '2026-11-10T08:30:00.000Z', 10);
+        await recordAutomationRunAdmitted(dbAdapter, running.id, 1);
+        await reached(running.id, ['Fetch open issues']);
+
+        let { data } = await listed();
+        let [inProgress, ended] = data.map(({ attributes }) => attributes);
+        assert.deepEqual(
+          [
+            inProgress.milestones?.current,
+            inProgress.milestones?.milestones.map(({ name }) => name),
+            inProgress.milestones?.ahead,
+          ],
+          [
+            'Fetch open issues',
+            ['Fetch open issues'],
+            ['Group by label', 'Write digest'],
+          ],
+          'a running run is in its last milestone, with the rest of the plan ahead',
+        );
+        assert.deepEqual(
+          [ended.milestones?.failedIn, ended.milestones?.ahead],
+          ['Group by label', ['Write digest']],
+          'a failed run names the milestone it failed in',
+        );
+      });
+
+      test('every waiting run names the running run as what the run waits for, or waits for a worker when none runs', async function (assert) {
+        await writeAutomation();
+        let earlier = await made('nightly', '2026-11-10T08:30:00.000Z', 40, {
+          waiting: true,
+        });
+        let later = await made('hourly', '2026-11-10T18:00:00.000Z', 30, {
+          waiting: true,
+        });
+        let byWaiting = async () =>
+          new Map(
+            (await listed()).data.map(({ id, attributes }) => [
+              id,
+              attributes.waitingFor,
+            ]),
+          );
+        let waiting = await byWaiting();
+        assert.deepEqual(
+          [waiting.get(earlier.id), waiting.get(later.id)],
+          [{ kind: 'worker' }, { kind: 'worker' }],
+          'with nothing running, every waiting run waits for a worker',
+        );
+
+        let running = await made('manual', randomUUID(), 20);
+        await recordAutomationRunAdmitted(dbAdapter, running.id, 1);
+        waiting = await byWaiting();
+        let ahead = {
+          kind: 'run',
+          runId: running.id,
+          startedBy: 'run-now',
+          trigger: null,
+          slot: null,
+          state: 'running',
+        };
+        assert.deepEqual(
+          [waiting.get(earlier.id), waiting.get(later.id)],
+          [ahead, ahead],
+          'each waiting run names the running run, not the waiting run made just before it',
+        );
+      });
+
+      test('a canceled run lists who canceled it, and a pause no person asked for lists its reason', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        let byPerson = await made('nightly', '2026-11-10T08:30:00.000Z', 20);
+        await cancelAutomationRun(dbAdapter, byPerson.id, PAYER);
+        let byPause = await made('hourly', '2026-11-10T18:00:00.000Z', 10);
+        await query(dbAdapter, [
+          `UPDATE automations SET caps_snapshot = jsonb_set(caps_snapshot, '{writes}', '1') WHERE automation_id =`,
+          param(automationURL()),
+        ]);
+        let paused = await checkAutomationCaps(
+          dbAdapter,
+          rri(automationURL()),
+          await indexedDeclaration(),
+        );
+        assert.deepEqual(
+          [paused?.state, paused?.pauseReason],
+          ['paused', 'caps-raised'],
+          'a card asking for more than its caps snapshot pauses it',
+        );
+
+        let { data } = await listed();
+        assert.deepEqual(
+          data.map(({ id, attributes: a }) => [
+            id,
+            a.state,
+            a.errorReason,
+            a.canceledBy,
+            a.canceledByAPerson,
+            a.viewerCanceled,
+          ]),
+          [
+            [byPause.id, 'canceled', 'caps-raised', null, false, false],
+            [byPerson.id, 'canceled', null, PAYER, true, false],
+          ],
+        );
+        let own = (await listed(PAYER)).data[1].attributes;
+        assert.deepEqual(
+          [own.canceledBy, own.viewerCanceled],
+          [PAYER, true],
+          'the person who canceled it reads as the viewer',
+        );
+      });
+
+      test('who canceled a run and who it acts as are hidden from a writer who shares no grant with them', async function (assert) {
+        await writeAutomation();
+        let run = await made('manual', randomUUID(), 10, { actsAs: PAYER });
+        await cancelAutomationRun(dbAdapter, run.id, PAYER);
+        await query(dbAdapter, [
+          `DELETE FROM realm_user_permissions WHERE username =`,
+          param(PAYER),
+          `AND realm_url =`,
+          param(testRealm.url),
+        ]);
+        let [hidden] = (await listed()).data;
+        assert.deepEqual(
+          [
+            hidden.attributes.canceledBy,
+            hidden.attributes.canceledByAPerson,
+            hidden.attributes.actsAs,
+            hidden.attributes.viewerIsActsAs,
+          ],
+          [null, true, null, false],
+          'a person canceled it, and the run acts as a person, but not who',
+        );
+
+        await insertPermissions(dbAdapter, new URL(ELSEWHERE), {
+          [PAYER]: ['read'],
+          [ADMIN]: ['read'],
+        });
+        let [shown] = (await listed()).data;
+        assert.deepEqual(
+          [shown.attributes.canceledBy, shown.attributes.actsAs],
+          [PAYER, PAYER],
+          'a grant that names both of them in another realm is enough',
+        );
+      });
+
+      test('a slot that joined a run still waiting to start lists under that run', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        let declaration = await indexedDeclaration();
+        let publisher = new PgQueuePublisher(dbAdapter as PgAdapter);
+        try {
+          let tick = (now: number) =>
+            tickAutomations(dbAdapter, {
+              queue: publisher,
+              virtualNetwork: createVirtualNetwork(),
+              readDeclaration: async () => ({ ok: true, declaration }),
+              now,
+            });
+          // The hourly trigger's 13:00 run is still waiting for a worker when
+          // 14:00 comes due.
+          let one = zonedDateTimeToUnixSeconds(
+            '2026-11-10T13:00',
+            'America/Chicago',
+          );
+          await tick(one + 30);
+          await tick(one + 3600 + 30);
+        } finally {
+          await publisher.destroy();
+        }
+        let { data } = await listed();
+        assert.strictEqual(data.length, 1, 'the joined slot started no run');
+        let [run] = data;
+        assert.deepEqual(
+          [run.attributes.trigger, run.attributes.slot, run.attributes.state],
+          ['hourly', '2026-11-10T19:00:00.000Z', 'pending'],
+        );
+        assert.deepEqual(
+          run.attributes.waitingFor,
+          { kind: 'worker' },
+          'with no run ahead of it, the run waits for a worker',
+        );
+        assert.deepEqual(
+          run.attributes.joined.map(({ trigger, slot }) => ({ trigger, slot })),
+          [{ trigger: 'hourly', slot: '2026-11-10T20:00:00.000Z' }],
+          'the 14:00 slot joined the 13:00 run',
+        );
+        assert.ok(run.attributes.joined[0].at, 'with when it joined');
+      });
+
+      test('the runs come a page at a time, with how many pages they fill', async function (assert) {
+        await writeAutomation();
+        let runs = [];
+        for (let i = 0; i < 5; i++) {
+          runs.push(await made('manual', randomUUID(), 50 - i * 10));
+        }
+        let newestFirst = runs.map((run) => run.id).reverse();
+        for (let [page, ids] of [
+          ['1', newestFirst.slice(0, 2)],
+          ['2', newestFirst.slice(2, 4)],
+          ['3', newestFirst.slice(4)],
+          ['4', []],
+        ] as const) {
+          let { data, meta } = await listed(ADMIN, { limit: '2', page });
+          assert.deepEqual(
+            [data.map(({ id }) => id), meta.page, meta.pages, meta.total],
+            [ids, Number(page), 3, 5],
+            `page ${page}`,
+          );
+        }
+
+        for (let [name, value] of [
+          ['limit', '0'],
+          ['limit', '101'],
+          ['limit', 'ten'],
+          ['page', '0'],
+          ['page', 'two'],
+          ['page', '1000000000000000000'],
+        ]) {
+          let response = await runsOf(ADMIN, ['read', 'write'], {
+            automation: automationURL(),
+            [name]: value,
+          });
+          assert.strictEqual(response.status, 400, `a ${name} of ${value}`);
+        }
+      });
+
+      test("another automation's runs are never listed", async function (assert) {
+        await writeAutomation();
+        let own = await made('manual', randomUUID(), 10);
+        let other = await createAutomationRun(dbAdapter, {
+          automationId: rri(`${testRealm.url}automations/weekly`),
+          realm: ri(testRealm.url),
+          trigger: 'manual',
+          slot: randomUUID(),
+          actsAs: ADMIN,
+        });
+        await startAutomationRunAttempt(dbAdapter, other.id, 1);
+        let { data, meta } = await listed();
+        assert.deepEqual([data.map(({ id }) => id), meta.total], [[own.id], 1]);
+      });
+
+      test('a reader is listed nothing, a malformed request is refused, and an anonymous caller gets 401', async function (assert) {
+        await writeAutomation();
+        await made('manual', randomUUID(), 10);
+        let reader = await runsOf(READER, ['read']);
+        assert.deepEqual(
+          [reader.status, reader.body],
+          [200, { data: [], meta: { directWriter: false } }],
+          "a reader isn't refused, since the host takes a refusal as an auth failure of what it renders",
+        );
+        let unchecked = await runsOf(READER, ['read'], null);
+        assert.deepEqual(
+          [unchecked.status, unchecked.body],
+          [200, { data: [], meta: { directWriter: false } }],
+          'the route checks its parameters only for a direct writer',
+        );
+
+        let missing = await runsOf(ADMIN, ['read', 'write'], null);
+        assert.strictEqual(missing.status, 400, 'no automation named');
+        let elsewhere = await runsOf(ADMIN, ['read', 'write'], {
+          automation: `${ELSEWHERE}automations/nightly`,
+        });
+        assert.strictEqual(elsewhere.status, 400, 'a card in another realm');
+
+        let anonymous = await request
+          .get(
+            `/_automation-runs?automation=${encodeURIComponent(automationURL())}`,
+          )
+          .set('Accept', SupportedMimeType.JSON);
+        assert.strictEqual(anonymous.status, 401);
+      });
+    });
+
     // The route the realm config's Automations entry and the automations
     // console list a realm's automations from.
     module("the realm's automation list", function () {
@@ -1418,4 +1969,236 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
   });
+
+  // A grant can let someone read an Automation card whom the realm's ACL gives
+  // nothing. The card's view, its editor and the realm config ask these
+  // routes while they render, and the host takes a 401 or 403 as an auth
+  // failure of whatever else it is loading, so such a caller is told they
+  // aren't a direct writer rather than refused.
+  module(
+    'a realm whose policy admits a caller its ACL gives nothing',
+    function (hooks) {
+      const NOT_A_DIRECT_WRITER = { data: null, meta: { directWriter: false } };
+      const LISTED_NOTHING = { data: [], meta: { directWriter: false } };
+
+      let policyRealm: Realm;
+      let policyRequest: SuperTest<Test>;
+      let policyServer: Server;
+      let policyDB: PgAdapter;
+
+      hooks.afterEach(async function () {
+        await closeServer(policyServer);
+      });
+
+      setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
+        permissions: {
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+          [ADMIN]: ['read', 'write'],
+        },
+        onRealmSetup(args) {
+          policyRealm = args.testRealm;
+          policyRequest = args.request;
+          policyServer = args.testRealmHttpServer;
+          policyDB = args.dbAdapter as PgAdapter;
+        },
+      });
+
+      function automationURL() {
+        return `${policyRealm.url}automations/nightly`;
+      }
+
+      // The automation card, a run of it, and a webhook its trigger names, so
+      // each route has something a direct writer is shown.
+      async function writeAutomation() {
+        await policyRealm.write(
+          'scripts/nightly-import.js',
+          "await realm.fs.writeText('imported.txt', 'done');\n",
+        );
+        await policyRealm.write(
+          'automations/nightly.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes,
+              relationships: {
+                script: { links: { self: '../scripts/nightly-import.js' } },
+              },
+              meta: { adoptsFrom: automationRef },
+            },
+          }),
+        );
+        await createAutomationRun(policyDB, {
+          automationId: rri(automationURL()),
+          realm: ri(policyRealm.url),
+          trigger: 'nightly',
+          slot: '2026-11-10T08:30:00.000Z',
+          actsAs: ADMIN,
+        });
+        await insertIncomingWebhookRow(policyDB, {
+          username: ADMIN,
+          webhookPath: 'github-push',
+          signingSecret: 'admin-secret',
+        });
+      }
+
+      // Points the realm at a policy that lets any signed-in caller read an
+      // automation.
+      async function nameAPolicy() {
+        await policyRealm.write(
+          'policies/automations.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                rules: [
+                  {
+                    targetType: automationRef,
+                    grants: [
+                      // Names no caller, so it admits only signed-in ones.
+                      { operation: 'read' },
+                    ],
+                  },
+                ],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: rri('@cardstack/catalog/realm-policy/realm-policy'),
+                  name: 'RealmPolicy',
+                },
+              },
+            },
+          }),
+        );
+        await policyRealm.write(
+          'realm.json',
+          realmConfigCardJSON({
+            policy: `${policyRealm.url}policies/automations`,
+          }),
+        );
+        await policyRealm.indexing();
+      }
+
+      // What the routes a card's view, its editor and the realm config read
+      // answer the caller `authorization` names.
+      async function answers(authorization: string) {
+        let ask = (path: string) =>
+          policyRequest
+            .get(path)
+            .set('Accept', SupportedMimeType.JSON)
+            .set('Authorization', authorization);
+        let automation = encodeURIComponent(automationURL());
+        return {
+          status: await ask(`/_automation-status?automation=${automation}`),
+          statusNamingNoCard: await ask('/_automation-status'),
+          runs: await ask(`/_automation-runs?automation=${automation}`),
+          automations: await ask('/_automations'),
+          webhooks: await ask('/_automation-webhooks'),
+        };
+      }
+
+      function signedIn(
+        user: string,
+        permissions: ('read' | 'write' | 'realm-owner')[] = [],
+      ) {
+        return `Bearer ${createJWT(policyRealm, user, permissions)}`;
+      }
+
+      function assertToldNotADirectWriter(
+        assert: Assert,
+        answered: Awaited<ReturnType<typeof answers>>,
+        who: string,
+      ) {
+        assert.deepEqual(
+          Object.fromEntries(
+            Object.entries(answered).map(([route, response]) => [
+              route,
+              [response.status, response.body],
+            ]),
+          ),
+          {
+            status: [200, NOT_A_DIRECT_WRITER],
+            statusNamingNoCard: [200, NOT_A_DIRECT_WRITER],
+            runs: [200, LISTED_NOTHING],
+            automations: [200, LISTED_NOTHING],
+            webhooks: [200, LISTED_NOTHING],
+          },
+          `${who} is told by every route that they aren't a direct writer, and shown nothing`,
+        );
+        for (let [route, response] of Object.entries(answered)) {
+          assert.strictEqual(
+            response.headers['cache-control'],
+            'no-store',
+            `${who}: ${route} is not cached`,
+          );
+        }
+      }
+
+      test('a realm with no policy refuses a signed-in caller its ACL gives nothing', async function (assert) {
+        await writeAutomation();
+        let answered = await answers(signedIn(STRANGER));
+        assert.deepEqual(
+          Object.values(answered).map((response) => response.status),
+          [403, 403, 403, 403, 403],
+          'no policy judges the caller, so the ACL refuses them',
+        );
+      });
+
+      test("a signed-in caller the policy admits to the card is told by every route that they aren't a direct writer", async function (assert) {
+        await writeAutomation();
+        await nameAPolicy();
+        let card = await policyRequest
+          .get('/automations/nightly')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', signedIn(STRANGER));
+        assert.strictEqual(
+          card.status,
+          200,
+          'the grant admits them to the card',
+        );
+
+        assertToldNotADirectWriter(
+          assert,
+          await answers(signedIn(STRANGER)),
+          'the caller the policy admits',
+        );
+
+        let admin = await answers(signedIn(ADMIN, ['read', 'write']));
+        assert.deepEqual(
+          [
+            admin.status.body.meta,
+            admin.runs.body.meta.total,
+            admin.automations.body.data.length,
+            admin.webhooks.body.data.length,
+          ],
+          [{ directWriter: true }, 1, 1, 1],
+          'a direct writer is shown the automation, its run and the webhook',
+        );
+      });
+
+      test("an archived realm tells a caller the policy admits the same, and not that it's archived", async function (assert) {
+        await writeAutomation();
+        await nameAPolicy();
+        await archiveRealm(policyDB, new URL(policyRealm.url));
+        let sealed = (await answers(signedIn(ADMIN, ['read', 'write']))).status;
+        assert.deepEqual(
+          [sealed.status, sealed.headers['x-boxel-realm-archived']],
+          [403, 'true'],
+          'the realm is sealed: a direct writer meets the archived seal',
+        );
+        let answered = await answers(signedIn(STRANGER));
+        assertToldNotADirectWriter(
+          assert,
+          answered,
+          'the caller the policy admits to an archived realm',
+        );
+        for (let [route, response] of Object.entries(answered)) {
+          assert.notOk(
+            response.headers['x-boxel-realm-archived'],
+            `${route} carries no archived marker`,
+          );
+        }
+      });
+    },
+  );
 });

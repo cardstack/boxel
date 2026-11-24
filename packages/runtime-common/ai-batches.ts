@@ -4,6 +4,9 @@
 // it ends. A batch can't be canceled, so every batch is billed later, from its
 // row, to the person its run acted as, by the settle job once it ends.
 
+import { MANUAL_RUN_TRIGGER } from './automation-declaration.ts';
+import { runCreditHoldCounts } from './automation-runs.ts';
+import { CREDITS_PER_USD } from './constants.ts';
 import type { DBAdapter } from './db.ts';
 import {
   addExplicitParens,
@@ -11,6 +14,7 @@ import {
   query,
   separatedByCommas,
   type Expression,
+  type Querier,
 } from './expression.ts';
 import type { PgPrimitive } from './index.ts';
 import type {
@@ -45,6 +49,9 @@ export interface AIBatch {
   // at twice its requests' worst case at the normal price, for the settle job
   // to settle when the batch ends.
   runAIReservation: string;
+  // The credits that reservation holds. Null on a row recorded without them
+  // (see `creditsHeldByUnsettledAIBatches` for what such a row holds).
+  reservedCredits: number | null;
   // How long the submitting script waits for the results.
   deadline: string;
   // When OpenRouter says its provider stops working on the batch, if it
@@ -70,6 +77,10 @@ export interface AIBatch {
   settledAt: string | null;
   billedUsd: number | null;
   billedAtEstimate: boolean | null;
+  // When an operator chose not to bill a settled batch whose charge drew
+  // nothing, and why. Null unless written off.
+  writtenOffAt: string | null;
+  writeOffReason: string | null;
 }
 
 // What a batch costs as the run that submitted it reads it: pending until the
@@ -108,9 +119,13 @@ export interface NewAIBatch {
   requestCount: number;
   estimatedUsd: number;
   runAIReservation: string;
+  reservedCredits: number;
   deadline: Date;
   expiresAt: Date | null;
   state: string;
+  // When OpenRouter accepted the batch. Defaults to when the row is written,
+  // which is when a submit records the batch it was answered with.
+  submittedAt?: Date;
 }
 
 // How a worker task settles batches: the realm-server side reads each
@@ -137,6 +152,66 @@ export interface AIBatchSettlementResult {
   unrecorded: number;
 }
 
+// The credits held by unsettled batches: those billed to `actsAs` (the
+// balance check), or those of `automationId` that runs other than Previews
+// and Run nows submitted (the credit caps). A batch is billed only once it
+// ends, so from submit until the settle job bills it, a batch holds what it
+// reserved on its submitting run's AI spending cap: twice its requests' worst
+// case at the normal price, once for the batch and once for the requests its
+// follow-up sends at the normal price when it misses its deadline (ADR 030
+// §1.4).
+//
+// A row recorded without `reserved_credits` holds the reservation its run's
+// row still names (`ai_reservations`). A row whose reservation is gone too
+// holds twice its estimate. The estimate is the most the batch can be
+// billed, so twice it covers the batch's own bill with headroom. The
+// requests a follow-up sends at the normal price are held by that follow-up
+// run, under its own AI spending cap.
+//
+// A batch stops holding `AI_BATCH_HOLD_SECONDS` after it was submitted. By
+// then OpenRouter has deleted its results (a `410`, 30 days after submit),
+// which the settle job bills at its estimate, so a batch still unsettled is
+// one OpenRouter doesn't know (`404`) or won't answer for. The settle job
+// keeps reading it and the unsettled batch alert reports it, but it no
+// longer keeps the payer short or takes from the automation's caps.
+//
+// While the submitting run's own credit hold counts
+// (`creditsHeldByRunsInFlight`), that hold already covers the batch: the
+// run's cost ceiling includes its AI spending cap, which the batch's
+// reservation counts against. So a batch holds only once its run's hold has
+// stopped counting, or its run's row is gone.
+// 30 days until OpenRouter deletes a batch's results, and a day of slack for
+// the settle pass that bills the `410`.
+export const AI_BATCH_HOLD_SECONDS = 31 * 24 * 60 * 60;
+
+export async function creditsHeldByUnsettledAIBatches(
+  querier: Querier,
+  filter:
+    | { actsAs: string; automationId?: undefined }
+    | { automationId: RealmResourceIdentifier; actsAs?: undefined },
+): Promise<number> {
+  let [row] = await querier([
+    'SELECT COALESCE(SUM(COALESCE(b.reserved_credits, CAST(r.ai_reservations ->> b.run_ai_reservation AS numeric), b.estimated_usd *',
+    param(2 * CREDITS_PER_USD),
+    ')), 0) AS held FROM ai_batches b LEFT JOIN automation_runs r ON r.id = b.run_id',
+    'WHERE b.settled_at IS NULL',
+    'AND b.submitted_at > now() - make_interval(secs =>',
+    param(AI_BATCH_HOLD_SECONDS),
+    ') AND',
+    ...((filter.actsAs !== undefined
+      ? ['b.acts_as =', param(filter.actsAs)]
+      : [
+          'b.automation_id =',
+          param(filter.automationId),
+          'AND r.trigger IS DISTINCT FROM',
+          param(MANUAL_RUN_TRIGGER),
+        ]) as Expression),
+    'AND NOT',
+    ...runCreditHoldCounts('r'),
+  ] as Expression);
+  return Number(row?.held ?? 0);
+}
+
 export function isFinalAIBatchState(state: string): boolean {
   return AI_BATCH_FINAL_STATES.includes(state);
 }
@@ -157,8 +232,13 @@ export async function recordAIBatch(
       `a batch's estimate is a finite number of USD, 0 or more, not ${batch.estimatedUsd}`,
     );
   }
+  if (!Number.isFinite(batch.reservedCredits) || batch.reservedCredits < 0) {
+    throw new Error(
+      `a batch reserves a finite number of credits, 0 or more, not ${batch.reservedCredits}`,
+    );
+  }
   let [created] = await query(dbAdapter, [
-    'INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, estimated_usd, run_ai_reservation, deadline, expires_at, state) VALUES (',
+    'INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, estimated_usd, run_ai_reservation, reserved_credits, deadline, expires_at, state, submitted_at) VALUES (',
     param(batch.batchId),
     ',',
     param(batch.runId),
@@ -177,11 +257,16 @@ export async function recordAIBatch(
     ',',
     param(batch.runAIReservation),
     ',',
+    param(batch.reservedCredits),
+    ',',
     param(batch.deadline.toISOString()),
     ',',
     param(batch.expiresAt ? batch.expiresAt.toISOString() : null),
     ',',
     param(batch.state),
+    ', COALESCE(CAST(',
+    param(batch.submittedAt ? batch.submittedAt.toISOString() : null),
+    'AS timestamptz), now())',
     ') ON CONFLICT (batch_id) DO NOTHING RETURNING *',
   ]);
   if (created) {
@@ -376,17 +461,105 @@ export async function recordUnrecordedAIBatches(
   return batches.filter((batch) => inserted.has(batch.batchId));
 }
 
-// Marks resolved every unrecorded batch that has an `ai_batches` row after
-// all, as a submit slower than the reconciliation's grace period leaves
-// behind. Returns how many it resolved.
+// Marks resolved, as `recorded`, every unrecorded batch that has an
+// `ai_batches` row after all: one a submit slower than the reconciliation's
+// grace period leaves behind, or one an operator recorded. Returns how many
+// it resolved.
 export async function resolveRecordedAIBatches(
   dbAdapter: DBAdapter,
 ): Promise<number> {
   let rows = await query(dbAdapter, [
-    'UPDATE unrecorded_ai_batches u SET resolved_at = now() WHERE resolved_at IS NULL',
+    "UPDATE unrecorded_ai_batches u SET resolved_at = now(), resolution = 'recorded' WHERE resolved_at IS NULL",
     'AND EXISTS (SELECT 1 FROM ai_batches b WHERE b.batch_id = u.batch_id) RETURNING batch_id',
   ]);
   return rows.length;
+}
+
+// An `unrecorded_ai_batches` row: a batch OpenRouter listed with no
+// `ai_batches` row, when the settle job found it, and how it was resolved.
+// `resolution` is `recorded` once an `ai_batches` row names the batch, or the
+// reason an operator gave for dismissing it.
+export interface UnrecordedAIBatchRecord extends UnrecordedAIBatch {
+  foundAt: string;
+  resolvedAt: string | null;
+  resolution: string | null;
+}
+
+export async function getUnrecordedAIBatch(
+  dbAdapter: DBAdapter,
+  batchId: string,
+): Promise<UnrecordedAIBatchRecord | undefined> {
+  let [row] = await query(dbAdapter, [
+    'SELECT * FROM unrecorded_ai_batches WHERE batch_id =',
+    param(batchId),
+  ]);
+  return row ? unrecordedFromRow(row) : undefined;
+}
+
+// Resolves an unrecorded batch an operator decided nothing should bill, such
+// as a batch another environment that shares the OpenRouter workspace
+// submitted, with the reason they gave. Returns the row as resolved, or
+// undefined when there is no such batch or it is already resolved.
+export async function dismissUnrecordedAIBatch(
+  dbAdapter: DBAdapter,
+  batchId: string,
+  reason: string,
+): Promise<UnrecordedAIBatchRecord | undefined> {
+  if (reason.trim() === '' || reason.trim() === 'recorded') {
+    throw new Error(
+      `dismissing a batch takes a reason other than "recorded", not "${reason}"`,
+    );
+  }
+  let [row] = await query(dbAdapter, [
+    'UPDATE unrecorded_ai_batches SET resolved_at = now(), resolution =',
+    param(reason.trim()),
+    'WHERE batch_id =',
+    param(batchId),
+    'AND resolved_at IS NULL RETURNING *',
+  ]);
+  return row ? unrecordedFromRow(row) : undefined;
+}
+
+// Records that an operator chose not to bill a settled batch whose charge
+// drew nothing, with the reason they gave. The ledger is checked in the same
+// statement, so a batch charged meanwhile isn't written off. Returns the
+// batch as recorded, or undefined when there is no such settled batch, it is
+// already written off, or it has a charge.
+export async function writeOffAIBatch(
+  dbAdapter: DBAdapter,
+  batchId: string,
+  reason: string,
+): Promise<AIBatch | undefined> {
+  if (reason.trim() === '') {
+    throw new Error('writing off a batch takes a reason');
+  }
+  let [row] = await query(dbAdapter, [
+    'UPDATE ai_batches SET written_off_at = now(), write_off_reason =',
+    param(reason.trim()),
+    'WHERE batch_id =',
+    param(batchId),
+    'AND settled_at IS NOT NULL AND written_off_at IS NULL',
+    "AND NOT EXISTS (SELECT 1 FROM credits_ledger l WHERE l.charge_kind = 'batched_ai' AND l.batch_id = ai_batches.batch_id)",
+    'RETURNING *',
+  ]);
+  return row ? batchFromRow(row) : undefined;
+}
+
+function unrecordedFromRow(
+  row: Record<string, PgPrimitive>,
+): UnrecordedAIBatchRecord {
+  return {
+    batchId: String(row.batch_id),
+    model: row.model == null ? null : String(row.model),
+    status: row.status == null ? null : String(row.status),
+    requestCount: row.request_count == null ? null : Number(row.request_count),
+    costUsd: row.cost_usd == null ? null : Number(row.cost_usd),
+    createdAt:
+      row.created_at == null ? null : new Date(row.created_at as string),
+    foundAt: iso(row.found_at)!,
+    resolvedAt: iso(row.resolved_at),
+    resolution: row.resolution == null ? null : String(row.resolution),
+  };
 }
 
 function finalStatesList() {
@@ -406,6 +579,8 @@ function batchFromRow(row: Record<string, PgPrimitive>): AIBatch {
     requestCount: Number(row.request_count),
     estimatedUsd: Number(row.estimated_usd),
     runAIReservation: String(row.run_ai_reservation),
+    reservedCredits:
+      row.reserved_credits == null ? null : Number(row.reserved_credits),
     deadline: iso(row.deadline)!,
     expiresAt: iso(row.expires_at),
     state: String(row.state),
@@ -418,6 +593,9 @@ function batchFromRow(row: Record<string, PgPrimitive>): AIBatch {
     billedUsd: row.billed_usd == null ? null : Number(row.billed_usd),
     billedAtEstimate:
       row.billed_at_estimate == null ? null : Boolean(row.billed_at_estimate),
+    writtenOffAt: iso(row.written_off_at),
+    writeOffReason:
+      row.write_off_reason == null ? null : String(row.write_off_reason),
   };
 }
 

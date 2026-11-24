@@ -142,13 +142,13 @@ export interface SearchShapeDescriptor {
   // which the handler folds it into the cache key.
   htmlQuery: string | null;
   // The page the request asked for. `pageSize` is post-clamp: the ceiling the
-  // server applies to a live item-leg search has already been imposed, so this
-  // is the page the query actually ran with.
+  // server applies to every search has already been imposed, so this is the
+  // page the query actually ran with.
   //
   // Both are coerced to numbers here rather than passed through. The grammar
   // admits a numeric string for `page.size` and validates `page.number` not at
-  // all, and the server-side clamp that would coerce the size runs only on the
-  // item leg — so without this a caller decides what type lands in the line,
+  // all, and the server-side clamp passes an in-range numeric string through
+  // unchanged — so without this a caller decides what type lands in the line,
   // and a string or an object breaks the flat-scalar contract the channel
   // rests on. A value that is not a finite number is reported as absent.
   pageSize: number | null;

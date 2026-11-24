@@ -274,8 +274,8 @@ pays every miss again, and lands in the same load. Under sustained load that is 
 loop, and each turn of it is slower than the last.
 
 So the fix for a saturated server is never to soften the check. It is to bound the
-work (`packages/runtime-common/search-bounds.ts` caps page size and wall-clock per
-item-leg search), to tolerate the transient (health-check timeout and unhealthy
+work (`packages/runtime-common/search-bounds.ts` caps the page size of every search
+and the wall-clock of every live one), to tolerate the transient (health-check timeout and unhealthy
 threshold set wide enough that a blip cannot cross them), and to restart only for a
 loop that has genuinely stopped.
 

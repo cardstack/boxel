@@ -9,6 +9,7 @@ import type {
   Prerenderer,
   LinkShapePolicy,
 } from '@cardstack/runtime-common';
+import type { AccountStanding } from '@cardstack/runtime-common/automation-admission';
 import { DBRateLimitStore } from '@cardstack/runtime-common';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -66,6 +67,12 @@ import handleReindex from './handlers/handle-reindex.ts';
 import handleFullReindex from './handlers/handle-full-reindex.ts';
 import handleRemoveJob from './handlers/handle-remove-job.ts';
 import handleAddCredit from './handlers/handle-add-credit.ts';
+import {
+  handleBillAIBatch,
+  handleDismissUnrecordedAIBatch,
+  handleRecordAIBatch,
+  handleWriteOffAIBatch,
+} from './handlers/handle-ai-batch-operator.ts';
 import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
 import handleRemoveRealmUserPermission from './handlers/handle-remove-realm-user-permission.ts';
 import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
@@ -88,6 +95,13 @@ import handleWorkerRequest from './handlers/handle-worker-request.ts';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.ts';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
+import {
+  handleHostURLHomePageCheck,
+  handleListHostURLs,
+  handleMountHostURL,
+  handleSetCanonicalHostURL,
+  handleUnmountHostURL,
+} from './handlers/handle-host-urls.ts';
 import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-path.ts';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
 import handleSearch from './handlers/handle-search.ts';
@@ -124,6 +138,8 @@ import handleRunCommand from './handlers/handle-run-command.ts';
 import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import type { HostURLResolver } from './lib/realm-host-urls.ts';
+import type { HostURLDomains } from './lib/realm-host-urls-domains.ts';
 import {
   KEY_BINDINGS_PATH,
   KEY_LIMIT_NOTICES_PATH,
@@ -294,6 +310,10 @@ export type CreateRoutesArgs = {
   // are used as-is for any environment (staging, prod).
   matrixAdminUsername?: string;
   matrixAdminPassword?: string;
+  // Asks the Matrix server about an account, for the resume route's
+  // admission of its new payer. Absent, every resume is refused as
+  // `account-unverifiable`.
+  automationAccountStanding?: (user: string) => Promise<AccountStanding>;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
@@ -306,6 +326,9 @@ export type CreateRoutesArgs = {
     boxelSpace?: string;
     boxelSite?: string;
   };
+  // The domains a host URL can be on, and this process's cache of host URLs.
+  hostURLDomains: HostURLDomains;
+  hostURLResolver: HostURLResolver;
   assetsURL: URL;
   // The host app's origin, where the render route is served.
   hostURL: URL;
@@ -1027,6 +1050,19 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint('/_grafana-reindex', handleReindex(args));
   registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
   registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
+  registerGrafanaEndpoint('/_grafana-bill-ai-batch', handleBillAIBatch(args));
+  registerGrafanaEndpoint(
+    '/_grafana-write-off-ai-batch',
+    handleWriteOffAIBatch(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-record-ai-batch',
+    handleRecordAIBatch(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-dismiss-unrecorded-ai-batch',
+    handleDismissUnrecordedAIBatch(args),
+  );
   registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
   registerGrafanaEndpoint(
     '/_grafana-upsert-realm-user-permission',
@@ -1084,6 +1120,33 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteBoxelClaimedDomainRequest(args),
+  );
+  // A realm's host URLs: the addresses it is served at besides its own URL
+  // (ADR 033). See `handlers/handle-host-urls.ts`.
+  router.get(
+    '/_host-urls',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListHostURLs(args),
+  );
+  router.get(
+    '/_host-urls/home-page-check',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleHostURLHomePageCheck(args),
+  );
+  router.post(
+    '/_host-urls',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMountHostURL(args),
+  );
+  router.patch(
+    '/_host-urls/:id',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSetCanonicalHostURL(args),
+  );
+  router.delete(
+    '/_host-urls/:id',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleUnmountHostURL(args),
   );
   router.post(
     '/_unlisted-realm-path',

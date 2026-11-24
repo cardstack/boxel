@@ -3,7 +3,7 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 import {
   admitRunIdentity,
   admitRunOperations,
-  scriptParseError,
+  scriptRefusal,
   type AdmittedRunKind,
   type AutomationAdmissionChecks,
 } from '../automation-admission.ts';
@@ -15,9 +15,9 @@ import {
   type AutomationScriptOutcome,
   AUTOMATION_COMMAND,
   AUTOMATION_TAB_GRACE_MS,
-  MAX_AUTOMATION_SCRIPT_CHARS,
   automationRunDedupeKey,
   isAutomationScriptOutcome,
+  scriptErrorText,
 } from '../automation-run-command.ts';
 import type { ReportAutomationChange } from '../automation-change-events.ts';
 import type { ReportRunChange } from '../automation-run-events.ts';
@@ -403,18 +403,9 @@ async function attemptRun(
       redact(`The script ${scriptURL} could not be read: ${e?.message ?? e}`),
     );
   }
-  if (!code.trim() || code.length > MAX_AUTOMATION_SCRIPT_CHARS) {
-    return await refuse(
-      'script-error',
-      `The script ${scriptURL} must be between 1 and ${MAX_AUTOMATION_SCRIPT_CHARS} characters`,
-    );
-  }
-  let parseError = scriptParseError(code);
-  if (parseError) {
-    return await refuse(
-      'script-error',
-      `The script ${scriptURL} doesn't parse: ${parseError}`,
-    );
+  let unrunnable = scriptRefusal(code, scriptURL);
+  if (unrunnable) {
+    return await refuse(unrunnable.reason, unrunnable.message);
   }
   let operationsAdmitted = await admitRunOperations(admission, run, {
     automation: identity.automation,
@@ -509,11 +500,10 @@ async function attemptRun(
   );
   if (outcome.state === 'error') {
     // The finish discards the overlay, so nothing the script staged lands.
-    let message =
-      outcome.line !== undefined
-        ? `line ${outcome.line}: ${outcome.message}`
-        : outcome.message;
-    return await fail(outcome.reason, message);
+    return await fail(
+      outcome.reason,
+      scriptErrorText(outcome.message, outcome.line),
+    );
   }
   if (dryRun) {
     // A Preview stops before the commit. Its finish keeps a copy of what it

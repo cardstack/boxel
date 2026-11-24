@@ -41,6 +41,24 @@ The issuer is the realm server's own origin. Every route answers only on the
 issuer's host; the same path on a published site's host goes on to realm
 routing.
 
+## Clients
+
+An app is known to the provider in one of three ways: pre-registered in code,
+by a client ID metadata document, or by dynamic registration. Boxel's own
+apps are pre-registered in `pre-registered-clients.ts`: a fixed client ID, no
+row anywhere, and consent names them by the name listed there. The first is
+boxel-cli (`boxel-cli`, a native client redirecting to
+`http://127.0.0.1/callback` on any port). A pre-registered app on the user's
+computer must send `boxel_confirmation_code` (two groups of four consonants,
+such as `WDJB-MJHT`) with each flow, and consent shows it for the user to
+check against the one the app printed (`security/confirmation-code.js` in
+`packages/secure-origin`, which both packages read); a flow without it, or
+any other client's flow with one, is refused as `confirmation-code`. Nothing proves a request comes from the app the client
+ID names, so "Boxel CLI" on consent means a program, on any computer, that
+says it is Boxel CLI: the loopback redirect keeps only its code on this one.
+A user who allowed Boxel CLI without starting it was most likely sent a link
+and asked to paste back the address they landed on.
+
 ## Routes
 
 | Route                                                  | Who calls it                   | What it does                                                                                                                     |
@@ -58,16 +76,20 @@ routing.
 | `POST /_oauth-provider/token/revocation`               | an app                         | Revocation (RFC 7009); either token of a grant ends the whole grant                                                              |
 | `GET /_oauth-provider/connections`                     | Connected apps (not built yet) | The user's live grants whose code was exchanged; secure window session only                                                      |
 | `DELETE /_oauth-provider/connections/:grantId`         | Connected apps (not built yet) | Ends one of the user's live grants; secure window session only                                                                   |
+| `POST /mcp`                                            | an MCP client                  | The placeholder MCP endpoint, behind its controller: `initialize`, `ping`, `tools/list` (no tools); every tool call is refused   |
+| `GET`/`DELETE /mcp`                                    | an MCP client                  | `405`: the placeholder is stateless, with no event stream and no session; no token is looked at                                  |
 
 The resources an access token may be used at are listed in `registry.ts`
 (today the MCP endpoint, `<issuer>/mcp`). A resource's routes check the token
 through its controller (`resource.ts`), which calls the one lookup
-(`lookup.ts`). Tokens are issued for the MCP resource, but nothing serves
-`/mcp` yet and its scopes map no routes: only the resources tests add mount
-the controller. So in production today no call with an OAuth token reaches
-a resource, and an app's failing call isn't reaching an OAuth resource at
-all. The rest of the realm server doesn't accept an OAuth token either (the
-remediation file lists where): see the `realm-auth` skill.
+(`lookup.ts`). Both MCP scopes map `POST /mcp`, so a token with either
+reaches it. `/mcp` is a placeholder (`handlers/handle-mcp.ts`) that only
+proves a token reaches a resource, for tests and the staging run with MCP
+Inspector: stateless, plain JSON, no tools, so every `tools/call` is
+answered with a JSON-RPC "unknown tool" error. It is served wherever the
+provider is on, on the issuer's host only. The MCP server replaces it. The
+rest of the realm server doesn't accept an OAuth token (the remediation file
+lists where): see the `realm-auth` skill.
 
 Lifetimes (`provider.ts`, `grants.ts`): an interaction and the library's
 session last 10 minutes, a code 60 seconds. A grant lasts 30 days if the user
@@ -199,7 +221,8 @@ for a token or the URL they were sent to.
 
 1. **Is the provider on?** `OAuth provider on:` at the last start, and
    `GET /.well-known/oauth-authorization-server` answers 200.
-2. **Did the app register?** For a self-registered client, its row in
+2. **Did the app register?** A pre-registered client (boxel-cli) always is;
+   skip to step 3. For a self-registered client, its row in
    `oauth_provider_dynamic_clients` (by `metadata->>'client_name'` and
    `created_at`). A client deleted by the cleanup is refused as unknown until
    it registers again. For a metadata-document client, the
@@ -217,9 +240,9 @@ refused: <reason>` near the time. The user saw "Something went wrong" on
 <error>`. A code lasts 60 seconds, needs the same `redirect_uri` and the
    PKCE verifier that matches the challenge. The grant row has
    `exchanged_at` once it did.
-7. **Does the call fail?** No production resource serves calls yet (see
-   Routes). Where one does, `token refused: <reason>, resource …`. The
-   lookup checks the grant before the token:
+7. **Does the call fail?** Only `/mcp` serves calls (see Routes), and only
+   where the provider is on. A call it refuses logs `token refused:
+<reason>, resource …`. The lookup checks the grant before the token:
    - `unknown`: no such token. Usually its grant ended, which deletes its
      tokens: go to step 8. Suspect a token from another environment only
      when the user's grant is live.
@@ -304,7 +327,8 @@ private JWK with `kid`, `use: "sig"`, `alg: "RS256"`, as
 All in `packages/realm-server/tests/`, named `oauth-provider-*-test.ts`, one
 per endpoint or concern (registration, authorization, consent, finish,
 token, token-lookup, revocation, connections, cleanup, discovery, client
-checks, client metadata, mock client). `oauth-provider-secrecy-test.ts` is
+checks, client metadata, mock client, mcp). `oauth-provider-mcp-test.ts`
+covers the placeholder `/mcp` end to end, with the MCP SDK's own client. `oauth-provider-secrecy-test.ts` is
 the whole-connection secrecy check: every table at each step, the
 request log and the provider's channel at info level, and Sentry. `tests/helpers/oauth-provider-flow.ts`
 drives each step; `tests/helpers/oauth-provider-secrets.ts` captures logs and

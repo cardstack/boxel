@@ -181,6 +181,10 @@ module.exports = function (environment) {
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaults.realmHost,
     publishedRealmBoxelSiteDomain:
       process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || defaults.realmHost,
+    // A realm server serving the host puts its own value here; a host served
+    // on its own, as in development, reads the same variable.
+    publishedRealmDomainOverrides:
+      process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES || '',
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
@@ -217,7 +221,14 @@ module.exports = function (environment) {
         ? `${normalized}/`
         : `${normalized}/test/`;
     })(),
-    featureFlags: {},
+    featureFlags: {
+      // On in the staging build only (`config/staging.env`). Set
+      // HOST_MODE_V2=true to turn it on in a local build.
+      hostModeV2: process.env.HOST_MODE_V2 === 'true',
+      // Holds a tab's requests to one origin to a fixed number in flight, and
+      // sends writes and auth ahead of reads (lib/request-limiter.ts).
+      LIMIT_REQUESTS_IN_FLIGHT: process.env.LIMIT_REQUESTS_IN_FLIGHT === 'true',
+    },
   };
 
   // Where each `@cardstack/…` prefix realm is served. This answers a different

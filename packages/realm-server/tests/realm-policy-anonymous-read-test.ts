@@ -351,6 +351,37 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(draftSource.text, missingSource.text);
   });
 
+  // An automation card's view, its editor and the realm config ask these
+  // routes while they render, and the host takes a 401 as an auth failure of
+  // whatever else it is loading. So where the policy opens `read` to a caller
+  // who isn't signed in, the routes tell them they aren't a direct writer.
+  test("the automation routes tell a caller who isn't signed in that they aren't a direct writer where the policy opens read to them, and ask them to authenticate where it doesn't", async function (assert) {
+    let ask = (realmURL: string, path: string) =>
+      request
+        .get(`${new URL(realmURL).pathname}${path}`)
+        .set('Accept', SupportedMimeType.JSON)
+        .set('X-Forwarded-For', VISITOR);
+    let automation = encodeURIComponent(`${NEWSROOM}automations/nightly`);
+    let paths = [
+      `_automation-status?automation=${automation}`,
+      '_automation-status',
+      `_automation-runs?automation=${automation}`,
+      '_automations',
+      '_automation-webhooks',
+    ];
+    for (let path of paths) {
+      let response = await ask(NEWSROOM, path);
+      assert.deepEqual(
+        [response.status, response.body.meta],
+        [200, { directWriter: false }],
+        `newsroom ${path}: not a direct writer`,
+      );
+    }
+    for (let path of paths) {
+      unauthenticated(await ask(LIBRARY, path), `library ${path}`, assert);
+    }
+  });
+
   test("a grant that reads the caller admits nobody who isn't signed in, and is not a fault", async function (assert) {
     let before = newsroom.__testOnlyPolicyGateStats().predicateEvaluations;
     let response = await readCard(DRAFT);
