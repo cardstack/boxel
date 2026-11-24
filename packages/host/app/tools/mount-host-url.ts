@@ -88,9 +88,10 @@ export default class MountHostURLTool extends HostBaseTool<
   // The mount accepts a site name that is claimed for this realm. The claim
   // lookup finds only the caller's own claims, so claim the hostname when the
   // caller has no claim for it. The server refuses a hostname that is already
-  // claimed with a 422. That claim can be one that another administrator made
-  // for this realm, which the mount accepts. So a 422 does not stop the mount:
-  // the mount checks the claim and gives its reason when it refuses.
+  // claimed. That claim can be one that another administrator made for this
+  // realm, which the mount accepts. So that refusal does not stop the mount:
+  // the mount checks the claim and gives its reason when it refuses. Any other
+  // refusal, such as a name that isn't valid, stops here with its own reason.
   private async ensureSiteNameClaim(realmURL: string, hostname: string) {
     let claimed = await this.realmServer.fetchBoxelClaimedDomain(realmURL);
     if (claimed?.hostname.toLowerCase() === hostname.toLowerCase()) {
@@ -99,13 +100,19 @@ export default class MountHostURLTool extends HostBaseTool<
     try {
       await this.realmServer.claimBoxelDomain(realmURL, hostname);
     } catch (error) {
-      if (error instanceof HostURLRequestError && error.status === 422) {
+      if (
+        error instanceof HostURLRequestError &&
+        error.status === 422 &&
+        error.message.includes(ALREADY_CLAIMED)
+      ) {
         return;
       }
       throw error;
     }
   }
 }
+
+const ALREADY_CLAIMED = 'Hostname is already claimed';
 
 function requireName(kind: string, name: string | undefined): string {
   let trimmed = name?.trim();

@@ -238,6 +238,27 @@ module('Integration | tools | mount-host-url', function (hooks) {
       ]);
     });
 
+    test('refuses a site name when the claim is refused for another reason', async function (assert) {
+      fake.claimRefusal = {
+        status: 422,
+        message: 'Subdomain must be lowercase',
+      };
+
+      await assert.rejects(
+        makeTool().execute({
+          realmURL: testRealmURL,
+          kind: 'site-name',
+          name: 'my-site',
+        }),
+        (error: Error) => error.message === 'Subdomain must be lowercase',
+      );
+      assert.deepEqual(
+        fake.calls,
+        [`claim my-site.${siteDomain}`],
+        'mounted nothing',
+      );
+    });
+
     test('refuses a site name when the claim fails with a status other than 422', async function (assert) {
       fake.claimRefusal = { status: 500, message: 'Internal server error' };
 
