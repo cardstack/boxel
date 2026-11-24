@@ -1674,6 +1674,9 @@ importers:
       '@embroider/vite':
         specifier: ^1.7.2
         version: 1.7.13(@embroider/core@4.6.7(@glint/template@1.7.7)(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@26.1.2)(terser@5.49.0)(yaml@2.9.0))
+      '@eslint/compat':
+        specifier: 'catalog:'
+        version: 2.1.1(eslint@10.15.0(supports-color@8.1.1))
       '@eslint/js':
         specifier: 'catalog:'
         version: 10.0.1(eslint@10.15.0(supports-color@8.1.1))
@@ -2308,6 +2311,9 @@ importers:
 
   packages/choreo-eslint-config:
     dependencies:
+      '@eslint/compat':
+        specifier: 'catalog:'
+        version: 2.1.1(eslint@10.15.0(supports-color@8.1.1))
       '@eslint/js':
         specifier: 'catalog:'
         version: 10.0.1(eslint@10.15.0(supports-color@8.1.1))

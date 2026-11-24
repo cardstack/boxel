@@ -14,17 +14,20 @@
  */
 import { createRequire } from 'node:module';
 
+import { fixupPluginRules } from '@eslint/compat';
 import js from '@eslint/js';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import prettier from 'eslint-config-prettier';
 import ember from 'eslint-plugin-ember/recommended';
-import importPlugin from 'eslint-plugin-import';
+import importPlugin from 'eslint-plugin-import-x';
 import n from 'eslint-plugin-n';
 import qunitDom from 'eslint-plugin-qunit-dom';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import typescriptSortKeys from 'eslint-plugin-typescript-sort-keys';
 import globals from 'globals';
 import ts from 'typescript-eslint';
+
+import { ESLINT_10_RECOMMENDED_OFF } from '../../eslint/shared.mjs';
 
 const require = createRequire(import.meta.url);
 // CJS modules shared with the eslintrc-based packages in this monorepo
@@ -52,6 +55,7 @@ export default defineConfig([
     '!**/.*',
   ]),
   js.configs.recommended,
+  ESLINT_10_RECOMMENDED_OFF,
   prettier,
   ember.configs.base,
   ember.configs.gjs,
@@ -90,7 +94,9 @@ export default defineConfig([
   },
   {
     plugins: {
-      'simple-import-sort': simpleImportSort,
+      // eslint-plugin-simple-import-sort 8 calls rule-context methods ESLint
+      // 10 removed. Later majors sort differently.
+      'simple-import-sort': fixupPluginRules(simpleImportSort),
     },
     rules: {
       curly: 'error',
@@ -102,7 +108,9 @@ export default defineConfig([
   {
     files: ['**/*.{ts,gts}'],
     plugins: {
-      'typescript-sort-keys': typescriptSortKeys,
+      // eslint-plugin-typescript-sort-keys calls rule-context methods ESLint
+      // 10 removed.
+      'typescript-sort-keys': fixupPluginRules(typescriptSortKeys),
     },
     rules: {
       'typescript-sort-keys/interface': 'error',
@@ -190,7 +198,8 @@ export default defineConfig([
   {
     files: ['tests/**/*'],
     plugins: {
-      'qunit-dom': qunitDom,
+      // eslint-plugin-qunit-dom calls rule-context methods ESLint 10 removed.
+      'qunit-dom': fixupPluginRules(qunitDom),
     },
     rules: {
       ...qunitDom.configs.recommended.rules,

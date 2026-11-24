@@ -20,6 +20,7 @@
     "eslint": "^10.15.0"
   },
   "dependencies": {
+    "@eslint/compat": "catalog:",
     "@eslint/js": "catalog:",
     "eslint-config-prettier": "catalog:",
     "eslint-plugin-ember": "catalog:",
