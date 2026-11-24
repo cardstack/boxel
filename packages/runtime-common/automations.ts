@@ -217,8 +217,8 @@ export type AutomationCapsSnapshot = AutomationCaps & {
 //   declaration. A label an edit removed keeps its run state, so the label
 //   keeps its count if it comes back, and carries `declared: false`, so a
 //   view that reads the row while the card doesn't read leaves the label
-//   out. `live` can't tell the two apart: a spent trigger the card still
-//   declares isn't live either. A run state without `declared` predates the
+//   out. `live` can't tell the two apart: a spent trigger the card declares
+//   isn't live either. A run state without `declared` predates the
 //   flag and counts as declared.
 export interface AutomationTriggerRuns extends TriggerRunState {
   timing?: string;
@@ -1624,7 +1624,7 @@ export function withEditCursors(
 }
 
 // Records, on each run state, the trigger's timing and whether it is live
-// under `schedule`. A label the card no longer has is recorded as neither
+// under `schedule`. A label the card doesn't declare is recorded as neither
 // live nor declared.
 export function recordTriggers(
   triggerRuns: Record<string, AutomationTriggerRuns>,

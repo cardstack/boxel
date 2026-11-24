@@ -833,13 +833,13 @@ module(basename(import.meta.filename), function (hooks) {
       let withoutHourly = attributes.triggers.filter(
         (t: Record<string, unknown>) => t.label !== 'hourly',
       );
-      // The first edit removes `hourly`, and the card still reads.
+      // The first edit removes `hourly`, and the card reads.
       await testRealm.write(
         'automations/nightly.json',
         cardWith(withoutHourly),
       );
       // The next edit leaves a cron trigger without an expression, so the
-      // card no longer reads.
+      // card fails to read.
       await testRealm.write(
         'automations/nightly.json',
         cardWith([...withoutHourly, trigger('cron', { label: 'half-typed' })]),
