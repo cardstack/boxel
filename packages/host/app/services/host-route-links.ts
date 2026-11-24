@@ -22,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { CardError } from '@cardstack/runtime-common/error';
+import { scopedRenderContext } from '@cardstack/runtime-common/render-context';
 
 import { currentRenderScope } from '@cardstack/host/lib/gc-card-store';
 import { visitorHostRouteLookups } from '@cardstack/host/lib/host-route-lookups';
@@ -325,6 +326,13 @@ export default class HostRouteLinksService
     }
     if (!this.inHTMLVisit) {
       return this.interactModeRoutes();
+    }
+    if (scopedRenderContext()) {
+      // This tab renders a card for its own index, and a link can't tell
+      // whether it renders for that or for someone looking at the app. It
+      // takes the visit's routes, and also reads the app's, so that a link
+      // in the app renders again once they change.
+      void this.interactModeRoutes();
     }
     let realmURL = this.visitedRealmURL();
     return realmURL ? this.routesOfRealm(realmURL) : undefined;

@@ -4,7 +4,11 @@ import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import type { Realm } from '@cardstack/runtime-common/realm';
+import {
+  validateHostRoutes,
+  type HostRoute,
+  type RawHostRoutingRule,
+} from '@cardstack/runtime-common';
 
 import {
   setupAcceptanceTestRealm,
@@ -21,30 +25,38 @@ import { setupApplicationTest } from '../../helpers/setup';
 import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 import type * as HrefToModule from '@cardstack/base/href-to';
 
-// A realm config card whose one route serves authors at `path`.
-function routedRealmConfig(path: string) {
-  return {
-    data: {
-      type: 'card',
-      attributes: {
-        cardInfo: { name: 'Routed Workspace' },
-        hostRoutingRules: [{ path, card: './Author/:id' }],
-      },
-      meta: {
-        adoptsFrom: {
-          module: '@cardstack/base/realm-config',
-          name: 'RealmConfig',
-        },
-      },
-    },
-  };
+// The realm's routes, as its routes endpoint answers them: one route that
+// serves authors at `path`.
+function routesServingAuthorsAt(path: string): readonly HostRoute[] {
+  let rules: RawHostRoutingRule[] = [{ path, card: './Author/:id' }];
+  let { routes, warnings } = validateHostRoutes(rules, {
+    realmURL: new URL(testRealmURL),
+    lookupType: () => undefined,
+  });
+  if (warnings.some((w) => w.dropped)) {
+    throw new Error(`test routes were dropped: ${JSON.stringify(warnings)}`);
+  }
+  return routes;
 }
 
 module('Acceptance | interact submode | routed links', function (hooks) {
   // The `hrefTo` helper of the loader the app renders with, which the
   // post's link calls.
   let linkHrefTo: (typeof HrefToModule)['hrefTo'] | undefined;
-  let realm: Realm;
+  // The path the realm's routes endpoint serves authors at. The endpoint is
+  // answered here, so a test controls what the app reads, and when.
+  let authorsPath: string;
+  let routesReads: number;
+  let serveRoutes = async (request: Request) => {
+    if (request.url !== `${testRealmURL}_host-routes`) {
+      return null;
+    }
+    routesReads++;
+    return new Response(
+      JSON.stringify({ routes: routesServingAuthorsAt(authorsPath) }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -122,10 +134,15 @@ module('Acceptance | interact submode | routed links', function (hooks) {
       };
     }
 
-    ({ realm } = await setupAcceptanceTestRealm({
+    // Before the realm starts, so that the renders of its own index read the
+    // same routes as the app.
+    authorsPath = '/people/:id';
+    routesReads = 0;
+    getService('network').virtualNetwork.mount(serveRoutes, { prepend: true });
+
+    await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
-        'realm.json': routedRealmConfig('/people/:id'),
         'blog.gts': { Author, Post },
         'Author/jane.json': {
           data: {
@@ -142,7 +159,7 @@ module('Acceptance | interact submode | routed links', function (hooks) {
           },
         },
       },
-    }));
+    });
 
     leftToBrowser = [];
     globalThis.addEventListener('click', stopNavigation);
@@ -150,6 +167,7 @@ module('Acceptance | interact submode | routed links', function (hooks) {
 
   hooks.afterEach(function () {
     globalThis.removeEventListener('click', stopNavigation);
+    getService('network').virtualNetwork.unmount(serveRoutes);
     linkHrefTo = undefined;
   });
 
@@ -203,16 +221,25 @@ module('Acceptance | interact submode | routed links', function (hooks) {
 
   test('a change to the routes reaches the app after the realm is indexed', async function (assert) {
     await openPost();
+    let readsBefore = routesReads;
 
-    await realm.write(
-      'realm.json',
-      JSON.stringify(routedRealmConfig('/authors/:id')),
-    );
+    authorsPath = '/authors/:id';
+    getService('message-service').relayRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: [`${testRealmURL}realm`],
+      realmURL: testRealmURL,
+    });
 
     await waitFor(`${link('routed')}[href="${testRealmURL}authors/jane"]`);
     await settled();
     await click(link('routed'));
 
+    assert.strictEqual(
+      routesReads,
+      readsBefore + 1,
+      'the app read the routes again after the index',
+    );
     assert.dom(`[data-test-operator-mode-stack="0"] ${author}`).exists();
     assert.deepEqual(leftToBrowser, []);
   });
