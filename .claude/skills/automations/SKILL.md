@@ -440,6 +440,14 @@ SELECT r.id, r.trigger, r.slot, r.state, r.created_at, l.message
 
 The ticks themselves are `automation-tick` rows in `jobs`; their `result` counts what each did.
 
+**Batch follow-ups.** The same job then starts each batch's follow-up run (`startDueAIBatchFollowUps` in `packages/runtime-common/ai-batch-follow-ups.ts`): every `ai_batches` row whose `deadline` has passed (within `AI_BATCH_HOLD_SECONDS`, read through `ai_batches_deadline_idx`), whose automation has a row that isn't `paused`, and that has no run row with trigger `batch` and the batch's id as its slot. For each, it makes that run row (`acts_as` = the batch's `acts_as`) and enqueues its job with `triggerKind: 'batch'`, `scheduledAt` = the deadline, the dedupe key `automation:<id>:batch:<batch id>` and a timeout from the caps snapshot's `seconds`. A tick that finds the row already made (another tick got there first) enqueues nothing, so each batch has one follow-up. A paused automation's batch waits until the automation is no longer paused; a removed automation's batch gets none. The follow-up's log starts with a `trigger` line naming the batch and the run that submitted it, and the worker logs:
+
+```
+automation-tick: batch <batch id> of automation <id> reached its deadline and started follow-up run <run id> (job <job id>)
+```
+
+The job's `result` counts `followUpsStarted` and `followUpsFailed`.
+
 **Why a due run didn't start.** Check in this order:
 
 - The row: `state` must be `active` or `waiting-for-credits` and `next_run` at or before now (see _Inspecting an automation_). A paused or _done_ row is never due, and an `active` row with a null `next_run` has nothing to schedule.
@@ -1067,6 +1075,7 @@ sent to the run record. The pieces live in `packages/host/app/lib/realm-runner/`
 | Card updates          | `cards.update`                                                                        | yes; saved through `_atomic` when the script finishes, within its time limit. The realm server refuses a run's `_atomic` unless that route stages its writes, and the run then fails at the save                |
 | Operations            | `operations.invoke`, `operations.invokeBatchOperation`                                | yes; the realm server admits a `callApi` only for an operation the card declares, counts it against `callApiCalls`, and refuses a write operation it doesn't stage (_Declared operations and the per-run caps_) |
 | Resolve               | `resolve`                                                                             | yes; counted against `resolveCalls` and priced against `aiCredits` at `_request-forward` when the forward carries the run's token                                                                               |
+| Batched AI            | `resolve.batch`                                                                       | yes, and only here; submitted through `/_ai-batches` with the run's token, refused unless the payer turned on `batchedAI` and the realm server turns batch submits on (_Batched AI: `realm.resolve.batch`_)     |
 | Progress              | `activity`, `progress.plan`, `progress.milestone`, `progress.task`, `progress.count`  | yes; `progress.*` only here. `progress.count` records nothing: the run's first call logs one `warn` console line naming `progress.task`, and the script runs on                                                 |
 | Console               | `console.log`, `console.info`, `console.warn`, `console.error`                        | yes; only here                                                                                                                                                                                                  |
 | Downloads and deletes | `fs.download`, `fs.delete`                                                            | no                                                                                                                                                                                                              |
@@ -1106,6 +1115,54 @@ How a method differs from the interactive surface:
   they cost memory in a tab other runs share. The worker drops the rest
   before posting them, and the run's progress ends with one `warn` line
   saying how many it dropped.
+
+### Batched AI: `realm.resolve.batch`
+
+`realm.resolve.batch(requests, { by, milestone })` sends `realm.resolve`
+requests nobody is waiting on as one OpenRouter batch, at about half the
+price (ADR 030). The run submits the batch and goes on to finish and commit
+as usual; no tab or worker waits on the batch. A follow-up run picks up the
+answers.
+
+- **In the tab** (`RealmFsSession#resolveBatch` in `tools/run-realm-code.ts`,
+  `resolveBatchRequest` in `lib/realm-runner/research.ts`): each request is
+  read as a `realm.resolve` request and sent as the chat completion
+  `realm.resolve` would send (`resolveChatBody`), keyed by its place in the
+  list (`customId` `"0"`, `"1"`, …), at most `MAX_RESOLVE_BATCH_REQUESTS`
+  (500) and `MAX_RESOLVE_BATCH_BYTES` (4 MiB) together. `by` is the deadline,
+  an ISO time or a Date, after now and at most 24 hours away; without it the
+  deadline is the card's `batchDeadlineMinutes`, which the worker passes in
+  the script input. A run submits one batch; a second call throws. The call
+  starts the batch's run milestone (`milestone`, or `batched AI`), reports a
+  `task` line once the batch is submitted, and answers
+  `{ batchId, requests, deadline, milestone }`. The guest's
+  `realm.resolve.batch` is a method on `realm.resolve`; `onSurface` in
+  `worker.ts` keeps it only where `resolve.batch` is on the surface.
+- **The submit** (`RunAutomationTool#runTokenBatchSubmit`) posts to the
+  realm server's `/_ai-batches` with the run's token. The handler
+  (`handle-ai-batches.ts`) refuses it unless `AI_BATCH_SUBMITS_ENABLED` is
+  `true` on the realm server (`aiBatchSubmitsEnabled`), refuses a Preview and
+  an automation whose caps snapshot has `batchedAI` off, reserves the batch on
+  `aiCredits` (_The AI spending cap_), and counts each request against
+  `resolveCalls` in one statement (`countRunCall` with a call count): a batch
+  past the cap ends the run with `hit-a-cap`, releases its reservation and
+  sends nothing. The refusal comes back to the script as the call's error.
+- **The record** is the batch's `ai_batches` row, whose `run_id` names the
+  submitting run and whose `deadline` is the follow-up's schedule.
+- **The follow-up**: once the deadline passes, the minute tick starts it
+  (_The tick: enqueueing due runs_). Its run row has trigger `batch`
+  (`BATCH_RUN_TRIGGER`, a label no card trigger may take) and the batch's id
+  as its slot; its job has `triggerKind: 'batch'`. It acts as the batch's
+  `acts_as`.
+
+```sql
+-- a run's batch, and whether its follow-up has started
+SELECT b.batch_id, b.deadline, b.state, f.id AS follow_up, f.state AS follow_up_state
+  FROM ai_batches b
+  LEFT JOIN automation_runs f
+    ON f.automation_id = b.automation_id AND f.trigger = 'batch' AND f.slot = b.batch_id
+ WHERE b.run_id = '<run id>';
+```
 
 For media from an AI vendor, author guidance is boxel-skills'
 `api-integrations` skill, _Images from an AI vendor_: an automation's own AI
@@ -2181,7 +2238,8 @@ slot the click, `acts_as` the clicker, and enqueues it with
 cap for the job's timeout, `scheduledAt` the row's `created_at`). The
 declaration reader refuses a card trigger labelled `manual`
 (`reserved-label`), so a click never shares a slot and dedupe key with a
-scheduled run. A worker runs it exactly as it runs a scheduled run, through
+scheduled run; it refuses `batch`, the label of a batch's follow-up, the
+same way. A worker runs it exactly as it runs a scheduled run, through
 `runAutomationAttempt`: every check that makes before the script starts
 applies to it, as do the caps (`readRunLimits`: the card's caps, held to
 the snapshot once the automation is switched on), the automation's

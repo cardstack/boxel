@@ -10,6 +10,7 @@ import { taskAutomationChangeReporter } from '../automation-change-events.ts';
 import { taskRunChangeReporter } from '../automation-run-events.ts';
 import { tickAutomations } from '../automation-tick.ts';
 import { readRunDeclaration } from '../automation-run-limits.ts';
+import { startDueAIBatchFollowUps } from '../ai-batch-follow-ups.ts';
 
 // The cron enqueues this job with no arguments; the tick handles whatever is
 // due when it runs.
@@ -22,6 +23,9 @@ export interface AutomationTickResult extends JSONTypes.Object {
   unreadable: number;
   capsRaised: number;
   failed: number;
+  // Batches whose deadline passed, by what came of starting their follow-up.
+  followUpsStarted: number;
+  followUpsFailed: number;
 }
 
 export { automationTick };
@@ -90,6 +94,8 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
         unreadable: 0,
         capsRaised: 0,
         failed: 0,
+        followUpsStarted: 0,
+        followUpsFailed: 0,
       };
       for (let outcome of outcomes) {
         switch (outcome.kind) {
@@ -139,6 +145,35 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
         log.info(
           `${tag}: ${result.automations} due, ${result.started} started, ${result.skipped} skipped, ${result.unreadable} unreadable, ${result.capsRaised} caps raised, ${result.failed} failed`,
         );
+      }
+
+      // Each batch whose deadline has passed gets its follow-up run, which
+      // picks up the batch's results.
+      for (let followUp of await startDueAIBatchFollowUps(dbAdapter, {
+        queue: queuePublisher,
+        virtualNetwork,
+      })) {
+        switch (followUp.kind) {
+          case 'started':
+            result.followUpsStarted++;
+            await reportRunChange?.(followUp.runId);
+            log.info(
+              `${tag}: batch ${followUp.batchId} of automation ${followUp.automationId} reached its deadline and started follow-up run ${followUp.runId} (job ${followUp.jobId})`,
+            );
+            break;
+          case 'found':
+            log.info(
+              `${tag}: batch ${followUp.batchId} of automation ${followUp.automationId} already has follow-up run ${followUp.runId}`,
+            );
+            break;
+          case 'failed':
+            result.followUpsFailed++;
+            log.error(
+              `${tag}: starting the follow-up of batch ${followUp.batchId} of automation ${followUp.automationId} failed:`,
+              followUp.error,
+            );
+            break;
+        }
       }
       return result;
     } finally {

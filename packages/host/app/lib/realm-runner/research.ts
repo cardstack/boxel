@@ -863,49 +863,157 @@ export function resolveRequest(raw: unknown): ResolveRequest {
   };
 }
 
+// The chat completion request `realm.resolve` sends for `request`, and that
+// `realm.resolve.batch` sends for each of its requests.
+export function resolveChatBody(
+  request: ResolveRequest,
+): Record<string, unknown> {
+  let { instruction, input, error, outputSchema, maxTokens, webSearch } =
+    request;
+  return {
+    model: RESOLVE_LLM,
+    stream: false,
+    temperature: 0,
+    max_tokens: maxTokens,
+    messages: [
+      { role: 'system', content: SYSTEM_POLICY },
+      {
+        role: 'user',
+        content: JSON.stringify({ instruction, input, error }),
+      },
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'realm_resolution',
+        strict: true,
+        schema: outputSchema,
+      },
+    },
+    ...(webSearch
+      ? {
+          plugins: [
+            exaPlugin(
+              webSearch.maxResults,
+              webSearch.includeDomains,
+              webSearch.excludeDomains,
+            ),
+          ],
+        }
+      : {}),
+  };
+}
+
+// realm.resolve.batch: `realm.resolve` requests nobody is waiting on, sent
+// together as one batch at about half the price. An automation run submits
+// the batch and finishes; a follow-up run picks up the answers once the
+// batch ends, or at the deadline the script sets with `by`, whichever comes
+// first. Each request is one `realm.resolve` request, checked the same way,
+// and its answer is keyed by its position in the list.
+
+// The most requests one batch holds, and the most bytes their requests take
+// together, as JSON: the tab builds the whole batch before it sends it.
+export const MAX_RESOLVE_BATCH_REQUESTS = 500;
+export const MAX_RESOLVE_BATCH_BYTES = 4 * 1024 * 1024;
+// The latest deadline a batch may have, after it is submitted: OpenRouter
+// gives a batch 24 hours.
+export const MAX_RESOLVE_BATCH_DEADLINE_MS = 24 * 60 * 60 * 1000;
+// The run milestone a batch starts when the script names none.
+export const DEFAULT_BATCH_MILESTONE = 'batched AI';
+
+export interface ResolveBatchRequest {
+  requests: ResolveRequest[];
+  // When the follow-up run starts at the latest, as ms since the epoch.
+  deadline: number;
+  // The run milestone the batch starts.
+  milestone: string;
+}
+
+// Reads `realm.resolve.batch(requests, { by, milestone })`. `by` is the
+// deadline, as an ISO 8601 time or a Date, after `now` and at most 24 hours
+// after it; without it, the deadline is `defaultDeadlineMinutes` after
+// `now`. `milestone` names the run milestone the batch starts, at most
+// `maxMilestoneChars` long.
+export function resolveBatchRequest(
+  rawRequests: unknown,
+  rawOptions: unknown,
+  {
+    now,
+    defaultDeadlineMinutes,
+    maxMilestoneChars,
+  }: { now: number; defaultDeadlineMinutes: number; maxMilestoneChars: number },
+): ResolveBatchRequest {
+  if (
+    !Array.isArray(rawRequests) ||
+    rawRequests.length === 0 ||
+    rawRequests.length > MAX_RESOLVE_BATCH_REQUESTS
+  ) {
+    throw new TypeError(
+      `realm.resolve.batch expects a list of 1 to ${MAX_RESOLVE_BATCH_REQUESTS} realm.resolve requests`,
+    );
+  }
+  let requests = rawRequests.map((raw, index) => {
+    try {
+      return resolveRequest(raw);
+    } catch (error) {
+      let message = error instanceof Error ? error.message : String(error);
+      let wrapped = `realm.resolve.batch request ${index + 1}: ${message}`;
+      throw error instanceof TypeError
+        ? new TypeError(wrapped)
+        : new Error(wrapped);
+    }
+  });
+  if (jsonBytes(requests) > MAX_RESOLVE_BATCH_BYTES) {
+    throw new TypeError(
+      `realm.resolve.batch takes at most ${MAX_RESOLVE_BATCH_BYTES} bytes of requests in one batch; split them across runs`,
+    );
+  }
+  let options = optionsObject(rawOptions, 'realm.resolve.batch', [
+    'by',
+    'milestone',
+  ]);
+  let deadline = now + defaultDeadlineMinutes * 60 * 1000;
+  if (options.by !== undefined && options.by !== null) {
+    let by = typeof options.by === 'string' ? Date.parse(options.by) : NaN;
+    if (Number.isNaN(by)) {
+      throw new TypeError(
+        'realm.resolve.batch `by` must be a time, as an ISO 8601 string or a Date',
+      );
+    }
+    if (by <= now || by - now > MAX_RESOLVE_BATCH_DEADLINE_MS) {
+      throw new RangeError(
+        `realm.resolve.batch \`by\` must be after now and at most 24 hours from now, not ${new Date(by).toISOString()}`,
+      );
+    }
+    deadline = by;
+  }
+  let milestone = DEFAULT_BATCH_MILESTONE;
+  if (options.milestone !== undefined && options.milestone !== null) {
+    if (
+      typeof options.milestone !== 'string' ||
+      !options.milestone.trim() ||
+      options.milestone.length > maxMilestoneChars
+    ) {
+      throw new TypeError(
+        `realm.resolve.batch \`milestone\` must be a name of 1 to ${maxMilestoneChars} characters`,
+      );
+    }
+    milestone = options.milestone.trim();
+  }
+  return { requests, deadline, milestone };
+}
+
 export async function resolve(
   request: ResolveRequest,
   send: ProxySend,
   signal: AbortSignal,
 ): Promise<ResolveResult> {
-  let { instruction, input, error, outputSchema, maxTokens, webSearch } =
-    request;
+  let { maxTokens, outputSchema } = request;
   let response: Response;
   try {
     response = await send({
       url: OPENROUTER_CHAT_URL,
-      requestBody: JSON.stringify({
-        model: RESOLVE_LLM,
-        stream: false,
-        temperature: 0,
-        max_tokens: maxTokens,
-        messages: [
-          { role: 'system', content: SYSTEM_POLICY },
-          {
-            role: 'user',
-            content: JSON.stringify({ instruction, input, error }),
-          },
-        ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'realm_resolution',
-            strict: true,
-            schema: outputSchema,
-          },
-        },
-        ...(webSearch
-          ? {
-              plugins: [
-                exaPlugin(
-                  webSearch.maxResults,
-                  webSearch.includeDomains,
-                  webSearch.excludeDomains,
-                ),
-              ],
-            }
-          : {}),
-      }),
+      requestBody: JSON.stringify(resolveChatBody(request)),
       signal,
     });
   } catch (cause) {
