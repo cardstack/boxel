@@ -67,6 +67,7 @@ import * as PersistModuleInspectorViewToolModule from './persist-module-inspecto
 import * as PopulateWithSampleDataToolModule from './populate-with-sample-data';
 import * as PreviewFormatToolModule from './preview-format';
 import * as PublishRealmToolModule from './publish-realm';
+import * as ReadAutomationRunToolModule from './read-automation-run';
 import * as ReadBinaryFileToolModule from './read-binary-file';
 import * as ReadCardForAiAssistantToolModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantToolModule from './read-file-for-ai-assistant';
@@ -265,6 +266,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     PatchCardInstanceToolModule,
   );
   shimHostToolModule(virtualNetwork, 'run-realm-code', RunRealmCodeToolModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'read-automation-run',
+    ReadAutomationRunToolModule,
+  );
   shimHostToolModule(virtualNetwork, 'run-automation', RunAutomationToolModule);
   shimHostToolModule(virtualNetwork, 'patch-fields', PatchFieldsToolModule);
   shimHostToolModule(virtualNetwork, 'patch-theme', PatchThemeToolModule);
@@ -572,6 +578,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   OpenSecureWindowToolModule.default,
   OpenWorkspaceToolModule.default,
   GenerateThemeExampleToolModule.default,
+  ReadAutomationRunToolModule.default,
   RunAutomationToolModule.default,
   RunRealmCodeToolModule.default,
   PatchFieldsToolModule.default,

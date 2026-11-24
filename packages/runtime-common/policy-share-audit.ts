@@ -106,16 +106,23 @@ export interface PolicyAuditOptions {
   confirmation: string | null;
   // Who is writing, for the notices.
   actor: string | null;
+  // The write is an OAuth caller's, which may not change what any realm's
+  // policy admits (ADR 021 §1.6): the realm refuses it if it would change
+  // `realm.json`'s `policy` or `config`, or write or remove the realm's
+  // policy card or any RealmPolicy card.
+  oauthCaller?: true;
 }
 
 export function policyAuditOptionsFor(
   request: Request,
   actor: string | null | undefined,
+  { oauthCaller = false }: { oauthCaller?: boolean } = {},
 ): PolicyAuditOptions {
   return {
     confirmation:
       request.headers.get(POLICY_AUDIT_CONFIRMATION_HEADER)?.trim() || null,
     actor: actor ?? null,
+    ...(oauthCaller ? { oauthCaller: true as const } : {}),
   };
 }
 

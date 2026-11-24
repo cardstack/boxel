@@ -89,26 +89,35 @@ own path and a realm file MUST still be served there.
 
 The server MUST read routes only through `validateHostRoutes`
 (`Realm.getHostRoutes`), as ADR 015 §1.2 requires. A route that fails
-validation MUST be dropped with a warning, with its child routes. A field
-match's type MUST be read through the definitions cache
-(`lookupDefinitionEntry`), as a search reads it. A browser's page request
-for a path the route could answer waits for the read, and any other request
-MAY get 503 while the read runs. On a cache miss, the read is a module visit
-in the prerender server, which ADR 015 §1.1 allows while a request waits. When the
-read fails, the route MUST be dropped for now and the validation marked
-incomplete, and a path the route could answer MUST get 503, not not-found.
-A card's canonical address is known only from every route, so a browser's
-request for an alias also waits for the reads, and while the validation is
-incomplete every alias of the realm MUST answer 503, not 301 and not its card.
-Validation MUST drop each
+validation MUST be dropped with a warning, with its child routes. The
+routes MUST be validated when the realm is indexed, and the validated tree
+MUST be stored with the index. A field match's type MUST be read then,
+through the definitions cache, which renders a module it doesn't hold. A
+type that can't be read (a module error, a missing export, a render
+timeout, a server that can't be reached) MUST make its route invalid, and
+the next index MUST read it again. A read that fails for a reason that may
+pass (a render timeout, a server that can't be reached) MUST use the
+definition the stored tree was validated with, when there is one. When
+there is none, the stored tree MUST say so, and a read of the routes MUST
+start an index of realm.json, at most once a minute, to read the type again.
+An index pass that changes neither realm.json nor a module SHOULD keep the
+stored tree without reading a type. A reader MUST read the stored tree,
+and MUST NOT read a type to answer a request, so a reader always gets the
+whole tree the last index validated. A path that a route dropped for a type
+that couldn't be read may answer, and that nothing else serves, MUST answer
+503, not 404: the next index may route it. While such a route is dropped,
+an alias MUST serve its card at its own path rather than answer a 301, as
+the tree may be missing the card's canonical route. When the index can't
+be read, a read of the routes MUST fail rather than answer no routes, and
+the page MUST answer 503. Validation MUST drop each
 dynamic route past `MAX_DYNAMIC_HOST_ROUTES`, with a warning. Validation
 SHOULD warn when a literal or fixed route takes a path that a dynamic sibling
 matches.
 
 ### 1.6. Every renderer gets the server's routes
 
-The server MUST put the validated route tree, with `complete`, into the
-page's host config as `hostDynamicRoutes`. For a dynamically routed page it
+The server MUST put the validated route tree into the page's host config
+as `hostDynamicRoutes`. For a dynamically routed page it
 MUST also add a serve rule for exactly the requested path to
 `hostRoutingMap`. A realm MUST also serve its validated route tree from a
 read-only endpoint, which HTML visits and interact mode read once per
@@ -133,12 +142,16 @@ from the child's link to it, and when only the parent holds the link, the
 link MUST fall back to the card's own URL. Where the server needs a card's canonical address, as for an alias's 301, it
 MUST work it out from index data, as the visitor, through the same canonical
 route walk. Both MUST give the same address for the same card, in the HTML
-visit and in the browser alike. An address MUST be the routed path on the realm's
-URL, and the stored HTML MUST carry it. The server MUST NOT work out a
-routed address when a response leaves it. Putting the canonical host URL in
-place of the realm's URL at that boundary is ADR 033 §1.5: a prefix swap
-with no route lookup. A change to the realm's routes MUST run the realm's HTML
-visits again. A link into another realm MUST keep that card's own URL.
+visit and in the browser alike. An address MUST be the routed path on the URL
+that ADR 033 §1.5 gives for the realm: in stored HTML, the URL it has
+prerendered HTML carry, and on a page served on a host URL, that host URL.
+The stored HTML MUST carry the address. Whether the realm has a host URL
+MUST NOT change the routed path of an address, so adding a realm's first host
+URL or removing its last needs no new HTML visits. The server MUST NOT work
+out a routed address when a response leaves it. Translating between the
+realm's URL and a host URL at that boundary is ADR 033 §1.5: it changes the
+URL an address is on, never its routed path. A change to the realm's routes MUST run the realm's HTML visits
+again. A link into another realm MUST keep that card's own URL.
 
 ### 1.8. Links are portable across realms
 
@@ -209,10 +222,17 @@ loads nothing more and picks the parent when there are several. One card
 also works, because the alias 301, a card's own path, the sitemap and
 `og:url` have only one card, and they must give the same address as a link
 [5][12]. The server never holds a loaded card (ADR 015 §1.1), so its canonical address
-comes from the index [9]. The stored HTML keeps the realm's URL, and ADR
-033's prefix swap puts in the host URL, so a change of host URL needs no new
-HTML visits [11]. Until host URLs serve a realm directly, a site is a published
-realm whose own URL is its public address, so no swap is needed [11].
+comes from the index [9]. This ADR decides the path of an address. Which URL
+the path is on is ADR 033's decision, because it holds for everything in the
+stored HTML that names the realm, not only for routed links, and two ADRs
+that each state it can come to disagree [16]. Until host URLs serve a realm
+directly, a site is a published realm whose own URL is its public address, so
+the realm's URL and its host URL are the same [11]. A routed address on the
+realm's URL opens its page, because the realm server resolves a publicly
+readable realm's routes at the realm's URL too, as it does for a published
+realm, which has no host URL [17]. So the stored path depends only on the
+realm's routes, whose change already runs the HTML visits again, and not on
+whether a host URL exists, which changes with no HTML visit [17].
 
 A link with no route renders with no `href` instead of failing, as Rails and
 Ember do, because there one team owns the templates and the routes. A shared
@@ -246,6 +266,11 @@ A hand-written redirect is explicit [10].
   Rationale [10].
 - **A uniqueness check on field values at indexing.** It needs a search for
   each card that a field match serves [13].
+- **A realm with no host URL keeps card URLs [16].** The realm's URL serves
+  its routes when the realm is publicly readable, so this would take the
+  `href` from links to pages that work. Stored links would also stay wrong
+  when a realm gains its first host URL or loses its last, since that runs
+  no HTML visit and ADR 033 §1.5 changes only the URL, never the path [17].
 - **A link that searches for its card when no route fits.** It makes each
   such link slow and async [10].
 - **Card types that declare the route names they need, which each realm maps
@@ -276,6 +301,12 @@ A hand-written redirect is explicit [10].
 15. Matic Jurglic, 2026-11-17: route validation reads definitions through
     the cache, as a search does; reading a definition is not a routing
     decision.
+16. Matic Jurglic, 2026-11-20: the URL an address is on follows ADR 033
+    §1.5, and a realm with no host URL keeps card URLs.
+17. https://github.com/cardstack/boxel/pull/7645#discussion_r4664565701 and
+    https://github.com/cardstack/boxel/pull/7645#discussion_r4663634509:
+    `serve-index.ts` resolves routes at the URL of a publicly readable realm,
+    and adding or removing a host URL runs no HTML visit.
 
 ## 5. Remediation
 

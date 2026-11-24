@@ -258,8 +258,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
               runId: 'run-live',
               startedAt: '2030-01-01T10:00:00.000Z',
               milestone: 'Import',
-              done: 3,
-              total: 9,
+              task: 'Imported the March invoices',
             },
           }),
         ],
@@ -275,7 +274,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
       await waitFor('[data-test-realm-automation-state="Running"]');
       assert
         .dom('[data-test-realm-automation-glance]')
-        .hasText('Running “Import” (3 of 9)');
+        .hasText('Running “Import” — Imported the March invoices');
 
       answer = { status: 200, data: [PAUSED] };
       sendRealmEvent({ eventName: 'automation', automation: WEEKLY });

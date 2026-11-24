@@ -94,6 +94,22 @@ module(basename(import.meta.filename), function () {
       close(assert, ceiling.totalCredits, PER_RUN_CREDITS, 'total');
     });
 
+    test('counts the AI cap twice for an automation that batches AI, and once otherwise', function (assert) {
+      let batched = runCostCeiling({ ...CAPS, batchedAI: true }, testPricing());
+      assert.strictEqual(
+        batched.aiCredits,
+        1000,
+        'each batched request counts for the batch and its normal-price fallback',
+      );
+      close(assert, batched.computeCredits, COMPUTE_CREDITS, 'compute');
+      close(assert, batched.networkCredits, NETWORK_CREDITS, 'network');
+      close(assert, batched.totalCredits, PER_RUN_CREDITS + 500, 'total');
+      assert.strictEqual(
+        runCostCeiling({ ...CAPS, batchedAI: false }, testPricing()).aiCredits,
+        500,
+      );
+    });
+
     test('a zero cap adds nothing for its charge', function (assert) {
       let ceiling = runCostCeiling(
         { seconds: 60, responseBytes: 0, aiCredits: 0 },
@@ -175,6 +191,28 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(result.boundedRunsPerMonth, 0);
       assert.strictEqual(result.onceRuns, 0);
       assert.strictEqual(result.pricingVersion, testPricing().version);
+    });
+
+    test('an automation that batches AI counts each run’s AI twice', function (assert) {
+      let daily: AutomationTrigger[] = [
+        {
+          kind: 'cron',
+          label: 'daily',
+          expression: '30 5 * * *',
+          timeZone: CHICAGO,
+        },
+      ];
+      let batched = estimate(daily, { caps: { ...CAPS, batchedAI: true } });
+      assert.strictEqual(batched.perRun.aiCredits, 1000);
+      assert.strictEqual(
+        batched.credits,
+        Math.ceil((PER_RUN_CREDITS + 500) * 30),
+      );
+      assert.strictEqual(
+        estimate(daily).credits,
+        Math.ceil(PER_RUN_CREDITS * 30),
+        'an automation that doesn’t batch is unchanged',
+      );
     });
 
     test('names the charges it leaves out', function (assert) {

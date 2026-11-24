@@ -90,6 +90,7 @@ export const METHOD_REACH: Record<
   ask: 'person',
   'progress.plan': 'progress',
   'progress.milestone': 'progress',
+  'progress.task': 'progress',
   'progress.count': 'progress',
   'console.log': 'log',
   'console.info': 'log',
@@ -164,6 +165,7 @@ export const AUTOMATION_METHODS: ReadonlySet<RealmRunnerCallMethod> =
     'activity',
     'progress.plan',
     'progress.milestone',
+    'progress.task',
     'progress.count',
     'console.log',
     'console.info',
@@ -177,6 +179,7 @@ export const NOTIFY_METHODS: ReadonlySet<RealmRunnerCallMethod> =
   new Set<RealmRunnerCallMethod>([
     'progress.plan',
     'progress.milestone',
+    'progress.task',
     'progress.count',
     'console.log',
     'console.info',
@@ -195,6 +198,10 @@ export const MAX_RUN_NOTIFICATION_CHARS = 2_000_000;
 // one.
 export const MAX_MILESTONES = 50;
 export const MAX_MILESTONE_CHARS = 80;
+
+// The longest line `realm.progress.task` takes: a notable task inside a
+// milestone, in a few plain words.
+export const MAX_TASK_CHARS = 200;
 
 // The shape of a card `realm.cards.get` answers and of each card
 // `realm.cards.search` finds, as the tool description and the sandbox's error

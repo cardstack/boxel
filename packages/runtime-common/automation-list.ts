@@ -61,13 +61,13 @@ export interface AutomationSummaryTrigger {
 }
 
 // The run in progress, and where it is: the run milestone its script last
-// reported, with the count inside it when the script counts.
+// reported, with the last task the script reported inside that milestone.
 export interface AutomationSummaryCurrentRun {
   runId: string;
   startedAt: string | null;
   milestone: string | null;
-  done?: number;
-  total?: number;
+  // Null before the script reports a task inside the milestone.
+  task: string | null;
 }
 
 export interface AutomationSummaryAttributes {
@@ -131,9 +131,8 @@ export interface AutomationListAnswer {
 // listens for it (the prerender routes, and `CardPrerender`, the in-page
 // indexer tests mount) it fails the loads in flight. The realm config asks
 // while it renders, so a refusal here failed the config card's other loads in
-// the test indexer. A caller only a policy grant admits gets the ACL's
-// refusal, since the route is `ACL_ONLY` and the ACL refuses before the route
-// runs.
+// the test indexer. A caller the realm hands to its policy asks as no one,
+// so they get the same answer.
 export async function answerAutomationList({
   dbAdapter,
   realmURL,
@@ -379,7 +378,7 @@ async function readLastRunsOf(
 
 // Each automation's run in progress, leaving out Previews, as
 // `readCurrentRunMilestones` picks it, with the milestone its script last
-// reported and the count inside that milestone.
+// reported and the last task inside that milestone.
 async function readCurrentRunsOf(
   querier: Querier,
   ids: string[],
@@ -390,11 +389,15 @@ async function readCurrentRunsOf(
   }
   let rows = (await querier([
     'SELECT DISTINCT ON (r.automation_id) r.automation_id, r.id, r.started_at,',
-    'm.name, m.count_done, m.count_total',
+    'm.name, t.text AS task',
     'FROM automation_runs r LEFT JOIN LATERAL (',
-    'SELECT name, count_done, count_total FROM automation_run_milestones',
+    'SELECT position, name FROM automation_run_milestones',
     'WHERE run_id = r.id ORDER BY position DESC LIMIT 1',
-    ') m ON TRUE',
+    ') m ON TRUE LEFT JOIN LATERAL (',
+    'SELECT text FROM automation_run_tasks',
+    'WHERE run_id = r.id AND milestone_position = m.position',
+    'ORDER BY position DESC LIMIT 1',
+    ') t ON TRUE',
     'WHERE r.automation_id IN',
     ...inList(ids),
     "AND r.state = 'running' AND NOT r.dry_run",
@@ -404,19 +407,15 @@ async function readCurrentRunsOf(
     id: string;
     started_at: unknown;
     name: string | null;
-    count_done: number | null;
-    count_total: number | null;
+    task: string | null;
   }[];
   for (let row of rows) {
     let run: AutomationSummaryCurrentRun = {
       runId: row.id,
       startedAt: iso(row.started_at),
       milestone: row.name ?? null,
+      task: row.task ?? null,
     };
-    if (row.name && row.count_done !== null && row.count_total !== null) {
-      run.done = Number(row.count_done);
-      run.total = Number(row.count_total);
-    }
     currentRuns.set(row.automation_id, run);
   }
   return currentRuns;

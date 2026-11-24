@@ -17,6 +17,7 @@
 // message, which telemetry records.
 
 import { CONFIRMATION_CODE } from './confirmation-code.js';
+import { ERROR_REFERENCE } from './oauth-error-states.js';
 import { SecureSessionError, timedFetch } from './session.js';
 import type { Session } from './session.js';
 
@@ -103,6 +104,23 @@ const REFUSALS = new Set([
   'unavailable',
 ]);
 
+// A refusal from the consent routes. `reference` is set when the provider
+// ended the flow and stored an error the error page can look up: only a value
+// of a reference's shape is kept, so nothing else from the answer reaches a
+// request path or a link.
+export class ConsentRefusal extends SecureSessionError {
+  reference: string | undefined;
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    reference?: string,
+  ) {
+    super(status, code, message);
+    this.reference = reference;
+  }
+}
+
 const MESSAGES: Record<number, string> = {
   401: 'Sign in to continue.',
   404: 'This request has expired.',
@@ -155,11 +173,15 @@ async function consentRequest(
     json = undefined;
   }
   if (!response.ok) {
-    let error = (json as { error?: unknown } | undefined)?.error;
-    throw new SecureSessionError(
+    let { error, reference } =
+      (json as { error?: unknown; reference?: unknown } | undefined) ?? {};
+    throw new ConsentRefusal(
       response.status,
       typeof error === 'string' && REFUSALS.has(error) ? error : 'failed',
       MESSAGES[response.status] ?? 'Something went wrong. Try again.',
+      typeof reference === 'string' && ERROR_REFERENCE.test(reference)
+        ? reference
+        : undefined,
     );
   }
   return json;

@@ -60,10 +60,13 @@ const log = logger('ai-batches');
 // Only a run token reaches it, from a running run that its token's attempt
 // still owns, whose identity's sessions haven't been revoked since the token
 // was minted. An interactive session is refused: someone waiting for an
-// answer gains nothing from a batch. A submit also needs the automation's
-// payer to have turned on `batchedAI` when they switched it on or last
-// resumed it (the automation row's caps snapshot); a status read doesn't, so
-// a follow-up run can always read a batch that is already paid for.
+// answer gains nothing from a batch. A Preview's submit is refused too: a
+// Preview sends batched requests at the normal price (ADR 030 §1.1), and its
+// minimum balance counts its AI once on that basis. A submit also needs the
+// automation's payer to have turned on `batchedAI` when they switched it on
+// or last resumed it (the automation row's caps snapshot); a status read
+// doesn't, so a follow-up run can always read a batch that is already paid
+// for.
 //
 // A submit charges nothing. OpenRouter reports a batch's cost only once it
 // ends, so the submit records the batch (its run, the person that run acts
@@ -105,6 +108,13 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       return;
     }
     let { run, automation } = caller;
+    if (run.dryRun) {
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        'A Preview sends its batched requests at the normal price, so it submits no batches',
+      );
+      return;
+    }
     if (!automation.capsSnapshot.batchedAI) {
       await sendResponseForForbiddenRequest(
         ctxt,
@@ -159,18 +169,21 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
     if (!reserved) {
       return;
     }
-    let reservationId = reserved;
+    let { reservationId, reservedCredits } = reserved;
     let release = () =>
       settleAutomationRunAIRequest(dbAdapter, {
         runId: run.id,
         reservationId,
         costInUsd: 0,
       });
-    // What an operator needs to bill a batch by hand when it may have been
-    // submitted with no row recording it.
+    // What an operator needs to record a batch that may have been submitted
+    // with no row (`/_grafana-record-ai-batch`). Every report of such a
+    // submit carries the `ai-batch-submit` tag, whatever its title, so an
+    // operator finds them all with one Sentry search.
     let unrecorded = {
       runId: run.id,
       actsAs: run.actsAs,
+      realm: run.realm,
       automationId: run.automationId,
       model,
       requestCount: requests.length,
@@ -193,7 +206,10 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       // that is paid for and recorded nowhere. The reservation stays held.
       let message = `batch submit outcome unknown for run ${run.id} (acting as ${run.actsAs}, ${requests.length} requests to ${model}, estimated at ${estimated.estimate.usd} USD): OpenRouter may have accepted a batch that nothing records`;
       log.error(message, answer.error);
-      Sentry.captureException(answer.error, { extra: unrecorded });
+      Sentry.captureException(answer.error, {
+        tags: { 'ai-batch-submit': 'outcome-unknown' },
+        extra: unrecorded,
+      });
       return;
     }
     let { status, json, text } = answer;
@@ -204,7 +220,11 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       // a timeout, so the reservation stays held.
       let message = `batch submit outcome unknown for run ${run.id}: OpenRouter answered ${status}, so a batch may exist that nothing records`;
       log.error(message);
-      Sentry.captureMessage(message, { level: 'error', extra: unrecorded });
+      Sentry.captureMessage(message, {
+        level: 'error',
+        tags: { 'ai-batch-submit': 'outcome-unknown' },
+        extra: unrecorded,
+      });
       sendJson(ctxt, status, text);
       return;
     }
@@ -225,7 +245,11 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       // batch, if one exists, can't be recorded or billed.
       let message = `batch submit outcome unknown for run ${run.id}: OpenRouter accepted the submit but its answer names no batch, so it can't be recorded for billing`;
       log.error(message);
-      Sentry.captureMessage(message, { level: 'error', extra: unrecorded });
+      Sentry.captureMessage(message, {
+        level: 'error',
+        tags: { 'ai-batch-submit': 'outcome-unknown' },
+        extra: unrecorded,
+      });
       await sendResponseForSystemError(
         ctxt,
         'OpenRouter answered the batch submit with no batch',
@@ -243,17 +267,19 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
         requestCount: requests.length,
         estimatedUsd: estimated.estimate.usd,
         runAIReservation: reservationId,
+        reservedCredits,
         deadline,
         expiresAt: batch.expiresAt,
         state: batch.status,
       });
     } catch (error) {
       // The batch is submitted and will be charged to the platform, but
-      // nothing records it to bill. Reported with everything needed to bill
-      // it by hand.
+      // nothing records it to bill. Reported with everything needed to
+      // record it.
       let message = `OpenRouter batch ${batch.id} for run ${run.id} (acting as ${run.actsAs}, estimated at ${estimated.estimate.usd} USD) was submitted but could not be recorded for billing`;
       log.error(message, error);
       Sentry.captureException(error, {
+        tags: { 'ai-batch-submit': 'not-recorded' },
         extra: { batchId: batch.id, ...unrecorded },
       });
       await sendResponseForSystemError(
@@ -419,9 +445,9 @@ async function batchCaller(
 // Reserves the batch on the run's AI spending cap, in one statement, at twice
 // its requests' worst case at the model's listed price: once for the batch,
 // and once for the normal-price requests it falls back to when it misses its
-// deadline. Returns the reservation's id, or answers the refusal itself and
-// returns undefined when the batch would pass the cap or the run can no
-// longer make AI requests.
+// deadline. Returns the reservation's id and the credits it holds, or answers
+// the refusal itself and returns undefined when the batch would pass the cap
+// or the run can no longer make AI requests.
 async function reserveBatch(
   ctxt: Koa.Context,
   dbAdapter: DBAdapter,
@@ -436,7 +462,7 @@ async function reserveBatch(
     listedCredits: number;
     requestCount: number;
   },
-): Promise<string | undefined> {
+): Promise<{ reservationId: string; reservedCredits: number } | undefined> {
   let credits = listedCredits * BATCHED_AI_RESERVE_FACTOR;
   let reservation = await reserveAutomationRunAICredits(
     dbAdapter,
@@ -446,7 +472,10 @@ async function reserveBatch(
   );
   switch (reservation.kind) {
     case 'reserved':
-      return reservation.reservationId;
+      return {
+        reservationId: reservation.reservationId,
+        reservedCredits: credits,
+      };
     case 'over-cap': {
       let { aiCreditsSpent, aiCreditsReserved } = reservation.run;
       await sendResponseForForbiddenRequest(

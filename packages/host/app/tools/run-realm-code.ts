@@ -129,6 +129,7 @@ import {
   INTERACTIVE_METHODS,
   MAX_MILESTONE_CHARS,
   MAX_MILESTONES,
+  MAX_TASK_CHARS,
   MAX_RUN_NOTIFICATION_CHARS,
   MAX_RUN_NOTIFICATIONS,
   NOTIFY_METHODS,
@@ -652,6 +653,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   ask: false,
   'progress.plan': false,
   'progress.milestone': false,
+  'progress.task': false,
   'progress.count': false,
   'console.log': false,
   'console.info': false,
@@ -706,6 +708,7 @@ const REQUIRES_READ: Record<RealmRunnerCallMethod, boolean> = {
   ask: false,
   'progress.plan': false,
   'progress.milestone': false,
+  'progress.task': false,
   'progress.count': false,
   'console.log': false,
   'console.info': false,
@@ -3039,8 +3042,12 @@ function milestoneName(value: unknown): string | undefined {
     : undefined;
 }
 
-function wholeNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+function taskText(value: unknown): string | undefined {
+  return typeof value === 'string' &&
+    value.trim() &&
+    value.length <= MAX_TASK_CHARS
+    ? value.trim()
+    : undefined;
 }
 
 // The progress event a one-way call reports, or undefined for arguments
@@ -3069,17 +3076,9 @@ function progressEvent(
       let name = milestoneName(args[0]);
       return name === undefined ? undefined : { kind: 'milestone', at, name };
     }
-    case 'progress.count': {
-      let [done, total] = args;
-      if (!wholeNumber(done)) {
-        return undefined;
-      }
-      if (total === null || total === undefined) {
-        return { kind: 'count', at, done };
-      }
-      return wholeNumber(total) && done <= total
-        ? { kind: 'count', at, done, total }
-        : undefined;
+    case 'progress.task': {
+      let text = taskText(args[0]);
+      return text === undefined ? undefined : { kind: 'task', at, text };
     }
     case 'console.log':
     case 'console.info':
@@ -3127,8 +3126,8 @@ function redactEvent(
       return { ...event, name: redactSecrets(event.name, secrets) };
     case 'console':
       return { ...event, message: redactSecrets(event.message, secrets) };
-    case 'count':
-      return event;
+    case 'task':
+      return { ...event, text: redactSecrets(event.text, secrets) };
     case 'error':
       return {
         ...event,

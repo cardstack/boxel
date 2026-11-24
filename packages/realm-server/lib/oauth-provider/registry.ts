@@ -6,7 +6,20 @@
 // a resource of their own through the realm server's test-only option;
 // nothing in production can.
 
-import type { SupportedMimeType } from '@cardstack/runtime-common';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import type {
+  OAuthRoute,
+  OAuthRouteMethod,
+  OAuthScope,
+} from '@cardstack/runtime-common/oauth-route-admission';
+
+// The route map's types and its check live in runtime-common, where a realm
+// can reach them too (ADR 021 §1.3).
+export type {
+  OAuthRoute,
+  OAuthRouteMethod,
+  OAuthScope,
+} from '@cardstack/runtime-common/oauth-route-admission';
 
 export type OAuthClientKinds =
   // Any client: one identified by a client ID metadata document, or one that
@@ -14,40 +27,6 @@ export type OAuthClientKinds =
   | 'open'
   // Only the clients Boxel registers in code.
   | 'pre-registered';
-
-export type OAuthRouteMethod =
-  | 'GET'
-  | 'HEAD'
-  | 'QUERY'
-  | 'POST'
-  | 'PUT'
-  | 'PATCH'
-  | 'DELETE';
-
-// A route a scope admits, named as its router registers it: the path is the
-// registered pattern, never a pattern over URLs, and a controller matches the
-// route its router selected, after any method override (ADR 021 §1.3).
-export type OAuthRoute =
-  | { on: 'server'; method: OAuthRouteMethod; path: string }
-  | {
-      on: 'realm';
-      method: OAuthRouteMethod;
-      mimeType: SupportedMimeType;
-      path: string;
-    };
-
-export interface OAuthScope {
-  name: string;
-  // What consent says the scope lets the app do.
-  description: string;
-  // The short word Connected apps shows for it ("Read", "Change").
-  label: string;
-  // Whether consent marks it as one to think twice about.
-  caution: boolean;
-  // The routes a token holding this scope may reach. The provider never
-  // reads these; the resource's controllers do.
-  routes: readonly OAuthRoute[];
-}
 
 // A resource as declared, before the server's URL is known.
 export interface OAuthResourceDefinition {
@@ -107,7 +86,168 @@ const MCP: OAuthResourceDefinition = {
   clients: 'open',
 };
 
-const RESOURCES: readonly OAuthResourceDefinition[] = [MCP];
+// The Boxel API: the realm and realm-server routes Boxel's own apps call,
+// starting with boxel-cli. Its controllers are `jwtMiddleware`,
+// `multiRealmAuthorization` and `Realm.#admitOAuthToken` (ADR 021 §1.5).
+//
+// A scope maps only what boxel-cli calls and a realm's reads; every
+// other route refuses its tokens, so a route added later refuses them until
+// it is mapped here (§1.3). None of key management, a secure-session route,
+// a route that mints a token or a signed URL, or a realm's permissions is
+// mapped, nor may ever be (§1.6): the realm's `_session`, `_permissions` and
+// `_sign-capture-urls`, and the realm server's `_server-session`,
+// `_realm-auth`, `_delegate-session`, key, secure-session, secure-window and
+// `_oauth` routes. Nor is `/_run-command`: its prerender tab holds sessions for
+// every realm the user can reach, beside code the caller chooses, which would
+// exchange the token for those sessions (§1.5).
+// `oauth-provider-boxel-api-test.ts` checks the map against both routers.
+const ROUTE_METHODS_READ: readonly OAuthRouteMethod[] = ['GET', 'QUERY'];
+
+function realm(
+  method: OAuthRouteMethod,
+  path: string,
+  mimeType: SupportedMimeType | '*',
+): OAuthRoute {
+  return { on: 'realm', method, path, mimeType };
+}
+
+function server(method: OAuthRouteMethod, path: string): OAuthRoute {
+  return { on: 'server', method, path };
+}
+
+const BOXEL_API_READ_ROUTES: readonly OAuthRoute[] = [
+  // Realm reads.
+  ...ROUTE_METHODS_READ.map((method) =>
+    realm(method, '/_info', SupportedMimeType.RealmInfo),
+  ),
+  realm('GET', '/_readiness-check', SupportedMimeType.RealmInfo),
+  realm('QUERY', '/_lint', SupportedMimeType.JSON),
+  realm('GET', '/_mtimes', SupportedMimeType.Mtimes),
+  ...ROUTE_METHODS_READ.map((method) =>
+    realm(method, '/_search', SupportedMimeType.CardJson),
+  ),
+  realm('HEAD', '/_search', SupportedMimeType.CardJson),
+  realm('GET', '/_types', SupportedMimeType.CardTypeSummary),
+  realm('GET', '/_dependencies', SupportedMimeType.JSONAPI),
+  realm('GET', '/_publishability', SupportedMimeType.JSONAPI),
+  realm('GET', '/_indexing-errors', SupportedMimeType.JSONAPI),
+  realm('GET', '/_card-dependencies', SupportedMimeType.CardDependencies),
+  // A `POST` that only reads: the realm requires `read` of it.
+  realm('POST', '/_capabilities', SupportedMimeType.JSON),
+  realm('QUERY', '/_operations', SupportedMimeType.BoxelOperations),
+  realm('QUERY', '/_operations', SupportedMimeType.JSONAPI),
+  ...[
+    SupportedMimeType.CardJson,
+    SupportedMimeType.CardHtml,
+    SupportedMimeType.FileMetaHtml,
+    SupportedMimeType.Markdown,
+    SupportedMimeType.FileMeta,
+    SupportedMimeType.CardSource,
+  ].map((mimeType) => realm('GET', '/.*', mimeType)),
+  realm('HEAD', '/.*', SupportedMimeType.CardJson),
+  realm('HEAD', '/.*', SupportedMimeType.CardSource),
+  realm('GET', '.*/', SupportedMimeType.DirectoryListing),
+  // Realm discovery: a `HEAD` in every other bucket answers with the realm's
+  // identity alone, and the health probe's `HEAD` is the same answer.
+  ...Object.values(SupportedMimeType)
+    .filter(
+      (mimeType) =>
+        mimeType !== SupportedMimeType.CardJson &&
+        mimeType !== SupportedMimeType.CardSource,
+    )
+    .flatMap((mimeType) => [
+      realm('HEAD', '/_readiness-check', mimeType),
+      realm('HEAD', '/.*', mimeType),
+    ]),
+  // The file and module serve, for whatever no router route claimed.
+  realm('GET', '*', '*'),
+  realm('HEAD', '*', '*'),
+  // Realm-server reads.
+  ...[
+    '/_federated-search',
+    '/_federated-info',
+    '/_federated-index-counts',
+    '/_federated-types',
+  ].flatMap((path) =>
+    (['GET', 'QUERY', 'POST'] as const).map((method) => server(method, path)),
+  ),
+  server('GET', '/_archived-realms'),
+  server('GET', '/_publish-progress'),
+];
+
+const BOXEL_API_WRITE_ROUTES: readonly OAuthRoute[] = [
+  ...BOXEL_API_READ_ROUTES,
+  // Realm writes. A write that would change what the realm's policy admits
+  // is refused in the realm whatever route carries it (§1.6).
+  realm('POST', '/_atomic', SupportedMimeType.JSONAPI),
+  realm('POST', '/_operations', SupportedMimeType.BoxelOperations),
+  realm('POST', '/_operations', SupportedMimeType.JSONAPI),
+  realm('POST', '(/|/.+/)', SupportedMimeType.CardJson),
+  realm('PATCH', '/.+(?<!.json)', SupportedMimeType.CardJson),
+  realm('DELETE', '/|/.+(?<!.json)', SupportedMimeType.CardJson),
+  realm('POST', '/.*', SupportedMimeType.CardSource),
+  realm('POST', '/.*', SupportedMimeType.OctetStream),
+  realm('DELETE', '/.+', SupportedMimeType.CardSource),
+  realm('POST', '/_cancel-indexing-job', SupportedMimeType.JSON),
+  realm('POST', '/_reindex', SupportedMimeType.JSON),
+  realm('POST', '/_full-reindex', SupportedMimeType.JSON),
+  // Realm-server writes: what boxel-cli does with a user's workspaces.
+  // Creating a workspace writes only its caller's own owner row, on a realm
+  // that didn't exist, and publishing writes read for everyone only on the
+  // published copy, never on the realm published from, so neither changes
+  // who can reach an existing realm of the user's (§1.6).
+  server('POST', '/_create-realm'),
+  server('DELETE', '/_delete-realm'),
+  server('POST', '/_publish-realm'),
+  server('POST', '/_unpublish-realm'),
+  server('POST', '/_archive-realm'),
+  server('POST', '/_unarchive-realm'),
+];
+
+const BOXEL_API: OAuthResourceDefinition = {
+  path: '',
+  name: 'Boxel',
+  description:
+    'Lets the app work in your Boxel account as you do: read and change your workspaces and their files.',
+  coverage:
+    'This covers every workspace you can open, including shared ones and ones you create later. It never covers your API keys, who can open a workspace, or your password.',
+  scopes: [
+    {
+      name: 'boxel:read',
+      description: 'See your workspaces and the cards and files in them.',
+      label: 'Read',
+      caution: false,
+      routes: BOXEL_API_READ_ROUTES,
+      realmPermission: 'read',
+    },
+    {
+      name: 'boxel:write',
+      description:
+        'Create and change cards and files, and create, publish, archive and delete workspaces you own.',
+      label: 'Change',
+      caution: true,
+      routes: BOXEL_API_WRITE_ROUTES,
+      realmPermission: 'write',
+    },
+  ],
+  clients: 'pre-registered',
+};
+
+// The Boxel API's entry. Its identifier is the issuer itself (`path: ''`),
+// and only it is, since `buildRegistry` refuses a duplicate identifier.
+export function boxelApiResource(
+  registry: readonly OAuthResource[],
+  issuer: string,
+): OAuthResource {
+  let id = oauthIssuer(issuer);
+  let found = registry.find((entry) => !entry.testOnly && entry.id === id);
+  if (!found) {
+    throw new Error('the registry declares no Boxel API resource');
+  }
+  return found;
+}
+
+const RESOURCES: readonly OAuthResourceDefinition[] = [MCP, BOXEL_API];
 
 // The issuer is the realm server's URL, which clients compare as a string
 // with the one they derived it from, so it carries no trailing slash.

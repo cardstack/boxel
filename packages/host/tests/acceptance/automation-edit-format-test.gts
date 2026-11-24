@@ -866,7 +866,7 @@ module('Acceptance | automation edit format', function (hooks) {
           resolveCalls: 5,
           aiCredits: 300,
           writes: 50,
-          seconds: 300,
+          seconds: 1200,
           dailyCredits: 500,
           monthlyCredits: 10_000,
         }),
@@ -875,7 +875,8 @@ module('Acceptance | automation edit format', function (hooks) {
     );
     assert.strictEqual(
       inputOf('Run time, in minutes', section('Limits')).value,
-      '5',
+      '20',
+      'a new automation may run for the longest a run may last',
     );
   });
 

@@ -60,6 +60,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=automation_preview_files \
   --exclude-table-and-children=automation_run_log \
   --exclude-table-and-children=automation_run_milestones \
+  --exclude-table-and-children=automation_run_tasks \
   --exclude-table-and-children=automations \
   --exclude-table-and-children=ai_batches \
   --exclude-table-and-children=unrecorded_ai_batches \

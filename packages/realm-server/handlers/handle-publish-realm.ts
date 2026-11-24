@@ -59,8 +59,10 @@ import {
   sendResponseForSystemError,
   sendResponseForUnprocessableEntity,
   setContextResponse,
+  requestUser,
 } from '../middleware/index.ts';
 import { createJWT } from '../jwt.ts';
+import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { registerUser } from '../synapse.ts';
@@ -456,8 +458,8 @@ export default function handlePublishRealm({
   domainsForPublishedRealms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token) {
+    let user = requestUser(ctxt);
+    if (!user) {
       await sendResponseForSystemError(
         ctxt,
         'token is required to create realm',
@@ -491,7 +493,13 @@ export default function handlePublishRealm({
     let sourceRealmURL = ensureTrailingSlash(json.sourceRealmURL);
     let publishedRealmURL = ensureTrailingSlash(json.publishedRealmURL);
 
-    let { user: ownerUserId, sessionRoom: tokenSessionRoom } = token;
+    let ownerUserId = user;
+    // An OAuth caller carries no session claims (ADR 021 §1.5), so its
+    // session room is the one the user's account records.
+    let tokenSessionRoom =
+      (ctxt.state.token as RealmServerTokenClaim | undefined)?.sessionRoom ??
+      (await fetchSessionRoom(dbAdapter, user)) ??
+      undefined;
 
     let overrideResult = await maybeApplyPublishedRealmOverride(
       dbAdapter,

@@ -33,16 +33,12 @@ import {
 import {
   realmSecretSeed,
   setupPermissionedRealmCached,
+  setupProcessPricing,
 } from './helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { resolveLogLine } from '../handlers/handle-request-forward.ts';
 import { exactMeteredCredits } from '../lib/metered-charge.ts';
-import {
-  BYTES_PER_GB,
-  checkPricingAtStartup,
-  currentPricing,
-  type PricingReporter,
-} from '../lib/pricing.ts';
+import { BYTES_PER_GB, currentPricing } from '../lib/pricing.ts';
 
 // What the automations console reads: a run's report, a Preview's staged
 // file and an automation's storage. Each answers only a direct writer of the
@@ -62,46 +58,12 @@ const REALM_USER = '@node-test_realm:localhost';
 
 const AUTOMATION = 'automation/nightly';
 
-const silent: PricingReporter = { info() {}, error() {}, alert() {} };
-
-function pricingEnv(): Record<string, string> {
-  return {
-    PRICING_PRERENDER_USD_PER_VCPU_HOUR: '0.04048',
-    PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR: '0.004445',
-    PRICING_PRERENDER_TASK_VCPUS: '4',
-    PRICING_PRERENDER_TASK_MEMORY_GB: '16',
-    PRICING_PRERENDER_TASK_TABS: '8',
-    PRICING_WORKER_USD_PER_VCPU_HOUR: '0.03238',
-    PRICING_WORKER_USD_PER_MEMORY_GB_HOUR: '0.00356',
-    PRICING_WORKER_TASK_VCPUS: '2',
-    PRICING_WORKER_TASK_MEMORY_GB: '4',
-    PRICING_WORKER_TASK_PROCESSES: '2',
-    PRICING_USD_PER_DOWNLOADED_GB: '0.045',
-    PRICING_USD_PER_FILE_STORAGE_GB_MONTH: '0.30',
-    PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH: '0.115',
-    PRICING_MARGIN: '2',
-    PRICING_MINIMUM_BALANCE_FLOOR_CREDITS: '1000',
-  };
-}
-
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
   let dbAdapter: PgAdapter;
   let request: SuperTest<Test>;
 
-  let pricedBefore = currentPricing() !== undefined;
-  hooks.before(function () {
-    checkPricingAtStartup(
-      'automation-console-reads-test',
-      pricingEnv(),
-      silent,
-    );
-  });
-  hooks.after(function () {
-    if (!pricedBefore) {
-      checkPricingAtStartup('automation-console-reads-test', {}, silent);
-    }
-  });
+  setupProcessPricing(hooks, 'automation-console-reads-test');
 
   setupPermissionedRealmCached(hooks, {
     realmURL,
@@ -221,16 +183,11 @@ module(basename(import.meta.filename), function (hooks) {
           bytes: 2048,
         } as Parameters<typeof callApiLogLine>[0]),
       );
-      await logRunPlatformLine(
-        dbAdapter,
-        run.id,
-        resolveLogLine({
-          model: 'test/model',
-          status: 200,
-          ms: 900,
-          costInUsd: 0.002,
-        }),
-      );
+      await logRunPlatformLine(dbAdapter, run.id, {
+        ...resolveLogLine({ model: 'test/model', status: 200, ms: 900 }),
+        // A stored line can carry an AI request's cost in its data.
+        data: { model: 'test/model', status: 200, ms: 900, costInUsd: 0.002 },
+      });
       await logRunPlatformLine(dbAdapter, run.id, {
         kind: 'commit',
         level: 'info',
@@ -297,7 +254,10 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(a.resolveCalls.length, 1);
       assert.strictEqual(a.resolveCalls[0].model, 'test/model');
-      assert.strictEqual(a.resolveCalls[0].costInUsd, 0.002);
+      assert.notOk(
+        'costInUsd' in a.resolveCalls[0],
+        'a writer never reads an AI request’s cost',
+      );
       assert.deepEqual(a.writes, {
         count: 2,
         committed: ['out/a.json', 'out/b.json'],

@@ -49,27 +49,19 @@ import type SessionService from '@cardstack/host/services/session';
 // The routing realm's validated routes, the whole tree, as the realm server
 // injects them next to the fixed routing map, for a realm with dynamic
 // routes. `realmURL` is the URL the realm is served at, ending with `/`.
-// `complete` is false when validation dropped routes for now because a type
-// definition could not be read; the route set is then not final, so a path
-// it does not resolve may still be one a route serves.
 export interface HostDynamicRoutes {
   realmURL: string;
   routes: readonly HostRoute[];
-  complete?: boolean;
 }
 
 // What a path no fixed rule matches resolves to through the dynamic routes.
 // `card` serves the card at `cardHref`; `redirect` navigates to
 // `redirectTo`, which is host-scoped like a fixed redirect rule's target;
-// `error` is a lookup that failed or was refused. `unavailable` is a path a
-// route matched but that resolved to nothing while the route set is
-// incomplete: when the path is not a card's own path, a route dropped for
-// now might serve it, so it is an error, not a missing page.
+// `error` is a lookup that failed or was refused.
 export type DynamicRoutedPath =
   | { kind: 'card'; cardHref: string }
   | { kind: 'redirect'; redirectTo: string }
-  | { kind: 'error'; error: unknown }
-  | { kind: 'unavailable' };
+  | { kind: 'error'; error: unknown };
 
 function parsesAsURL(value: string): boolean {
   try {
@@ -372,9 +364,6 @@ export default class HostModeService extends Service {
     path: string,
   ): Promise<DynamicRoutedPath | undefined> {
     let mount = this.dynamicRoutesMount;
-    // No routes at all, even in an incomplete set (`complete: false` with
-    // every dynamic route dropped), is no dynamic routes: no route can match
-    // the path, and serve-index answers 503 only for a path a route matched.
     if (!mount || mount.dynamicRoutes.routes.length === 0) {
       return undefined;
     }
@@ -432,13 +421,6 @@ export default class HostModeService extends Service {
         );
         return { kind: 'error', error: resolution.error };
       case 'nothing':
-        // With an incomplete route set, a route that would serve a path
-        // some route matched may be one validation dropped for now, so the
-        // path is not known to be missing, as on the server. A path no
-        // route matched at all loads as it did before routes.
-        if (dynamicRoutes.complete === false && resolution.trace.length > 0) {
-          return { kind: 'unavailable' };
-        }
         return undefined;
     }
   }

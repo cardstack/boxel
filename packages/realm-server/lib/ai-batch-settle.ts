@@ -19,6 +19,7 @@ import {
 } from '@cardstack/billing/ai-billing';
 import * as Sentry from '@sentry/node';
 import { outboundLogContext } from './proxy-forward.ts';
+import { currentPricing, type Pricing } from './pricing.ts';
 import { settleAutomationRunAIRequest } from './automation-ai-spending.ts';
 import {
   callOpenRouterBatchAPI,
@@ -69,6 +70,12 @@ const RECONCILE_GRACE_MS = 30 * 60 * 1000;
 // was submitted) is settled at its estimate. A batch OpenRouter doesn't know
 // (`404`), or one it can't answer for, stays unsettled and is read again by
 // the next pass.
+//
+// Each charge records the pricing version this process checked at startup,
+// read when the pass starts (`settleAIBatches` takes another `pricing`). A
+// batch is billed at its provider's cost with no margin whatever the version,
+// so a process whose pricing check failed still settles every batch and
+// records no version.
 export function aiBatchSettlementFor(dbAdapter: DBAdapter): AIBatchSettlement {
   return {
     settle: (opts) => settleAIBatches(dbAdapter, opts),
@@ -80,7 +87,12 @@ export async function settleAIBatches(
   {
     now = new Date(),
     onProgress = () => {},
-  }: { now?: Date; onProgress?: () => void } = {},
+    pricing = currentPricing,
+  }: {
+    now?: Date;
+    onProgress?: () => void;
+    pricing?: () => Pricing | undefined;
+  } = {},
 ): Promise<AIBatchSettlementResult> {
   let result: AIBatchSettlementResult = {
     settled: 0,
@@ -88,12 +100,13 @@ export async function settleAIBatches(
     failed: 0,
     unrecorded: 0,
   };
+  let pricingVersion = pricing()?.version;
   let batches = await listUnsettledAIBatches(dbAdapter, {
     limit: MAX_BATCHES_PER_PASS,
   });
   for (let batch of batches) {
     try {
-      let outcome = await settleAIBatch(dbAdapter, batch);
+      let outcome = await settleAIBatch(dbAdapter, batch, pricingVersion);
       result[outcome]++;
     } catch (error) {
       result.failed++;
@@ -118,6 +131,7 @@ export async function settleAIBatches(
 async function settleAIBatch(
   dbAdapter: DBAdapter,
   batch: AIBatch,
+  pricingVersion: string | undefined,
 ): Promise<'settled' | 'open' | 'failed'> {
   await recordAIBatchSettleRead(dbAdapter, batch.batchId);
   let answer = await callOpenRouterBatchAPI(dbAdapter, {
@@ -135,7 +149,7 @@ async function settleAIBatch(
     // OpenRouter deletes a batch's results 30 days after it was submitted,
     // long after it ended. What it cost is no longer readable, so it is
     // billed at its estimate.
-    await settle(dbAdapter, batch, undefined);
+    await settle(dbAdapter, batch, undefined, pricingVersion);
     return 'settled';
   }
   // A 402 answers with the batch when the platform's OpenRouter balance
@@ -173,16 +187,18 @@ async function settleAIBatch(
     // is topped up, so it isn't billed at the estimate yet.
     return 'open';
   }
-  await settle(dbAdapter, recorded, read.costUsd ?? undefined);
+  await settle(dbAdapter, recorded, read.costUsd ?? undefined, pricingVersion);
   return 'settled';
 }
 
 // Bills a batch that has ended: `reportedUsd` when OpenRouter reported a
-// cost, otherwise the estimate made at submit.
+// cost, otherwise the estimate made at submit. The charge records
+// `pricingVersion` when the pass has one.
 async function settle(
   dbAdapter: DBAdapter,
   batch: AIBatch,
   reportedUsd: number | undefined,
+  pricingVersion: string | undefined,
 ) {
   let estimated = reportedUsd === undefined;
   let usd = reportedUsd ?? batch.estimatedUsd;
@@ -193,6 +209,7 @@ async function settle(
       realm: batch.realm,
       runId: batch.runId,
       batchId: batch.batchId,
+      ...(pricingVersion ? { pricingVersion } : {}),
     },
     usd,
     estimated,

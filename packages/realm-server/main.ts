@@ -101,7 +101,10 @@ import {
 } from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
 import { checkPricingAtStartup } from './lib/pricing.ts';
+import { recordCurrentPricing } from './lib/metered-charge.ts';
 import { transpilerIdentity } from './lib/transpiler-identity.ts';
+import { boxelApi, boxelApiForRealms } from './lib/oauth-provider/boxel-api.ts';
+import { buildRegistry, oauthIssuer } from './lib/oauth-provider/registry.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -705,6 +708,11 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let queue = new PgQueuePublisher(dbAdapter);
   await reportPlaintextCensus(dbAdapter);
   await reportSealedCensus(dbAdapter, secretsKeyring());
+  // The AI charges this process writes record its pricing version, so it
+  // records what the version stands for, as every worker does. Not awaited, so
+  // a slow or failing insert never holds up the start; `recordCurrentPricing`
+  // logs any failure.
+  void recordCurrentPricing(dbAdapter, 'realm-server');
   // DB-backed job-scoped search cache, shared across replicas via Postgres.
   // One instance per process, shared between the request handlers (via
   // RealmServer → createRoutes) and the JobsFinishedListener so a
@@ -900,6 +908,18 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     sendEvent: sendKeyNoticeEvent,
   });
 
+  // Each realm is one of the Boxel API's controllers while the OAuth provider
+  // is on (ADR 021 §1.5): it gets the realm routes the API's scopes map, and
+  // the shared lookup.
+  let realmOAuth = oauthProvider
+    ? boxelApiForRealms(
+        boxelApi(dbAdapter, {
+          issuer: oauthIssuer(serverURL),
+          registry: buildRegistry(oauthIssuer(serverURL)),
+        }),
+      )
+    : undefined;
+
   // Construct the reconciler before the server so the server can hold a
   // reference to it. The reconciler doesn't begin its background poll
   // loop until reconciler.start() is called below, after server.start()
@@ -968,6 +988,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
               : {}),
           }),
           policyWriteAuditor,
+          ...(realmOAuth ? { oauth: realmOAuth } : {}),
           ...(changeJournal ? { history: { journal: changeJournal } } : {}),
         },
         {

@@ -51,7 +51,7 @@ import handleUnarchiveRealm from './handlers/handle-unarchive-realm.ts';
 import handleArchivedRealms from './handlers/handle-archived-realms.ts';
 import {
   healthCheck,
-  jwtMiddleware,
+  jwtMiddleware as userTokenMiddleware,
   grafanaAuthorization,
   operatorAuthorization,
   sendResponseForUnauthorizedRequest,
@@ -67,6 +67,12 @@ import handleReindex from './handlers/handle-reindex.ts';
 import handleFullReindex from './handlers/handle-full-reindex.ts';
 import handleRemoveJob from './handlers/handle-remove-job.ts';
 import handleAddCredit from './handlers/handle-add-credit.ts';
+import {
+  handleBillAIBatch,
+  handleDismissUnrecordedAIBatch,
+  handleRecordAIBatch,
+  handleWriteOffAIBatch,
+} from './handlers/handle-ai-batch-operator.ts';
 import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
 import handleRemoveRealmUserPermission from './handlers/handle-remove-realm-user-permission.ts';
 import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
@@ -172,6 +178,7 @@ import { PREFIX_REALMS_ENDPOINT } from '@cardstack/runtime-common/prefix-realm-n
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import type { OAuthProviderService } from './lib/oauth-provider/provider.ts';
 import { registerOAuthProviderRoutes } from './lib/oauth-provider/serve.ts';
+import { boxelApi as createBoxelApi } from './lib/oauth-provider/boxel-api.ts';
 import {
   handleAddUserKey,
   handleDeleteUserKey,
@@ -373,6 +380,20 @@ export function createRoutes(args: CreateRoutesArgs) {
     reconciler: args.reconciler,
     ...(args.changeJournal ? { changeJournal: args.changeJournal } : {}),
   };
+
+  // Every route behind a user's own token is also a controller of the Boxel
+  // API's OAuth tokens (ADR 021 §1.5), and admits one only where a Boxel API
+  // scope maps it (`lib/oauth-provider/registry.ts`). Every other route
+  // answers an OAuth token `401 invalid_token`.
+  let boxelApi = args.oauthProvider
+    ? createBoxelApi(args.dbAdapter, args.oauthProvider)
+    : undefined;
+  let jwtMiddleware = (
+    secretSeed: string,
+    dbAdapter: DBAdapter,
+    opts: { expiredWithinSeconds?: number } = {},
+  ) => userTokenMiddleware(secretSeed, dbAdapter, { ...opts, boxelApi });
+  let multiRealmDeps = { ...args, boxelApi };
 
   if (args.oauthProvider) {
     registerOAuthProviderRoutes(router, args.oauthProvider, {
@@ -762,7 +783,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-search',
-    multiRealmAuthorization(args, { unreadableRealms: 'carry' }),
+    multiRealmAuthorization(multiRealmDeps, { unreadableRealms: 'carry' }),
     handleSearch({
       reconciler: args.reconciler,
       realmsRootPath: args.realmsRootPath,
@@ -775,7 +796,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-info',
-    multiRealmAuthorization(args),
+    multiRealmAuthorization(multiRealmDeps),
     handleRealmInfo({
       dbAdapter: args.dbAdapter,
       reconciler: args.reconciler,
@@ -783,7 +804,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-index-counts',
-    multiRealmAuthorization(args),
+    multiRealmAuthorization(multiRealmDeps),
     handleRealmIndexCounts({
       dbAdapter: args.dbAdapter,
       reconciler: args.reconciler,
@@ -791,7 +812,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-types',
-    multiRealmAuthorization(args),
+    multiRealmAuthorization(multiRealmDeps),
     handleFederatedTypes({
       dbAdapter: args.dbAdapter,
       reconciler: args.reconciler,
@@ -1044,6 +1065,19 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint('/_grafana-reindex', handleReindex(args));
   registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
   registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
+  registerGrafanaEndpoint('/_grafana-bill-ai-batch', handleBillAIBatch(args));
+  registerGrafanaEndpoint(
+    '/_grafana-write-off-ai-batch',
+    handleWriteOffAIBatch(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-record-ai-batch',
+    handleRecordAIBatch(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-dismiss-unrecorded-ai-batch',
+    handleDismissUnrecordedAIBatch(args),
+  );
   registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
   registerGrafanaEndpoint(
     '/_grafana-upsert-realm-user-permission',

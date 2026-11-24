@@ -11,9 +11,10 @@ description: >-
   boundary a run crosses: enqueued, claimed, admitted, script, commit,
   finished, index-pass, charged, and the prerender server's run `capacity`),
   the ids every line of a run carries (automation, run, job, attempt), and
-  queue wait and prerender capacity for automation runs, and the four
+  queue wait and prerender capacity for automation runs, and the five
   scheduler alerts (tick stopped, runs made up by reconcile, pricing check
-  failed, runs waiting for a worker): what each means and the first steps for
+  failed in the realm server or worker, pricing check failed in the prerender
+  server, runs waiting for a worker): what each means and the first steps for
   it. Use when an operator
   or a person asks why an automation didn't run, ran twice, ran late, failed,
   was slow, paused itself or charged what it did, or when automation runs'
@@ -171,14 +172,17 @@ Postgres holds the run's log as the console shows it:
 SELECT seq, at, source, kind, level, script_line, message, data
   FROM automation_run_log WHERE run_id = '<run>' ORDER BY seq;
 
-SELECT position, name, started_at, count_done, count_total
+SELECT position, name, started_at
   FROM automation_run_milestones WHERE run_id = '<run>' ORDER BY position;
+
+SELECT position, milestone_position, text, reported_at
+  FROM automation_run_tasks WHERE run_id = '<run>' ORDER BY position;
 ```
 
 Platform lines are the trigger, admission, each `callApi` call (status, ms,
 bytes), each `resolve` call (model, status, ms, cost), the commit (files, ms)
 and the finish. Script lines are its console, activity, plan, milestones,
-counts and its uncaught error. A log past its cap ends with how many lines were dropped.
+tasks and its uncaught error. A log past its cap ends with how many lines were dropped.
 
 The same lines reach Loki, anchored on their tags. Whichever process stored a
 line logs it: the realm server for the tab's lines and its own calls, the
@@ -354,7 +358,7 @@ _Prerender run capacity_, which reads Loki.
 | How many runs hold prerender tabs, and does any server queue runs?   | _Runs in flight_ (Postgres, every server together): runs claimed and not yet ended, an upper bound on tabs in use, since a claimed run also counts during admission, while waiting for a tab and while committing; the collapsed _Prerender capacity (Loki)_ row shows each server's running and queued runs from the `capacity` events, over the last 15 minutes |
 | What did runs write, call and download?                              | _Writes and calls_ (writes, callApi calls, resolve calls); _Downloaded and prerender time_, the two quantities a run's own charge prices                                                                                                                                                                                                                          |
 | What did an automation or a run cost? (step 7)                       | _Credits charged_ and _AWS cost_ stats; _Credits charged by kind_ and _AWS cost by kind_; credits charged and AWS cost per automation (_Automations_) and per run with the run's pricing version (_Runs_)                                                                                                                                                         |
-| Which pricing version priced the charges?                            | _Pricing versions_ stat and table: each version's margin, the time a process first recorded the version, and the charges, credits charged and cost at the version                                                                                                                                                                                                 |
+| Which pricing version priced the charges?                            | _Pricing versions_ stat and table: per version and charge kind, the margin (1 for an AI kind, which records the writing process's version), the time a process first recorded the version, and the charges, credits charged and cost                                                                                                                              |
 | Does the margin cover our cost, and which kind charges too little?   | _Cost coverage_: the pricing skill's cost coverage report over the dashboard's time range, with the margin in credits beside coverage                                                                                                                                                                                                                             |
 
 The cost panels attribute charges the way step 7 does: `run`, `run_indexing`
@@ -380,20 +384,23 @@ development_ covers it.
 
 ## Alerts
 
-Four Grafana alert rules watch the scheduler. They live in
+Five Grafana alert rules watch the scheduler. They live in
 `packages/observability/provisioning/alerting/automations-group.json`, carry
-the label `area=automations`, evaluate every minute, and go through Grafana's
-default notification policy. Each one's summary repeats the first steps below.
+the label `area=automations`, and go through Grafana's default notification
+policy. Each evaluates every minute, except the prerender server's pricing
+check, which evaluates every 5 minutes because it reads the busiest stream on
+Loki. Each one's summary repeats the first steps below.
 A notification named `DatasourceError` with one of these rule names means
 Grafana couldn't run the query; the fault is the data source (Postgres or
 Loki), not the scheduler.
 
-| Alert                                  | Fires when                                                                                                      | Reads                                                  |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `Automation tick stopped`              | no `automation-tick` job has resolved for more than 300 s                                                       | Postgres `jobs`, `automations`                         |
-| `Automation runs made up by reconcile` | a reconcile pass made up a run in the last 10 minutes                                                           | Loki, worker lines tagged `automation-reconcile:`      |
-| `Pricing check failed`                 | a realm-server or worker process logged `pricing check failed in` in the last 10 minutes; one alert per service | Loki                                                   |
-| `Automation runs waiting for a worker` | the oldest automation run a worker could claim has waited more than 60 s, held for 5 minutes                    | Postgres `jobs`, `job_reservations`, `job_claim_holds` |
+| Alert                                          | Fires when                                                                                                      | Reads                                                  |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `Automation tick stopped`                      | no `automation-tick` job has resolved for more than 300 s                                                       | Postgres `jobs`, `automations`                         |
+| `Automation runs made up by reconcile`         | a reconcile pass made up a run in the last 10 minutes                                                           | Loki, worker lines tagged `automation-reconcile:`      |
+| `Pricing check failed`                         | a realm-server or worker process logged `pricing check failed in` in the last 10 minutes; one alert per service | Loki                                                   |
+| `Pricing check failed in the prerender server` | a prerender process logged `pricing check failed in` in the last 6 minutes                                      | Loki                                                   |
+| `Automation runs waiting for a worker`         | the oldest automation run a worker could claim has waited more than 60 s, held for 5 minutes                    | Postgres `jobs`, `job_reservations`, `job_claim_holds` |
 
 ### Automation tick stopped
 
@@ -458,15 +465,39 @@ made up; they don't fire this alert, but they come from the same lost jobs.
 
 A process whose startup pricing check fails has no prices: it admits no new
 automation run (admission `pricing-unavailable`), submits no batch, and
-writes no charge (`charged` with `result: "no-prices"`) until its `PRICING_*`
+writes no metered charge (`charged` with `result: "no-prices"`) until its `PRICING_*`
 variables are fixed and it restarts. The failing line names every bad
 variable and its problem. The alert resolves 10 minutes after the line while
 the process has no prices, so a resolved alert says nothing about
 recovery: confirm that each restarted process logged `pricing check passed in`
-with the expected pricing version. The prerender server checks its prices too,
-but nothing it does reads them, so its failing check reaches Sentry only; the
-rule leaves out its log stream, which is the busiest on Loki. The `pricing`
-skill covers the variables and how to change one.
+with the expected pricing version. The `pricing` skill covers the variables
+and how to change one.
+
+### Pricing check failed in the prerender server
+
+The prerender server runs the same startup check, but nothing it does reads
+its prices, so renders and automation run tabs carry on. The failure means
+its task has `PRICING_*` variables that are missing or wrong:
+
+- **A bad value**: the prerender task takes the same SSM parameters as the
+  realm server and the worker, so each of those that starts after the change
+  fails its check too and runs without prices. Fix the parameter and redeploy
+  all three (the `pricing` skill's steps).
+- **A missing variable**: the prerender task wires in only the pricing
+  parameters that existed when its config was applied. A parameter created
+  after that is missing until the prerender config is applied again.
+
+The rule reads the prerender log stream, the busiest on Loki, so it evaluates
+every 5 minutes over the last 6 minutes of lines, in its own group
+(`automations-prerender-group`). The extra minute covers a line that reaches
+Loki just after an evaluation. Like the realm-server and worker rule, it
+resolves once the line leaves its window, so confirm that each restarted
+prerender process logged `pricing check passed in`:
+
+```bash
+packages/observability/scripts/tail-logs.sh --env staging --service prerender \
+  --filter 'pricing check' --since 15m --no-follow
+```
 
 ### Automation runs waiting for a worker
 

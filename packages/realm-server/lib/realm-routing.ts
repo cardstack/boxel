@@ -18,10 +18,10 @@ import {
   fetchRealmPermissions,
   hasExtension,
   logger,
-  matchRoutePathPattern,
   param,
   query,
   RealmPaths,
+  unavailableRouteMayAnswer,
 } from '@cardstack/runtime-common';
 import {
   indexCandidateExpressions,
@@ -218,6 +218,26 @@ export function hostRoutingRuleFor(
   return routingMap.find((rule) => rule.path === pathInRealm);
 }
 
+// Whether a route dropped because its type's definition couldn't be read
+// when the realm was indexed, or a route under it, matches the request path.
+// The realm's next index may route that path, so it isn't known to be not
+// found.
+export function unavailableRouteMayAnswerRequest(
+  requestURL: URL,
+  realm: Realm,
+  validation: HostRoutesValidation,
+): boolean {
+  let realmURL = new URL(realm.url);
+  realmURL.protocol = requestURL.protocol;
+  let pathInRealm: string;
+  try {
+    pathInRealm = '/' + new RealmPaths(realmURL).local(requestURL);
+  } catch {
+    return false;
+  }
+  return unavailableRouteMayAnswer(validation, pathInRealm);
+}
+
 // Whether a realm's validated host routes hold any route the fixed routing
 // map leaves out: a card id template, a field match, a route or redirect
 // with `:name` segments, or a child route. Only such a realm needs the
@@ -285,26 +305,6 @@ function pathInRealm(requestURL: URL, realm: Realm): string | undefined {
     return undefined;
   }
   return '/' + pathname.slice(mountPathname.length);
-}
-
-// Whether a route dropped for now, because its type's definition couldn't
-// be read, matches the request path, or a route under it does. The next
-// validation may keep that route, so the path isn't known to be not found.
-export function droppedRouteMayAnswer(
-  requestURL: URL,
-  realm: Realm,
-  validation: HostRoutesValidation,
-): boolean {
-  if (validation.unavailableRoutePatterns.length === 0) {
-    return false;
-  }
-  let path = pathInRealm(requestURL, realm);
-  return (
-    path !== undefined &&
-    validation.unavailableRoutePatterns.some(
-      (pattern) => matchRoutePathPattern(pattern, path) !== undefined,
-    )
-  );
 }
 
 export async function getPublishedRealmInfo(
