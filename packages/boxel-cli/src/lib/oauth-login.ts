@@ -284,6 +284,10 @@ export async function exchangeCode(
     now = Date.now,
   }: { fetchFn?: typeof fetch; startedAt: number; now?: () => number },
 ): Promise<OAuthTokens> {
+  // The access token's lifetime is counted from before the request, which is
+  // before the provider issues it, so the stored expiry is never later than
+  // the real one however slow the response is.
+  let requestedAt = now();
   let body = await tokenRequest(
     provider,
     {
@@ -303,7 +307,7 @@ export async function exchangeCode(
       `The realm server didn't issue tokens for the sign-in: ${describeTokenError(body)}`,
     );
   }
-  let accessExpiresAt = now() + body.expires_in * 1000;
+  let accessExpiresAt = requestedAt + body.expires_in * 1000;
   let refreshToken =
     typeof body.refresh_token === 'string' ? body.refresh_token : undefined;
   return {

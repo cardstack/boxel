@@ -8,6 +8,7 @@ import {
   OAuthNotOfferedError,
   buildAuthorizeUrl,
   discoverBoxelApi,
+  exchangeCode,
   makeConfirmationCode,
   makePkce,
   oauthLogin,
@@ -252,6 +253,32 @@ describe('buildAuthorizeUrl', () => {
   });
 });
 
+describe('exchangeCode', () => {
+  it("counts the access token's lifetime from before the request", async () => {
+    let clock = Date.parse('2026-11-24T00:00:00Z');
+    let fetchFn = (async () => {
+      // A slow response: the token was issued before the clock moved on.
+      clock += 90_000;
+      return jsonResponse({
+        access_token: 'access-token-placeholder',
+        expires_in: 600,
+      });
+    }) as typeof fetch;
+
+    let tokens = await exchangeCode(
+      PROVIDER,
+      {
+        code: 'code-placeholder',
+        codeVerifier: 'verifier-placeholder',
+        redirectUri: 'http://127.0.0.1:1234/callback',
+      },
+      { fetchFn, startedAt: clock, now: () => clock },
+    );
+
+    expect(tokens.accessExpiresAt).toBe('2026-11-24T00:10:00.000Z');
+  });
+});
+
 describe('oauthLogin', () => {
   it('signs in through the browser and answers the tokens and who they belong to', async () => {
     let server = realmServer();
@@ -341,7 +368,7 @@ describe('oauthLogin', () => {
     );
   });
 
-  it('ignores a response for another sign-in', async () => {
+  it('fails the sign-in when the response carries another state', async () => {
     let server = realmServer();
     let { openBrowserFn } = browser(() => ({
       code: 'code-placeholder',

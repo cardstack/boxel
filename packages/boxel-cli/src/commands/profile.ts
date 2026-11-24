@@ -7,6 +7,7 @@ import {
   getUsernameFromMatrixId,
   signInKind,
 } from '../lib/profile-manager.ts';
+import { matrixLogout } from '../lib/auth.ts';
 import { ensurePersonalRealm } from '../lib/personal-realm.ts';
 import { prompt, promptPassword } from '../lib/prompt.ts';
 import { SsoTimeoutError, browserLogin } from '../lib/sso-login.ts';
@@ -509,6 +510,7 @@ export interface AddProfileDeps {
   isTty?: () => boolean;
   oauthLogin?: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
   revokeConnection?: typeof revokeConnection;
+  matrixLogout?: typeof matrixLogout;
 }
 
 interface AddProfileContext {
@@ -520,6 +522,7 @@ interface AddProfileContext {
   interactive: boolean;
   oauthLogin: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
   revokeConnection: typeof revokeConnection;
+  matrixLogout: typeof matrixLogout;
 }
 
 function addProfileContext(deps: AddProfileDeps): AddProfileContext {
@@ -533,6 +536,7 @@ function addProfileContext(deps: AddProfileDeps): AddProfileContext {
     interactive: (deps.isTty ?? (() => Boolean(process.stdin.isTTY)))(),
     oauthLogin: deps.oauthLogin ?? oauthLogin,
     revokeConnection: deps.revokeConnection ?? revokeConnection,
+    matrixLogout: deps.matrixLogout ?? matrixLogout,
   };
 }
 
@@ -910,9 +914,15 @@ async function addProfileViaOAuth(
 
   // What the profile held before is ended on the server that issued it,
   // rather than left live with nothing holding it: an earlier OAuth
-  // connection, and a secure session, which an OAuth profile never keeps.
+  // connection, and a Matrix token and secure session, which an OAuth
+  // profile never keeps. Each is best-effort: the new profile is saved.
   if (previous?.oauth) {
     await endReplacedConnection(previous, ctx.revokeConnection);
+  }
+  if (previous?.matrixAccessToken) {
+    await ctx
+      .matrixLogout(previous.matrixUrl, previous.matrixAccessToken)
+      .catch(() => {});
   }
   if (previous?.secureSession) {
     await ctx

@@ -77,6 +77,7 @@ function deps({
       oauthLogin: vi.fn(oauthLogin),
       revokeConnection: vi.fn(async () => true),
       secureSignOut: vi.fn(async () => {}),
+      matrixLogout: vi.fn(async () => {}),
       browserLogin: vi.fn(async () => matrixAuth('browser-token')),
       secureOriginForProfiles: vi.fn(async () => undefined),
       ensurePersonalRealm: vi.fn(async () => ({
@@ -171,7 +172,7 @@ describe('boxel profile add --oauth', () => {
     );
   });
 
-  it('replaces a Matrix profile, ending its secure session', async () => {
+  it('replaces a Matrix profile, signing out its Matrix token and ending its secure session', async () => {
     await manager.addProfileWithAuth(
       matrixId,
       matrixAuth(),
@@ -196,6 +197,28 @@ describe('boxel profile add --oauth', () => {
       environment.realmServerUrl,
       'secure-session-placeholder',
     );
+    expect(d.matrixLogout).toHaveBeenCalledWith(
+      environment.matrixUrl,
+      'matrix-token',
+    );
+  });
+
+  it('keeps the new profile when signing out the replaced Matrix token fails', async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      matrixAuth(),
+      'Example Name',
+      environment.realmServerUrl,
+    );
+    let { deps: d } = deps({ tty: false });
+    d.matrixLogout.mockRejectedValueOnce(new Error('network down'));
+
+    await addOAuthProfile(manager, environment, d);
+
+    expect(manager.getProfile(matrixId)?.oauth?.accessToken).toBe(
+      'access-token-placeholder',
+    );
+    expect(process.exitCode).toBeUndefined();
   });
 
   it('ends the connection a profile signed in again replaces', async () => {
