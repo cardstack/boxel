@@ -1,10 +1,13 @@
-// Text written into SQL as a literal, where a bind parameter cannot go: a
-// field path the expression builder renders into a `jsonb_tree(…)` call in
-// a FROM clause. The quoting rules live here and are tested once
+// Text written into SQL as a literal, where a bind parameter cannot go: the
+// SQL a formula compiles to (BXL's score profile returns SQL text), a column
+// the engine joins into its select list as text, a function call rendered
+// into a FROM clause, DDL. Every such literal is made here, so the quoting
+// rules live in one place and are tested once
 // (realm-server/tests/sql-literal-test.ts). Prefer a bound parameter
 // (`param(…)`) wherever the query builder takes one.
 //
-// No imports, so any SQL builder can use it.
+// No imports: the query grammar, its lowering, the formula compiler's
+// callers and the vector store all use it.
 
 export type SqlLiteralDialect = 'pg' | 'sqlite';
 
@@ -37,4 +40,39 @@ export function sqlTextLiteral(
     return `E'${quoted.replace(/\\/g, '\\\\')}'`;
   }
   return `'${quoted}'`;
+}
+
+// One element of a Postgres array literal (`{a,b}`), double-quoted with its
+// quotes and backslashes escaped, as the array parser reads them: a bare
+// `null` element would be SQL NULL, and a name may hold a comma or a brace.
+// Not yet a SQL literal: `sqlTextArrayLiteral` makes one.
+export function arrayElement(name: string): string {
+  return `"${name.replace(/["\\]/g, (c) => `\\${c}`)}"`;
+}
+
+// A path of keys as a Postgres `text[]` literal, for `#>` and `#>>`.
+export function sqlTextArrayLiteral(parts: readonly string[]): string {
+  return `${sqlTextLiteral(`{${parts.map(arrayElement).join(',')}}`)}::text[]`;
+}
+
+// A path of keys as a SQL/JSON path (`$."a"."b"[*]`): each key a JSON string
+// (so a quote, a backslash or a control character in it is escaped as JSON
+// escapes it, which the jsonpath grammar reads), and a key written `name[]`
+// steps into every element of that list.
+export function jsonPathOfKeys(segments: readonly string[]): string {
+  return (
+    '$' +
+    segments
+      .map((x) =>
+        x.endsWith('[]')
+          ? `.${JSON.stringify(x.slice(0, -2))}[*]`
+          : `.${JSON.stringify(x)}`,
+      )
+      .join('')
+  );
+}
+
+// The same path as a SQL literal of type jsonpath.
+export function sqlJsonPathLiteral(segments: readonly string[]): string {
+  return `${sqlTextLiteral(jsonPathOfKeys(segments))}::jsonpath`;
 }
