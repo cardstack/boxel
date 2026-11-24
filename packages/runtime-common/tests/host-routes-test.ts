@@ -1068,23 +1068,9 @@ const tests: SharedTests<unknown> = Object.freeze({
     ]);
   },
 
-  'validateHostRoutes: an unavailable type makes the validation incomplete':
+  'validateHostRoutes: a type that could not be read drops its route and keeps the rest':
     async (assert) => {
-      let complete = validate([
-        fieldMatch('/posts/:slug', 'Post', { slug: ':slug' }),
-        fieldMatch('/missing/:slug', 'Missing', { slug: ':slug' }),
-      ]);
-      assert.true(
-        complete.complete,
-        'a type that does not exist is final: the route is dropped for good',
-      );
-
-      let {
-        routes,
-        warnings,
-        complete: isComplete,
-        unavailableRoutePatterns,
-      } = validate([
+      let { routes, warnings } = validate([
         { path: '/', instance: instance('home') },
         fieldMatch(
           '/later/:slug',
@@ -1094,12 +1080,6 @@ const tests: SharedTests<unknown> = Object.freeze({
         ),
         fieldMatch('/posts/:slug', 'Post', { slug: ':slug' }),
       ]);
-      assert.false(isComplete, 'the validation is not final');
-      assert.deepEqual(
-        unavailableRoutePatterns.map((pattern) => pattern.source),
-        ['/later/:slug', '/later/:slug/:venue'],
-        'the dropped route and the route under it may answer later',
-      );
       assert.deepEqual(paths(routes), ['/', '/posts/:slug']);
       assert.deepEqual(codes(warnings), [
         { code: 'type-unavailable', path: '/later/:slug', dropped: true },
@@ -1112,12 +1092,6 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.deepEqual(hostRoutingMapFromRoutes(routes), [
         { path: '/', id: `${REALM}home` },
       ]);
-      assert.deepEqual(
-        validate([fieldMatch('/posts/:slug', 'Post', { slug: ':slug' })])
-          .unavailableRoutePatterns,
-        [],
-        'a complete validation has none',
-      );
     },
   'validateHostRoutes: a link to a type the parent descends from counts':
     async (assert) => {

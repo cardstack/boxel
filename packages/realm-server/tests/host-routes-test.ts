@@ -113,7 +113,7 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 
-  test('validateHostRoutes: an unavailable type makes the validation incomplete', async function (assert) {
+  test('validateHostRoutes: a type that could not be read drops its route and keeps the rest', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 

@@ -1,6 +1,7 @@
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   CLIENT_IP_HEADER,
+  HostRoutesReadError,
   SupportedMimeType,
   hasExecutableExtension,
   isRedirectRoutingRule,
@@ -52,7 +53,8 @@ export interface AnonymousHomePageModule {
 
 export interface AnonymousHomePageReport {
   // The card the realm serves at its root: its index card, or the card a
-  // routing rule for `/` names. Undefined when a rule redirects `/`.
+  // routing rule for `/` names. Undefined when a rule redirects `/`, or when
+  // the realm's routes can't be read now (`temporarilyRefused`).
   homeCardId: string | undefined;
   // Where the realm sends a visitor to its root, when a routing rule
   // redirects `/`. The realm itself then serves no home card to check.
@@ -87,7 +89,24 @@ const TEMPORARY_REFUSALS = new Set([429, 503]);
 export async function checkAnonymousHomePage(
   realm: Realm,
 ): Promise<AnonymousHomePageReport> {
-  let home = await homePage(realm);
+  let home: Awaited<ReturnType<typeof homePage>>;
+  try {
+    home = await homePage(realm);
+  } catch (e) {
+    if (!(e instanceof HostRoutesReadError)) {
+      throw e;
+    }
+    // The realm's host routes can't be read now, so its home page isn't
+    // known. The check is worth running again.
+    return {
+      homeCardId: undefined,
+      homeCardReadable: false,
+      homeCardStatus: undefined,
+      unloadableModules: [],
+      anonymousCanView: false,
+      temporarilyRefused: true,
+    };
+  }
   if ('redirectTo' in home) {
     return {
       homeCardId: undefined,
