@@ -17,13 +17,14 @@ import { resolvePrettierConfig } from '../prettier-config.ts';
 
 // runtime-common lives at <repo>/packages/runtime-common; host is its sibling.
 const HOST_PKG = resolve(import.meta.dirname, '..', '..', 'host');
-const HOST_ESLINTRC = resolve(HOST_PKG, '.eslintrc.js');
+const HOST_ESLINT_CONFIG = resolve(HOST_PKG, 'eslint.config.mjs');
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 export const LINT_ANCHOR = resolve(HOST_PKG, '__realm__');
 
-// pnpm doesn't hoist transitive deps, so parsers/plugins host references by
-// string (e.g. `parser: 'ember-eslint-parser'`) won't resolve from here.
-// Mirror pnpm's own eslint bin shim: add .pnpm/node_modules to NODE_PATH.
+// pnpm doesn't hoist transitive deps, so plugins host's template-lint config
+// names by string won't resolve from here. Mirror pnpm's own bin shim: add
+// .pnpm/node_modules to NODE_PATH. (ESLint's flat config imports its plugins,
+// so it needs none of this.)
 let nodePathReady = false;
 function ensurePnpmNodePath() {
   if (nodePathReady) return;
@@ -93,11 +94,12 @@ async function getESLint(): Promise<any> {
 }
 
 async function initESLint(): Promise<any> {
-  ensurePnpmNodePath();
-  // Load ESLint from host's own node_modules so plugin/parser resolution
-  // inside ESLint follows host's dependency tree.
+  // Load the ESLint that host lints with.
   const hostRequire = Module.createRequire(resolve(HOST_PKG, 'package.json'));
   const { ESLint } = hostRequire('eslint');
+  // The instance host's config registers: flat config refuses a second
+  // object under the same plugin name.
+  const boxelPlugin = hostRequire('@cardstack/eslint-plugin-boxel');
   reportEngineStage('eslint-module');
 
   const importMappingConfig = await import(
@@ -119,16 +121,18 @@ async function initESLint(): Promise<any> {
 
   const eslint = new ESLint({
     cwd: HOST_PKG,
-    overrideConfigFile: HOST_ESLINTRC,
+    overrideConfigFile: HOST_ESLINT_CONFIG,
     fix: true,
-    // Submission/realm files are in-memory; don't apply host's .eslintignore
-    // to them.
+    // Submission/realm files are in-memory; don't apply host's ignores to
+    // them.
     ignore: false,
-    // Rules that run lowering's own code, so they live beside it rather than
-    // in the published ESLint plugin.
-    plugins: { '@cardstack/boxel-operations': callApiLintPlugin },
     overrideConfig: {
-      plugins: ['@cardstack/boxel', '@cardstack/boxel-operations'],
+      plugins: {
+        '@cardstack/boxel': boxelPlugin,
+        // Rules that run lowering's own code, so they live beside it rather
+        // than in the published ESLint plugin.
+        '@cardstack/boxel-operations': callApiLintPlugin,
+      },
       rules: {
         // Prettier runs as a separate pass after ESLint (see lintOne); folding
         // it in lets the prettier plugin see a mid-fix file (e.g. a not-yet-
@@ -138,7 +142,7 @@ async function initESLint(): Promise<any> {
         // misreads a realm test file (foo.test.gts, no tests/ dir) as
         // production code and rejects its legitimate test-support imports.
         'ember/no-test-support-import': 'off',
-        // Realm-submission autofixes host/.eslintrc.js omits (host source
+        // Realm-submission autofixes host's ESLint config omits (host source
         // authors its own imports; realm content gets them injected).
         '@cardstack/boxel/missing-card-api-import': [
           'error',
