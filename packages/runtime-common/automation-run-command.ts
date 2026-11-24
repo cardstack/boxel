@@ -36,6 +36,22 @@ export function automationRunDedupeKey(run: {
   return `automation:${run.automationId}:${run.trigger}:${run.slot}`;
 }
 
+// A webhook run's slot: `delivery:` and the delivery's id. The prefix marks
+// the run as a delivery's for good, whatever its card says later: the
+// delivery's payload lives only in the run's job, so a webhook run is never
+// enqueued again without it (`isWebhookDeliverySlot`). A cron or one-time
+// slot is an ISO instant, a click's or a batch's an id, and none of those
+// carries the prefix.
+const WEBHOOK_DELIVERY_SLOT_PREFIX = 'delivery:';
+
+export function webhookDeliverySlot(deliveryId: string): string {
+  return `${WEBHOOK_DELIVERY_SLOT_PREFIX}${deliveryId}`;
+}
+
+export function isWebhookDeliverySlot(slot: string): boolean {
+  return slot.startsWith(WEBHOOK_DELIVERY_SLOT_PREFIX);
+}
+
 // The longest script a run takes, in characters: the interactive surface's
 // limit. The script rides the request to the prerender server and the tab's
 // storage, so it is bounded before it is sent.

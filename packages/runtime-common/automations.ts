@@ -1053,8 +1053,7 @@ export async function pauseAfterRepeatedFailures(
 // What a webhook delivery did to one automation (`takeWebhookDelivery`):
 //
 // - `started`: the automation takes the delivery. `runs` holds a run for each
-//   of the triggers named, acting as the payer, with the delivery's id as its
-//   slot. A run is `created` by this call, or found: a redelivery finds the
+//   of the triggers named, acting as the payer, with the delivery's slot. A run is `created` by this call, or found: a redelivery finds the
 //   run the first delivery made, whatever its state.
 // - `paused`: the webhook's owner is no longer a direct writer of the
 //   automation's realm, so the automation paused with
@@ -1101,7 +1100,7 @@ export async function takeWebhookDelivery(
     owner,
     declaration,
     triggers,
-    deliveryId,
+    slot,
   }: {
     automationId: RealmResourceIdentifier;
     // Who made the incoming webhook the delivery came to.
@@ -1109,8 +1108,8 @@ export async function takeWebhookDelivery(
     // The automation's card, as the caller read it.
     declaration: Pick<AutomationDeclaration, 'caps' | 'batchedAI' | 'triggers'>;
     triggers: string[];
-    // The delivery's id, each run's slot (`webhookDeliveryId`).
-    deliveryId: string;
+    // Each run's slot: the delivery's (`webhookDeliverySlot`).
+    slot: string;
   },
   options: Omit<AutomationActorOptions, 'now'>,
 ): Promise<WebhookDeliveryTaken> {
@@ -1161,7 +1160,7 @@ export async function takeWebhookDelivery(
           automationId,
           realm: automation.realm,
           trigger,
-          slot: deliveryId,
+          slot,
           actsAs: automation.payer,
         }),
       );

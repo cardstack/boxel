@@ -580,23 +580,16 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await queuedRuns()).length, 1, 'no job is added');
   });
 
-  test("a webhook delivery's lost run is ended, not enqueued again without its payload", async function (assert) {
+  test("a webhook delivery's lost run is ended, not enqueued again without its payload, even when its card can't be read", async function (assert) {
     await switchOn();
-    // Reconcile reads the card as it is now, which names a webhook trigger.
-    card = {
-      ok: true,
-      declaration: declaration({
-        triggers: [
-          HOURLY,
-          { kind: 'webhook', label: 'deliveries', webhookPath: 'whk_lost' },
-        ],
-      }),
-    };
+    // The card can't be read when reconcile runs, so only the run's slot says
+    // the run is a delivery's.
+    card = { ok: false, message: 'the card failed to index' };
     let run = await createAutomationRun(dbAdapter, {
       automationId: AUTOMATION,
       realm: REALM,
       trigger: 'deliveries',
-      slot: 'delivery-lost',
+      slot: 'delivery:delivery-lost',
       actsAs: OWNER,
     });
     // Made past the grace, and reconciled before the hourly trigger's first
@@ -611,7 +604,8 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       (await queuedRuns()).filter(
         ({ dedupeKey }) =>
-          dedupeKey === `automation:${AUTOMATION}:deliveries:delivery-lost`,
+          dedupeKey ===
+          `automation:${AUTOMATION}:deliveries:delivery:delivery-lost`,
       ),
       [],
       'no job is made again',

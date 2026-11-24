@@ -36,12 +36,18 @@ import {
 // (`startWebhookAutomationRuns`). The two are independent: an automation's
 // run never depends on a command, nor a command on an automation.
 //
-// The answer is 500 when the delivery matched something and nothing it
-// matched could be started, so the sender delivers it again. A redelivery
-// joins the automation runs the first delivery made (the delivery's id is
-// their slot), but a command has no such key and runs again, so once any
-// command is enqueued the answer is 200, and an automation that failed to
-// take the delivery is left to its cron backstop.
+// The answer is 500 when the sender should deliver again:
+//
+// - An automation failed to take the delivery, the sender gave the delivery
+//   an id, and no command was enqueued. The redelivery carries the same id,
+//   so it finds the runs the first delivery made and tries the automation
+//   that failed again. Without a sender's id a redelivery would start every
+//   automation's runs a second time, and once a command is enqueued a
+//   redelivery would run it again (a command has no key to join on), so in
+//   either case the answer is 200 and the failed automation is left to its
+//   cron backstop.
+// - Commands matched and none could be enqueued. A sender that gave no id
+//   then starts the delivery's automation runs again on the redelivery.
 export default function handleWebhookReceiverRequest(
   args: CreateRoutesArgs,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -208,23 +214,21 @@ export default function handleWebhookReceiverRequest(
       }
     }
 
+    let deliveryId = webhookDeliveryId(ctxt.req.headers, automationPayload);
     let automationRuns = await startAutomationRuns(args, {
       webhookPath: webhook.webhook_path as string,
       owner: webhook.username as string,
-      deliveryId: webhookDeliveryId(ctxt.req.headers, automationPayload),
+      deliveryId: deliveryId.id,
       payload: automationPayload,
     });
     let failedAutomations = automationRuns.filter(
       ({ kind }) => kind === 'failed',
     ).length;
-    let startedAutomations = automationRuns.filter(
-      ({ kind }) => kind === 'started',
-    ).length;
 
     if (
       failedAutomations > 0 &&
-      executedCommands === 0 &&
-      startedAutomations === 0
+      deliveryId.fromSender &&
+      executedCommands === 0
     ) {
       await setContextResponse(
         ctxt,

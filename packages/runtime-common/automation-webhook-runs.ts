@@ -8,9 +8,9 @@
 //
 // - makes a run row for each trigger on the card naming the webhook. The run
 //   acts as the automation's payer, never the webhook's owner, and its slot
-//   is the delivery's id (`webhookDeliveryId`), so a sender that delivers the
-//   same event again finds the run the first delivery made and starts no
-//   second one.
+//   is `delivery:` and the delivery's id (`webhookDeliveryId`,
+//   `webhookDeliverySlot`), so a sender that delivers the same event again
+//   finds the run the first delivery made and starts no second one.
 // - enqueues the run's job through `enqueueAutomationRunJob`, as the tick
 //   does for a scheduled run, with the delivery's body as the job's
 //   `webhookPayload`. The script reads it as
@@ -31,7 +31,7 @@
 //
 // A delivery's payload lives only in its run's job. A webhook run whose job is
 // lost is ended by reconcile, never enqueued again, since nothing else holds
-// the payload. A cron trigger on the same card is the backstop for anything a
+// the payload, and the worker refuses a webhook run whose job carries none. A cron trigger on the same card is the backstop for anything a
 // webhook missed: it runs on its schedule and catches up from the realm.
 
 import type * as JSONTypes from 'json-typescript';
@@ -41,6 +41,7 @@ import type { AutomationTickOptions } from './automation-tick.ts';
 import type { ReportAutomationChange } from './automation-change-events.ts';
 import type { ReportRunChange } from './automation-run-events.ts';
 import { logRunPlatformLine } from './automation-run-log.ts';
+import { webhookDeliverySlot } from './automation-run-command.ts';
 import { emitAutomationRunEvent } from './automation-run-telemetry.ts';
 import { takeWebhookDelivery, type AutomationRow } from './automations.ts';
 import type { DBAdapter } from './db.ts';
@@ -69,37 +70,43 @@ export type WebhookHeaders = Record<string, string | string[] | undefined>;
 //   `X-Goog-Message-Number` headers, joined as `<channel>:<number>`.
 // - Stripe: the body's `id`, on an event (`object` is `"event"`).
 //
-// A delivery that carries none of these gets a fresh id, so it starts its own
-// runs, and a redelivery of it starts them again.
+// A delivery that carries none of these gets a fresh id (`fromSender` false),
+// so it starts its own runs, and a redelivery of it starts them again.
+//
+// The receiver verifies a delivery's signature before any of this, and checks
+// only an HMAC-SHA256 of the body in one header, as GitHub signs. So of these
+// senders only GitHub's deliveries reach an automation; the rest are read for
+// the day the receiver verifies their signatures too.
 export function webhookDeliveryId(
   headers: WebhookHeaders,
   payload: unknown,
-): string {
+): { id: string; fromSender: boolean } {
   let header = (name: string) => usableId(headers[name]);
+  let fromSender = (id: string) => ({ id, fromSender: true });
   let github = header('x-github-delivery');
   if (github) {
-    return github;
+    return fromSender(github);
   }
   let standard = header('webhook-id');
   if (standard) {
-    return standard;
+    return fromSender(standard);
   }
   let channel = header('x-goog-channel-id');
   let message = header('x-goog-message-number');
   if (channel && message) {
     let joined = usableId(`${channel}:${message}`);
     if (joined) {
-      return joined;
+      return fromSender(joined);
     }
   }
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
     let body = payload as Record<string, unknown>;
     let stripe = body.object === 'event' ? usableId(body.id) : undefined;
     if (stripe) {
-      return stripe;
+      return fromSender(stripe);
     }
   }
-  return uuidv4();
+  return { id: uuidv4(), fromSender: false };
 }
 
 function usableId(value: unknown): string | undefined {
@@ -116,7 +123,7 @@ export interface WebhookDelivery {
   webhookPath: string;
   // Who made the incoming webhook.
   owner: string;
-  // `webhookDeliveryId`.
+  // `webhookDeliveryId`'s id.
   deliveryId: string;
   // The delivery's body: its JSON, or its text when it isn't JSON.
   payload: JSONTypes.Value;
@@ -136,8 +143,12 @@ export interface WebhookRunOptions {
 // What a delivery did with one candidate automation:
 //
 // - `started`: a run for each trigger naming the webhook. `created` is false
-//   for a run a redelivery found, whose job, if it is still pending, the
-//   delivery enqueued again (the queue joins it to the job already there).
+//   for a run a redelivery found. When that run is still pending, the
+//   redelivery enqueues its job again: the queue joins the job already
+//   there when the args match, and otherwise adds a job that, running after
+//   the first in the automation's concurrency group, finds the run started
+//   or over and leaves it. A first delivery that made the run and failed to
+//   enqueue its job is made good this way.
 // - `paused`: the webhook's owner lost write, so the automation paused with
 //   `webhook-owner-lost-access`.
 // - `skipped`: the automation took no delivery (`reason`):
@@ -237,7 +248,7 @@ async function startRunsOf(
       owner: delivery.owner,
       declaration,
       triggers,
-      deliveryId: delivery.deliveryId,
+      slot: webhookDeliverySlot(delivery.deliveryId),
     },
     options,
   );
@@ -272,23 +283,50 @@ async function startRunsOf(
       },
     });
     runs.push({ runId: run.id, trigger: run.trigger, created, jobId: job.id });
-    if (created) {
-      await reportStarted(dbAdapter, taken.automation, run, job.id, delivery);
-    }
+    await reportEnqueued(
+      dbAdapter,
+      taken.automation,
+      run,
+      job.id,
+      delivery,
+      created,
+    );
     await options.reportRunChange?.(run.id);
   }
   return { kind: 'started', automationId, runs };
 }
 
-// The run's `enqueued` telemetry, and the line on its log naming the trigger,
-// the webhook and the delivery, which is how a delivery is traced to its run.
-async function reportStarted(
+// The line on the run's log naming the trigger, the webhook and the delivery,
+// which is how a delivery is traced to its run, and, for the delivery that
+// made the run, the run's `enqueued` telemetry. A redelivery that enqueued a
+// pending run's job again says so on the log too.
+async function reportEnqueued(
   dbAdapter: DBAdapter,
   automation: AutomationRow,
   run: { id: string; trigger: string; slot: string; createdAt: string },
   jobId: number,
   delivery: WebhookDelivery,
+  created: boolean,
 ): Promise<void> {
+  if (!created) {
+    await logRunPlatformLine(
+      dbAdapter,
+      run.id,
+      {
+        kind: 'trigger',
+        level: 'info',
+        message: `Delivery ${delivery.deliveryId} to the incoming webhook ${delivery.webhookPath} came again while this run was pending, and enqueued its job again`,
+        data: {
+          trigger: run.trigger,
+          slot: run.slot,
+          webhookPath: delivery.webhookPath,
+          redelivered: true,
+        },
+      },
+      jobId,
+    );
+    return;
+  }
   let enqueuedAt = new Date().toISOString();
   emitAutomationRunEvent({
     kind: 'enqueued',
@@ -312,7 +350,7 @@ async function reportStarted(
     {
       kind: 'trigger',
       level: 'info',
-      message: `The ${run.trigger} trigger started this run for delivery ${run.slot} to the incoming webhook ${delivery.webhookPath}`,
+      message: `The ${run.trigger} trigger started this run for delivery ${delivery.deliveryId} to the incoming webhook ${delivery.webhookPath}`,
       data: {
         trigger: run.trigger,
         slot: run.slot,

@@ -841,8 +841,8 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(run.trigger, 'deliveries', 'the webhook trigger');
       assert.strictEqual(
         run.slot,
-        'delivery-1',
-        "the delivery's id is the slot",
+        'delivery:delivery-1',
+        "the slot is the delivery's id",
       );
       assert.strictEqual(
         run.actsAs,
@@ -852,7 +852,9 @@ module(basename(import.meta.filename), function (hooks) {
       let [job] = (await dbAdapter.execute(
         `SELECT args FROM jobs WHERE args->>'dedupeKey' = $1`,
         {
-          bind: [`automation:${automationId(HOOKED)}:deliveries:delivery-1`],
+          bind: [
+            `automation:${automationId(HOOKED)}:deliveries:delivery:delivery-1`,
+          ],
         },
       )) as { args: { commandInput: Record<string, unknown> } }[];
       assert.deepEqual(
@@ -915,6 +917,20 @@ module(basename(import.meta.filename), function (hooks) {
       let automation = await getAutomation(dbAdapter, automationId(HOOKED));
       assert.strictEqual(automation?.state, 'paused');
       assert.strictEqual(automation?.pauseReason, 'webhook-owner-lost-access');
+    });
+
+    test('an automation switched on before its snapshot recorded webhooks takes a delivery its card names', async function (assert) {
+      await switchOnHooked();
+      await dbAdapter.execute(
+        `UPDATE automations SET caps_snapshot = caps_snapshot - 'webhookPaths' WHERE automation_id = $1`,
+        { bind: [automationId(HOOKED)] },
+      );
+      let response = await deliver('delivery-6', { legacy: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 1);
+      let [run] = await runsOfHooked();
+      assert.strictEqual(run?.slot, 'delivery:delivery-6');
+      await ended(run.id);
     });
 
     test('an automation that is off takes no delivery', async function (assert) {
