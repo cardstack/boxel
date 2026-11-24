@@ -71,7 +71,10 @@ A realm with any host URLs MUST have exactly one canonical host URL. The first
 host URL added MUST be canonical. The canonical host URL MUST NOT be removed
 while the realm has others: another one must be marked canonical first. A
 page's canonical link, its `og:url` and the realm's sitemap MUST use the
-canonical host URL, whichever host URL the request came in on.
+canonical host URL, whichever host URL the request came in on. A request
+for a page on any other host URL MUST be answered with a permanent redirect
+to the same address on the canonical host URL. A request on such a host URL
+for anything other than a page MUST be served there, as §1.5 says.
 
 ### 1.5. Ids stay canonical
 
@@ -187,7 +190,13 @@ them right. A change to the canonical host URL is a rare action by an
 administrator, and page views never stop, so the cost belongs on the change:
 one new render of the realm, as ADR 036 §1.7 puts the cost of a routed
 address on the render rather than on each request. The translation stays for
-the other host URLs, for JSON, and while a new render runs.
+JSON, and while a new render runs.
+
+HTML rendered for one host URL is still wrong on another host URL whose path
+prefix differs, because a root-relative path in it names the canonical
+prefix. So a page on any host URL but the canonical one redirects to the
+canonical one, as a site's other names usually do. This also gives each page
+one address for search engines.
 
 ## 3. Considered options
 
@@ -221,6 +230,14 @@ the other host URLs, for JSON, and while a new render runs.
   work per request ADR 036 §3 rejects for routed addresses. This ADR made
   that choice first. The translation it built stays, for the uses §1.8
   keeps.
+- **Serve a page on every host URL, and render the HTML once for each host
+  URL.** Each page is right on every host URL, but each render of the realm
+  costs as many renders as it has host URLs, and the index stores as many
+  copies of the HTML.
+- **Serve a page on every host URL from the HTML rendered for the canonical
+  one, and accept that some links are wrong there.** A root-relative link on
+  a host URL whose path prefix differs goes to a page that doesn't exist,
+  and nothing reports it.
 - **Write `includePrerenderedDefaultRealmIndex` into `realm.json` when a host
   URL is added, as v1 publishing does.** That changes a file in the realm
   (§1.1).
