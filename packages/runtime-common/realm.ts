@@ -5,6 +5,7 @@ import {
   type AnonymousRateLimit,
 } from './anonymous-access.ts';
 import {
+  ANONYMOUS_AUTOMATION_VIEW,
   ANONYMOUS_BYTES_READ,
   ANONYMOUS_CAPABILITY_CHECK,
   ANONYMOUS_CARD_READ,
@@ -1345,6 +1346,20 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // policy judges them, and runs the assistant's scripts for such a caller
 // (ADR 022 §1.8), so a change to whom `_info` answers changes that too.
 //
+// The automation routes a card's view, its editor and the realm config read
+// consume it too, and resolve no operation either:
+// `_automation-status`, `_automation-runs`, `_automations` and
+// `_automation-webhooks`. Each shows what it serves only to a direct writer
+// of the realm whom its ACL admits, and tells anyone else that they aren't
+// one (see `#statusViewer`). So a caller the realm hands to its policy is told
+// that too, and is shown nothing about the automations, their runs or the
+// realm's webhooks, rather than refused: a 401 or 403 the host reads while it
+// renders a card a grant admits them to fails whatever else it is loading.
+// Unlike `_info`, they also tell a caller who isn't signed in the same, where
+// the policy opens `read` or `query` to such callers (see
+// `ANONYMOUS_AUTOMATION_VIEW`). The answer runs nothing a grant admits, so an
+// archived realm gives it as it does while active, as `_info` does.
+//
 // No other route does, but for the byte routes and the hashed scoped-CSS
 // serve described below. Each of the rest is marked `ACL_ONLY` where it is
 // declared, or serves code and the file tree (`COARSE_READ_ONLY`), and each
@@ -1366,19 +1381,6 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   read.
 // - `_sign-capture-urls` signs the URLs of the capture serve, which the ACL
 //   alone admits a caller to.
-// - `_automation-status` answers an automation's server row, which only the
-//   realm's direct writers are shown (see `automation-status.ts`). A grant
-//   reaches a card, not the row.
-// - `_automations` lists every automation in the realm with its row's state,
-//   payer and spend, which only the realm's direct writers see (see
-//   `automation-list.ts`). A grant reaches a card, not the rows.
-// - `_automation-runs` lists an automation's runs, with who canceled each,
-//   which only the realm's direct writers see (see `automation-run-list.ts`).
-//   A grant reaches a card, not its runs.
-// - `_automation-webhooks` lists the incoming webhooks the realm's
-//   automations may name, which only the realm's direct writers are listed
-//   (see `automation-webhooks.ts`). A grant reaches a card, not the realm's
-//   webhooks.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
 // differently on some of them (see `#refusalUnderPolicy`), as does the
@@ -1415,6 +1417,13 @@ const ACL_ONLY = { aclOnly: true } as const;
 const APPLIES_ARCHIVED_SEAL = {
   consumesCoarseOutcome: true,
   appliesArchivedSeal: true,
+} as const;
+// The automation routes, which tell a caller the realm hands to its policy
+// that they aren't a direct writer, and never apply the archived seal, since
+// that answer runs nothing a grant admits (see `CONSUMES_COARSE_OUTCOME`).
+const AUTOMATION_VIEW_ROUTE = {
+  ...APPLIES_ARCHIVED_SEAL,
+  anonymous: ANONYMOUS_AUTOMATION_VIEW,
 } as const;
 // The realm's search routes. A verified user the ACL refuses is admitted to
 // them whether or not the realm names a policy, and a realm with none has no
@@ -4019,43 +4028,45 @@ export class Realm {
         ACL_ONLY,
       )
       // An automation card's switched-on state, payer and each trigger's runs
-      // left, for the card's view. Answered on the realm ACL; a caller who
-      // isn't a direct writer is shown nothing (see `automation-status.ts`).
+      // left, for the card's view. A caller who isn't a direct writer,
+      // including one the realm hands to its policy, is shown nothing (see
+      // `automation-status.ts`).
       .get(
         '/_automation-status',
         SupportedMimeType.JSON,
         this.automationStatus.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
       )
       // Every automation in the realm, with its state, next run, payer, cap,
       // spend this month and last result, for the realm config's Automations
-      // section, the automations console. Answered on the realm ACL; a caller
-      // who isn't a direct writer is listed nothing (see
-      // `automation-list.ts`).
+      // section, the automations console. A caller who isn't a direct
+      // writer, including one the realm hands to its policy, is listed
+      // nothing (see `automation-list.ts`).
       .get(
         '/_automations',
         SupportedMimeType.JSON,
         this.automationList.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
       )
       // An automation's runs, newest first, a page at a time, for the
-      // Automation card's isolated view. Answered on the realm ACL; a caller
-      // who isn't a direct writer is listed nothing (see
+      // Automation card's isolated view. A caller who isn't a direct writer,
+      // including one the realm hands to its policy, is listed nothing (see
       // `automation-run-list.ts`).
       .get(
         '/_automation-runs',
         SupportedMimeType.JSON,
         this.automationRunList.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
       )
       // The incoming webhooks an automation card's webhook trigger may name,
-      // for the card's editor. Answered on the realm ACL; a caller who isn't
-      // a direct writer is listed nothing (see `automation-webhooks.ts`).
+      // for the card's editor. A caller who isn't a direct writer, including
+      // one the realm hands to its policy, is listed nothing (see
+      // `automation-webhooks.ts`).
       .get(
         '/_automation-webhooks',
         SupportedMimeType.JSON,
         this.automationWebhooks.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
       )
       .get(
         READINESS_CHECK_PATH,
@@ -21341,11 +21352,18 @@ export class Realm {
   // session the realm vouches for (`#sessionPrincipal`), so a revoked session
   // or one delegated to another realm asks as no one. A realm-authority session is a realm rendering its
   // own cards, and a diagnostic session is an operator reading as a user;
-  // neither is a person looking at the card, so neither sees the payer.
+  // neither is a person looking at the card, so neither sees the payer. A
+  // caller the realm ACL refused, whom the realm handed to its policy, asks as
+  // no one too: no grant reaches what these routes serve, so they are told
+  // they aren't a direct writer, which reads nothing about the realm.
   async #statusViewer(
     requestContext: RequestContext,
   ): Promise<string | undefined> {
-    if (requestContext.realmAuthority || requestContext.diagnosticSession) {
+    if (
+      requestContext.coarseAllowed === false ||
+      requestContext.realmAuthority ||
+      requestContext.diagnosticSession
+    ) {
       return undefined;
     }
     return await this.#sessionPrincipal(requestContext);

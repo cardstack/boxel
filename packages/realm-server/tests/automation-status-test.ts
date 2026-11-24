@@ -10,6 +10,7 @@ import {
   getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
 import {
+  archiveRealm,
   insertPermissions,
   internalKeyFor,
   param,
@@ -55,6 +56,7 @@ import {
   ensureTestUser,
   insertIncomingWebhookRow,
   insertUser,
+  realmConfigCardJSON,
   realmSecretSeed,
   setupPermissionedRealmCached,
   setupSecretsKeyring,
@@ -1967,4 +1969,236 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
   });
+
+  // A grant can let someone read an Automation card whom the realm's ACL gives
+  // nothing. The card's view, its editor and the realm config ask these
+  // routes while they render, and the host takes a 401 or 403 as an auth
+  // failure of whatever else it is loading, so such a caller is told they
+  // aren't a direct writer rather than refused.
+  module(
+    'a realm whose policy admits a caller its ACL gives nothing',
+    function (hooks) {
+      const NOT_A_DIRECT_WRITER = { data: null, meta: { directWriter: false } };
+      const LISTED_NOTHING = { data: [], meta: { directWriter: false } };
+
+      let policyRealm: Realm;
+      let policyRequest: SuperTest<Test>;
+      let policyServer: Server;
+      let policyDB: PgAdapter;
+
+      hooks.afterEach(async function () {
+        await closeServer(policyServer);
+      });
+
+      setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
+        permissions: {
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+          [ADMIN]: ['read', 'write'],
+        },
+        onRealmSetup(args) {
+          policyRealm = args.testRealm;
+          policyRequest = args.request;
+          policyServer = args.testRealmHttpServer;
+          policyDB = args.dbAdapter as PgAdapter;
+        },
+      });
+
+      function automationURL() {
+        return `${policyRealm.url}automations/nightly`;
+      }
+
+      // The automation card, a run of it, and a webhook its trigger names, so
+      // each route has something a direct writer is shown.
+      async function writeAutomation() {
+        await policyRealm.write(
+          'scripts/nightly-import.js',
+          "await realm.fs.writeText('imported.txt', 'done');\n",
+        );
+        await policyRealm.write(
+          'automations/nightly.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes,
+              relationships: {
+                script: { links: { self: '../scripts/nightly-import.js' } },
+              },
+              meta: { adoptsFrom: automationRef },
+            },
+          }),
+        );
+        await createAutomationRun(policyDB, {
+          automationId: rri(automationURL()),
+          realm: ri(policyRealm.url),
+          trigger: 'nightly',
+          slot: '2026-11-10T08:30:00.000Z',
+          actsAs: ADMIN,
+        });
+        await insertIncomingWebhookRow(policyDB, {
+          username: ADMIN,
+          webhookPath: 'github-push',
+          signingSecret: 'admin-secret',
+        });
+      }
+
+      // Points the realm at a policy that lets any signed-in caller read an
+      // automation.
+      async function nameAPolicy() {
+        await policyRealm.write(
+          'policies/automations.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                rules: [
+                  {
+                    targetType: automationRef,
+                    grants: [
+                      // Names no caller, so it admits only signed-in ones.
+                      { operation: 'read' },
+                    ],
+                  },
+                ],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: rri('@cardstack/catalog/realm-policy/realm-policy'),
+                  name: 'RealmPolicy',
+                },
+              },
+            },
+          }),
+        );
+        await policyRealm.write(
+          'realm.json',
+          realmConfigCardJSON({
+            policy: `${policyRealm.url}policies/automations`,
+          }),
+        );
+        await policyRealm.indexing();
+      }
+
+      // What the routes a card's view, its editor and the realm config read
+      // answer the caller `authorization` names.
+      async function answers(authorization: string) {
+        let ask = (path: string) =>
+          policyRequest
+            .get(path)
+            .set('Accept', SupportedMimeType.JSON)
+            .set('Authorization', authorization);
+        let automation = encodeURIComponent(automationURL());
+        return {
+          status: await ask(`/_automation-status?automation=${automation}`),
+          statusNamingNoCard: await ask('/_automation-status'),
+          runs: await ask(`/_automation-runs?automation=${automation}`),
+          automations: await ask('/_automations'),
+          webhooks: await ask('/_automation-webhooks'),
+        };
+      }
+
+      function signedIn(
+        user: string,
+        permissions: ('read' | 'write' | 'realm-owner')[] = [],
+      ) {
+        return `Bearer ${createJWT(policyRealm, user, permissions)}`;
+      }
+
+      function assertToldNotADirectWriter(
+        assert: Assert,
+        answered: Awaited<ReturnType<typeof answers>>,
+        who: string,
+      ) {
+        assert.deepEqual(
+          Object.fromEntries(
+            Object.entries(answered).map(([route, response]) => [
+              route,
+              [response.status, response.body],
+            ]),
+          ),
+          {
+            status: [200, NOT_A_DIRECT_WRITER],
+            statusNamingNoCard: [200, NOT_A_DIRECT_WRITER],
+            runs: [200, LISTED_NOTHING],
+            automations: [200, LISTED_NOTHING],
+            webhooks: [200, LISTED_NOTHING],
+          },
+          `${who} is told by every route that they aren't a direct writer, and shown nothing`,
+        );
+        for (let [route, response] of Object.entries(answered)) {
+          assert.strictEqual(
+            response.headers['cache-control'],
+            'no-store',
+            `${who}: ${route} is not cached`,
+          );
+        }
+      }
+
+      test('a realm with no policy refuses a signed-in caller its ACL gives nothing', async function (assert) {
+        await writeAutomation();
+        let answered = await answers(signedIn(STRANGER));
+        assert.deepEqual(
+          Object.values(answered).map((response) => response.status),
+          [403, 403, 403, 403, 403],
+          'no policy judges the caller, so the ACL refuses them',
+        );
+      });
+
+      test("a signed-in caller the policy admits to the card is told by every route that they aren't a direct writer", async function (assert) {
+        await writeAutomation();
+        await nameAPolicy();
+        let card = await policyRequest
+          .get('/automations/nightly')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', signedIn(STRANGER));
+        assert.strictEqual(
+          card.status,
+          200,
+          'the grant admits them to the card',
+        );
+
+        assertToldNotADirectWriter(
+          assert,
+          await answers(signedIn(STRANGER)),
+          'the caller the policy admits',
+        );
+
+        let admin = await answers(signedIn(ADMIN, ['read', 'write']));
+        assert.deepEqual(
+          [
+            admin.status.body.meta,
+            admin.runs.body.meta.total,
+            admin.automations.body.data.length,
+            admin.webhooks.body.data.length,
+          ],
+          [{ directWriter: true }, 1, 1, 1],
+          'a direct writer is shown the automation, its run and the webhook',
+        );
+      });
+
+      test("an archived realm tells a caller the policy admits the same, and not that it's archived", async function (assert) {
+        await writeAutomation();
+        await nameAPolicy();
+        await archiveRealm(policyDB, new URL(policyRealm.url));
+        let sealed = (await answers(signedIn(ADMIN, ['read', 'write']))).status;
+        assert.deepEqual(
+          [sealed.status, sealed.headers['x-boxel-realm-archived']],
+          [403, 'true'],
+          'the realm is sealed: a direct writer meets the archived seal',
+        );
+        let answered = await answers(signedIn(STRANGER));
+        assertToldNotADirectWriter(
+          assert,
+          answered,
+          'the caller the policy admits to an archived realm',
+        );
+        for (let [route, response] of Object.entries(answered)) {
+          assert.notOk(
+            response.headers['x-boxel-realm-archived'],
+            `${route} carries no archived marker`,
+          );
+        }
+      });
+    },
+  );
 });
