@@ -1,7 +1,10 @@
 import {
   param,
+  type ChangedAutomation,
   type Expression,
   type Querier,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
   versionKeyOf,
@@ -53,20 +56,22 @@ export async function writeAutomationKeyApprovalsIn(
 // Ends every automation approval of the bindings `bindingIds`: each binding
 // came to send another share or key than the one its approvals were given
 // for (`waitForKeyApprovalOfBindingsIn` moves their automations first).
+// Returns the automations it moved to waiting for key approval.
 export async function endAutomationKeyApprovalsIn(
   txQuery: Querier,
   bindingIds: string[],
-): Promise<void> {
+): Promise<ChangedAutomation[]> {
   if (bindingIds.length === 0) {
-    return;
+    return [];
   }
   let selected = bindingIdList(bindingIds);
-  await waitForKeyApprovalOfBindingsIn(txQuery, selected);
+  let waiting = await waitForKeyApprovalOfBindingsIn(txQuery, selected);
   await txQuery([
     'DELETE FROM automation_key_approvals WHERE binding_id IN (',
     ...selected,
     ')',
   ]);
+  return waiting;
 }
 
 // Moves each automation an approval of the bindings `bindings` selects
@@ -81,10 +86,13 @@ export async function endAutomationKeyApprovalsIn(
 // approvals that holds the row commits before this reads it, and one that
 // comes later reads the approval as gone. A pending run of a moved
 // automation is refused at admission (`waiting-for-key-approval`).
+//
+// Returns the automations it moved, in `automation_id` order, for the caller
+// to report to their realms' direct writers once its transaction commits.
 export async function waitForKeyApprovalOfBindingsIn(
   txQuery: Querier,
   bindings: Expression,
-): Promise<void> {
+): Promise<ChangedAutomation[]> {
   let served: Expression = [
     'SELECT a.automation_id FROM automation_key_approvals a JOIN key_bindings b ON b.id = a.binding_id JOIN automations au ON au.automation_id = a.automation_id WHERE a.binding_id IN (',
     ...bindings,
@@ -95,11 +103,17 @@ export async function waitForKeyApprovalOfBindingsIn(
     ...served,
     ') ORDER BY automation_id FOR UPDATE',
   ]);
-  await txQuery([
+  let moved = await txQuery([
     "UPDATE automations SET state = 'waiting-for-key-approval', next_run = NULL, updated_at = now() WHERE state IN ('active', 'done', 'waiting-for-credits') AND automation_id IN (",
     ...served,
-    ')',
+    ') RETURNING automation_id, realm',
   ]);
+  return moved
+    .map((row) => ({
+      automationId: row.automation_id as RealmResourceIdentifier,
+      realm: row.realm as RealmIdentifier,
+    }))
+    .sort((a, b) => a.automationId.localeCompare(b.automationId));
 }
 
 function bindingIdList(bindingIds: string[]): Expression {

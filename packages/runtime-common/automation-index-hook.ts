@@ -7,6 +7,14 @@
 // indexing tasks call it once their pass has committed, so the row is read
 // against the committed index.
 //
+// The worker can't read a private realm's operation definitions, so the hook
+// compares only the approvals already given. The full check, which tells
+// whether every operation's approvals are there, runs in the realm that
+// started the pass once the pass lands (`Realm.followAutomationKeyApprovals`,
+// over the automations `automationTouchedBy` names): an edit that makes every
+// approval match again runs the automation again, and one that adds an
+// operation needing a key no approval covers makes it wait.
+//
 // The `automations` table is server-only, so the hook runs only against
 // Postgres.
 
@@ -28,7 +36,7 @@ import { trimExecutableExtension } from './executable-extensions.ts';
 import type { DefinitionLookup } from './definition-lookup.ts';
 import { internalKeyFor } from './index.ts';
 import { IndexQueryEngine } from './index-query-engine.ts';
-import { ri } from './realm-identifiers.ts';
+import { ri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
 export interface AutomationIndexHookArgs {
@@ -85,30 +93,29 @@ export async function syncAutomationsAfterIndex({
   if (automations.length === 0) {
     return synced;
   }
-  // A card's file is its id plus `.json`; both spellings count as touched.
-  let touchedCards = touched
-    ? new Set(touched.map((url) => url.replace(/\.json$/, '')))
+  let touchedBy = touched
+    ? automationTouchedBy({
+        dbAdapter,
+        definitionLookup,
+        virtualNetwork,
+        touched,
+      })
     : undefined;
-  let engine = new IndexQueryEngine(
-    dbAdapter,
-    definitionLookup,
-    virtualNetwork,
-  );
   let automationTypeKey = internalKeyFor(
     automationRef,
     undefined,
     virtualNetwork,
   );
-  let touchedFiles = touched ? new Set(touched) : undefined;
+  let engine = new IndexQueryEngine(
+    dbAdapter,
+    definitionLookup,
+    virtualNetwork,
+  );
   let querier = dbAdapterQuerier(dbAdapter);
   for (let { automationId } of automations) {
     try {
       let cardURL = virtualNetwork.toURLHref(automationId);
-      if (
-        touchedCards &&
-        !touchedCards.has(cardURL) &&
-        !(await scriptTouched(cardURL))
-      ) {
+      if (touchedBy && !(await touchedBy(automationId))) {
         continue;
       }
       let result = await syncAutomationWithCard(
@@ -146,11 +153,41 @@ export async function syncAutomationsAfterIndex({
     }
   }
   return synced;
+}
 
-  // Whether the pass touched the script the automation's card names, as the
-  // card is indexed now.
-  async function scriptTouched(cardURL: string): Promise<boolean> {
-    if (!touchedFiles?.size) {
+// Answers whether an index pass that visited or deleted the file URLs
+// `touched` touched an automation: its card (whose file is its id plus
+// `.json`; both spellings count), or the script its card names as the card
+// is indexed now.
+export function automationTouchedBy({
+  dbAdapter,
+  definitionLookup,
+  virtualNetwork,
+  touched,
+}: {
+  dbAdapter: DBAdapter;
+  definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
+  touched: readonly string[];
+}): (automationId: RealmResourceIdentifier) => Promise<boolean> {
+  let touchedFiles = new Set(touched);
+  let touchedCards = new Set(touched.map((url) => url.replace(/\.json$/, '')));
+  let engine = new IndexQueryEngine(
+    dbAdapter,
+    definitionLookup,
+    virtualNetwork,
+  );
+  let automationTypeKey = internalKeyFor(
+    automationRef,
+    undefined,
+    virtualNetwork,
+  );
+  return async (automationId) => {
+    let cardURL = virtualNetwork.toURLHref(automationId);
+    if (touchedCards.has(cardURL)) {
+      return true;
+    }
+    if (touchedFiles.size === 0) {
       return false;
     }
     let card = await engine.getInstanceSource(new URL(cardURL));
@@ -170,5 +207,5 @@ export async function syncAutomationsAfterIndex({
       read.ok &&
       touchedFiles.has(virtualNetwork.toURLHref(read.declaration.script))
     );
-  }
+  };
 }

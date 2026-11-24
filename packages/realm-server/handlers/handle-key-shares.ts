@@ -3,7 +3,12 @@ import {
   automationsWaitingForKeyApproval,
   followAutomationKeyApprovals,
 } from '../lib/automation-key-approvals.ts';
-import { logger, type VirtualNetwork } from '@cardstack/runtime-common';
+import {
+  logger,
+  reportAutomationChanges,
+  type VirtualNetwork,
+} from '@cardstack/runtime-common';
+import { realmServerAutomationChangeReporter } from '../lib/run-change-reporter.ts';
 import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { setContextResponse } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
@@ -314,7 +319,7 @@ export function handleSwapKeyIntoShare(args: CreateRoutesArgs): Handler {
           ctxt.state.token as RealmServerTokenClaim | undefined,
         )
       : undefined;
-    let { share, reapprovedBindings } = await swapKeyIntoShare(
+    let { share, reapprovedBindings, waiting } = await swapKeyIntoShare(
       dbAdapter,
       secretsKeyring(),
       {
@@ -327,8 +332,13 @@ export function handleSwapKeyIntoShare(args: CreateRoutesArgs): Handler {
       },
     );
     // The swap ended the approvals of the share's bindings and moved their
-    // automations to waiting. One whose ended approval was for an operation
-    // its card no longer declares has nothing missing, and runs again.
+    // automations to waiting, which their realm's direct writers are told.
+    // One whose ended approval was for an operation its card no longer
+    // declares has nothing missing, and runs again.
+    await reportAutomationChanges(
+      realmServerAutomationChangeReporter(args),
+      waiting,
+    );
     let realmURL = new URL(share.realm);
     await followAutomationKeyApprovals(
       args,

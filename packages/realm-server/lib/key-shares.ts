@@ -3,6 +3,7 @@ import {
   isDirectWriterLocked,
   param,
   query,
+  type ChangedAutomation,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { Querier } from '@cardstack/runtime-common/expression';
@@ -566,7 +567,13 @@ export async function swapKeyIntoShare(
     // knows it opens nothing to them.
     opensToAnonymous?: (realmURL: URL) => Promise<boolean>;
   },
-): Promise<{ share: KeyShare; reapprovedBindings: string[] }> {
+): Promise<{
+  share: KeyShare;
+  reapprovedBindings: string[];
+  // The automations that moved to waiting for key approval because the
+  // approvals they had of the share's bindings ended with the swap.
+  waiting: ChangedAutomation[];
+}> {
   if (keyId === undefined || keyId === null) {
     throw new UserKeyError(400, 'a swap names the key it puts in');
   }
@@ -632,13 +639,17 @@ export async function swapKeyIntoShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    let reapprovedBindings = await moveShareBindingsIn(txQuery, keyring, {
+    let { moved, waiting } = await moveShareBindingsIn(txQuery, keyring, {
       shareId,
       keyId,
       owner: user,
       via,
     });
-    return { share: toShare(updated, { withKey: true }), reapprovedBindings };
+    return {
+      share: toShare(updated, { withKey: true }),
+      reapprovedBindings: moved,
+      waiting,
+    };
   });
 }
 
