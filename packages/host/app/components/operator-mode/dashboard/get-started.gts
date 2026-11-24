@@ -438,7 +438,7 @@ export default class GetStarted extends Component<Signature> {
     {{yield this.toggleState to='head'}}
     {{#if this.toggleState.isOpen}}
       <section
-        class='get-started'
+        class={{cn 'get-started' is-folded=(unless this.isExpanded true)}}
         id={{this.panelId}}
         aria-labelledby={{this.titleId}}
         data-test-get-started
@@ -790,20 +790,36 @@ export default class GetStarted extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
         font-style: italic;
       }
+      /* Where each part sits once the box stacks, below. They place nothing
+         until the body is a grid. */
+      .get-started-title {
+        grid-area: title;
+      }
+      .get-started-dismiss {
+        grid-area: dismiss;
+      }
+      .get-started-actions {
+        grid-area: actions;
+      }
+      /* The rest take a whole row each, in DOM order, and only while they
+         show, so a missing error or folded steps leave no empty row. */
+      .get-started-progress,
+      .get-started-count,
+      .get-started-error,
+      .get-started-steps {
+        grid-column: 1 / -1;
+      }
       /* Narrow, the box stacks: the title row with Dismiss and the
          minimize button, the progress bar across the box, the count, a
          failed dismissal's error when there is one, then the steps. The
          header's items join the body's grid for that, in their DOM order
-         so Tab follows what's on screen. */
+         so Tab follows what's on screen. The folded layout below repeats
+         this grid, so keep the two in step. */
       @container get-started (max-width: 30rem) {
         .get-started-body {
           display: grid;
           grid-template-columns: minmax(0, 1fr) auto auto;
-          grid-template-areas:
-            'title dismiss actions'
-            'progress progress progress'
-            'count count count'
-            'steps steps steps';
+          grid-template-areas: 'title dismiss actions';
           align-items: center;
           gap: var(--boxel-sp-xs);
         }
@@ -812,37 +828,8 @@ export default class GetStarted extends Component<Signature> {
         .get-started-controls {
           display: contents;
         }
-        .get-started-steps {
-          grid-area: steps;
-        }
-        .get-started-title {
-          grid-area: title;
-        }
-        .get-started-actions {
-          grid-area: actions;
-        }
         .get-started-progress {
-          grid-area: progress;
           width: 100%;
-        }
-        .get-started-count {
-          grid-area: count;
-        }
-        .get-started-dismiss {
-          grid-area: dismiss;
-        }
-        .get-started-error {
-          grid-area: error;
-        }
-        /* An empty row would still add a gap, so the row exists only while
-           an error shows. Keep this map in step with the one above. */
-        .get-started-body:has(.get-started-error) {
-          grid-template-areas:
-            'title dismiss actions'
-            'progress progress progress'
-            'count count count'
-            'error error error'
-            'steps steps steps';
         }
         .get-started-step {
           grid-template-columns: var(--_get-started-tick-size) minmax(0, 1fr);
@@ -853,6 +840,27 @@ export default class GetStarted extends Component<Signature> {
         .step-action {
           grid-column: 1 / -1;
           justify-self: end;
+        }
+      }
+      /* Folded, the box stacks the same way until it is wide enough for the
+         title, progress, buttons and the count with the longest next step to
+         share one line. Narrower, the count would wrap beside a short
+         progress bar. Its grid repeats the narrow one above. */
+      @container get-started (max-width: 48rem) {
+        .get-started.is-folded .get-started-body {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto auto;
+          grid-template-areas: 'title dismiss actions';
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+        }
+        .get-started.is-folded .get-started-head,
+        .get-started.is-folded .get-started-summary,
+        .get-started.is-folded .get-started-controls {
+          display: contents;
+        }
+        .get-started.is-folded .get-started-progress {
+          width: 100%;
         }
       }
     </style>
