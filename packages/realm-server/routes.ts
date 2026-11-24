@@ -51,7 +51,7 @@ import handleUnarchiveRealm from './handlers/handle-unarchive-realm.ts';
 import handleArchivedRealms from './handlers/handle-archived-realms.ts';
 import {
   healthCheck,
-  jwtMiddleware,
+  jwtMiddleware as userTokenMiddleware,
   grafanaAuthorization,
   operatorAuthorization,
   sendResponseForUnauthorizedRequest,
@@ -178,6 +178,7 @@ import { PREFIX_REALMS_ENDPOINT } from '@cardstack/runtime-common/prefix-realm-n
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import type { OAuthProviderService } from './lib/oauth-provider/provider.ts';
 import { registerOAuthProviderRoutes } from './lib/oauth-provider/serve.ts';
+import { boxelApi as createBoxelApi } from './lib/oauth-provider/boxel-api.ts';
 import {
   handleAddUserKey,
   handleDeleteUserKey,
@@ -379,6 +380,20 @@ export function createRoutes(args: CreateRoutesArgs) {
     reconciler: args.reconciler,
     ...(args.changeJournal ? { changeJournal: args.changeJournal } : {}),
   };
+
+  // Every route behind a user's own token is also a controller of the Boxel
+  // API's OAuth tokens (ADR 021 §1.5), and admits one only where a Boxel API
+  // scope maps it (`lib/oauth-provider/registry.ts`). Every other route
+  // answers an OAuth token `401 invalid_token`.
+  let boxelApi = args.oauthProvider
+    ? createBoxelApi(args.dbAdapter, args.oauthProvider)
+    : undefined;
+  let jwtMiddleware = (
+    secretSeed: string,
+    dbAdapter: DBAdapter,
+    opts: { expiredWithinSeconds?: number } = {},
+  ) => userTokenMiddleware(secretSeed, dbAdapter, { ...opts, boxelApi });
+  let multiRealmDeps = { ...args, boxelApi };
 
   if (args.oauthProvider) {
     registerOAuthProviderRoutes(router, args.oauthProvider, {
@@ -768,7 +783,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-search',
-    multiRealmAuthorization(args, { unreadableRealms: 'carry' }),
+    multiRealmAuthorization(multiRealmDeps, { unreadableRealms: 'carry' }),
     handleSearch({
       reconciler: args.reconciler,
       realmsRootPath: args.realmsRootPath,
@@ -781,7 +796,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-info',
-    multiRealmAuthorization(args),
+    multiRealmAuthorization(multiRealmDeps),
     handleRealmInfo({
       dbAdapter: args.dbAdapter,
       reconciler: args.reconciler,
@@ -789,7 +804,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-index-counts',
-    multiRealmAuthorization(args),
+    multiRealmAuthorization(multiRealmDeps),
     handleRealmIndexCounts({
       dbAdapter: args.dbAdapter,
       reconciler: args.reconciler,
@@ -797,7 +812,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-types',
-    multiRealmAuthorization(args),
+    multiRealmAuthorization(multiRealmDeps),
     handleFederatedTypes({
       dbAdapter: args.dbAdapter,
       reconciler: args.reconciler,

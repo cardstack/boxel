@@ -16,9 +16,9 @@ import * as Sentry from '@sentry/node';
 import {
   sendResponseForSystemError,
   setContextResponse,
+  requestUser,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 const log = logger('handle-archived-realms');
 
@@ -63,8 +63,8 @@ export default function handleArchivedRealms({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token) {
+    let user = requestUser(ctxt);
+    if (!user) {
       await sendResponseForSystemError(
         ctxt,
         'token is required to list archived realms',
@@ -73,7 +73,7 @@ export default function handleArchivedRealms({
     }
 
     try {
-      let { user: username } = token;
+      let username = user;
       let archivedRealms = await fetchArchivedRealmsForAdministrator(
         dbAdapter,
         username,
