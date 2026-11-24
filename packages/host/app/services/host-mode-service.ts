@@ -536,9 +536,14 @@ export default class HostModeService extends Service {
 
   // Host Mode v2: the realm's host URLs, canonical first, each with the path
   // of the card on screen. Empty until the host URL service has read them,
-  // and when the flag is off.
+  // when the flag is off, and when no card is open, since the realm is then a
+  // fallback the user isn't looking at.
   get openSiteHostURLs(): OpenSiteHostURL[] {
-    if (!this.isHostModeV2 || !this.realmURL) {
+    if (
+      !this.isHostModeV2 ||
+      !this.realmURL ||
+      !this.operatorModeStateService.hostModePrimaryCard
+    ) {
       return [];
     }
     return [...this.hostUrlService.hostURLsFor(this.realmURL)]

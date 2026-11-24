@@ -200,6 +200,16 @@ module('Acceptance | host mode open site', function (hooks) {
     assert.dom(OPEN_SITE).doesNotExist();
   });
 
+  test('with no card open, reads no host URLs and shows no button, so it can’t open a fallback realm’s site', async function (assert) {
+    fake.hostURLs = [
+      { id: 'b', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
+    ];
+    await visitOperatorMode({ submode: 'host', trail: [] });
+    await settled();
+    assert.strictEqual(fake.listCalls, 0, 'read no host URLs');
+    assert.dom(OPEN_SITE).doesNotExist();
+  });
+
   test('with only a v1 site, the button opens the v1 site', async function (assert) {
     let restore = await withV1Site(V1_URL);
     try {

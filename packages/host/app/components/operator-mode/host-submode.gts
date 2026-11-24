@@ -173,9 +173,11 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   // With Host Mode v2, the realm's host URLs, which the Open Site button
-  // opens. With the flag off, nothing reads them.
+  // opens. With the flag off, nothing reads them. With no card open, the
+  // realm is a fallback the user isn't looking at, so nothing reads them
+  // either, as for the host URL manager.
   private hostURLs = loadHostURLs(this, getOwner(this)!, () =>
-    this.isHostModeV2 ? this.realmURL : undefined,
+    this.needsCardForHostURLs || !this.isHostModeV2 ? undefined : this.realmURL,
   );
 
   // The button shows when there is a site to open: a host URL, or a site
