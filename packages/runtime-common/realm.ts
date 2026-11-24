@@ -15240,7 +15240,11 @@ export class Realm {
       secrets: token ? [token] : [],
       attempt: call.attempt,
     });
-    if (result.milestones > 0) {
+    // One event for each request that records a milestone or a task. The
+    // tab sends a run's lines in batches, at most one a second unless a
+    // batch fills, so a script that reports many tasks quickly sends one
+    // event a batch, and the realm event line merges a run's queued events.
+    if (result.milestones > 0 || result.tasks > 0) {
       // Not awaited: the run's tab is waiting on this answer, and the event
       // is a report the run doesn't depend on.
       void this.reportRunChange(call.runId);

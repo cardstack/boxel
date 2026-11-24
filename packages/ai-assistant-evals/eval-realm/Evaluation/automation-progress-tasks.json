@@ -1,0 +1,61 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Every Monday at 9 AM Chicago time, count my recipes by cuisine, leave out any recipe that has no cuisine, and save the counts as a report in this workspace. Don't ask me any follow-up questions; decide the details yourself.",
+      "followUpPrompts": [],
+      "successCriteria": "1. The workspace holds a card instance whose `meta.adoptsFrom` is `@cardstack/catalog/automation/automation` / `Automation`, and the instance's `script` relationship links a `.js` file that exists in the workspace snapshot's `files`. A card definition of the assistant's own that only stores a schedule, or a reply promising to run the report later, does not count.\n2. The Automation card has exactly one trigger: `kind` `cron`, a non-empty `label`, an expression that fires on Mondays at 09:00 (`0 9 * * 1`, `0 9 * * MON` or an equivalent), and `timeZone` `America/Chicago`.\n3. (problem) The script reports the notable tasks of the run with `realm.progress.task(text)`, each after a `realm.progress.milestone(...)` call: at least one task says how many recipes the script counted, at least one says how many recipes the script left out for having no cuisine (or that it left out none), and at least one names the report the script wrote. Each task text is a short line in plain words that names what the task acted on, such as `Counted 6 recipes in 4 cuisines` or `Left out 1 recipe with no cuisine`, not a bare number, `Done`, `Step 2` or a variable dump. No `realm.progress.task` call sits inside the loop over individual recipes, and the script calls no `realm.progress.count`. A script that reports progress only with `realm.progress.count`, `console` lines or milestones fails this criterion.\n4. The script calls only methods on the automation surface: no `realm.ask`, `realm.ui`, `realm.transform`, `realm.capture`, `realm.web`, `realm.fs.delete` or `room`. The script reads the Recipe cards with `realm.cards.search` on the Recipe type and pages until `truncated` is false, counts them by `cuisine`, leaves out a recipe whose `cuisine` is empty, and writes one report file or card with `realm.fs.writeText` or `realm.cards.update`. The script writes no `.gts`, `.js` or Automation card.\n5. The script declares its milestones with one `realm.progress.plan([...])` of string literals and marks each with `realm.progress.milestone`.\n6. `caps` sets every run limit and `monthlyCredits`; `callApiCalls`, `resolveCalls` and `aiCredits` are 0, and `writes` is at least 1. `operations` is empty.\n7. The Automation card is shown with no error boundary. The reply says the automation runs nothing until a direct writer switches the automation on and confirms the limits and the monthly cap; the reply does not claim the automation is scheduled, switched on or already run.\n8. The assistant asked no question, and the whole flow took at most 15 turns.",
+      "cardInfo": {
+        "name": "Automation: report notable tasks in a run",
+        "summary": "Six recipes are in the workspace, with one of them open. The prompt asks for a weekly report of the recipes counted by cuisine, leaving out recipes with no cuisine. This eval tests whether the automation's script reports the run's notable tasks inside its milestones with realm.progress.task, in plain words a person would check (how many recipes the run counted, how many the run left out, the report the run wrote), rather than a count or nothing.",
+        "notes": "Known gap: Claude models show the Automation card from the same run-realm-code call that writes it. A fresh workspace can take longer to index its first Automation card than the host waits for a card to show (about 20 seconds against 10 on an environment-mode stack), so the runner finds no rendered card and grades the run model-failure, which scores 0 whatever the other criteria say. When the room shows the show failed with \"has not finished indexing\" and the card is in the workspace snapshot, judge the other criteria as usual and say in the analysis which failures are this gap and which are the model's.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": [],
+      "secondsPerPrompt": 300
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/margherita-pizza"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/cacio-e-pepe.json"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/chicken-tinga-tacos.json"
+        }
+      },
+      "initialFiles.2": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/pozole-rojo.json"
+        }
+      },
+      "initialFiles.3": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/miso-ramen.json"
+        }
+      },
+      "initialFiles.4": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/chana-masala.json"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

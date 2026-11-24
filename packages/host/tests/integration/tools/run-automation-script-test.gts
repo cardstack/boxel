@@ -399,7 +399,7 @@ module('Integration | tools | run-automation-script', function (hooks) {
     let { events, done } = run(
       `realm.progress.plan(['fetch roster', 'write findings']);
 realm.progress.milestone('fetch roster');
-realm.progress.count(1, 2);
+realm.progress.task('Fetched the roster, key ghp_abcdefghijklmnopqrstuvwxyz0123');
 console.log('fetched', { count: 2 });
 console.warn('token', ${JSON.stringify(token)});
 console.info('key ghp_abcdefghijklmnopqrstuvwxyz0123');
@@ -417,7 +417,7 @@ return 'done';`,
     assert.deepEqual(shown, [
       { kind: 'plan', milestones: ['fetch roster', 'write findings'] },
       { kind: 'milestone', name: 'fetch roster' },
-      { kind: 'count', done: 1, total: 2 },
+      { kind: 'task', text: `Fetched the roster, key ${REDACTED}` },
       {
         kind: 'console',
         level: 'log',
@@ -659,14 +659,46 @@ return 'done';`,
       for (const call of [
         () => realm.progress.milestone(''),
         () => realm.progress.plan([]),
-        () => realm.progress.count(3, 2),
-        () => realm.progress.count(-1),
+        () => realm.progress.task('Grouped the bug label'),
+        () => realm.progress.milestone('Group by label'),
+        () => realm.progress.task(''),
+        () => realm.progress.task('x'.repeat(201)),
+        () => realm.progress.task(3),
       ]) {
         try { call(); } catch (error) { errors.push(error.message); }
       }
       return errors;
     `);
-    assert.strictEqual(JSON.parse((await done).scriptResult).length, 4);
+    assert.deepEqual(JSON.parse((await done).scriptResult), [
+      'realm.progress.milestone expects milestone names of 1 to 80 characters',
+      'realm.progress.plan expects 1 to 50 milestone names',
+      'realm.progress.task reports a task inside a milestone: call realm.progress.milestone first',
+      'realm.progress.task expects a task of 1 to 200 characters',
+      'realm.progress.task expects a task of 1 to 200 characters',
+      'realm.progress.task expects a task of 1 to 200 characters',
+    ]);
+  });
+
+  test('realm.progress.count records nothing, and the run says once that tasks take its place', async function (assert) {
+    let { events, done } = run(`realm.progress.milestone('Import');
+realm.progress.count(1, 3);
+realm.progress.count(2, 3);
+realm.progress.count(9, 3);
+return 'done';`);
+    assert.strictEqual((await done).scriptResult, JSON.stringify('done'));
+    assert.deepEqual(
+      events.map(({ at: _at, ...rest }) => rest),
+      [
+        { kind: 'milestone', name: 'Import' },
+        {
+          kind: 'console',
+          level: 'warn',
+          message:
+            'realm.progress.count records nothing. Report each notable task inside a milestone with realm.progress.task instead.',
+          line: 2,
+        },
+      ],
+    );
   });
 
   test('a script that runs past its seconds cap is stopped at its time limit', async function (assert) {

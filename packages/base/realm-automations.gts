@@ -48,10 +48,6 @@ const AUTOMATION_TYPE: ResolvedCodeRef = {
   name: 'Automation',
 };
 
-function count(n: number): string {
-  return n.toLocaleString('en-US');
-}
-
 // A card with no name reads by the last segment of the card's URL.
 export function automationTitle(automation: Automation): string {
   let { title } = automation.attributes;
@@ -119,7 +115,7 @@ export function pausedBecause(automation: Automation): string {
 }
 
 // Where a run in progress is: the milestone the script last reported, with
-// the count inside the milestone when the script counts.
+// the last task the script reported inside the milestone.
 export function runningText(automation: Automation): string | undefined {
   let run = automation.attributes.currentRun;
   if (!run) {
@@ -128,11 +124,8 @@ export function runningText(automation: Automation): string | undefined {
   if (!run.milestone) {
     return 'Running, before the first milestone';
   }
-  let progress =
-    run.done !== undefined && run.total !== undefined
-      ? ` (${count(run.done)} of ${count(run.total)})`
-      : '';
-  return `Running “${run.milestone}”${progress}`;
+  let task = run.task ? ` — ${run.task}` : '';
+  return `Running “${run.milestone}”${task}`;
 }
 
 // What a row says under the automation's name when the automation's card

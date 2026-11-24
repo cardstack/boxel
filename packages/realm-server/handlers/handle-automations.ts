@@ -840,7 +840,7 @@ export function handleAutomationRunLog(args: CreateRoutesArgs): Handler {
         attributes: {
           state:
             page.state as AutomationRunLogDocument['data']['attributes']['state'],
-          lines: page.lines,
+          lines: page.lines.map(withoutUnitCost),
           next: page.next,
           more: page.more,
           total: page.total,
@@ -850,6 +850,28 @@ export function handleAutomationRunLog(args: CreateRoutesArgs): Handler {
     };
     await sendJSON(ctxt, 200, document);
   });
+}
+
+// A log line as a writer reads it. A `resolve` line stored before ADR 049
+// carries an AI request's cost twice: as `costInUsd` in its data, and as the
+// last figure in its message (`resolve <model>: 200 (812 ms, $0.000412)`).
+// Nothing prunes a run's log, so both come off here, and a writer sees the
+// request's cost only as the credits charged (ADR 049 §1.4).
+function withoutUnitCost<
+  T extends { kind?: string; message: string; data?: Record<string, unknown> },
+>(line: T): T {
+  if (line.kind !== 'resolve') {
+    return line;
+  }
+  let message = line.message.replace(
+    /\s\((?:(.*?),\s*)?\$\d+(?:\.\d+)?\)$/,
+    (_match, measured?: string) => (measured ? ` (${measured})` : ''),
+  );
+  if (!line.data || !('costInUsd' in line.data)) {
+    return message === line.message ? line : { ...line, message };
+  }
+  let { costInUsd: _costInUsd, ...data } = line.data;
+  return { ...line, message, data };
 }
 
 // The largest `seq` a run's log holds, Postgres's `integer`.

@@ -44,6 +44,7 @@ export type RealmRunnerCallMethod =
   | 'ask'
   | 'progress.plan'
   | 'progress.milestone'
+  | 'progress.task'
   | 'progress.count'
   | 'console.log'
   | 'console.info'
