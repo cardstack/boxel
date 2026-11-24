@@ -1975,8 +1975,11 @@ export async function notifyRealmIndexUpdated(
 // check every automation's key approvals in full
 // (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`), which the worker
 // can't do, as it reads no operation definitions. A `POST` with no body,
-// answered 204 once the check has run; like every `POST`, it takes a direct
-// writer of the realm.
+// answered 202 once the check has started, without waiting for it: the pass's
+// job holds the realm's exclusive index lane, so its writers would wait
+// behind the check's definition lookups. `Realm.incrementalIndexing()` holds
+// the check until it settles. Like every `POST`, it takes a direct writer of
+// the realm.
 export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
   '/_follow-automation-key-approvals';
 
@@ -15643,10 +15646,14 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    await this.followAutomationKeyApprovalsAfterFromScratchPass();
+    let tracked = this.followAutomationKeyApprovalsAfterFromScratchPass();
+    this.#automationFollowsAfterPass.add(tracked);
+    void tracked.finally(() =>
+      this.#automationFollowsAfterPass.delete(tracked),
+    );
     return createResponse({
       body: null,
-      init: { status: 204 },
+      init: { status: 202 },
       requestContext,
     });
   }

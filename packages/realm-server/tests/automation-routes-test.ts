@@ -1733,7 +1733,7 @@ module(basename(import.meta.filename), function (hooks) {
           'Authorization',
           `Bearer ${createJWT(realm, WRITER, ['read', 'write'])}`,
         );
-      assert.strictEqual(answered.status, 204, answered.text);
+      assert.strictEqual(answered.status, 202, answered.text);
     });
 
     test('approving a slot again with another key sends an automation event for the automation whose approval it ended', async function (assert) {
