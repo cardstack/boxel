@@ -516,6 +516,11 @@ export interface InstanceSubject extends SubjectCommon {
   // The instance's own type, for the one entry that names it: a patch of a
   // card's document is a card resource, which says what the card is.
   codeRef?: CodeRef;
+  // Checks and normalizes an operation's payload before any entry carries it,
+  // a single call and a batch entry alike: a log read through a typed field
+  // checks `record`'s line against its type (base's `log-lines.ts`). Throws
+  // to refuse the call.
+  paramsFor?: (name: string, payload: unknown) => unknown;
 }
 
 export interface TypeSubject extends SubjectCommon {
@@ -802,6 +807,9 @@ function entryData(
     throw new Error(
       `operation "${name}" on ${subject.displayName} takes its payload as an object`,
     );
+  }
+  if (subject.scope === 'instance' && subject.paramsFor) {
+    payload = subject.paramsFor(name, payload);
   }
   let data: Record<string, unknown> = {
     ...(lid === undefined ? {} : { lid }),

@@ -33,6 +33,7 @@ import {
   type SearchInvokeOptions,
 } from '@cardstack/runtime-common';
 
+import { lineParamsFor, lineTypeFor } from './log-lines';
 import {
   BaseDef,
   CardDef,
@@ -3024,6 +3025,11 @@ function subjectFor(target: unknown): OperationsSubject {
     ...(instance[localId] ? { localId: instance[localId] } : {}),
     ...(realm ? { realmURL: realm.href } : {}),
     ...(codeRef ? { codeRef } : {}),
+    // A log read through `linksTo(JSONLFile, { of: LineType })`: `record`
+    // checks and normalizes its line, in a single call or a batch entry.
+    ...((lineType) => (lineType ? { paramsFor: lineParamsFor(lineType) } : {}))(
+      lineTypeFor(target),
+    ),
   };
 }
 

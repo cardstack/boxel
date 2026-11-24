@@ -1272,6 +1272,18 @@ export interface LogQuerySource {
 
 export const LOG_MAX_GROUP_BY = 8;
 export const LOG_MAX_AGGREGATES = 32;
+// An aggregate's column is "a_<name>", and Postgres keeps 63 bytes of a
+// name: a longer one would be cut, and its aggregate read as null.
+export const LOG_MAX_AGGREGATE_NAME = 61;
+// Names an aggregate cannot take, and why. A grouped row holds its keys under
+// `group`; the rest name an object's own machinery in JavaScript, which a
+// reader of the row (a card, a client) would find in place of the value.
+const RESERVED_AGGREGATE_NAMES: ReadonlyMap<string, string> = new Map([
+  ['group', 'a grouped row holds its keys under group'],
+  ['__proto__', "it names an object's prototype in JavaScript"],
+  ['constructor', "it names an object's constructor in JavaScript"],
+  ['prototype', "it names a function's prototype in JavaScript"],
+]);
 // logs one query reads, named or under a folder
 export const LOG_MAX_FILES = 100;
 
@@ -1397,6 +1409,13 @@ function assertLogGroup(group: any) {
     if (!/^[A-Za-z_]\w*$/.test(name)) {
       let values = { name: JSON.stringify(name.slice(0, 80)) };
       throw refuseLog('log-invalid-aggregate-name-name-letter', values);
+    }
+    let reserved = RESERVED_AGGREGATE_NAMES.get(name);
+    if (reserved)
+      throw refuseLog('log-aggregate-name-reserved', { name, why: reserved });
+    if (name.length > LOG_MAX_AGGREGATE_NAME) {
+      let values = { length: name.length, LOG_MAX_AGGREGATE_NAME };
+      throw refuseLog('log-aggregate-name-too-long', values);
     }
     needLog(isObject(spec), 'log-aggregate-one-as-op-path', { name, ops });
     let entries = Object.entries(spec);

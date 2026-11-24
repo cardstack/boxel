@@ -436,6 +436,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'iso-bmff': () => import('@cardstack/base/iso-bmff'),
   'jpg-meta-extractor': () => import('@cardstack/base/jpg-meta-extractor'),
   'json-file-def': () => import('@cardstack/base/json-file-def'),
+  'log-lines': () => import('@cardstack/base/log-lines'),
   'm4a-meta-extractor': () => import('@cardstack/base/m4a-meta-extractor'),
   'midi-audio-def': () => import('@cardstack/base/midi-audio-def'),
   'midi-meta-extractor': () => import('@cardstack/base/midi-meta-extractor'),

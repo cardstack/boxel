@@ -4,6 +4,7 @@ import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 
 import { setupDB } from './helpers/index.ts';
+import { ensureLogPartition } from '@cardstack/runtime-common/log-line-partitions';
 import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
 
 const GONE = 'http://removed-realm.test/';
@@ -11,7 +12,7 @@ const KEPT = 'http://kept-realm.test/';
 
 // Removing a realm removes its rows in every table the index writer derives
 // from boxel_index (vectors and sidecars, passages, the value store, the typo
-// word list), and no other realm's.
+// word list, a log's line rows and its file state), and no other realm's.
 module(basename(import.meta.filename), function (hooks) {
   let adapter: PgAdapter;
   setupDB(hooks, {
@@ -63,6 +64,18 @@ module(basename(import.meta.filename), function (hooks) {
          VALUES ($1, $2, $3, $4, 's', 'a title')`,
       [realmId, typeId, pathId, cardId],
     );
+    // A log's line in the realm's own partition of boxel_log_lines, which the
+    // removal drops whole, and the log's file state.
+    await ensureLogPartition(adapter, realm);
+    await one(
+      `INSERT INTO boxel_log_lines (realm_url, url, line_no, at, actor, entry)
+         VALUES ($1, $2, 1, now(), '@ada:localhost', '{"what":"arrived"}'::jsonb)`,
+      [realm, `${realm}events.jsonl`],
+    );
+    await one(
+      `INSERT INTO boxel_log_files (url, realm_url, line_count) VALUES ($1, $2, 1)`,
+      [`${realm}events.jsonl`, realm],
+    );
   }
 
   // Every table above but boxel_index_values is keyed by realm_url;
@@ -76,6 +89,8 @@ module(basename(import.meta.filename), function (hooks) {
     'boxel_index_value_realms',
     'boxel_index_value_types',
     'boxel_index_value_cards',
+    'boxel_log_lines',
+    'boxel_log_files',
   ];
 
   async function counts(realm: string) {

@@ -248,6 +248,143 @@ export async function clearRealmPermissions(
   );
 }
 
+// The realm index's side tables: every table named `boxel_*` with a
+// `realm_url` column, other than the index's own row tables, which have
+// statements of their own (and whose pending rows a clone clears). A feature
+// that keeps a realm's rows beside `boxel_index` names its table that way
+// (vectors, passages, facet values, and the side tables later migrations
+// add), so a clone rewrites it and a reset clears it with no edit here. A
+// partitioned table is listed once, by its parent: a statement on the parent
+// reaches every partition.
+const INDEX_ROW_TABLES = [
+  'boxel_index',
+  'boxel_index_pending',
+  'boxel_index_working',
+];
+
+interface RealmIndexSideTable {
+  name: string;
+  // Its text and JSON columns: the ones a URL can be in.
+  columns: { name: string; type: string }[];
+}
+
+export async function realmIndexSideTables(
+  client: PgClient,
+): Promise<RealmIndexSideTable[]> {
+  let { rows } = await client.query<{
+    table_name: string;
+    column_name: string;
+    column_type: string;
+  }>(
+    `SELECT c.relname AS table_name, a.attname AS column_name,
+            format_type(a.atttypid, NULL) AS column_type
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_attribute a ON a.attrelid = c.oid
+        AND a.attnum > 0 AND NOT a.attisdropped
+        AND format_type(a.atttypid, NULL)
+            IN ('text', 'character varying', 'json', 'jsonb')
+      WHERE n.nspname = current_schema()
+        AND c.relkind IN ('r', 'p')
+        AND NOT c.relispartition
+        AND c.relname LIKE 'boxel\\_%'
+        AND NOT (c.relname = ANY($1::text[]))
+        AND EXISTS (
+          SELECT 1 FROM pg_attribute r
+           WHERE r.attrelid = c.oid AND r.attname = 'realm_url'
+             AND NOT r.attisdropped
+        )
+      ORDER BY c.relname, a.attnum`,
+    [INDEX_ROW_TABLES],
+  );
+  let tables = new Map<string, RealmIndexSideTable>();
+  for (let row of rows) {
+    let table = tables.get(row.table_name);
+    if (!table) {
+      table = { name: row.table_name, columns: [] };
+      tables.set(row.table_name, table);
+    }
+    table.columns.push({ name: row.column_name, type: row.column_type });
+  }
+  return [...tables.values()];
+}
+
+// `column = <its value with the old URL replaced by the new>`, for a clone.
+function rewrittenColumn(column: { name: string; type: string }): string {
+  let name = quotePgIdentifier(column.name);
+  return column.type === 'json' || column.type === 'jsonb'
+    ? `${name} = replace(${name}::text, $1, $2)::${column.type}`
+    : `${name} = replace(${name}, $1, $2)`;
+}
+
+// A realm's log lines live in a partition of `boxel_log_lines` of its own,
+// bound to its URL and named in `boxel_log_realms` (runtime-common's
+// log-line-partitions.ts). Rewriting the rows through the parent alone would
+// move them into the DEFAULT partition and leave the realm's catalog row
+// naming a partition still bound to the old URL. So a clone moves each
+// partition: detached, its rows given the new URL, attached again for it.
+// The side-table pass then rewrites the catalog row and every other column.
+async function rebindLogPartitions(
+  client: PgClient,
+  fromURL: string,
+  toURL: string,
+): Promise<void> {
+  if (!(await hasLogPartitions(client))) {
+    return;
+  }
+  let { rows } = await client.query<{ name: string; realm_url: string }>(
+    `SELECT r.partition_name AS name,
+            replace(r.realm_url, $1, $2) AS realm_url
+       FROM boxel_log_realms r
+       JOIN pg_class c ON c.relname = r.partition_name
+       JOIN pg_inherits i ON i.inhrelid = c.oid
+        AND i.inhparent = 'boxel_log_lines'::regclass
+      WHERE position($1 in r.realm_url) > 0`,
+    [fromURL, toURL],
+  );
+  for (let row of rows) {
+    let partition = quotePgIdentifier(row.name);
+    await client.query(
+      `ALTER TABLE boxel_log_lines DETACH PARTITION ${partition}`,
+    );
+    await client.query(
+      `UPDATE ${partition} SET realm_url = replace(realm_url, $1, $2)`,
+      [fromURL, toURL],
+    );
+    await client.query(
+      `ALTER TABLE boxel_log_lines ATTACH PARTITION ${partition}
+       FOR VALUES IN (${client.escapeLiteral(row.realm_url)})`,
+    );
+  }
+}
+
+// A reset drops the realm's log partition, as deleting a realm does
+// (`dropLogPartition` in runtime-common). Left attached without its catalog
+// row, the realm's next first write would try to create it again.
+async function dropLogPartition(
+  client: PgClient,
+  realmURL: string,
+): Promise<void> {
+  if (!(await hasLogPartitions(client))) {
+    return;
+  }
+  let { rows } = await client.query<{ name: string }>(
+    `SELECT partition_name AS name FROM boxel_log_realms WHERE realm_url = $1`,
+    [realmURL],
+  );
+  for (let row of rows) {
+    await client.query(`DROP TABLE IF EXISTS ${quotePgIdentifier(row.name)}`);
+  }
+}
+
+async function hasLogPartitions(client: PgClient): Promise<boolean> {
+  let { rows } = await client.query<{ present: boolean }>(
+    `SELECT to_regclass('boxel_log_realms') IS NOT NULL
+        AND to_regclass('boxel_log_lines') IS NOT NULL AS present`,
+  );
+  return Boolean(rows[0]?.present);
+}
+
 export async function resetRealmState(
   databaseName: string,
   realmURL: URL,
@@ -300,6 +437,13 @@ export async function resetRealmState(
        WHERE source_url = $1 OR url = $1`,
           [realmURL.href],
         );
+        await dropLogPartition(client, realmURL.href);
+        for (let table of await realmIndexSideTables(client)) {
+          await client.query(
+            `DELETE FROM ${quotePgIdentifier(table.name)} WHERE realm_url = $1`,
+            [realmURL.href],
+          );
+        }
 
         await client.query('COMMIT');
       } catch (error) {
@@ -368,7 +512,8 @@ export async function clearModuleCache(databaseName: string): Promise<void> {
 // When schema changes add new persisted URL-bearing columns or tables, this
 // rewrite pass needs to be updated as well. If that coverage drifts, cloned
 // harness databases quietly fall back toward cold indexing instead of reusing
-// the prepared snapshot.
+// the prepared snapshot. The realm index's side tables are found, not listed
+// (see `realmIndexSideTables`).
 export async function rewriteClonedRealmServerUrls(
   databaseName: string,
   fromRealmServerURL: URL,
@@ -389,6 +534,9 @@ export async function rewriteClonedRealmServerUrls(
         await client.connect();
         await client.query('BEGIN');
 
+        // `pattern_text` holds a card's pattern-field values, which can be
+        // URLs. The text vectors (`search_tsv`, `rank_tsv`) are left as they
+        // are: they hold words, and a card's next index rebuilds them.
         await client.query(
           `UPDATE boxel_index
            SET url = replace(url, $1, $2),
@@ -401,6 +549,7 @@ export async function rewriteClonedRealmServerUrls(
                types = replace(types::text, $1, $2)::jsonb,
                display_names = replace(display_names::text, $1, $2)::jsonb,
                icon_html = replace(icon_html, $1, $2),
+               pattern_text = replace(pattern_text, $1, $2),
                last_known_good_deps = replace(last_known_good_deps::text, $1, $2)::jsonb`,
           [fromURL, toURL],
         );
@@ -424,6 +573,26 @@ export async function rewriteClonedRealmServerUrls(
           [fromURL, toURL],
         );
 
+        await rebindLogPartitions(client, fromURL, toURL);
+        // The realm index's side tables, every text and JSON column of
+        // each.
+        for (let table of await realmIndexSideTables(client)) {
+          await client.query(
+            `UPDATE ${quotePgIdentifier(table.name)}
+             SET ${table.columns.map(rewrittenColumn).join(', ')}`,
+            [fromURL, toURL],
+          );
+        }
+
+        // The value store's values are keyed by integer ids (its
+        // dictionaries above carry the URLs), so the loop above skips it;
+        // a text value can still name a URL, such as a link's id.
+        await client.query(
+          `UPDATE boxel_index_values
+           SET txt = replace(txt, $1, $2)
+           WHERE position($1 in txt) > 0`,
+          [fromURL, toURL],
+        );
         await client.query(
           `UPDATE realm_generations
            SET realm_url = replace(realm_url, $1, $2)`,
