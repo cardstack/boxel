@@ -36,10 +36,10 @@
 //
 //   pnpm stop:synapse && pnpm compact:synapse-db && pnpm start:synapse
 //
-// The data directory is ./synapse-data (./synapse-data-<slug> in environment
-// mode), or SYNAPSE_DATA_DIR when set. Each checkout has its own, and the dev
-// synapse uses whichever checkout started it, so another checkout's database
-// can be compacted while synapse keeps running.
+// The data directory is the main checkout's packages/matrix/synapse-data, also
+// when run from a linked worktree, since that is the one the dev synapse uses
+// (see scripts/synapse-data-dir.js). In environment mode it is
+// ./synapse-data-<slug>. SYNAPSE_DATA_DIR overrides both.
 //
 // The database is copied aside first, and the copy is deleted once the
 // compacted file is in place; a failed run leaves it for recovery. Pass
@@ -62,6 +62,7 @@ import {
   getEnvironmentSlug,
   isEnvironmentMode,
 } from '../support/environment-config.ts';
+import { sharedSynapseDataDir } from '../../../scripts/synapse-data-dir.js';
 
 const TABLE = 'device_lists_changes_in_room';
 const CURSOR_TABLE = 'device_lists_changes_converted_stream_position';
@@ -76,7 +77,7 @@ let dataDir = process.env.SYNAPSE_DATA_DIR
   : resolve(
       isEnvironmentMode()
         ? `./synapse-data-${getEnvironmentSlug()}`
-        : './synapse-data',
+        : sharedSynapseDataDir(),
     );
 let dbPath = join(dataDir, 'db', 'homeserver.db');
 

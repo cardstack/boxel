@@ -6,6 +6,7 @@ import { createHmac } from 'crypto';
 import yaml from 'yaml';
 import { existsSync } from 'fs';
 import { sanitizeSlug } from '../../scripts/env-slug.js';
+import { sharedSynapseDataDir } from '../../scripts/synapse-data-dir.js';
 import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
@@ -33,15 +34,10 @@ function homeserverFile(): string {
       return branchFile;
     }
   }
-  return resolve(
-    join(
-      import.meta.dirname,
-      '..',
-      'matrix',
-      'synapse-data',
-      'homeserver.yaml',
-    ),
-  );
+  // The machine-wide dev synapse mounts the main checkout's data directory,
+  // also when a linked worktree started it, so the live registration secret is
+  // there and not in this checkout.
+  return join(sharedSynapseDataDir(), 'homeserver.yaml');
 }
 
 export function getLocalConfig() {
