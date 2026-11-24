@@ -6,7 +6,10 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   IndexQueryEngine,
   VirtualNetwork,
+  query,
+  syncValueStoreLiveness,
   type DefinitionLookup,
+  type Expression,
 } from '@cardstack/runtime-common';
 
 import { setupDB } from './helpers/index.ts';
@@ -117,6 +120,11 @@ async function seedFile(dbAdapter: PgAdapter) {
   `);
 }
 
+// The statement that reads the page's rows: the one selecting the
+// projection's columns (the total is counted on its own).
+const isPageStatement = (sql: string) =>
+  sql.includes('GROUP BY i.url, i.type') && sql.includes('i.pristine_doc');
+
 interface BlockCounts {
   // Buffer requests (hit + read) against the prerendered_html TOAST table.
   prerenderedToast: number;
@@ -211,6 +219,19 @@ module(basename(import.meta.filename), function () {
         );
         await seedInstances(dbAdapter);
         await seedFile(dbAdapter);
+        // Rows written straight to the index: the value store follows them
+        // as the writer's swap would.
+        await syncValueStoreLiveness(
+          {
+            dbAdapter,
+            query: (e: Expression) => query(dbAdapter, e),
+          },
+          realmURL,
+          Array.from(
+            { length: instanceCount },
+            (_, i) => `${realmURL}case-${i + 1}.json`,
+          ),
+        );
         await dbAdapter.execute('ANALYZE boxel_index');
         await dbAdapter.execute('ANALYZE prerendered_html');
       },
@@ -228,7 +249,7 @@ module(basename(import.meta.filename), function () {
         opts?: Parameters<typeof originalExecute>[1],
       ) => {
         executed.push(sql);
-        if (sql.includes('GROUP BY i.url, i.type') && !sql.includes('COUNT(')) {
+        if (isPageStatement(sql)) {
           let { rows, blocks } = await runCountingBlocks(
             dbAdapter,
             sql,
@@ -282,10 +303,7 @@ module(basename(import.meta.filename), function () {
         'no instance row carries prerendered deps',
       );
 
-      let page = executed.find(
-        (sql) =>
-          sql.includes('GROUP BY i.url, i.type') && !sql.includes('COUNT('),
-      );
+      let page = executed.find((sql) => isPageStatement(sql));
       assert.ok(page, 'captured the page statement');
       // Every mention of ph.deps in the projection is gated to file rows.
       let ungated = page!

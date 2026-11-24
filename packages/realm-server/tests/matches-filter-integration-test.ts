@@ -4,7 +4,7 @@ import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import {
-  LegacyIndexQueryEngine as IndexQueryEngine,
+  IndexQueryEngine,
   param,
   query,
   rri,
@@ -56,7 +56,10 @@ async function seedRow(
   { url, markdown }: { url: string; markdown: string | null },
 ) {
   await query(dbAdapter, [
-    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at)`,
+    // Query V2 ranks a match by the card's search text (`rank_tsv`, which the
+    // index writer derives from `_searchText`); each seeded row's markdown is
+    // its body text (weight C), as a card whose fields hold that prose.
+    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, rank_tsv)`,
     `VALUES (`,
     param(url),
     `,`,
@@ -81,12 +84,17 @@ async function seedRow(
     param(false),
     `,`,
     param(Date.now()),
+    `,`,
+    `search_rank_vector(jsonb_build_object('C', `,
+    param(markdown),
+    `::text))`,
     `)`,
   ]);
-  // The full-text `matches` predicate reads `prerendered_html.markdown`, so
-  // the rendering half of the row — the markdown — is seeded there.
+  // The full-text `matches` predicate reads `prerendered_html.markdown_tsv`,
+  // which the index writer derives from the markdown at promote; a row seeded
+  // here derives it the same way.
   await query(dbAdapter, [
-    `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, generation, is_deleted, rendered_at)`,
+    `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, markdown_tsv, generation, is_deleted, rendered_at)`,
     `VALUES (`,
     param(url),
     `,`,
@@ -97,6 +105,10 @@ async function seedRow(
     param('instance'),
     `,`,
     param(markdown),
+    `,`,
+    `to_tsvector('boxel_english', markdown_search_text(`,
+    param(markdown),
+    `::text))`,
     `,`,
     param(1),
     `,`,
@@ -535,46 +547,6 @@ module(basename(import.meta.filename), function () {
         /requires at least one positive `matches` filter/,
         'a negated-only tree has no positive term to rank by',
       );
-    });
-
-    test('IndexQueryEngine emits the null-rejecting guard in its matches SQL', async function (assert) {
-      // The join-shape test below proves the guard *would* reduce the join, but
-      // it composes the predicate itself, so it can't catch IndexQueryEngine
-      // dropping the guard. This test closes that gap: it captures the SQL the
-      // engine actually emits for a `matches` search and asserts the guard is
-      // present, so a regression in the engine fails here rather than passing on
-      // a predicate the engine no longer produces.
-      let executed: string[] = [];
-      let originalExecute = dbAdapter.execute.bind(dbAdapter);
-      dbAdapter.execute = ((
-        sql: string,
-        opts?: Parameters<typeof originalExecute>[1],
-      ) => {
-        executed.push(sql);
-        return originalExecute(sql, opts);
-      }) as typeof dbAdapter.execute;
-      try {
-        await engine.searchCards(new URL(testRealmURL), {
-          filter: { matches: 'mango' },
-        });
-      } finally {
-        dbAdapter.execute = originalExecute;
-      }
-
-      let guard = `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown))`;
-      let matchesSql = executed.filter((sql) =>
-        sql.includes('markdown_search_text(ph.markdown)'),
-      );
-      assert.ok(
-        matchesSql.length > 0,
-        'the engine ran a full-text matches query',
-      );
-      for (let sql of matchesSql) {
-        assert.ok(
-          sql.includes(guard),
-          `emitted matches SQL should include the null-rejecting guard; got: ${sql}`,
-        );
-      }
     });
 
     test('the null-rejecting guard reduces the prerendered_html LEFT JOIN to an inner join', async function (assert) {

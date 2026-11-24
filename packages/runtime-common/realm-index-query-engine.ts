@@ -30,10 +30,6 @@ import {
   isScopedReference,
   codeRefFromInternalKey,
 } from './index.ts';
-import {
-  indexQueryEngineFor,
-  type AnyIndexQueryEngine,
-} from './query-engine/engine-choice.ts';
 import type { Realm } from './realm.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import { FILE_META_RESERVED_KEYS } from './realm.ts';
@@ -107,8 +103,7 @@ import {
   type RenderingCandidate,
   type SearchEntryFieldset,
 } from './search-entry.ts';
-// Either grammar's entry query: both search routes parse with Query V2's
-// unless `BOXEL_QUERY_ENGINE=legacy` (`engine-choice.ts`). Its
+// Query V2's entry query, which both search routes parse. Its
 // entries carry the per-row values the newer grammar asks for (a merge's
 // sort values, a near similarity, a collapse size, an explanation).
 import {
@@ -396,16 +391,17 @@ function absolutizeInstanceURL(
 }
 
 // A search's rows and meta, before its entries are made (`entriesFromRows`).
-type SearchRows = Awaited<ReturnType<AnyIndexQueryEngine['search']>>;
+type SearchRows = Awaited<ReturnType<IndexQueryEngine['search']>>;
 
 export class RealmIndexQueryEngine {
   #realm: Realm;
   #realmURL: URL | undefined;
   #fetch: typeof globalThis.fetch;
   // A realm's `_search`, named queries, card reads and link targets.
-  #indexQueryEngine: AnyIndexQueryEngine;
-  // Query-backed fields (the 'query-fields' caller).
-  #queryFieldEngine: AnyIndexQueryEngine;
+  #indexQueryEngine: IndexQueryEngine;
+  // Query-backed fields, on an engine of their own (as they had while the
+  // two engines stood side by side).
+  #queryFieldEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
   #log = logger('realm:index-query-engine');
 
@@ -425,14 +421,12 @@ export class RealmIndexQueryEngine {
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexQueryEngine = indexQueryEngineFor(
-      'realm-search',
+    this.#indexQueryEngine = new IndexQueryEngine(
       dbAdapter,
       definitionLookup,
       realm.virtualNetwork,
     );
-    this.#queryFieldEngine = indexQueryEngineFor(
-      'query-fields',
+    this.#queryFieldEngine = new IndexQueryEngine(
       dbAdapter,
       definitionLookup,
       realm.virtualNetwork,
@@ -468,9 +462,6 @@ export class RealmIndexQueryEngine {
       throw new Error('searchColumns needs columns');
     }
     let engine = this.#indexQueryEngine;
-    if (!(engine instanceof IndexQueryEngine)) {
-      throw new Error("searchColumns needs Query V2's engine");
-    }
     let type = typeAnchors?.length === 1 ? typeAnchors[0] : undefined;
     if (!type) {
       throw refuse('select-query-needs-one');
@@ -615,9 +606,6 @@ export class RealmIndexQueryEngine {
     let runSql = () =>
       this.#indexQueryEngine.search(
         over ?? new URL(this.#realm.url),
-        // A query in Query V2's grammar reaches Query V2's engine alone: the
-        // federated route reads with main's grammar wherever this realm reads
-        // through main's engine (`engine-choice.ts`).
         query as Query,
         sqlOpts,
         projection,

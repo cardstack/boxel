@@ -7,6 +7,7 @@ import {
   setupPermissionedRealmCached,
   searchCardsForTest,
 } from './helpers/index.ts';
+import { searchStatementsJit } from './helpers/jit-guard.ts';
 
 const testRealm = new URL('http://127.0.0.1:4462/test/');
 
@@ -159,6 +160,32 @@ module(basename(import.meta.filename), function () {
         0,
         "the side-loaded card's query matches are not",
       );
+    });
+
+    // jit off for the search a query-backed field runs when it is resolved
+    // (search-session.ts; helpers/jit-guard.ts). The card's own read and the
+    // probe for which kind of row a field targets are reads by URL and type,
+    // as on main, not searches, so they are left unchecked.
+    test("resolving a card's query fields never compiles", async function (assert) {
+      let applied = 0;
+      let { value, checked, compiled } = await searchStatementsJit(
+        () =>
+          realm.realmIndexQueryEngine.cardDocument(
+            new URL(`${testRealm}parent-1`),
+            { loadLinks: true, onQueryFieldApplied: () => applied++ },
+          ),
+        {
+          ignore: [
+            /^SELECT i\.\*, ph\.isolated_html/,
+            /^SELECT i\.url, i\.file_alias, i\.pristine_doc, ph\.captures/,
+            /^SELECT 1 FROM boxel_index AS i WHERE \( i\.realm_url = \$1 \) AND \( i\.type = \$2 \)/,
+          ],
+        },
+      );
+      assert.strictEqual(value?.type, 'doc', 'doc returned');
+      assert.strictEqual(applied, 1, 'its query field was resolved');
+      assert.ok(checked >= 1, `statements explained: ${checked}`);
+      assert.deepEqual(compiled, [], 'none would compile');
     });
 
     test("a side-loaded card's query-backed field arrives unresolved rather than as an empty answer", async function (assert) {

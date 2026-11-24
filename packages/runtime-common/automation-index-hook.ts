@@ -18,7 +18,7 @@ import {
 import type { DBAdapter } from './db.ts';
 import type { DefinitionLookup } from './definition-lookup.ts';
 import { internalKeyFor } from './index.ts';
-import { indexQueryEngineFor } from './query-engine/engine-choice.ts';
+import { IndexQueryEngine } from './query-engine/index-query-engine.ts';
 import { ri } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -75,8 +75,7 @@ export async function syncAutomationsAfterIndex({
   let touchedCards = touched
     ? new Set(touched.map((url) => url.replace(/\.json$/, '')))
     : undefined;
-  let engine = indexQueryEngineFor(
-    'automations',
+  let engine = new IndexQueryEngine(
     dbAdapter,
     definitionLookup,
     virtualNetwork,

@@ -3,7 +3,6 @@ import {
   isLogQuery,
   type LogAccess,
 } from '@cardstack/runtime-common/log-query';
-import { queryEngineFor } from '@cardstack/runtime-common/query-engine/engine-choice';
 import { isLogBinding } from '@cardstack/runtime-common/query-v2/query-values';
 import { applyServerSearchPageBound as applyV2ServerSearchPageBound } from '@cardstack/runtime-common/query-v2/search-bounds';
 import {
@@ -25,7 +24,6 @@ import {
 import { respondToLogSearch } from './log-search.ts';
 import {
   applyFederatedRowBudget,
-  applyServerSearchPageBound,
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
   ifNoneMatchMatches,
@@ -34,15 +32,12 @@ import {
   parseRealmsFromPayload,
   registeredRealmURL,
   parseSearchRequestPayload,
-  parseSearchEntryQueryFromPayload,
-  policyScopedQuery,
   policyScopedRealms,
   runWithSearchTimeBudget,
   sanitizeConsumingRealmHeader,
   SearchBoundError,
   isDefinitionsUnavailableError,
   SearchRequestError,
-  searchEntryRealms,
   sanitizeLoggingCorrelationId,
   SupportedMimeType,
   X_BOXEL_CONSUMING_REALM_HEADER,
@@ -126,14 +121,11 @@ export const LIVE_SEARCH_CACHE_HEADER = 'x-boxel-live-search-cache';
 const log = logger('realm-server:search');
 
 // How the federated route reads a request and fans it out: with Query V2's
-// entry grammar once the 'federated' caller's switch row moved it
-// (`engine-choice.ts`), with main's until then and under
-// `BOXEL_QUERY_ENGINE=legacy`. Query V2's reads the newer wire grammar (`let`
-// bindings, a log's lines among them, facets, collapse, a merged federation)
-// and reports each realm's answer in `meta.realms`; both answer a search of
-// several realms by merging each realm's own search. Its refusals are main's
-// `SearchRequestError`, carrying the grammar's code. Main's half goes with
-// main's engine.
+// entry grammar, which reads the newer wire grammar (`let` bindings, a log's
+// lines among them, facets, collapse, a merged federation) and reports each
+// realm's answer in `meta.realms`. A search of several realms merges each
+// realm's own search. Its refusals are `SearchRequestError`, carrying the
+// grammar's code.
 interface FederatedEntryGrammar {
   parse(payload: unknown): SearchEntryQuery;
   boundPage(
@@ -156,31 +148,12 @@ const V2_ENTRY_GRAMMAR: FederatedEntryGrammar = {
   searchEntryRealms: v2SearchEntryRealms,
 };
 
-// Main's grammar parses only main's members, so every query it hands on is
-// one main's functions take.
-const LEGACY_ENTRY_GRAMMAR: FederatedEntryGrammar = {
-  parse: (payload) => parseSearchEntryQueryFromPayload(payload),
-  boundPage: (query) => applyServerSearchPageBound(query as Query),
-  policyScopedQuery: (query, grantFilters) =>
-    policyScopedQuery(query as LegacySearchEntryQuery, grantFilters),
-  searchEntryRealms: (realms, query, opts, queryForRealm) =>
-    searchEntryRealms(
-      realms,
-      query as LegacySearchEntryQuery,
-      opts,
-      queryForRealm as ((realm: object) => LegacySearchEntryQuery) | undefined,
-    ),
-};
-
 function federatedEntryGrammar(): FederatedEntryGrammar {
-  return queryEngineFor('federated') === 'v2'
-    ? V2_ENTRY_GRAMMAR
-    : LEGACY_ENTRY_GRAMMAR;
+  return V2_ENTRY_GRAMMAR;
 }
 
-// A request's entry query, read with `grammar`. Main's grammar refuses a
-// card query's `select` outright; Query V2's answers it for a search naming
-// one realm (`respondWithTable`).
+// A request's entry query, read with `grammar`. A card query's `select` is
+// answered for a search naming one realm (`respondWithTable`).
 function parseFederatedEntryQuery(
   grammar: FederatedEntryGrammar,
   payload: unknown,
@@ -244,9 +217,8 @@ export default function handleSearch(opts: {
     // declaration searched.
     let requested = named;
     // A search over one of the realm's logs (`from: { log }`) is answered
-    // from its line rows, not the card index (`log-search.ts`), once the
-    // logs' row moves them to Query V2 (`engine-choice.ts`).
-    if (isLogQuery(payload) && queryEngineFor('realm-logs') === 'v2') {
+    // from its line rows, not the card index (`log-search.ts`).
+    if (isLogQuery(payload)) {
       await respondToLogSearch(ctxt, payload, named, realmList, dbAdapter, {
         realmFor: (url) => reconciler.mounted.get(url),
         grantCandidates,
