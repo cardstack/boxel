@@ -25,6 +25,7 @@
  * Run as a script, it prints the directory.
  */
 
+/* eslint-env node */
 'use strict';
 
 const { execFileSync } = require('child_process');
