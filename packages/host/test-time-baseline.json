@@ -1,15 +1,6 @@
 {
   "main": [
     {
-      "run": 43795083081,
-      "at": "2026-11-16T02:55:50Z",
-      "minutes": 240.9,
-      "slowestShard": 17.9,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
       "run": 43811440598,
       "at": "2026-11-16T05:37:23Z",
       "minutes": 241.3,
@@ -359,36 +350,18 @@
       "shards": 16,
       "runsOn": true,
       "indexCache": false
+    },
+    {
+      "run": 45327491670,
+      "at": "2026-11-24T04:35:52Z",
+      "minutes": 168.7,
+      "slowestShard": 14.4,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": false
     }
   ],
   "pullRequest": [
-    {
-      "run": 44115359865,
-      "at": "2026-11-17T15:31:45Z",
-      "minutes": 224.2,
-      "slowestShard": 18.3,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": true
-    },
-    {
-      "run": 44115919199,
-      "at": "2026-11-17T15:34:39Z",
-      "minutes": 219.5,
-      "slowestShard": 16.6,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
-      "run": 44119044515,
-      "at": "2026-11-17T15:51:07Z",
-      "minutes": 220.5,
-      "slowestShard": 15.7,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
     {
       "run": 44127296678,
       "at": "2026-11-17T16:34:25Z",
@@ -2965,6 +2938,33 @@
       "shards": 16,
       "runsOn": true,
       "indexCache": true
+    },
+    {
+      "run": 45294109129,
+      "at": "2026-11-24T00:04:21Z",
+      "minutes": 210.4,
+      "slowestShard": 19.8,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": false
+    },
+    {
+      "run": 45323871423,
+      "at": "2026-11-24T04:04:56Z",
+      "minutes": 189.1,
+      "slowestShard": 15.5,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": false
+    },
+    {
+      "run": 45323871014,
+      "at": "2026-11-24T04:04:56Z",
+      "minutes": 188,
+      "slowestShard": 16.8,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": false
     }
   ]
 }
