@@ -569,8 +569,8 @@ module('Integration | hrefTo', function (hooks) {
         renderStore.resetCache();
         assert.strictEqual(
           hrefTo(postId),
-          undefined,
-          'the card asked for before the reset is not used',
+          postId,
+          'the card asked for before the reset is not used: the link has the card URL while the card loads again',
         );
         await renderStore.loaded();
         assert.strictEqual(
