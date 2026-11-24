@@ -25,7 +25,7 @@ const CALLER_ENGINES: Readonly<Record<QueryEngineCaller, QueryEngineChoice>> = {
   'realm-logs': 'v2',
   federated: 'v2',
   'query-fields': 'v2',
-  host: 'legacy',
+  host: 'v2',
 };
 
 // Every production file that chooses a query engine, and the callers it names
@@ -103,11 +103,11 @@ module(basename(import.meta.filename), function () {
 
   test('the override sends every caller to one engine', function (assert) {
     assert.strictEqual(queryEngineFor('realm-search', 'legacy'), 'legacy');
-    assert.strictEqual(queryEngineFor('host', 'v2'), 'v2');
+    assert.strictEqual(queryEngineFor('host', 'legacy'), 'legacy');
   });
 
   test('an override it does not know is ignored', function (assert) {
-    assert.strictEqual(queryEngineFor('host', 'V2'), 'legacy');
+    assert.strictEqual(queryEngineFor('host', 'LEGACY'), 'v2');
     assert.strictEqual(queryEngineFor('realm-search', ''), 'v2');
   });
 

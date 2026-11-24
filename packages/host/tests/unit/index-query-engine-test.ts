@@ -7,7 +7,7 @@ import {
   VirtualNetwork,
   baseRealm,
   baseRealmRRI,
-  LegacyIndexQueryEngine as IndexQueryEngine,
+  IndexQueryEngine,
   fetcher,
   maybeHandleScopedCSSRequest,
   internalKeyFor,
@@ -20,8 +20,9 @@ import {
   type Definition,
   type LooseCardResource,
   FilterRefersToNonexistentTypeError,
-  isFilterRefersToNonsearchableFieldError,
 } from '@cardstack/runtime-common';
+// Query V2's engine throws its own non-searchable-field error.
+import { isFilterRefersToNonsearchableFieldError } from '@cardstack/runtime-common/query-engine/filter-paths';
 
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -127,6 +128,11 @@ module('Unit | query', function (hooks) {
     class Cat extends CardDef {
       @field name = contains(StringField);
     }
+    class Product extends CardDef {
+      @field sku = contains(StringField, {
+        search: { patterns: true, facet: true },
+      });
+    }
     class SimpleSpec extends CardDef {
       @field cardTitle = contains(StringField);
       @field ref = contains(CodeRefField);
@@ -156,6 +162,7 @@ module('Unit | query', function (hooks) {
     tagTestModuleExports(`${testRealmURL}person`, { Person });
     tagTestModuleExports(`${testRealmURL}fancy-person`, { FancyPerson });
     tagTestModuleExports(`${testRealmURL}cat`, { Cat });
+    tagTestModuleExports(`${testRealmURL}product`, { Product });
     tagTestModuleExports(`${testRealmURL}spec`, { SimpleSpec });
     tagTestModuleExports(`${testRealmURL}event`, { Event });
     tagTestModuleExports(`${testRealmURL}org`, { Org });
@@ -201,6 +208,8 @@ module('Unit | query', function (hooks) {
       friends: [vangogh, ringo],
     });
     let paper = new Cat({ name: 'Paper' });
+    let lamp = new Product({ sku: 'LMP-100' });
+    let desk = new Product({ sku: 'DSK-200' });
 
     let mangoBirthday = new Event({
       cardTitle: "Mango's Birthday",
@@ -218,6 +227,8 @@ module('Unit | query', function (hooks) {
       vangogh,
       ringo,
       paper,
+      lamp,
+      desk,
       mangoBirthday,
       vangoghBirthday,
       stringFieldEntry,
@@ -259,6 +270,8 @@ module('Unit | query', function (hooks) {
             return await buildDefinition(Event);
           case `${testRealmURL}org/Org`:
             return await buildDefinition(Org);
+          case `${testRealmURL}product/Product`:
+            return await buildDefinition(Product);
           default:
             throw new FilterRefersToNonexistentTypeError(codeRef, {
               cause: `Definition for ${stringify(codeRef)} not found`,
@@ -303,6 +316,179 @@ module('Unit | query', function (hooks) {
       mockDefinitionLookup,
       virtualNetwork,
     );
+  });
+
+  test('a paged search reports the whole match count on every page, and past the last', async function (assert) {
+    let { mango, vangogh, paper } = testCards;
+    await setupIndex(dbAdapter, [mango, vangogh, paper]);
+    let realm = new URL(testRealmURL);
+    let pages = [];
+    for (let number of [0, 1, 2]) {
+      let { cards, meta } = await indexQueryEngine.searchCards(realm, {
+        page: { size: 2, number },
+      });
+      pages.push({ ids: cards.map((c) => c.id), total: meta.page.total });
+    }
+    assert.deepEqual(
+      pages.map((p) => p.total),
+      [3, 3, 3],
+      'the total counts every match, including on a page past the last',
+    );
+    assert.deepEqual(
+      pages.map((p) => p.ids.length),
+      [2, 1, 0],
+      'each page holds its slice',
+    );
+    let { cards: all } = await indexQueryEngine.searchCards(realm, {});
+    assert.deepEqual(
+      [...pages[0].ids, ...pages[1].ids],
+      all.map((c) => c.id),
+      'the pages, in order, are the unpaged result',
+    );
+  });
+
+  // The browser index (SQLite) answers what only Postgres runs with the
+  // closest thing it can, naming each approximation in `meta.warnings`
+  // (docs/search.md, "On SQLite"); it never refuses one.
+  let warningCodes = (meta: { warnings?: { code: string }[] }) =>
+    (meta.warnings ?? []).map((w) => w.code);
+  // The products' search docs, which a pattern reads.
+  let seedProducts = async () => {
+    let { lamp, desk } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: lamp, data: { search_doc: { sku: 'LMP-100' } } },
+      { card: desk, data: { search_doc: { sku: 'DSK-200' } } },
+    ]);
+    return await productCardType(testCards);
+  };
+
+  test('facets are counted from the search docs: the browser index keeps no value store', async function (assert) {
+    let productType = await seedProducts();
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { type: productType }, facets: [{ by: 'sku' }] },
+    );
+    assert.strictEqual(cards.length, 2, 'the cards are found');
+    assert.deepEqual(
+      meta.facets,
+      {
+        sku: [
+          { value: 'DSK-200', count: 1 },
+          { value: 'LMP-100', count: 1 },
+        ],
+      },
+      'each value is counted',
+    );
+    assert.deepEqual(warningCodes(meta), [], 'nothing approximated');
+  });
+
+  test('a regex with a glob form runs as that pattern', async function (assert) {
+    let productType = await seedProducts();
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { on: productType, regex: { sku: '^LMP-' } } },
+    );
+    assert.deepEqual(
+      cards.map((c) => String(c.id)),
+      [`${testRealmURL}lamp`],
+    );
+    assert.deepEqual(warningCodes(meta), ['sqlite-regex-as-pattern']);
+  });
+
+  test('a regex with no glob form is left out, under either polarity', async function (assert) {
+    let productType = await seedProducts();
+    let realm = new URL(testRealmURL);
+    let ids = (cards: { id?: unknown }[]) =>
+      cards.map((c) => String(c.id)).sort();
+    let both = [`${testRealmURL}desk`, `${testRealmURL}lamp`];
+    let positive = await indexQueryEngine.searchCards(realm, {
+      filter: {
+        every: [
+          { type: productType },
+          { on: productType, regex: { sku: '[LD]' } },
+        ],
+      },
+    });
+    assert.deepEqual(ids(positive.cards), both, 'not as nothing');
+    assert.deepEqual(warningCodes(positive.meta), ['sqlite-regex-dropped']);
+    let negated = await indexQueryEngine.searchCards(realm, {
+      filter: {
+        every: [
+          { type: productType },
+          { not: { on: productType, regex: { sku: '[LD]' } } },
+        ],
+      },
+    });
+    assert.deepEqual(ids(negated.cards), both, 'under not, not as nothing');
+    let alone = await indexQueryEngine.searchCards(realm, {
+      filter: { any: [{ on: productType, regex: { sku: '[LD]' } }] },
+    });
+    assert.true(alone.cards.length >= 2, 'an any left empty is dropped');
+  });
+
+  test('an invalid regex is still refused', async function (assert) {
+    let productType = await seedProducts();
+    try {
+      await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: { on: productType, regex: { sku: '(' } },
+      });
+      assert.ok(false, 'expected a refusal');
+    } catch (e: any) {
+      assert.strictEqual(e.code, 'invalid-value');
+    }
+  });
+
+  test('a formula sort is left out and the order falls back', async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [mango, vangogh, ringo]);
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { type, sort: [{ expression: 'age * 2' }] } as any,
+    );
+    assert.strictEqual(cards.length, 3, 'every match is returned');
+    assert.deepEqual(warningCodes(meta), ['sqlite-formula-sort-dropped']);
+  });
+
+  test('select reads columns from each search doc', async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            nickNames: ['Mang', 'Goo'],
+            address: { city: 'Barksville' },
+            bestFriend: { id: `${testRealmURL}vangogh`, name: 'Van Gogh' },
+          },
+        },
+      },
+      { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
+    ]);
+    let type = await personCardType(testCards);
+    let plans = await indexQueryEngine.planColumns(type, [
+      { name: 'name', path: 'name' },
+      { name: 'city', path: 'address.city' },
+      { name: 'nicks', path: 'nickNames' },
+      { name: 'friend', path: 'bestFriend.name' },
+    ]);
+    let { rows } = await indexQueryEngine.searchColumns(
+      new URL(testRealmURL),
+      { filter: { type }, sort: [{ by: 'name', on: type }] } as any,
+      {},
+      plans,
+    );
+    assert.deepEqual(rows, [
+      [
+        `${testRealmURL}mango`,
+        'Mango',
+        'Barksville',
+        ['Mang', 'Goo'],
+        'Van Gogh',
+      ],
+      [`${testRealmURL}vangogh`, 'Van Gogh', null, [], null],
+    ]);
   });
 
   test('can get all cards with empty filter', async function (assert) {
@@ -3712,5 +3898,16 @@ async function eventType(testCards: { [name: string]: CardDef }) {
     );
   }
   let internalKey = [...(await getTypes(mangoBirthday))].shift()!;
+  return internalKeyToCodeRef(internalKey);
+}
+
+async function productCardType(testCards: { [name: string]: CardDef }) {
+  let { lamp } = testCards;
+  if (!lamp) {
+    throw new Error(
+      `missing the 'lamp' test card, which gives the Product type`,
+    );
+  }
+  let internalKey = [...(await getTypes(lamp))].shift()!;
   return internalKeyToCodeRef(internalKey);
 }
