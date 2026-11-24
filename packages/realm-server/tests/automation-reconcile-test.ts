@@ -581,6 +581,8 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test("a webhook delivery's lost run is ended, not enqueued again without its payload", async function (assert) {
+    await switchOn();
+    // Reconcile reads the card as it is now, which names a webhook trigger.
     card = {
       ok: true,
       declaration: declaration({
@@ -590,7 +592,6 @@ module(basename(import.meta.filename), function (hooks) {
         ],
       }),
     };
-    await switchOn();
     let run = await createAutomationRun(dbAdapter, {
       automationId: AUTOMATION,
       realm: REALM,
@@ -598,14 +599,23 @@ module(basename(import.meta.filename), function (hooks) {
       slot: 'delivery-lost',
       actsAs: OWNER,
     });
-    await madeAt(SWITCHED_ON);
-    let [outcome] = (await reconcile(SWITCHED_ON + 10 * 60)).lostRuns;
+    // Made past the grace, and reconciled before the hourly trigger's first
+    // slot, so the pass has only the lost run to handle.
+    await madeAt(SWITCHED_ON - 5 * 60);
+    let [outcome] = (await reconcile(SWITCHED_ON + 30)).lostRuns;
     assert.strictEqual(outcome.kind, 'ended');
     assert.strictEqual(
       (await getAutomationRun(dbAdapter, run.id))?.errorReason,
       JOB_LOST_REASON,
     );
-    assert.deepEqual(await queuedRuns(), [], 'no job is made again');
+    assert.deepEqual(
+      (await queuedRuns()).filter(
+        ({ dedupeKey }) =>
+          dedupeKey === `automation:${AUTOMATION}:deliveries:delivery-lost`,
+      ),
+      [],
+      'no job is made again',
+    );
   });
 
   test('a lost run whose trigger is gone from the card is ended', async function (assert) {
