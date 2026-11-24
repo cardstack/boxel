@@ -306,6 +306,68 @@ export {
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol.for('cardstack-field-decorator');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
+// A field type may refuse to be declared: `contains` and `containsMany` call
+// `FieldType[assertDeclarable](fieldName, options)` when the card's class is
+// built, so a field the type can never serve fails when its module loads
+// rather than when a value arrives. A vector kind with no exact vectorizer
+// uses it (`needs-vectorizer`).
+export const assertDeclarable = Symbol.for('cardstack-assert-declarable');
+
+// A containsMany item's stable id, for items whose type holds a vector (see
+// `holdsVector`). Stored in the item's attributes under `_itemId`, kept on
+// the item instance under this symbol.
+export const ITEM_ID_KEY = '_itemId';
+const itemIdSymbol = Symbol.for('cardstack-item-id');
+function itemIdOf(item: unknown): string {
+  let held = (item as any)?.[itemIdSymbol];
+  if (typeof held === 'string' && held) {
+    return held;
+  }
+  let minted = `i${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 6)}`;
+  if (item && typeof item === 'object') {
+    (item as any)[itemIdSymbol] = minted;
+  }
+  return minted;
+}
+// Whether a compound field type holds a vector field, at any depth of
+// contained fields: its items then carry stable ids.
+const vectorHolders = new WeakMap<object, boolean>();
+function holdsVector(type: unknown, depth = 0): boolean {
+  if (!type || typeof type !== 'function' || depth > 6) {
+    return false;
+  }
+  let known = vectorHolders.get(type);
+  if (known !== undefined) {
+    return known;
+  }
+  vectorHolders.set(type, false);
+  let found = Object.values(getFields(type as any)).some((field: any) => {
+    if (
+      field?.fieldType !== 'contains' &&
+      field?.fieldType !== 'containsMany'
+    ) {
+      return false;
+    }
+    let card = field.card;
+    return (
+      (card && (card as any)[fieldSerializer] === 'vector') ||
+      holdsVector(card, depth + 1)
+    );
+  });
+  vectorHolders.set(type, found);
+  return found;
+}
+
+function checkDeclarable(field: unknown, fieldName: string, options?: Options) {
+  // a thunk (a function that is not a class) resolves later; only a class
+  // can be checked here
+  if (typeof field === 'function' && 'prototype' in field) {
+    let check = (field as any)[assertDeclarable];
+    if (typeof check === 'function') {
+      check.call(field, fieldName, options);
+    }
+  }
+}
 export const formatQuery = Symbol.for('cardstack-format-query');
 export const realmInfo = Symbol.for('cardstack-realm-info');
 export const emptyValue = Symbol.for('cardstack-empty-value');
@@ -1035,12 +1097,24 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
               return resource;
             });
 
+      // An item whose type holds a vector carries a stable id, minted the
+      // first time it is saved: its vector lives in the card's sidecar keyed
+      // by that id, never by position, so reordering or editing items moves
+      // no vector.
+      let keyed = holdsVector(this.card);
       let result: JSONAPIResource = {
         attributes: {
           [this.name]:
             serialized === null
               ? null
-              : serialized.map((resource) => resource.attributes),
+              : serialized.map((resource, index) =>
+                  keyed
+                    ? {
+                        [ITEM_ID_KEY]: itemIdOf(values![index]),
+                        ...resource.attributes,
+                      }
+                    : resource.attributes,
+                ),
         },
       };
       if (Object.keys(relationships).length > 0) {
@@ -1151,13 +1225,26 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
               relativeTo,
             );
             assertNoDeserializeOverride(cardClass);
-            return cardClass[deserialize](
+            let item = await cardClass[deserialize](
               resource,
               relativeTo,
               doc,
               store,
               opts,
             );
+            // An item that holds a vector keeps its stable id: its vector
+            // lives in the card's sidecar, keyed by this id.
+            if (
+              entry &&
+              typeof entry === 'object' &&
+              typeof (entry as Record<string, unknown>)[ITEM_ID_KEY] ===
+                'string'
+            ) {
+              (item as any)[itemIdSymbol] = (entry as Record<string, unknown>)[
+                ITEM_ID_KEY
+              ];
+            }
+            return item;
           }
         }),
       ),
@@ -2711,6 +2798,7 @@ export function containsMany<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT>[] {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
+      checkDeclarable(field, fieldName, options);
       let { computeVia, searchable } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field, { fieldName, ownerPrototype }),
@@ -2733,6 +2821,7 @@ export function contains<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT> {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
+      checkDeclarable(field, fieldName, options);
       let { computeVia, searchable } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field, { fieldName, ownerPrototype }),
@@ -4368,6 +4457,23 @@ export class ImageDef extends FileDef {
   };
 }
 
+// One passage of a longer text: a transcript segment, a chapter, a message.
+// A card holds its passages as a `containsMany` of a PassageField subclass
+// (add whatever else a passage carries, such as an embedding). The index
+// keeps each passage's text searchable on its own, so a search can find the
+// card by any passage and say which ones matched, without a card per passage:
+// `{ matches: '…', within: '<field>' }` returns the matching passages in
+// `meta.passages`.
+export class PassageField extends FieldDef {
+  static displayName = 'Passage';
+  static isPassageField = true;
+  // Where the passage begins and ends, in the units the card uses (seconds
+  // into a talk, a page, an offset).
+  @field start = contains(NumberField);
+  @field end = contains(NumberField);
+  @field text = contains(StringField);
+}
+
 export class CardInfoField extends FieldDef {
   static displayName = 'Card Info';
   @field name = contains(StringField, { search: { role: 'title' } });
@@ -4446,6 +4552,16 @@ function applySearchIntent(
         continue;
       }
       if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
+        continue;
+      }
+      // A PassageField list is searched passage by passage, through its own
+      // index (`matches … within`), so its words stay out of the card's
+      // vector: a transcript would otherwise outweigh everything else and
+      // match every query.
+      if (
+        field.fieldType === 'containsMany' &&
+        (field.card as unknown as { isPassageField?: boolean }).isPassageField
+      ) {
         continue;
       }
       let value = doc[name];

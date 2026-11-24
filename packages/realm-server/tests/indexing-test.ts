@@ -16,6 +16,7 @@ import {
   diffDoc,
   markVisitRequestFailure,
   sweepUnreferencedScopedCSS,
+  vectorSidecarFor,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
@@ -5519,6 +5520,20 @@ module(basename(import.meta.filename), function () {
           content.length,
           'contentSize reflects the bytes on disk, not the indexed value',
         );
+      });
+
+      test('a deleted card takes its vector sidecar with it', async function (assert) {
+        let sidecar = vectorSidecarFor('mango.json');
+        await realm.write(sidecar, '');
+        let before = await fetch(`${testRealm}${sidecar}`, {
+          headers: { Accept: SupportedMimeType.CardSource },
+        });
+        assert.strictEqual(before.status, 200, 'the sidecar is there');
+        await realm.delete('mango.json');
+        let after = await fetch(`${testRealm}${sidecar}`, {
+          headers: { Accept: SupportedMimeType.CardSource },
+        });
+        assert.strictEqual(after.status, 404, 'the sidecar went with its card');
       });
 
       test('can incrementally index deleted instance', async function (assert) {

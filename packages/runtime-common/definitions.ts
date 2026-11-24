@@ -9,6 +9,7 @@ import {
 } from './index.ts';
 import type { OperationDefinition } from './card-operations/types.ts';
 import type { SerializerName } from './serializers/index.ts';
+import { vectorSpace, type VectorSpaceSource } from './vector-space.ts';
 import {
   cardSearchIntentOf,
   type CardSearchIntent,
@@ -191,15 +192,19 @@ export function getFieldDefinitions(
     let queryDefinition = field.queryDefinition
       ? (JSON.parse(JSON.stringify(field.queryDefinition)) as Query) // ensure this is a plain object
       : undefined;
+    let serializerName =
+      fieldSerializer in field.card
+        ? (field.card[fieldSerializer] as SerializerName)
+        : undefined;
     let def: FieldDefinition = {
       type: field.fieldType,
       isPrimitive,
       isComputed: Boolean(field.computeVia),
       fieldOrCard: identifyCard(field.card)!,
-      serializerName:
-        fieldSerializer in field.card
-          ? (field.card[fieldSerializer] as SerializerName)
-          : undefined,
+      serializerName,
+      ...(serializerName === 'vector'
+        ? { vectorSpace: vectorSpace(field.card as VectorSpaceSource) }
+        : {}),
       query: queryDefinition,
       searchable: field.searchable,
       ...(() => {

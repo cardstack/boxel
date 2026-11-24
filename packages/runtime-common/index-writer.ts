@@ -45,6 +45,14 @@ import {
 } from './error.ts';
 import { unwrittenTransientAttempts } from './prerender-html-reconcile.ts';
 import type { DBAdapter } from './db.ts';
+import {
+  syncVectorIndex,
+  vectorSidecarMtimes,
+  type VectorSidecarReader,
+} from './vector-index-writer.ts';
+export type { VectorSidecarReader } from './vector-index-writer.ts';
+import { vectorStoreFor } from './vector-store.ts';
+import { collectSearchDocPassages } from './passage-index.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
 import type { FileMetaResource } from './resource-types.ts';
@@ -172,6 +180,9 @@ export class IndexWriter {
     opts?: {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
+      // Reads a card's vector sidecar (`<card>.vectors.jsonl`) by the card's
+      // URL, with its modified time; undefined when it has none.
+      readVectorSidecar?: VectorSidecarReader;
     },
   ) {
     let batch = new Batch(
@@ -935,6 +946,7 @@ export class Batch {
   // Whether this pass rebuilt the whole realm (a from-scratch index), as
   // opposed to an incremental fan-out; recorded on the ledger row.
   #fullRealm = false;
+  #readVectorSidecar: VectorSidecarReader | undefined;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
   private jobInfo?: JobInfo;
@@ -947,6 +959,9 @@ export class Batch {
     opts?: {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
+      // Reads a card's vector sidecar (`<card>.vectors.jsonl`) by the card's
+      // URL, with its modified time; undefined when it has none.
+      readVectorSidecar?: VectorSidecarReader;
     },
   ) {
     this.realmURL = realmURL;
@@ -956,6 +971,7 @@ export class Batch {
     this.#splitPrerenderHtml =
       opts?.splitPrerenderHtml ?? dbAdapter.kind === 'pg';
     this.#prerenderHtmlOnly = opts?.prerenderHtmlOnly ?? false;
+    this.#readVectorSidecar = opts?.readVectorSidecar;
     this.#stagingId =
       jobInfo && jobInfo.jobId > 0
         ? jobStagingId(jobInfo.jobId, jobInfo.reservationId)
@@ -969,6 +985,16 @@ export class Batch {
   // loop (to skip the inline prerender-html visit) and the enqueue callback.
   get splitPrerenderHtml(): boolean {
     return this.#splitPrerenderHtml;
+  }
+
+  // The modified time of the sidecar each card's vectors were loaded from,
+  // by card URL. Empty where there is no vector table.
+  async vectorSidecarMtimes(): Promise<Map<string, number>> {
+    return await vectorSidecarMtimes(
+      this.#dbAdapter,
+      (expression) => this.#query(expression),
+      this.realmURL.href,
+    );
   }
 
   // The generation this batch stages its rows under (see
@@ -2882,6 +2908,9 @@ export class Batch {
       }
     }
     this.#committedGeneration = this.commitGeneration;
+    // A space that has grown past the exact threshold gets its approximate
+    // index now, in the background (`VectorStore.buildIndexes`).
+    void vectorStoreFor(this.#dbAdapter).buildIndexes();
     let cleanup = await this.clearPendingRows();
 
     let totalIndexEntries = await this.numberOfIndexEntries();
@@ -4168,6 +4197,8 @@ export class Batch {
         tombstoneColumns: INDEX_TOMBSTONE_COLUMNS,
         restamp: true,
       });
+      await this.#syncVectorIndex();
+      await this.#syncPassageIndex();
       await this.#syncWordList();
 
       // Publish this pass's `prerendered_html_pending` rows, UNLESS this is a
@@ -4189,6 +4220,157 @@ export class Batch {
     }
 
     await this.stampRenderOnlyEntries();
+  }
+
+  // The URLs of `chunk` this pass staged a row or tombstone for. Only those
+  // move in the swap, so only their derived rows (vectors, passages, facet
+  // values) are replaced; any other URL keeps what it had.
+  #stagedInChunk(chunk: string[]): Expression {
+    return [
+      'url IN',
+      ...addExplicitParens(separatedByCommas(chunk.map((url) => [param(url)]))),
+      'AND url IN (SELECT sp.url FROM boxel_index_pending AS sp WHERE sp.realm_url =',
+      param(this.realmURL.href),
+      'AND sp.staging_id =',
+      param(this.#stagingId),
+      ')',
+    ] as Expression;
+  }
+
+  // The full search docs this pass staged for `chunk`'s live rows, matching
+  // `filter`. Derived tables are built from these: the staged doc still
+  // holds the render's `_searchText`, which the promoted doc drops.
+  async #stagedSearchDocs(
+    chunk: string[],
+    filter: string,
+  ): Promise<Pick<BoxelIndexTable, 'url' | 'type' | 'search_doc'>[]> {
+    return (await this.#query([
+      'SELECT url, type, search_doc FROM boxel_index_pending WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        ['staging_id =', param(this.#stagingId)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(chunk.map((url) => [param(url)])),
+          ),
+        ],
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
+        [filter],
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'search_doc'>[];
+  }
+
+  // After a pass that rebuilt the whole realm: the realm's vectors, vector
+  // sidecars and passages whose card has no row left in the index go. Each
+  // sync replaces the rows of the URLs a pass promotes, and a rebuild
+  // promotes the cards that exist, so a card that vanished while the index
+  // held nothing for it (an index emptied by a crash) leaves them behind. A
+  // card that is only in error keeps them, so a recovery does not re-embed
+  // it. Every search reads them through a live index row, which covers the
+  // window between the swap and this cleanup; it keeps the tables to the
+  // cards the realm has. Runs after the swap commits, with the value store's
+  // orphan cleanup (`#removeOrphansAfterFullRealm`); Postgres only.
+  async #removeOrphanSideRows() {
+    if (!this.#fullRealm || !dialectFor(this.#dbAdapter.kind).passages) {
+      return;
+    }
+    // The vector tables exist only where the vector extension does.
+    let [present] = (await this.#query([
+      "SELECT to_regclass('boxel_index_vectors') IS NOT NULL AS vectors",
+    ] as Expression)) as { vectors: boolean }[];
+    let tables = [
+      ...(present?.vectors
+        ? ['boxel_index_vectors', 'boxel_index_vector_sidecars']
+        : []),
+      'boxel_index_passages',
+    ];
+    for (let table of tables) {
+      await this.#query([
+        `DELETE FROM ${table} AS s WHERE s.realm_url =`,
+        param(this.realmURL.href),
+        'AND NOT EXISTS (SELECT 1 FROM boxel_index AS i WHERE i.realm_url = s.realm_url AND i.url = s.url AND i.type = s.type AND i.is_deleted IS NOT TRUE)',
+      ] as Expression);
+    }
+  }
+
+  // Re-derives the stored vectors for every URL this pass staged (see
+  // vector-index-writer.ts). Runs inside the swap transaction.
+  async #syncVectorIndex() {
+    await syncVectorIndex(
+      {
+        dbAdapter: this.#dbAdapter,
+        realmURL: this.realmURL.href,
+        stagingId: this.#stagingId,
+        query: (expression) => this.#query(expression),
+        stagedSearchDocs: (chunk, filter) =>
+          this.#stagedSearchDocs(chunk, filter),
+        stagedInChunk: (chunk) => this.#stagedInChunk(chunk),
+        readVectorSidecar: this.#readVectorSidecar,
+      },
+      [...this.#invalidations],
+    );
+  }
+
+  // Re-derives `boxel_index_passages` for every URL this pass staged, the
+  // same way `#syncVectorIndex` re-derives vectors: the URL's old passage rows
+  // go, and each passage its new search doc carries (see
+  // `collectSearchDocPassages`) is written back with its english tsvector.
+  // Inside the swap transaction, so a passage search never pairs a card's new
+  // row with its old passages. Postgres only: SQLite matches passages from
+  // the search doc.
+  async #syncPassageIndex() {
+    if (!dialectFor(this.#dbAdapter.kind).passages) {
+      return;
+    }
+    let urls = [...this.#invalidations];
+    const CHUNK = 500;
+    for (let start = 0; start < urls.length; start += CHUNK) {
+      let chunk = urls.slice(start, start + CHUNK);
+      await this.#query([
+        'DELETE FROM boxel_index_passages WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          this.#stagedInChunk(chunk),
+        ]),
+      ] as Expression);
+      let rows = await this.#stagedSearchDocs(
+        chunk,
+        `search_doc ? '_passages'`,
+      );
+      let values: Expression[] = [];
+      for (let row of rows) {
+        for (let passage of collectSearchDocPassages(row.search_doc)) {
+          values.push([
+            '(',
+            param(this.realmURL.href),
+            ',',
+            param(row.url),
+            ',',
+            param(row.type),
+            ',',
+            param(passage.fieldPath),
+            ',',
+            param(passage.ordinal),
+            ',',
+            param(passage.start),
+            ',',
+            param(passage.end),
+            ',',
+            param(passage.text),
+            `, to_tsvector('boxel_english',`,
+            param(passage.text),
+            '))',
+          ]);
+        }
+      }
+      for (let i = 0; i < values.length; i += CHUNK) {
+        await this.#query([
+          'INSERT INTO boxel_index_passages (realm_url, url, type, field_path, ordinal, start_at, end_at, body, tsv) VALUES',
+          ...separatedByCommas(values.slice(i, i + CHUNK)),
+        ] as Expression);
+      }
+    }
   }
 
   // Replaces the value rows (value-store.ts) of every URL this pass
@@ -4220,12 +4402,18 @@ export class Batch {
             { dbAdapter: this.#dbAdapter, query: (e: Expression) => q(e) },
             this.realmURL.href,
           );
+          this.#txQuerier = q;
+          try {
+            await this.#removeOrphanSideRows();
+          } finally {
+            this.#txQuerier = undefined;
+          }
         },
         { label: `the orphan cleanup of ${this.realmURL.href}` },
       );
     } catch (e) {
       this.#log.warn(
-        `could not remove the value rows of cards ${this.realmURL.href} no longer holds (the next rebuild of the realm tries again): ${e}`,
+        `could not remove the value rows, vectors and passages of cards ${this.realmURL.href} no longer holds (the next rebuild of the realm tries again): ${e}`,
       );
     }
   }
