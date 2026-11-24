@@ -93,10 +93,12 @@ export default class AiAssistantPanelService extends Service {
   }
 
   // Enter a room if the panel is open and nothing is loaded/loading yet. Used
-  // by the session-start hook (re-arm after re-login, and boot replay); leaves
-  // an already-current room untouched so a passive broadcast never clobbers it.
-  private ensureRoomsLoaded() {
-    if (!this.isOpen) {
+  // by the session-start hook (re-arm after re-login, and boot replay), and by
+  // the panel once it renders, for a panel left open while host submode hid
+  // it; leaves an already-current room untouched so a passive call never
+  // clobbers it. A failed session leaves the retry to the user.
+  ensureRoomsLoaded() {
+    if (!this.isOpen || this.displayRoomError) {
       return;
     }
     if (!this.matrixService.currentRoomId && !this.loadRoomsTask.isRunning) {
@@ -139,8 +141,13 @@ export default class AiAssistantPanelService extends Service {
     return this.commandModuleResource.module as typeof CommandModule;
   }
 
+  // Host submode previews the site, so it hides the assistant. The dashboard
+  // opened over it has actions that open the panel, so it shows it.
   get isAiAssistantHidden() {
-    return this.operatorModeStateService.state.submode === Submodes.Host;
+    return (
+      this.operatorModeStateService.state.submode === Submodes.Host &&
+      !this.operatorModeStateService.workspaceChooserOpened
+    );
   }
 
   get isOpen() {

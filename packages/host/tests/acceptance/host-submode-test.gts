@@ -927,6 +927,100 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('[data-test-ai-assistant-panel]').exists();
     });
 
+    test('a panel left open shows its session on leaving host submode', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        stacks: [[{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }]],
+        trail: [`${testRealmURL}Person/1.json`],
+        aiAssistantOpen: true,
+      });
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+
+      await click('[data-test-submode-switcher-button]');
+      await click('[data-test-boxel-menu-item-text="Interact"]');
+
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      await waitFor('[data-test-room]');
+      assert.dom('[data-test-room]').exists();
+    });
+
+    module('with the dashboard open over host submode', function () {
+      async function openDashboardOverHostSubmode() {
+        await visitOperatorMode({
+          submode: 'interact',
+          stacks: [
+            [{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }],
+          ],
+        });
+        await click('[data-test-submode-switcher-button]');
+        await click('[data-test-boxel-menu-item-text="Host"]');
+        await click('[data-test-workspace-chooser-toggle]');
+      }
+
+      test('the dashboard shows search and the AI assistant, and closing it hides the panel without closing it', async function (assert) {
+        await openDashboardOverHostSubmode();
+
+        assert.dom('[data-test-dashboard]').exists();
+        assert.dom('[data-test-open-search-field]').exists();
+        assert.dom('[data-test-open-ai-assistant]').exists();
+
+        await click('[data-test-open-ai-assistant]');
+        assert.dom('[data-test-ai-assistant-panel]').exists();
+
+        await click('[data-test-workspace-chooser-toggle]');
+        assert.dom('[data-test-host-submode]').exists();
+        assert.dom('[data-test-open-search-field]').doesNotExist();
+        assert.dom('[data-test-open-ai-assistant]').doesNotExist();
+        assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+
+        await click('[data-test-workspace-chooser-toggle]');
+        assert.dom('[data-test-ai-assistant-panel]').exists();
+      });
+
+      test("a new session from the dashboard's Agents flyout opens the panel on it", async function (assert) {
+        await openDashboardOverHostSubmode();
+
+        await click('[data-test-section-rail-entry="agents"]');
+        await click(
+          '[data-test-section-rail-flyout="agents"] [data-test-section-rail-ai-new-session]',
+        );
+
+        assert.dom('[data-test-ai-assistant-panel]').exists();
+        await waitFor('[data-test-room]');
+        assert.dom('[data-test-room]').exists();
+      });
+
+      test('a panel left open shows its session when the dashboard opens', async function (assert) {
+        await visitOperatorMode({
+          submode: 'host',
+          stacks: [
+            [{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }],
+          ],
+          trail: [`${testRealmURL}Person/1.json`],
+          aiAssistantOpen: true,
+        });
+        assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+
+        await click('[data-test-workspace-chooser-toggle]');
+
+        assert.dom('[data-test-ai-assistant-panel]').exists();
+        await waitFor('[data-test-room]');
+        assert.dom('[data-test-room]').exists();
+      });
+
+      test('a search result opens in interact submode', async function (assert) {
+        await openDashboardOverHostSubmode();
+
+        await click('[data-test-open-search-field]');
+        await fillIn('[data-test-search-field]', 'B C');
+        await click(`[data-test-search-result="${testRealmURL}Person/2"]`);
+
+        assert.dom('[data-test-dashboard]').doesNotExist();
+        assert.dom('[data-test-interact-submode]').exists();
+        assert.dom(`[data-test-stack-card="${testRealmURL}Person/2"]`).exists();
+      });
+    });
+
     module('publish and unpublish realm', function (hooks) {
       // This module calls no caching helper of its own, so the registration below
       // looks superfluous. It isn't. The parent's beforeEach runs for these tests
