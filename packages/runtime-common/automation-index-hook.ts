@@ -12,9 +12,9 @@
 // whether every operation's approvals are there, runs in a realm server once
 // the pass lands (`Realm.followAutomationKeyApprovals`): after an incremental
 // pass, in the realm that started it, over the automations
-// `automationTouchedBy` names; after a from-scratch pass, in each realm
-// server serving the realm, over every automation in it that isn't paused,
-// as the worker announces the pass (`REALM_AUTOMATIONS_REINDEXED_CHANNEL`).
+// `automationTouchedBy` names; after a from-scratch pass, in the realm, over
+// every automation in it that isn't paused, as the worker that ran the pass
+// asks (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`).
 // An edit that makes every approval match again runs the automation again,
 // and one that adds an operation needing a key no approval covers makes it
 // wait.

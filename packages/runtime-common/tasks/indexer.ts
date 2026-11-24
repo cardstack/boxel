@@ -4,7 +4,7 @@ import {
   jobIdentity,
   notifyAllFileChanges,
   notifyRealmIndexUpdated,
-  notifyRealmAutomationsReindexed,
+  FOLLOW_AUTOMATION_KEY_APPROVALS_PATH,
   incrementalCompletionThatFits,
   userIdFromUsername,
   fetchUserPermissions,
@@ -851,12 +851,12 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
         log,
       }),
     });
-    // The realm servers serving the realm check the automations' key
-    // approvals in full, which the hook can't, as the worker reads no
-    // operation definitions. They hear of it from here whoever started the
-    // pass, a reindex no realm awaits included.
+    // The realm checks the automations' key approvals in full, which the
+    // hook can't, as the worker reads no operation definitions. It hears of
+    // the pass from here whoever started it, a reindex no realm awaits
+    // included.
     if (synced.size > 0) {
-      await notifyRealmAutomationsReindexed(dbAdapter, args.realmURL);
+      await followAutomationKeyApprovalsInRealm(log, jobInfo, _fetch, realmURL);
     }
     reportStatus(args.jobInfo, 'finish');
     let queueClaim = queueClaimOf(jobInfo);
@@ -1226,6 +1226,46 @@ async function syncAutomationsAfterPass(
       `${jobIdentity(jobInfo)} failed to sync automations with their cards in ${args.realmURL}: ${(e as Error)?.message}`,
     );
     return new Map();
+  }
+}
+
+// How long the from-scratch task waits for the realm's check of its
+// automations' key approvals before it lets its job finish without the
+// answer. The check runs on in the realm either way.
+const FOLLOW_AUTOMATION_KEY_APPROVALS_TIMEOUT_MS = 60_000;
+
+// Asks the realm to check the key approvals of its automations in full
+// (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`) as the realm's own user, through
+// the pass's fetch. The request reaches one realm server, which mounts the
+// realm if it hasn't. The index is already committed, so a refusal or failure
+// is logged and leaves the job a success: an automation then stays as the
+// hook left it until the next pass over it, an approval landing, or its next
+// run's admission.
+async function followAutomationKeyApprovalsInRealm(
+  log: TaskArgs['log'],
+  jobInfo: JobInfo | undefined,
+  _fetch: typeof globalThis.fetch,
+  realmURL: string,
+): Promise<void> {
+  let url = new URL(
+    FOLLOW_AUTOMATION_KEY_APPROVALS_PATH.replace(/^\//, ''),
+    realmURL,
+  ).href;
+  try {
+    let response = await _fetch(url, {
+      method: 'POST',
+      headers: { Accept: SupportedMimeType.JSONAPI },
+      signal: AbortSignal.timeout(FOLLOW_AUTOMATION_KEY_APPROVALS_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      log.warn(
+        `${jobIdentity(jobInfo)} the realm ${realmURL} refused to check its automations' key approvals: ${response.status} ${await response.text()}`,
+      );
+    }
+  } catch (e) {
+    log.warn(
+      `${jobIdentity(jobInfo)} couldn't ask the realm ${realmURL} to check its automations' key approvals: ${(e as Error)?.message}`,
+    );
   }
 }
 

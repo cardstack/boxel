@@ -1970,29 +1970,15 @@ export async function notifyRealmIndexUpdated(
   }
 }
 
-// Postgres NOTIFY channel announcing that a from-scratch index pass over a
-// realm with automations has landed and the worker's index hook has synced
-// them with their cards. Payload is the realm URL. Each realm server serving
-// the realm then checks the key approvals of its automations in full
-// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`), which the
-// worker can't do, as it reads no operation definitions. Best-effort like
-// the other realm channels: a missed NOTIFY leaves an automation as the
-// hook left it, until an approval lands or its next run's admission.
-export const REALM_AUTOMATIONS_REINDEXED_CHANNEL =
-  'realm_automations_reindexed';
-
-export async function notifyRealmAutomationsReindexed(
-  dbAdapter: DBAdapter,
-  realmURL: string,
-): Promise<void> {
-  try {
-    await dbAdapter.notify(REALM_AUTOMATIONS_REINDEXED_CHANNEL, realmURL);
-  } catch (err: unknown) {
-    logger('realm').warn(
-      `notify ${REALM_AUTOMATIONS_REINDEXED_CHANNEL} failed for ${realmURL}: ${String(err)}`,
-    );
-  }
-}
+// The realm route the worker asks, once a from-scratch index pass over the
+// realm has landed and its index hook has synced the realm's automations, to
+// check every automation's key approvals in full
+// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`), which the worker
+// can't do, as it reads no operation definitions. A `POST` with no body,
+// answered 204 once the check has run; like every `POST`, it takes a direct
+// writer of the realm.
+export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
+  '/_follow-automation-key-approvals';
 
 // Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
 // peer realm-server replicas drop every cached path for this realm. Use
@@ -4153,6 +4139,15 @@ export class Realm {
         RUN_STATE_PATH,
         SupportedMimeType.JSONAPI,
         this.runState.bind(this),
+        ACL_ONLY,
+      )
+      // The worker's request, after a from-scratch pass over this realm, to
+      // check its automations' key approvals in full. Answered on the realm
+      // ACL alone: it runs only what the realm's own follow would.
+      .post(
+        FOLLOW_AUTOMATION_KEY_APPROVALS_PATH,
+        SupportedMimeType.JSONAPI,
+        this.followAutomationKeyApprovalsOnRequest.bind(this),
         ACL_ONLY,
       )
       // The operations envelope, under the media type that carries its
@@ -15600,14 +15595,15 @@ export class Realm {
 
   // Once a from-scratch pass over this realm has landed, follows the key
   // approvals of every automation in the realm that isn't paused, as an
-  // incremental pass does for the automations it touched. A from-scratch pass
-  // rebuilds the whole realm, so it can be the first to index an edit made
-  // while no realm server watched the files. The worker that ran the pass
-  // announces it (`REALM_AUTOMATIONS_REINDEXED_CHANNEL`) whoever started it,
-  // a reindex no realm awaits included, and each realm server serving the
-  // realm answers here. Each automation's follow locks its row, so the
-  // servers' follows of one automation take turns and the later ones find it
-  // already in step.
+  // incremental pass this realm starts does for the automations it touched.
+  // A from-scratch pass rebuilds the whole realm, so it can be the first to
+  // index an edit made while no realm server watched the files. The worker
+  // that ran the pass asks for this whoever started it
+  // (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`), and the request mounts the realm
+  // on whichever realm server it reaches, so a realm no server had mounted is
+  // followed too. Each automation's follow locks its row, so a follow racing
+  // another one of the same automation takes its turn and finds the row in
+  // step.
   //
   // It reports what it moved, as the worker's index hook in the same pass
   // does: a from-scratch pass that announces nothing (a boot's reindex of an
@@ -15641,6 +15637,18 @@ export class Realm {
         `couldn't follow the key approvals of the automations in ${this.url} after a from-scratch index pass: ${e?.message ?? e}`,
       );
     }
+  }
+
+  private async followAutomationKeyApprovalsOnRequest(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    await this.followAutomationKeyApprovalsAfterFromScratchPass();
+    return createResponse({
+      body: null,
+      init: { status: 204 },
+      requestContext,
+    });
   }
 
   // The automation's version with `payer` as its payer, its card read as

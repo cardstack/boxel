@@ -26,7 +26,6 @@ import {
   waitForKeyApproval,
 } from '@cardstack/runtime-common/automations';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
-import { RealmAutomationsReindexedListener } from '../lib/realm-automations-reindexed-listener.ts';
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
 import {
   appendRunLog,
@@ -1616,38 +1615,26 @@ module(basename(import.meta.filename), function (hooks) {
       realm.clearLocalSourceCaches();
     }
 
-    // Runs a from-scratch pass over the realm with this realm server
-    // listening for the worker's announcement of it, as a deployed realm
-    // server does, and waits for the follow the announcement starts.
-    async function fromScratchPassHeard() {
-      let follows: Promise<void>[] = [];
+    // Runs a from-scratch pass over the realm, whose worker asks the realm to
+    // check its automations' key approvals once the pass's hook has synced
+    // them, and answers how many checks the realm ran. With `realmChecks`
+    // false the realm answers the request without checking, which leaves the
+    // automations as the hook alone moves them.
+    async function fromScratchPass({ realmChecks = true } = {}) {
+      let checks: Promise<void>[] = [];
       let original = realm.followAutomationKeyApprovalsAfterFromScratchPass;
       realm.followAutomationKeyApprovalsAfterFromScratchPass = function () {
-        let follow = original.call(realm);
-        follows.push(follow);
-        return follow;
+        let check = realmChecks ? original.call(realm) : Promise.resolve();
+        checks.push(check);
+        return check;
       };
-      let listener = new RealmAutomationsReindexedListener({
-        dbAdapter,
-        lookupMountedRealm: (url) => (url === realm.url ? realm : undefined),
-      });
-      await listener.start();
       try {
         await realm.reindex();
-        // The announcement and the pass's job settling reach this server
-        // over separate notifications, in either order.
-        let deadline = Date.now() + 30_000;
-        while (follows.length === 0) {
-          if (Date.now() > deadline) {
-            throw new Error('no from-scratch pass was announced');
-          }
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
-        await Promise.all(follows);
+        await Promise.all(checks);
       } finally {
-        await listener.shutDown();
         realm.followAutomationKeyApprovalsAfterFromScratchPass = original;
       }
+      return checks.length;
     }
 
     test('a revert a from-scratch pass is the first to index runs a waiting automation again, with nobody asked to approve it again', async function (assert) {
@@ -1660,14 +1647,18 @@ module(basename(import.meta.filename), function (hooks) {
       await realm.incrementalIndexing();
       editUnwatched(`${KEYED}-script.js`, `return 'ok';`);
 
-      await realm.reindex();
+      assert.strictEqual(
+        await fromScratchPass({ realmChecks: false }),
+        1,
+        'the worker asks the realm once',
+      );
       assert.strictEqual(
         (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
         'waiting-for-key-approval',
         "the worker's index hook alone leaves it waiting",
       );
 
-      await fromScratchPassHeard();
+      await fromScratchPass();
       let row = await reachesState(KEYED, 'active');
       assert.notStrictEqual(row.nextRun, null, 'its schedule starts again');
       assert.deepEqual(
@@ -1696,7 +1687,7 @@ module(basename(import.meta.filename), function (hooks) {
         })[`${DAILY}.json`],
       );
 
-      await fromScratchPassHeard();
+      await fromScratchPass();
       let row = await reachesState(DAILY, 'waiting-for-key-approval');
       assert.strictEqual(row.nextRun, null);
       assert.deepEqual(operationStates(await keyApprovalsOf(DAILY)), [
@@ -1720,11 +1711,25 @@ module(basename(import.meta.filename), function (hooks) {
       );
       editUnwatched(`${KEYED}-script.js`, `return 'ok';`);
 
-      await fromScratchPassHeard();
+      await fromScratchPass();
       assert.strictEqual(
         (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
         'paused',
       );
+    });
+
+    test('the request to check the automations’ key approvals takes a direct writer of the realm', async function (assert) {
+      let path = `${new URL(realm.url).pathname}_follow-automation-key-approvals`;
+      let refused = await request
+        .post(path)
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', auth(READER));
+      assert.strictEqual(refused.status, 403, refused.text);
+      let answered = await request
+        .post(path)
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', auth(WRITER));
+      assert.strictEqual(answered.status, 204, answered.text);
     });
 
     test('approving a slot again with another key sends an automation event for the automation whose approval it ended', async function (assert) {
