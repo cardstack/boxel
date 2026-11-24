@@ -59,7 +59,7 @@ export default class ShowCardTool extends HostBaseTool<
       // A card already in that stack is shown again on top: the cards above
       // it close, and the card opens fresh in their place. Adding it as it is
       // would leave the card where it was, under whatever covers it.
-      let existing = operatorModeStateService.state?.stacks[
+      let existing = operatorModeStateService.state?.stacks?.[
         newStackIndex
       ]?.find((item) => item.id === newStackItem.id);
       if (existing) {

@@ -50,6 +50,7 @@ class MockOperatorModeStateService extends Service {
     codeSelection: undefined as string | undefined,
   };
   addedStackItems: StackItem[] = [];
+  trimmedStackItems: StackItem[] = [];
   updatedCodePaths: (URL | string)[] = [];
 
   numberOfStacks() {
@@ -78,6 +79,10 @@ class MockOperatorModeStateService extends Service {
     this.addedStackItems.push(stackItem);
   }
 
+  trimItemsFromStack(stackItem: StackItem) {
+    this.trimmedStackItems.push(stackItem);
+  }
+
   updateCodePath(url: URL | string) {
     this.updatedCodePaths.push(url);
     this.state = {
@@ -88,6 +93,7 @@ class MockOperatorModeStateService extends Service {
 
   reset() {
     this.addedStackItems = [];
+    this.trimmedStackItems = [];
     this.updatedCodePaths = [];
     this.state = { submode: 'interact', codeSelection: undefined };
   }
@@ -296,6 +302,42 @@ module('Integration | Command | show-card', function (hooks) {
         'isolated',
         'Stack item has isolated format',
       );
+    });
+
+    test('a card already in the target stack closes the cards above it and opens again on top', async function (assert) {
+      const cardId = `${testRealmURL}Person/alice`;
+      let buried = new StackItem({
+        id: cardId,
+        stackIndex: 1,
+        format: 'isolated',
+      });
+      let above = new StackItem({
+        id: `${testRealmURL}Person/bob`,
+        stackIndex: 1,
+        format: 'isolated',
+      });
+      mockOperatorModeStateService.state = {
+        submode: 'interact',
+        codeSelection: undefined,
+        stacks: [[], [buried, above]],
+      };
+
+      await command.execute({ cardId });
+
+      assert.deepEqual(
+        mockOperatorModeStateService.trimmedStackItems,
+        [buried],
+        'the stack is trimmed from the buried card up',
+      );
+      assert.strictEqual(
+        mockOperatorModeStateService.addedStackItems.length,
+        1,
+        'the card is added again',
+      );
+      let added = mockOperatorModeStateService.addedStackItems[0];
+      assert.strictEqual(added.id, cardId, 'the added item is the card');
+      assert.notStrictEqual(added, buried, 'the card opens as a new item');
+      assert.strictEqual(added.stackIndex, 1, 'in the same stack');
     });
 
     test('calculates correct stack index based on numberOfStacks', async function (assert) {

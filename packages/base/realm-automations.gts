@@ -96,13 +96,15 @@ export async function showAutomationInConsole(
       cardId: realmConfigCardURL(new URL(request.realm)).href,
       format: 'isolated',
     });
-  } finally {
-    // The config card mounts while the tool runs. A request no console took
-    // by then (the card failed to open) is dropped, so it never surfaces in a
-    // console opened later for another reason.
+  } catch (error) {
+    // The config card mounts its console once the card loads, after the tool
+    // returns, and that console takes the request. A config card that never
+    // opened mounts no console, so its request is dropped here rather than
+    // surfacing in a console opened later for another reason.
     if (consoleRequest === request) {
       consoleRequest = undefined;
     }
+    throw error;
   }
 }
 
