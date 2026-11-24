@@ -133,7 +133,9 @@ export interface HostRouteTypeInfo {
   // relies on a child type having the link field it inherits from its
   // parent type. `isPrimitive` is false for a link or a compound field.
   // `target` is the key of the card type a `linksTo` or `linksToMany`
-  // field points to.
+  // field points to. `isQueryBacked` is true for a link field declared with
+  // a `query`: it stores no link, so it can't be a nested route's parent
+  // link.
   fields: Readonly<Record<string, HostRouteTypeField>>;
 }
 
@@ -141,6 +143,7 @@ export interface HostRouteTypeField {
   type: FieldDefinition['type'];
   isPrimitive: boolean;
   target?: string;
+  isQueryBacked?: true;
 }
 
 // Builds a `HostRouteTypeInfo` from a type's indexed definition, and its
@@ -169,9 +172,13 @@ export function hostRouteTypeInfo(
       }
     }
     let isPrimitive = fieldDef.isPrimitive;
-    fields[name] = target
+    let field: HostRouteTypeField = target
       ? { type: fieldDef.type, isPrimitive, target }
       : { type: fieldDef.type, isPrimitive };
+    if (target && fieldDef.query) {
+      field.isQueryBacked = true;
+    }
+    fields[name] = field;
   }
   let key = types[0] ?? keyFor(definition.codeRef);
   return {
@@ -1045,6 +1052,9 @@ class Validator {
         // field of that name too, so it is left for the resolver to read on
         // whichever card has it, as is a field the known type doesn't have.
         let field = childType?.fields[named];
+        if (field && isLinkType(field.type) && field.isQueryBacked) {
+          return queryBackedParent(named);
+        }
         if (field && isLinkType(field.type)) {
           return {
             field: named,
@@ -1057,7 +1067,14 @@ class Validator {
       }
       return "parent must name the link field that connects this route's card to its parent route's card: a card id template has no type to infer it from";
     }
-    let candidates = linkCandidates(childType, parentType);
+    let all = linkCandidates(childType, parentType);
+    // A query-backed link stores nothing: it is derived from the stored
+    // links, often the other side of one of them. So it is never inferred,
+    // and it can't be named either, since membership is read from the
+    // stored links on the two loaded cards, with no search.
+    let candidates = all
+      .filter((c) => !c.isQueryBacked)
+      .map(({ isQueryBacked: _, ...link }) => link);
     if (named) {
       let matching = candidates.filter((c) => c.field === named);
       if (matching.length === 1) {
@@ -1066,13 +1083,20 @@ class Validator {
       if (matching.length > 1) {
         return `parent ${named} is ambiguous: both cards have a link field ${named} to the other`;
       }
+      if (all.some((c) => c.field === named)) {
+        return queryBackedParent(named);
+      }
       return `parent ${named} is not a linksTo or linksToMany field connecting the two routes' card types`;
     }
     if (candidates.length === 1) {
       return { ...candidates[0]!, inferred: true };
     }
     if (candidates.length === 0) {
-      return "No linksTo or linksToMany field connects this route's card type to its parent route's card type";
+      return all.length > 0
+        ? `No stored linksTo or linksToMany field connects this route's card type to its parent route's card type; a query-backed link (${all
+            .map((c) => `${c.side}.${c.field}`)
+            .join(', ')}) can't be a parent link`
+        : "No linksTo or linksToMany field connects this route's card type to its parent route's card type";
     }
     return `parent is required: more than one link connects the two card types (${candidates
       .map((c) => `${c.side === 'child' ? 'child' : 'parent'}.${c.field}`)
@@ -1297,6 +1321,10 @@ class Validator {
   }
 }
 
+function queryBackedParent(field: string): string {
+  return `parent ${field} is a query-backed link: it stores no link that can be read on the loaded cards with no search; name a stored linksTo or linksToMany field instead`;
+}
+
 // The link fields that connect a child route's type and its parent route's
 // type, in either direction. A field that connects them both ways (the two
 // types are the same, or one descends from the other) counts once: a
@@ -1309,11 +1337,13 @@ function linkCandidates(
   field: string;
   side: 'child' | 'parent';
   kind: 'linksTo' | 'linksToMany';
+  isQueryBacked: boolean;
 }[] {
   let out: {
     field: string;
     side: 'child' | 'parent';
     kind: 'linksTo' | 'linksToMany';
+    isQueryBacked: boolean;
   }[] = [];
   // When one type is, or descends from, the other, a field with the same
   // name and definition on both is the one field, inherited.
@@ -1339,7 +1369,12 @@ function linkCandidates(
         sameField(field, def, parentType.fields)
       )
     ) {
-      out.push({ field, side: 'child', kind: def.type });
+      out.push({
+        field,
+        side: 'child',
+        kind: def.type,
+        isQueryBacked: !!def.isQueryBacked,
+      });
     }
   }
   for (let [field, def] of Object.entries(parentType.fields)) {
@@ -1356,7 +1391,12 @@ function linkCandidates(
         sameField(field, def, childType.fields)
       )
     ) {
-      out.push({ field, side: 'parent', kind: def.type });
+      out.push({
+        field,
+        side: 'parent',
+        kind: def.type,
+        isQueryBacked: !!def.isQueryBacked,
+      });
     }
   }
   return out;

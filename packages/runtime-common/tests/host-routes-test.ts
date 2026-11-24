@@ -1,4 +1,5 @@
 import {
+  hostRouteTypeInfo,
   hostRoutingMapFromRoutes,
   validateHostRoutes,
   type HostRoute,
@@ -7,6 +8,7 @@ import {
   type HostRoutesValidation,
   type ValidateHostRoutesOptions,
 } from '../host-routes.ts';
+import type { Definition } from '../definitions.ts';
 import type { RawHostRoutingRule } from '../realm.ts';
 import type { ResolvedCodeRef } from '../code-ref.ts';
 import type { SharedTests } from '../helpers/index.ts';
@@ -37,6 +39,10 @@ const linksToMany = (name: string) => ({
   isPrimitive: false,
   target: `${MODULE}/${name}`,
 });
+const queryLinksToMany = (name: string) => ({
+  ...linksToMany(name),
+  isQueryBacked: true as const,
+});
 
 const TYPES: Record<string, HostRouteTypeInfo> = {
   // Two links to its own type: `friendOf` and `friends`.
@@ -60,6 +66,19 @@ const TYPES: Record<string, HostRouteTypeInfo> = {
     slug: contains,
     category: linksTo('Category'),
   }),
+  // A stored link on the gadget, and the department's query-backed list of
+  // its gadgets: the same connection, seen from both sides.
+  Department: cardType('Department', {
+    slug: contains,
+    gadgets: queryLinksToMany('Gadget'),
+  }),
+  Gadget: cardType('Gadget', {
+    slug: contains,
+    department: linksTo('Department'),
+  }),
+  // Only a query-backed link connects them.
+  Aisle: cardType('Aisle', { slug: contains, wares: queryLinksToMany('Ware') }),
+  Ware: cardType('Ware', { slug: contains }),
   // Only the shelf holds the link.
   Shelf: cardType('Shelf', { slug: contains, items: linksToMany('Item') }),
   Item: cardType('Item', { slug: contains }),
@@ -570,6 +589,120 @@ const tests: SharedTests<unknown> = Object.freeze({
         warnings[0]!.message.includes('parent.products'),
       `the warning names the candidates: ${warnings[0]!.message}`,
     );
+  },
+
+  'validateHostRoutes: a query-backed link is not a parent link candidate':
+    async (assert) => {
+      let { routes, warnings } = validate([
+        fieldMatch(
+          '/d/:department',
+          'Department',
+          { slug: ':department' },
+          {
+            routes: [fieldMatch('/:gadget', 'Gadget', { slug: ':gadget' })],
+          },
+        ),
+      ]);
+      assert.deepEqual(warnings, []);
+      assert.deepEqual(paths(routes), [
+        '/d/:department',
+        '/d/:department/:gadget',
+      ]);
+      let child = routes[0]!.routes[0]!;
+      assert.deepEqual(
+        child.kind === 'field-match' ? child.parentLink : undefined,
+        {
+          field: 'department',
+          side: 'child',
+          kind: 'linksTo',
+          inferred: true,
+        },
+        'the stored link is inferred',
+      );
+    },
+
+  'validateHostRoutes: parent cannot name a query-backed link': async (
+    assert,
+  ) => {
+    let { routes, warnings } = validate([
+      fieldMatch(
+        '/d/:department',
+        'Department',
+        { slug: ':department' },
+        {
+          routes: [
+            fieldMatch(
+              '/:gadget',
+              'Gadget',
+              { slug: ':gadget' },
+              { parent: 'gadgets' },
+            ),
+          ],
+        },
+      ),
+      fieldMatch(
+        '/a/:aisle',
+        'Aisle',
+        { slug: ':aisle' },
+        {
+          routes: [fieldMatch('/:ware', 'Ware', { slug: ':ware' })],
+        },
+      ),
+    ]);
+    assert.deepEqual(paths(routes), ['/d/:department', '/a/:aisle']);
+    assert.deepEqual(codes(warnings), [
+      {
+        code: 'invalid-parent-link',
+        path: '/d/:department/:gadget',
+        dropped: true,
+      },
+      {
+        code: 'invalid-parent-link',
+        path: '/a/:aisle/:ware',
+        dropped: true,
+      },
+    ]);
+    assert.true(
+      warnings[0]!.message.includes('gadgets is a query-backed link'),
+      `the warning says the named link is query-backed: ${warnings[0]!.message}`,
+    );
+    assert.true(
+      warnings[1]!.message.includes('parent.wares'),
+      `the warning names the query-backed link: ${warnings[1]!.message}`,
+    );
+  },
+
+  'hostRouteTypeInfo: a link field with a query is query-backed': async (
+    assert,
+  ) => {
+    let ref = type;
+    let link = (type: 'linksTo' | 'linksToMany', query?: object) => ({
+      type,
+      isPrimitive: false,
+      isComputed: false,
+      fieldOrCard: ref('Product'),
+      ...(query ? { query } : {}),
+    });
+    let definition = {
+      type: 'card-def',
+      codeRef: ref('Category'),
+      displayName: 'Category',
+      fields: { featured: 'a', products: 'b' },
+      fieldDefs: {
+        a: link('linksTo'),
+        b: link('linksToMany', {
+          filter: { eq: { 'category.id': '$this.id' } },
+        }),
+      },
+    } as Definition;
+    let info = hostRouteTypeInfo(
+      { definition },
+      (r) => `${(r as ResolvedCodeRef).module}/${(r as ResolvedCodeRef).name}`,
+    );
+    assert.deepEqual(info.fields, {
+      featured: linksTo('Product'),
+      products: queryLinksToMany('Product'),
+    });
   },
 
   'validateHostRoutes: a link on its own type is read by its kind': async (
