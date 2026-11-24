@@ -16,9 +16,12 @@ import {
 } from './helpers/index.ts';
 import { testOAuthSecureOriginURL } from './helpers/oauth-provider.ts';
 import {
+  landOAuthFlow,
   OAUTH_TEST_ISSUER,
   OAUTH_TEST_MCP,
   OAUTH_TEST_SERVER_URL,
+  OAUTH_TEST_STATE,
+  OAUTH_TEST_WEB_REDIRECT_URI,
   registerOAuthClient,
   startOAuthFlow,
   startOAuthProviderServer,
@@ -32,9 +35,16 @@ import { getMatrixAdminToken, registerUser } from '../synapse.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { revokeUserSessions } from '@cardstack/runtime-common/db-queries/user-queries';
 import {
+  cancelConsentDecision,
+  decideFlow,
+  endUndecidedFlow,
   findConsentDecision,
+  isFlowDecided,
   sha256Hex,
+  takeConsentDecision,
   takeConsentTicket,
+  type AuthorizationErrorRecord,
+  type ConsentDecisionRecord,
 } from '../lib/oauth-provider/objects.ts';
 import { buildRegistry } from '../lib/oauth-provider/registry.ts';
 import { BOXEL_CLI_CLIENT_ID } from '../lib/oauth-provider/pre-registered-clients.ts';
@@ -45,6 +55,11 @@ const ISSUER = OAUTH_TEST_ISSUER;
 const MCP = OAUTH_TEST_MCP;
 const SECURE_ORIGIN = testOAuthSecureOriginURL.origin;
 const LOOPBACK_REDIRECT_URI = 'http://127.0.0.1/callback';
+// An error reference as the provider issues one.
+const ERROR_REFERENCE = /^[A-Za-z0-9_-]{43}$/;
+// An answer the page could have sent, and one it couldn't.
+const ALLOW = { decision: 'allow', renew: true };
+const UNREADABLE = { decision: 'maybe', renew: true };
 const ADMIN = { matrixURL, adminUsername: 'admin', adminPassword: 'password' };
 
 // What the registry says about `/mcp`, which the page must show whatever the
@@ -188,6 +203,33 @@ module(basename(import.meta.filename), function (hooks) {
     return JSON.stringify(rows);
   }
 
+  async function errorReferenceCount(): Promise<number> {
+    let [row] = (await db.execute(
+      `SELECT count(*)::int AS count FROM oauth_provider_objects
+         WHERE kind = 'ErrorReference'`,
+    )) as { count: number }[];
+    return row.count;
+  }
+
+  function errorDetails(reference: string) {
+    return supertest(server!)
+      .get(`/_oauth-provider/error/${reference}`)
+      .set('Host', serverURL.host)
+      .set('Origin', SECURE_ORIGIN);
+  }
+
+  // Where the browser is sent when it asks to cancel a flow, as the
+  // authorize page does at sign-in.
+  async function cancelled(
+    browser: ReturnType<typeof supertest.agent>,
+    uid: string,
+  ) {
+    let response = await browser
+      .get(`/_oauth-provider/interaction/${uid}/finish?cancel=1`)
+      .set('Host', serverURL.host);
+    return response.headers.location as string | undefined;
+  }
+
   async function lifetimeOf(kind: string): Promise<number> {
     let [row] = (await db.execute(
       `SELECT extract(epoch FROM expires_at - created_at)::float AS lifetime
@@ -237,11 +279,23 @@ module(basename(import.meta.filename), function (hooks) {
         );
         assert.strictEqual(decided.status, status, `decision: ${name}`);
         assert.notOk(decided.body.ticket, `no ticket: ${name}`);
+        let unreadable = await decide(uid, UNREADABLE, caller);
+        assert.strictEqual(
+          unreadable.status,
+          status,
+          `unreadable decision: ${name}`,
+        );
+        assert.notOk(unreadable.body.reference, `no reference: ${name}`);
       }
       assert.strictEqual(
         await findConsentDecision(db, uid),
         undefined,
         'no decision was recorded',
+      );
+      assert.strictEqual(
+        await errorReferenceCount(),
+        0,
+        'nobody it refused ended the flow',
       );
       let allowed = await decide(
         uid,
@@ -651,10 +705,10 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(typeof retried.body.ticket, 'string');
     });
 
-    test('a decision that is not one is refused', async function (assert) {
+    test('a decision that is not one is refused, and ends its flow', async function (assert) {
       let user = await matrixAccount();
       let session = await secureSessionAuth(db, user);
-      let uid = await startFlow(await register());
+      let clientId = await register();
       for (let body of [
         {},
         { decision: 'allow' },
@@ -663,14 +717,131 @@ module(basename(import.meta.filename), function (hooks) {
         ['allow'],
         { decision: 'allow', renew: true, padding: 'x'.repeat(2000) },
       ]) {
+        let label = JSON.stringify(body).slice(0, 60);
+        let uid = await startFlow(clientId);
         let response = await decide(uid, body, { authorization: session });
-        assert.strictEqual(
-          response.status,
-          400,
-          `refused: ${JSON.stringify(body).slice(0, 60)}`,
+        assert.strictEqual(response.status, 400, `refused: ${label}`);
+        assert.strictEqual(response.body.error, 'bad-request', label);
+        assert.true(
+          ERROR_REFERENCE.test(response.body.reference),
+          `answers an error reference: ${label}`,
         );
+        let again = await decide(uid, ALLOW, { authorization: session });
+        assert.strictEqual(again.status, 404, `the flow is gone: ${label}`);
       }
-      assert.strictEqual(await findConsentDecision(db, uid), undefined);
+    });
+
+    test("an answer that can't be read ends the flow, with an error that returns to the app", async function (assert) {
+      let session = await secureSessionAuth(db, await matrixAccount());
+      let browser = supertest.agent(server!);
+      let uid = await startOAuthFlow(browser, await register());
+      let response = await decide(uid, UNREADABLE, { authorization: session });
+      assert.strictEqual(response.status, 400, response.text);
+      assert.strictEqual(response.headers['cache-control'], 'no-store');
+      let { reference } = response.body;
+
+      let read = await details(uid, { authorization: session });
+      assert.strictEqual(read.status, 404, 'the flow shows no consent');
+      let decided = await decide(uid, ALLOW, { authorization: session });
+      assert.strictEqual(decided.status, 404, 'and takes no decision');
+      assert.true(
+        (await cancelled(browser, uid))?.endsWith('authorize?error=expired'),
+        'and the browser that started it can no longer finish it',
+      );
+
+      let error = await errorDetails(reference);
+      assert.strictEqual(error.status, 200, error.text);
+      assert.strictEqual(error.body.error, 'server_error');
+      assert.strictEqual(error.body.reason, 'unreadable-decision');
+      assert.true(error.body.returnOffered, '"Return" is offered');
+      assert.ok(error.body.app?.shown, 'the app is named');
+
+      let returned = await supertest(server!)
+        .get(`/_oauth-provider/error/${reference}/return`)
+        .set('Host', serverURL.host);
+      assert.strictEqual(returned.status, 303);
+      let landed = new URL(returned.headers.location);
+      assert.strictEqual(
+        `${landed.origin}${landed.pathname}`,
+        OAUTH_TEST_WEB_REDIRECT_URI,
+        'the app is told at its redirect URI',
+      );
+      assert.deepEqual(Object.fromEntries(landed.searchParams), {
+        error: 'server_error',
+        state: OAUTH_TEST_STATE,
+        iss: ISSUER,
+      });
+    });
+
+    test("an answer that can't be read leaves a decided flow to the window that decided it", async function (assert) {
+      let session = await secureSessionAuth(db, await matrixAccount());
+      let browser = supertest.agent(server!);
+      let uid = await startOAuthFlow(browser, await register());
+      // Deny finishes without the user's row in `users`, which this
+      // module's accounts don't have.
+      let { ticket } = (
+        await decide(
+          uid,
+          { decision: 'deny', renew: false },
+          { authorization: session },
+        )
+      ).body;
+      let response = await decide(uid, UNREADABLE, { authorization: session });
+      assert.strictEqual(response.status, 409);
+      assert.deepEqual(response.body, { error: 'decided' });
+      assert.strictEqual(await errorReferenceCount(), 0, 'no error is stored');
+      let landed = await landOAuthFlow(browser, uid, ticket);
+      assert.strictEqual(
+        landed.searchParams.get('error'),
+        'access_denied',
+        'the flow still finishes with its decision',
+      );
+    });
+
+    test("an answer that can't be read leaves the flow open when its error can't be stored", async function (assert) {
+      let session = await secureSessionAuth(db, await matrixAccount());
+      let uid = await startFlow(await register());
+      await db.execute(`
+        CREATE FUNCTION refuse_error_reference() RETURNS trigger AS $$
+        BEGIN
+          IF NEW.kind = 'ErrorReference' THEN
+            RAISE EXCEPTION 'no error references in this test';
+          END IF;
+          RETURN NEW;
+        END $$ LANGUAGE plpgsql
+      `);
+      await db.execute(`
+        CREATE TRIGGER refuse_error_reference
+          BEFORE INSERT ON oauth_provider_objects
+          FOR EACH ROW EXECUTE FUNCTION refuse_error_reference()
+      `);
+      try {
+        let failed = await decide(uid, UNREADABLE, { authorization: session });
+        assert.strictEqual(failed.status, 500);
+      } finally {
+        await db.execute(
+          `DROP TRIGGER refuse_error_reference ON oauth_provider_objects`,
+        );
+        await db.execute(`DROP FUNCTION refuse_error_reference()`);
+      }
+      let read = await details(uid, { authorization: session });
+      assert.strictEqual(read.status, 200, 'the flow is not ended');
+      let decided = await decide(uid, ALLOW, { authorization: session });
+      assert.strictEqual(decided.status, 201, 'and can still be decided');
+    });
+
+    test("an answer that can't be read for a flow that is gone stores nothing", async function (assert) {
+      let session = await secureSessionAuth(db, await matrixAccount());
+      let uid = await startFlow(await register());
+      await db.execute(
+        `UPDATE oauth_provider_objects
+           SET expires_at = now() - interval '1 second'
+           WHERE kind = 'Interaction'`,
+      );
+      let response = await decide(uid, UNREADABLE, { authorization: session });
+      assert.strictEqual(response.status, 404);
+      assert.deepEqual(response.body, { error: 'expired' });
+      assert.strictEqual(await errorReferenceCount(), 0);
     });
 
     test('the ticket lives a minute, and never past its interaction', async function (assert) {
@@ -728,6 +899,105 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  module('closing a flow', function () {
+    const RECORD: ConsentDecisionRecord = {
+      user: '@closing-flow:localhost',
+      allowed: true,
+      renew: false,
+      clientId: 'closing-flow-client',
+      scopes: { [MCP]: ['boxel:read'] },
+    };
+    const ERROR: AuthorizationErrorRecord = {
+      error: 'server_error',
+      reason: 'unreadable-decision',
+    };
+    const LIFETIMES = { decisionExpiresIn: 600, ticketExpiresIn: 60 };
+
+    function flowId() {
+      return randomBytes(16).toString('base64url');
+    }
+
+    test('an ended flow can never be decided, and ends once', async function (assert) {
+      let uid = flowId();
+      assert.ok(
+        await endUndecidedFlow(db, uid, 600, ERROR),
+        'an undecided flow ends, answering its error reference',
+      );
+      assert.strictEqual(
+        await decideFlow(db, uid, RECORD, LIFETIMES),
+        undefined,
+        'no decision is recorded after it',
+      );
+      assert.strictEqual(await findConsentDecision(db, uid), undefined);
+      assert.strictEqual(await takeConsentDecision(db, uid), undefined);
+      assert.true(await isFlowDecided(db, uid), 'it shows no consent');
+      assert.strictEqual(
+        await endUndecidedFlow(db, uid, 600, ERROR),
+        undefined,
+        'it ends once',
+      );
+      assert.strictEqual(await errorReferenceCount(), 1, 'with one error');
+    });
+
+    test('a decided, finishing or cancelled flow is never ended', async function (assert) {
+      let decided = flowId();
+      assert.ok(await decideFlow(db, decided, RECORD, LIFETIMES));
+      assert.strictEqual(
+        await endUndecidedFlow(db, decided, 600, ERROR),
+        undefined,
+        'a decided flow is left to the window that decided it',
+      );
+      assert.deepEqual(
+        await findConsentDecision(db, decided),
+        RECORD,
+        'whose decision stands',
+      );
+
+      let finishing = flowId();
+      await decideFlow(db, finishing, RECORD, LIFETIMES);
+      let taken = await takeConsentDecision(db, finishing);
+      assert.strictEqual(
+        taken?.clientId,
+        RECORD.clientId,
+        'the finish takes it',
+      );
+      assert.strictEqual(
+        await endUndecidedFlow(db, finishing, 600, ERROR),
+        undefined,
+        'a flow whose decision was taken is never ended',
+      );
+      assert.strictEqual(
+        await takeConsentDecision(db, finishing),
+        undefined,
+        'a decision is taken once',
+      );
+      assert.strictEqual(
+        await decideFlow(db, finishing, RECORD, LIFETIMES),
+        undefined,
+        'and the flow is never decided again',
+      );
+      assert.true(await isFlowDecided(db, finishing), 'it shows no consent');
+
+      let cancelled = flowId();
+      await cancelConsentDecision(db, cancelled, 600);
+      assert.strictEqual(
+        await endUndecidedFlow(db, cancelled, 600, ERROR),
+        undefined,
+        'a cancelled flow is never ended',
+      );
+      assert.strictEqual(
+        await decideFlow(db, cancelled, RECORD, LIFETIMES),
+        undefined,
+        'nor decided',
+      );
+      assert.strictEqual(
+        await errorReferenceCount(),
+        0,
+        'and no error is stored',
+      );
+    });
+  });
+
   module('secrets', function () {
     test('no ticket or interaction ID is stored readable, logged or sent to Sentry', async function (assert) {
       let user = await matrixAccount({ email: 'consent-secret@example.test' });
@@ -780,6 +1050,35 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.false(stored.includes(uid), 'no row holds the interaction ID');
       assert.false(stored.includes(ticket), 'no row holds the ticket');
+    });
+
+    test("an ended flow's error reference is not stored readable, logged or sent to Sentry", async function (assert) {
+      let session = await secureSessionAuth(db, await matrixAccount());
+      let clientId = await register();
+      let uid = '';
+      let reference = '';
+      let telemetry = await telemetryDuring(async () => {
+        uid = await startFlow(clientId);
+        reference = (await decide(uid, UNREADABLE, { authorization: session }))
+          .body.reference;
+      });
+      assert.true(
+        telemetry.logs.includes(
+          `consent refused: unreadable decision, flow ended: client ${clientId}`,
+        ),
+        'the ended flow is logged, naming its client',
+      );
+      assertNoSecrets(assert, telemetry, {
+        'interaction ID': uid,
+        'error reference': reference,
+      });
+      let stored = await rawObjects();
+      assert.true(
+        stored.includes('ErrorReference'),
+        'precondition: the error is stored',
+      );
+      assert.false(stored.includes(uid), 'no row holds the interaction ID');
+      assert.false(stored.includes(reference), 'no row holds the reference');
     });
   });
 });

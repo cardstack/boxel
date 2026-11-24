@@ -28,7 +28,8 @@ import {
 import {
   CONSENT_TICKET_TTL_SECONDS,
   decideFlow,
-  findConsentDecision,
+  endUndecidedFlow,
+  isFlowDecided,
 } from './objects.ts';
 import {
   CONFIRMATION_CODE,
@@ -90,6 +91,8 @@ export interface ConsentDecisionRequest {
 interface Flow {
   client: LibraryClient;
   redirectUri: string | undefined;
+  // The client's `state`, which an error the flow ends with returns to it.
+  state: string | undefined;
   resources: { resource: OAuthResource; scopes: OAuthScope[] }[];
   confirmationCode: string | undefined;
   // Seconds until the interaction expires.
@@ -119,7 +122,7 @@ export function consentDetailsHandler(deps: ConsentDeps): Koa.Middleware {
       return respond(ctxt, 404, { error: FIXED_ERROR_PAGES.expired });
     }
     // A decided flow shows no consent: the page says it was answered.
-    if (await findConsentDecision(deps.dbAdapter, ctxt.params.uid)) {
+    if (await isFlowDecided(deps.dbAdapter, ctxt.params.uid)) {
       return respond(ctxt, 409, { error: 'decided' });
     }
     let account: AccountContact;
@@ -166,19 +169,28 @@ export function consentDetailsHandler(deps: ConsentDeps): Koa.Middleware {
 // leaves the flow open to decide again. The same user sending the same
 // decision again gets a new ticket (`decideFlow`); any other decision is
 // refused with 409 `decided`.
+//
+// An answer that can't be read ends the flow, since the page sent it and
+// would send it again: the app is owed an error, not a wait until its own
+// timeout. The flow can't finish after that, and the answer, 400
+// `bad-request`, carries the reference of an error the authorize page's error
+// page shows, whose "Return" sends the app `server_error` (ADR 021 §1.8). A
+// flow that already has a decision, or was finished or cancelled, isn't
+// ended, and answers 409 `decided`: the window that decided it may still be
+// finishing the flow.
 export function consentDecisionHandler(deps: ConsentDeps): Koa.Middleware {
   return async function handleConsentDecision(ctxt) {
     let user = await secureWindowUser(ctxt, deps);
     if (!user) {
       return;
     }
-    let request = await readDecision(ctxt);
-    if (!request) {
-      return respond(ctxt, 400, { error: 'bad-request' });
-    }
     let flow = await findFlow(deps, ctxt.params.uid);
     if (!flow) {
       return respond(ctxt, 404, { error: FIXED_ERROR_PAGES.expired });
+    }
+    let request = await readDecision(ctxt);
+    if (!request) {
+      return endUnreadable(ctxt, deps, flow);
     }
     let allowed = request.decision === 'allow';
     let renew = allowed && request.renew && renewalOffered(flow.client);
@@ -216,6 +228,37 @@ export function consentDecisionHandler(deps: ConsentDeps): Koa.Middleware {
     );
     respond(ctxt, 201, { ticket });
   };
+}
+
+// Ends a flow whose answer couldn't be read, and answers the reference of the
+// error the authorize page shows for it.
+async function endUnreadable(ctxt: Koa.Context, deps: ConsentDeps, flow: Flow) {
+  let reference = await endUndecidedFlow(
+    deps.dbAdapter,
+    ctxt.params.uid,
+    flow.remainingSeconds,
+    {
+      error: 'server_error',
+      reason: 'unreadable-decision',
+      clientId: flow.client.clientId,
+      ...(flow.redirectUri !== undefined
+        ? {
+            redirectUri: flow.redirectUri,
+            ...(flow.state !== undefined ? { state: flow.state } : {}),
+          }
+        : {}),
+    },
+  );
+  if (!reference) {
+    return respond(ctxt, 409, { error: 'decided' });
+  }
+  log.info(
+    `consent refused: unreadable decision, flow ended: ${describe(
+      flow,
+      nameOf(flow, deps.preRegistered),
+    )}`,
+  );
+  respond(ctxt, 400, { error: 'bad-request', reference });
 }
 
 // The flow an interaction ID names, while it can still be decided. Its
@@ -265,6 +308,7 @@ async function findFlow(
     client,
     redirectUri:
       typeof params.redirect_uri === 'string' ? params.redirect_uri : undefined,
+    state: typeof params.state === 'string' ? params.state : undefined,
     resources,
     // Checked when the flow started, and checked again here, so the page
     // only ever shows a value of the code's form.
