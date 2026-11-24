@@ -244,6 +244,15 @@ export type QueryOptions = WIPOptions & {
   // it and the searches nested in it made (sqlite-approximations.ts), which
   // the outermost answer reports in `meta.warnings`.
   approximations?: { code: string; message: string }[];
+  // On SQLite, the bounds facets are counted within (sqlite-facets.ts), for
+  // a test to set: the rows read, the rows per chunk, the time budget and
+  // the clock it is read by (milliseconds).
+  sqliteFacetLimits?: {
+    rows?: number;
+    chunk?: number;
+    budgetMs?: number;
+    clock?: () => number;
+  };
   // For a query with a `let` binding read from a log (`isLogBinding`): what
   // the caller may read of each log, for a caller a realm policy scopes
   // (unset: every line), and how to read a log's file, so a log no index

@@ -85,6 +85,14 @@ import {
   type LogFileReader,
 } from './log-line-index.ts';
 import type { LogAccess } from './query-engine/types.ts';
+import {
+  answerLogLines,
+  logLineValues,
+  SQLITE_LOG_BYTES,
+  SQLITE_LOG_LINES,
+  type LineContext,
+  type LineWindow,
+} from './query-engine/sqlite-log-lines.ts';
 export type { LogAccess };
 
 // A refusal of a log query (`LogQueryError`, invalid-query-error.ts).
@@ -170,6 +178,8 @@ export interface LogQueryResult {
 // the size is clamped with a `page-size-clamped` warning.
 export const LOG_MAX_PAGE_SIZE = 1000;
 export const LOG_DEFAULT_PAGE_SIZE = 50;
+// The window a search on SQLite reads from the logs' files.
+export { SQLITE_LOG_BYTES, SQLITE_LOG_LINES };
 // the values a query binds, past which Postgres (65,535) would refuse it
 const LOG_MAX_BOUND_VALUES = 60_000;
 
@@ -658,6 +668,9 @@ export interface LogQueryOptions {
   // The snapshot of an enclosing search, when this one runs inside it.
   reader?: DBAdapter;
   signal?: AbortSignal;
+  // On SQLite, the window of lines a search reads from the logs' files
+  // (`SQLITE_LOG_LINES`, `SQLITE_LOG_BYTES` unless set).
+  sqliteLogWindow?: LineWindow;
 }
 
 // The logs a query reads, in file order, each with what the caller may read
@@ -721,6 +734,20 @@ async function logsUnder(
   realmURL: string,
   folder: string,
 ): Promise<string[]> {
+  // Without the log tables (SQLite) a folder's logs are its file rows.
+  if (!dialectFor(dbAdapter.kind).logs) {
+    let rows = (await runQuery(dbAdapter, [
+      'SELECT url FROM boxel_index WHERE realm_url =',
+      param(realmURL),
+      "AND type = 'file' AND (is_deleted = false OR is_deleted IS NULL)",
+      'AND substr(url, 1, length(',
+      param(folder),
+      ')) =',
+      param(folder),
+      "AND (url LIKE '%.jsonl' OR url LIKE '%.log')",
+    ] as Expression)) as { url: string }[];
+    return [...new Set(rows.map((r) => r.url).filter(isLogFileURL))];
+  }
   let rows = (await runQuery(dbAdapter, [
     'SELECT url FROM boxel_index WHERE realm_url =',
     param(realmURL),
@@ -827,6 +854,12 @@ function logWhere(
   ];
 }
 
+// What the SQLite line evaluator reads beyond a line, as `logWhere` compiles
+// it for Postgres.
+function lineContext(realmURL: string, now: Date): LineContext {
+  return { now, fileURL: fileURLIn(realmURL), time: resolveLogTime };
+}
+
 // A `file` value as the URL a row's `file` holds, as `from` names a log.
 function fileURLIn(realmURL: string): (value: Json) => string {
   let realm = new URL(realmURL);
@@ -854,14 +887,6 @@ async function asLogRefusal<T>(run: () => Promise<T>): Promise<T> {
 
 // ---- answering --------------------------------------------------------
 
-// What a log query, or a `let` over a log, answers on SQLite, which keeps no
-// log tables: no lines, said so (docs/search.md, "On SQLite").
-export const SQLITE_LOG_NOT_READ = {
-  code: 'sqlite-log-not-read',
-  message:
-    'this index (SQLite) keeps no log tables, so no log lines were read: a log query has no rows, and a let over a log has no values',
-};
-
 export function runLogQuery(
   dbAdapter: DBAdapter,
   realmURL: string,
@@ -880,16 +905,7 @@ async function logQuery(
   // One clock reading for the whole query and any it encloses.
   let now = opts.now ?? new Date();
   validateLogQuery(q, now);
-  // Without the log tables (SQLite) a valid log query answers with no lines.
-  if (!dialectFor(dbAdapter.kind).logs) {
-    return {
-      data: [],
-      meta: {
-        page: { total: 0, hasMore: false },
-        warnings: [SQLITE_LOG_NOT_READ],
-      },
-    };
-  }
+  let dialect = dialectFor(dbAdapter.kind);
   // The zone, resolved as a card query resolves it: the query's own, the
   // caller's, the enclosing query's clock's, the realm's default, UTC.
   let zone =
@@ -900,7 +916,7 @@ async function logQuery(
       : undefined) ??
     (await opts.realmTimeZone?.()) ??
     DEFAULT_TIME_ZONE;
-  if (!isUtcZone(zone)) {
+  if (!isUtcZone(zone) && dialect.timeZoneNames) {
     await assertPostgresKnowsTimeZone(zone, (sql, bind) =>
       dbAdapter.execute(sql, { bind: bind as any }),
     );
@@ -919,6 +935,25 @@ async function logQuery(
   }
   let number = Number(q.page?.number ?? 0);
 
+  // Without the log tables (SQLite) the logs' files are read and the query
+  // answered over their lines (query-engine/sqlite-log-lines.ts).
+  if (!dialect.logs) {
+    let source = await resolveSource(dbAdapter, realmURL, q.from, opts);
+    let result = await answerLogLines(
+      q,
+      source.files,
+      source.many,
+      opts.readLogFile,
+      {
+        size,
+        number,
+        ctx: lineContext(realmURL, now),
+        zone,
+        window: opts.sqliteLogWindow,
+      },
+    );
+    return withSourceMeta(q, source, zone, warnings, result);
+  }
   // The realm's own partition, made by its first query if no append has.
   if (!opts.reader) await ensureLogPartition(dbAdapter, realmURL);
   let source = await resolveSource(dbAdapter, realmURL, q.from, opts);
@@ -951,6 +986,18 @@ async function logQuery(
           answer,
           opts.signal ? { signal: opts.signal } : undefined,
         );
+  return withSourceMeta(q, source, zone, warnings, result);
+}
+
+// The answer's meta with what the query read: its log or logs, the logs a
+// policy scoped, the zone, and its warnings.
+function withSourceMeta(
+  q: LogQuery,
+  source: ResolvedSource,
+  zone: string,
+  warnings: LogQueryWarning[],
+  result: LogQueryResult,
+): LogQueryResult {
   let policyScoped = source.files.filter((f) => f.actor).map((f) => f.url);
   warnings.push(...(result.meta.warnings ?? []));
   result.meta = {
@@ -1136,7 +1183,7 @@ export async function logBindingValues(
   select: string,
   cap: number,
   opts: LogQueryOptions = {},
-): Promise<{ values: Json[]; truncated?: true; notRead?: true }> {
+): Promise<{ values: Json[]; truncated?: true; window?: LogQueryWarning }> {
   return asLogRefusal(async () => {
     let now = opts.now ?? new Date();
     let { filter, ...sourceOnly } = from;
@@ -1146,9 +1193,19 @@ export async function logBindingValues(
       select: [select],
     };
     validateLogQuery(q, now);
-    // Without the log tables (SQLite) a valid binding reads no values.
+    // Without the log tables (SQLite) the logs' files are read
+    // (query-engine/sqlite-log-lines.ts).
     if (!dialectFor(dbAdapter.kind).logs) {
-      return { values: [], notRead: true };
+      let source = await resolveSource(dbAdapter, realmURL, q.from, opts);
+      return await logLineValues(
+        source.files,
+        opts.readLogFile,
+        filter,
+        select,
+        cap,
+        lineContext(realmURL, now),
+        opts.sqliteLogWindow,
+      );
     }
     let reader = opts.reader ?? dbAdapter;
     let source = await resolveSource(reader, realmURL, q.from, opts);
