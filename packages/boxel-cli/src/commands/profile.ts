@@ -8,7 +8,11 @@ import {
   signInKind,
 } from '../lib/profile-manager.ts';
 import { matrixLogout } from '../lib/auth.ts';
-import { ensurePersonalRealm } from '../lib/personal-realm.ts';
+import {
+  ensurePersonalRealm,
+  ensurePersonalRealmWithOAuth,
+  type EnsurePersonalRealmResult,
+} from '../lib/personal-realm.ts';
 import { prompt, promptPassword } from '../lib/prompt.ts';
 import { SsoTimeoutError, browserLogin } from '../lib/sso-login.ts';
 import {
@@ -511,6 +515,7 @@ export interface AddProfileDeps {
   oauthLogin?: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
   revokeConnection?: typeof revokeConnection;
   matrixLogout?: typeof matrixLogout;
+  ensurePersonalRealmWithOAuth?: typeof ensurePersonalRealmWithOAuth;
 }
 
 interface AddProfileContext {
@@ -523,6 +528,7 @@ interface AddProfileContext {
   oauthLogin: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
   revokeConnection: typeof revokeConnection;
   matrixLogout: typeof matrixLogout;
+  ensurePersonalRealmWithOAuth: typeof ensurePersonalRealmWithOAuth;
 }
 
 function addProfileContext(deps: AddProfileDeps): AddProfileContext {
@@ -537,6 +543,8 @@ function addProfileContext(deps: AddProfileDeps): AddProfileContext {
     oauthLogin: deps.oauthLogin ?? oauthLogin,
     revokeConnection: deps.revokeConnection ?? revokeConnection,
     matrixLogout: deps.matrixLogout ?? matrixLogout,
+    ensurePersonalRealmWithOAuth:
+      deps.ensurePersonalRealmWithOAuth ?? ensurePersonalRealmWithOAuth,
   };
 }
 
@@ -698,8 +706,23 @@ async function addProfileViaBrowser(
   // (a first sign-in on the secure origin already made one), and a failure
   // only warns: the profile works without it, and signing in to the web app
   // offers workspace creation.
+  await reportPersonalRealm(
+    ctx.ensurePersonalRealm(matrixAuth, realmServerUrl),
+    realmServerUrl,
+  );
+
+  return { status: 'added', matrixId: auth.userId };
+}
+
+// Reports the personal-workspace bootstrap, which only warns when it fails:
+// the profile works without one, and signing in to the web app offers
+// workspace creation.
+async function reportPersonalRealm(
+  bootstrap: Promise<EnsurePersonalRealmResult>,
+  realmServerUrl: string,
+): Promise<void> {
   try {
-    const result = await ctx.ensurePersonalRealm(matrixAuth, realmServerUrl);
+    const result = await bootstrap;
     if (result.outcome === 'created') {
       console.log(
         `${FG_GREEN}✓${RESET} Created your personal workspace: ${FG_CYAN}${result.realmUrl}${RESET}`,
@@ -719,8 +742,6 @@ async function addProfileViaBrowser(
       `${DIM}You can create one by signing in at ${realmServerUrl}${RESET}`,
     );
   }
-
-  return { status: 'added', matrixId: auth.userId };
 }
 
 async function addProfileViaPassword(
@@ -931,6 +952,17 @@ async function addProfileViaOAuth(
   }
 
   console.log(describeConnectionEnd(tokens));
+  await reportPersonalRealm(
+    ctx.ensurePersonalRealmWithOAuth(
+      {
+        accessToken: tokens.accessToken,
+        userId: user.userId,
+        displayName: user.displayName,
+      },
+      realmServerUrl,
+    ),
+    realmServerUrl,
+  );
   return { status: 'added', matrixId: user.userId };
 }
 

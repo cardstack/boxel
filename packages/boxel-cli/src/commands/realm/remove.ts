@@ -155,7 +155,11 @@ export async function removeRealm(
 
   let unlinked: boolean;
   try {
-    unlinked = await pm.removeFromUserRealms(realmUrl);
+    // On an OAuth profile the realm server removed the realm from the
+    // workspace list as part of the delete, or refused the delete.
+    unlinked = pm.serverKeepsWorkspaceList()
+      ? true
+      : await pm.removeFromUserRealms(realmUrl);
   } catch (err) {
     return {
       realmUrl,

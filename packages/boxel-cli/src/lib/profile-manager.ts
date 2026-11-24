@@ -15,6 +15,7 @@ import {
   type MatrixAuth,
 } from './auth.ts';
 import { withFileLock } from './file-lock.ts';
+import { readWorkspaceListResponse } from './personal-realm.ts';
 import {
   boxelApiResource,
   OAuthConnectionEndedError,
@@ -1050,6 +1051,9 @@ export class ProfileManager implements RealmAuthenticator {
   // bootstrap realm's token is keyed by its `https://cardstack.com/<name>/`
   // id and served at `<realm server>/<name>/`, which is what this answers.
   async realmUrlFor(url: string): Promise<string | undefined> {
+    if (this.getActiveProfile()?.profile.oauth) {
+      return this.oauthRealmUrlFor(url);
+    }
     let find = () => {
       let active = this.getActiveProfile();
       if (!active) {
@@ -1081,6 +1085,45 @@ export class ProfileManager implements RealmAuthenticator {
 
   // A realm's own token. An OAuth profile has none: its access token reaches
   // every realm itself.
+  // An OAuth profile has no per-realm tokens to find a realm by. The realm
+  // is the longest one in its workspace list that `url` starts with; failing
+  // that, the longest path prefix of `url` that answers as a realm
+  // (`<prefix>_info`), which finds realms shared with the user too.
+  private async oauthRealmUrlFor(url: string): Promise<string | undefined> {
+    let target: URL;
+    try {
+      target = new URL(url);
+    } catch {
+      return undefined;
+    }
+    try {
+      let listed = (await this.getUserRealms())
+        .map((realm) => (realm.endsWith('/') ? realm : `${realm}/`))
+        .filter((realm) => target.href.startsWith(realm))
+        .sort((a, b) => b.length - a.length)[0];
+      if (listed) {
+        return listed;
+      }
+    } catch {
+      // The list couldn't be read; the realms themselves can still answer.
+    }
+    let segments = target.pathname.split('/').filter(Boolean);
+    for (let depth = segments.length; depth > 0; depth--) {
+      let prefix = `${target.origin}/${segments.slice(0, depth).join('/')}/`;
+      try {
+        let response = await this.authedRealmFetch(`${prefix}_info`, {
+          headers: { Accept: 'application/vnd.api+json' },
+        });
+        if (response.ok) {
+          return prefix;
+        }
+      } catch {
+        // Not a realm, or unreachable: try a shorter prefix.
+      }
+    }
+    return undefined;
+  }
+
   async getRealmTokenForUrl(url: string): Promise<string | undefined> {
     if (this.getActiveProfile()?.profile.oauth) {
       return undefined;
@@ -1225,22 +1268,53 @@ export class ProfileManager implements RealmAuthenticator {
     }
   }
 
+  // The account's realm list (the workspaces the app shows). A Matrix
+  // profile edits it in the user's Matrix account data. For an OAuth profile
+  // the realm server keeps it: creating and deleting a realm with an OAuth
+  // token adds it to the list and removes it, so there is nothing for the
+  // CLI to edit, and these two refuse.
   async addToUserRealms(realmUrl: string): Promise<void> {
+    this.refuseListEditOnOAuth();
     await this.withMatrixAuthRecovery((auth) =>
       addRealmToMatrixAccountData(auth, realmUrl),
     );
   }
 
   async removeFromUserRealms(realmUrl: string): Promise<boolean> {
+    this.refuseListEditOnOAuth();
     return this.withMatrixAuthRecovery((auth) =>
       removeRealmFromMatrixAccountData(auth, realmUrl),
     );
   }
 
+  private refuseListEditOnOAuth(): void {
+    let active = this.getActiveProfile();
+    if (active?.profile.oauth) {
+      throw new Error(
+        `Profile "${active.id}" is signed in with OAuth: the realm server keeps its workspace list as realms are created and deleted.`,
+      );
+    }
+  }
+
   async getUserRealms(): Promise<string[]> {
+    let active = this.getActiveProfile();
+    if (active?.profile.oauth) {
+      return readWorkspaceListResponse(
+        await this.authedRealmServerFetch(
+          `${active.profile.realmServerUrl.replace(/\/$/, '')}/_user-realms`,
+          { headers: { Accept: 'application/vnd.api+json' } },
+        ),
+      );
+    }
     return this.withMatrixAuthRecovery((auth) =>
       getUserRealmsFromMatrixAccountData(auth),
     );
+  }
+
+  // Whether the active profile's sign-in leaves its workspace list to the
+  // realm server (see `addToUserRealms`).
+  serverKeepsWorkspaceList(): boolean {
+    return Boolean(this.getActiveProfile()?.profile.oauth);
   }
 
   async migrateFromEnv(): Promise<{

@@ -78,6 +78,9 @@ function deps({
       revokeConnection: vi.fn(async () => true),
       secureSignOut: vi.fn(async () => {}),
       matrixLogout: vi.fn(async () => {}),
+      ensurePersonalRealmWithOAuth: vi.fn(async () => ({
+        outcome: 'has-realms' as const,
+      })),
       browserLogin: vi.fn(async () => matrixAuth('browser-token')),
       secureOriginForProfiles: vi.fn(async () => undefined),
       ensurePersonalRealm: vi.fn(async () => ({
@@ -144,6 +147,29 @@ describe('boxel profile add --oauth', () => {
     let onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
     expect(onDisk.profiles[matrixId].matrixAccessToken).toBeUndefined();
     expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+  });
+
+  it('sets up a personal workspace with the new access token when the account has none', async () => {
+    let { deps: d } = deps({ tty: false });
+    d.ensurePersonalRealmWithOAuth.mockResolvedValueOnce({
+      outcome: 'created',
+      realmUrl: 'https://realms.example.test/example-user/personal/',
+    } as never);
+    let log = vi.spyOn(console, 'log');
+
+    await addOAuthProfile(manager, environment, d);
+
+    expect(d.ensurePersonalRealmWithOAuth).toHaveBeenCalledWith(
+      {
+        accessToken: 'access-token-placeholder',
+        userId: matrixId,
+        displayName: 'Example User',
+      },
+      environment.realmServerUrl,
+    );
+    expect(log.mock.calls.flat().join('\n')).toContain(
+      'Created your personal workspace',
+    );
   });
 
   it('asks nothing without a TTY', async () => {

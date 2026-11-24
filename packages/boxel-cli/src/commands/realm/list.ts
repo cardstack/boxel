@@ -65,44 +65,41 @@ export async function listRealms(
   }
 
   let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
-  let response = await pm.authedRealmServerFetch(
-    `${realmServerUrl}/_realm-auth?include-public=true`,
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-    },
-  );
-  if (!response.ok) {
-    let text = await response.text();
-    return {
-      realms: [],
-      error: `Realm auth lookup failed: ${response.status} ${text}`,
-    };
+  let summaries: RealmSummary[];
+  // The workspace list: a realm outside it is hidden.
+  let userRealmsSet: Set<string>;
+  if (pm.serverKeepsWorkspaceList()) {
+    // An OAuth profile sees only its workspace list: the realms it can reach
+    // beyond that come from minting a token for each, which an OAuth token
+    // can't do.
+    if (options.allAccessible || options.hidden) {
+      return { realms: [], error: OAUTH_LISTS_WORKSPACES_ONLY };
+    }
+    let userRealms: string[];
+    try {
+      userRealms = await pm.getUserRealms();
+    } catch (err) {
+      return {
+        realms: [],
+        error: `Failed to load UI realm list: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      };
+    }
+    userRealmsSet = new Set(userRealms.map(ensureTrailingSlash));
+    summaries = [...userRealmsSet].map((url) => ({
+      url,
+      hidden: false,
+      archived: false,
+    }));
+  } else {
+    let accessible = await listAccessibleRealms(pm, realmServerUrl);
+    if ('error' in accessible) {
+      return { realms: [], error: accessible.error };
+    }
+    summaries = accessible.summaries;
+    userRealmsSet = accessible.userRealmsSet;
   }
-  let tokens = (await response.json()) as Record<string, string>;
-  let accessibleUrls = Object.keys(tokens).map(ensureTrailingSlash);
-
-  let userRealms: string[];
-  try {
-    userRealms = await pm.getUserRealms();
-  } catch (err) {
-    return {
-      realms: [],
-      error: `Failed to load UI realm list: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    };
-  }
-  let userRealmsSet = new Set(userRealms.map(ensureTrailingSlash));
-
-  let summaries: RealmSummary[] = accessibleUrls.map((url) => ({
-    url,
-    hidden: !userRealmsSet.has(url),
-    archived: false,
-  }));
 
   if (options.allAccessible) {
     // no filter
@@ -203,4 +200,56 @@ export function registerListCommand(realm: Command): void {
         console.log(`  ${FG_CYAN}${r.url}${RESET}${tag}`);
       }
     });
+}
+
+const OAUTH_LISTS_WORKSPACES_ONLY =
+  'This profile is signed in with OAuth, so it lists only your workspaces: --hidden and --all-accessible need a profile signed in with Matrix.';
+
+// Every realm the profile can reach, from the tokens `_realm-auth` mints for
+// them, marked hidden where the workspace list doesn't name it.
+async function listAccessibleRealms(
+  pm: ProfileManager,
+  realmServerUrl: string,
+): Promise<
+  { summaries: RealmSummary[]; userRealmsSet: Set<string> } | { error: string }
+> {
+  let response = await pm.authedRealmServerFetch(
+    `${realmServerUrl}/_realm-auth?include-public=true`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+    },
+  );
+  if (!response.ok) {
+    let text = await response.text();
+    return {
+      error: `Realm auth lookup failed: ${response.status} ${text}`,
+    };
+  }
+  let tokens = (await response.json()) as Record<string, string>;
+  let accessibleUrls = Object.keys(tokens).map(ensureTrailingSlash);
+
+  let userRealms: string[];
+  try {
+    userRealms = await pm.getUserRealms();
+  } catch (err) {
+    return {
+      error: `Failed to load UI realm list: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
+  let userRealmsSet = new Set(userRealms.map(ensureTrailingSlash));
+
+  return {
+    summaries: accessibleUrls.map((url) => ({
+      url,
+      hidden: !userRealmsSet.has(url),
+      archived: false,
+    })),
+    userRealmsSet,
+  };
 }
