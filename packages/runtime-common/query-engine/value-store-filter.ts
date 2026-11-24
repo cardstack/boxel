@@ -31,7 +31,10 @@ const BOUNDS: Record<string, string> = {
   lte: '<=',
 };
 
-export function storedRangeCandidates(
+// The ids of the cards a positive range admits, among the realm's store:
+// a number in range at the path, a marker at or above the path, or text
+// there (which the test reads as a number when it spells one).
+function storedRangeCardIds(
   realm: string,
   path: string,
   range: Record<string, unknown>,
@@ -67,7 +70,6 @@ export function storedRangeCandidates(
     bounds.push(`AND v.num ${BOUNDS[op]}`, param(v as number), '::numeric');
   }
   return [
-    'i.url = ANY (ARRAY(SELECT (c.url COLLATE "default")::varchar FROM boxel_index_value_cards AS c WHERE c.id IN (',
     'SELECT v.card_id FROM boxel_index_values AS v WHERE',
     ...atPath('v'),
     ...bounds,
@@ -78,8 +80,57 @@ export function storedRangeCandidates(
     ")) AND m.kind = 'm'",
     'UNION SELECT s.card_id FROM boxel_index_values AS s WHERE',
     ...atPath('s'),
-    "AND s.txt IS NOT NULL AND s.kind = 's')))",
+    "AND s.txt IS NOT NULL AND s.kind = 's'",
   ];
+}
+
+// The rows whose url is one of `ids`' cards: the card ids as one array, so
+// each is read by key from the card dictionary rather than the dictionary
+// read whole for a join, and the urls as one array, which the index reads
+// by key.
+function urlAmong(ids: Expression): Expression {
+  return [
+    'i.url = ANY (ARRAY(SELECT (c.url COLLATE "default")::varchar FROM boxel_index_value_cards AS c WHERE c.id = ANY (ARRAY(',
+    ...ids,
+    '))))',
+  ];
+}
+
+export function storedRangeCandidates(
+  realm: string,
+  path: string,
+  range: Record<string, unknown>,
+): Expression | undefined {
+  let ids = storedRangeCardIds(realm, path, range);
+  return ids ? urlAmong(ids) : undefined;
+}
+
+// The candidates of several ranges that are conjuncts of one filter: the
+// cards every one of them admits, their store sets intersected in SQL, as
+// one array on url. One array per range put two `url = ANY` on the index
+// scan, which Postgres 16's btree does not intersect: case 8's two ranges
+// (1,642 and 4,343 urls) took 147 ms in that scan for 585 rows, against
+// 25 ms with the one intersected array.
+export function storedRangesCandidates(
+  ranges: {
+    realm: string;
+    path: string;
+    range: Record<string, unknown>;
+  }[],
+): Expression | undefined {
+  let sets = ranges.map((r) => storedRangeCardIds(r.realm, r.path, r.range));
+  if (sets.length === 0 || sets.some((ids) => !ids)) {
+    return undefined;
+  }
+  return urlAmong(
+    sets.flatMap(
+      (ids, n): Expression => [
+        ...(n > 0 ? [') INTERSECT ('] : ['(']),
+        ...ids!,
+        ...(n === sets.length - 1 ? [')'] : []),
+      ],
+    ),
+  );
 }
 
 // The number of live cards of one realm whose type chain names one of

@@ -483,18 +483,35 @@ export abstract class SortWindow extends BlendSort {
       .join(', ');
     let by = rerank.compare?.by;
     let group = by ? `, ANY_VALUE(${hot(by)} #>> ${path(by)}) AS g` : '';
-    let { results, meta: setMeta } = await this._search(
-      realmURL,
-      {
-        filter: rerank.compare?.filter ?? query.filter,
-        let: query.let,
-        // Exact: a set cut at its row limit says so by its total.
-        page: { number: 0, size: compareRowLimit(), total: 'exact' },
-      },
-      { ...opts, cardUrls: undefined },
-      [`SELECT i.url AS url, ${columns}${group}`],
-      entryType,
-    );
+    let setFilter = rerank.compare?.filter ?? query.filter;
+    // The set of a whole card type read from the value store, when it can
+    // be (store-compare.ts); else the general read.
+    let set =
+      !query.let || Object.keys(query.let).length === 0
+        ? await this.comparisonSetFromStore({
+            realmURL,
+            filter: setFilter,
+            fields,
+            by,
+            limit: compareRowLimit(),
+            opts,
+            entryType,
+          })
+        : undefined;
+    let { results, meta: setMeta } = set
+      ? { results: set.rows, meta: { page: { total: set.total } } }
+      : await this._search(
+          realmURL,
+          {
+            filter: setFilter,
+            let: query.let,
+            // Exact: a set cut at its row limit says so by its total.
+            page: { number: 0, size: compareRowLimit(), total: 'exact' },
+          },
+          { ...opts, cardUrls: undefined },
+          [`SELECT i.url AS url, ${columns}${group}`],
+          entryType,
+        );
     let setTotal = Number(setMeta.page?.total ?? results.length);
     // one row per card of the set, keyed by its group; a field holds its
     // number, or its text (a `peers.` list keeps both, `stats.` count
@@ -526,6 +543,22 @@ export abstract class SortWindow extends BlendSort {
         ? { truncated: { rows: results.length, total: setTotal } }
         : {}),
     };
+  }
+
+  // A comparison set read from the value store: its rows (each with `url`,
+  // `c<i>`, `t<i>` and `g` as the general read selects them) in the general
+  // read's order, and its total; undefined when the store cannot answer it
+  // (store-blend.ts).
+  protected async comparisonSetFromStore(_args: {
+    realmURL: URL;
+    filter: Filter | undefined;
+    fields: string[];
+    by: string | undefined;
+    limit: number;
+    opts: QueryOptions;
+    entryType: 'instance' | 'file' | 'all';
+  }): Promise<{ rows: Record<string, unknown>[]; total: number } | undefined> {
+    return undefined;
   }
 
   // An expression (a sort's or a rerank's) is checked before it runs: a

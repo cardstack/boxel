@@ -152,6 +152,7 @@ export abstract class FilterCompiler extends ExpressionResolver {
       };
     },
     inAny: ({ on, context }) => ({ on, context: { ...context, inAny: true } }),
+    inNot: ({ on, context }) => ({ on, context: { ...context, inNot: true } }),
     eq: ({ on, context }, path, value, polarity) =>
       this.fieldEqFilter(path, value, on, polarity, context),
     in: ({ on, context }, path, values, polarity) =>
@@ -169,6 +170,16 @@ export abstract class FilterCompiler extends ExpressionResolver {
         ...(polarity ? { polarity } : {}),
         ...(context.valueStoreRealm && !context.perRow
           ? { valueStoreRealm: context.valueStoreRealm }
+          : {}),
+        // Outside any `any` and any `not`, a test is a conjunct of the
+        // whole filter: a row the filter admits passes it. (Under two
+        // `not`s a test is positive again, but a `not` of a conjunction is
+        // a disjunction, so it is no conjunct.)
+        ...(context.storeBound &&
+        !context.inAny &&
+        !context.inNot &&
+        !context.perRow
+          ? { storeBound: context.storeBound }
           : {}),
       }),
     missing: ({ on }, path) => this.#test(on, path, 'missing'),
