@@ -9,6 +9,7 @@
 // Guarantees: docs/search.md ("How a query is evaluated").
 
 import { refuse } from '../query-v2/query-refusals.ts';
+import { mentionsPaths } from './paths-guard.ts';
 import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
 import {
   type CardExpression,
@@ -711,7 +712,10 @@ export abstract class SearchPipeline extends StoreBlend {
           (entryType === 'all' &&
             filter !== undefined &&
             (await this.#readsOnlyCards(filter)))) &&
-        !opts.includeErrors
+        !opts.includeErrors &&
+        // a path filter or a path-narrowed grant stays on the general read
+        !mentionsPaths(filter) &&
+        !mentionsPaths(opts.grantFilter)
           ? realmURL.href
           : undefined;
       let filterContext: FilterContext = {

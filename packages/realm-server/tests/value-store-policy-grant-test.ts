@@ -408,6 +408,37 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('not recognized: a grant narrowed by realm path, in any position', function (assert) {
+    let grantFilterOf = (granted: Filter) =>
+      scoped({ type: product, page: { size: 0 } }, [scope(granted)])
+        .grantFilter;
+    assert.ok(
+      storeGrantOf(grantFilterOf(unconditional(productRef))),
+      'the same grant without paths is carried',
+    );
+    assert.strictEqual(
+      storeGrantOf(
+        grantFilterOf({
+          every: [unconditional(productRef), { paths: ['blog/'] }],
+        } as Filter),
+      ),
+      undefined,
+      'a path-narrowed grant keeps the general read',
+    );
+    assert.strictEqual(
+      storeGrantOf(
+        grantFilterOf({
+          any: [
+            unconditional(productRef),
+            { every: [unconditional(baseCardRef), { paths: ['a.json'] }] },
+          ],
+        } as Filter),
+      ),
+      undefined,
+      'one path-narrowed grant among several keeps the general read',
+    );
+  });
+
   test('not recognized: a grant that reads a card field, and every other shape', function (assert) {
     let base = scoped({ type: product, page: { size: 0 } }, [
       scope(unconditional(productRef)),
