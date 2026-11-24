@@ -19,6 +19,7 @@ import {
 } from '@cardstack/runtime-common/card-operations';
 import type { PublishedFrom } from '../published-realm.ts';
 import { automationAdmission, fillSlots } from '../key-bindings.ts';
+import { checkAutomationKeyApprovals } from '../automation-key-approvals.ts';
 import {
   clearGrantRejection,
   credentialRejected,
@@ -135,6 +136,11 @@ export function createCallApiSender(
       : {
           admitAutomation: (args) =>
             automationAdmission(dbAdapter, { ...args, probeIntervalMs }),
+          checkAutomationKeyApprovals: (args) =>
+            checkAutomationKeyApprovals(dbAdapter, {
+              ...args,
+              probeIntervalMs,
+            }),
         }),
     send: async (request, credentials, options) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {

@@ -5,11 +5,19 @@ import {
   type Querier,
 } from '@cardstack/runtime-common';
 import type { SecureSessionClient } from './secure-session.ts';
+import { waitForKeyApprovalOfBindingsIn } from './automation-key-approval-records.ts';
 
 // Revokes the bindings `where` selects: each is removed, and its history gains
 // a `revoked` row carrying the request as it was last approved, so the owner
 // can still read what was revoked once the binding itself is gone. Every row
 // one call writes shares a batch. Answers with the revoked bindings' ids.
+//
+// Removing a binding removes its automation approvals (ADR 039 §1.2), so
+// each automation one of them served that is active, *done* or waiting for
+// credits moves to *waiting for key approval* in the same transaction, with
+// no next run. A run of it already enqueued is refused at admission
+// (`waiting-for-key-approval`), and the automation runs again once its key's
+// owner approves it again.
 //
 // Kept apart from the bindings module because removing a grant and deleting a
 // key revoke bindings too, and the bindings module reads grants.
@@ -27,6 +35,10 @@ export async function revokeBindingsIn(
     via: SecureSessionClient | null;
   },
 ): Promise<string[]> {
+  await waitForKeyApprovalOfBindingsIn(txQuery, [
+    'SELECT id FROM key_bindings WHERE ',
+    ...where,
+  ]);
   let rows = await txQuery([
     `WITH gone AS (DELETE FROM key_bindings WHERE `,
     ...where,
