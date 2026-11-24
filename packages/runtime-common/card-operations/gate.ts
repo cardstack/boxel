@@ -12,6 +12,8 @@ import { extensionOfName } from '../file-def-code-ref.ts';
 import { baseFileRef } from '../constants.ts';
 import { isModuleSource, policyFileDefCodeRef } from '../policy-file-def.ts';
 import { routesForField } from '../searchable-routes.ts';
+import { isLogFileURL } from '../log-line-index.ts';
+import { isBaseLogTypeKey } from './log-line-policy.ts';
 import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
@@ -658,7 +660,28 @@ async function decide(
   // metadata `read`, an `appendLine` — is granted on nothing. A file is
   // created or removed only by a caller the realm ACL allows, since no
   // operation a file def carries does either.
-  if (subject.kind === 'file' && base !== 'readSource' && base !== 'update') {
+  //
+  // A log is the exception. Who wrote a line is the actor the realm stamped
+  // on it, which a grant can trust only while no caller may rewrite the
+  // log's bytes. So the one write a grant reaches on a log is the base log
+  // types' own `record`, which stamps the time and the actor where a caller
+  // cannot, and its raw bytes, which hold every caller's lines, are granted
+  // to no one: neither read nor replaced (`log-line-policy.ts`).
+  // A log is addressed as a file or, where its extension is not in the
+  // platform's file table, as a stored path the gate would read as a card's.
+  let logTarget =
+    (subject.kind === 'file' || subject.kind === 'card') &&
+    isLogFileURL(subject.url.href);
+  let logRecord = logTarget && stampsItsLine(name, definition);
+  if (logTarget) {
+    if (!logRecord) {
+      return refuse('non-grantable');
+    }
+  } else if (
+    subject.kind === 'file' &&
+    base !== 'readSource' &&
+    base !== 'update'
+  ) {
     return refuse('unmatchable-target');
   }
   // The realm's config card and the card its policy key names together
@@ -706,11 +729,13 @@ async function decide(
   if (target && (await core.isIgnored(pathsFor(core).fileURL(target.path)))) {
     return refuse('unmatchable-target');
   }
-  // Every other behavior is matched on its card's index row. A stored-bytes
-  // read, and a file's update, are typed from the bytes stored at the path
-  // instead, which costs a file read and a definition lookup.
+  // Every other behavior is matched on its card's index row, which is peeked
+  // before the policy loads. A stored-bytes read, and a file's update, are
+  // typed from the bytes stored at the path instead, which costs a file read
+  // and a definition lookup, so none of that is paid until a policy is known
+  // to be there. A log's `record` is typed from the log's bytes as well.
   let rowMatched: MatchedSubject | undefined;
-  if (base !== 'readSource' && subject.kind !== 'file') {
+  if (base !== 'readSource' && subject.kind !== 'file' && !logRecord) {
     let indexed = await indexedSubject(scope, subject);
     if (!indexed) {
       return refuse('unmatchable-target');
@@ -736,6 +761,11 @@ async function decide(
     return refuse('unmatchable-target');
   }
   let { types } = matchOn;
+  // Only the base log types' `record` stamps its line as this realm does: a
+  // type of the caller's choosing could declare one that doesn't.
+  if (logRecord && !isBaseLogTypeKey(types[0])) {
+    return refuse('non-grantable');
+  }
   notes?.typed(types[0]);
   let matched = await matchingGrants(
     policy,
@@ -840,10 +870,13 @@ async function decide(
   // A write's predicate is judged under the write lock against the card the
   // write changes, and a file's update changes no card: its bytes are not
   // fields a predicate reads. So only a grant with no `where` admits one.
-  if (isWrite(base) && matchOn.kind === 'file') {
+  if (isWrite(base) && matchOn.kind === 'file' && !logRecord) {
     return refuse('unmatchable-target');
   }
-  if (isWrite(base)) {
+  // A log's `record` never opens the log, so there is nothing for the
+  // write lock to judge it by later: its grant is judged here, as a read's
+  // is, against the log as it is stored now.
+  if (isWrite(base) && !logRecord) {
     return {
       kind: 'pending',
       grants: matched,
@@ -2916,4 +2949,16 @@ function loadBxlMutation(): Promise<BxlMutationModule> {
     (module) => module as BxlMutationModule,
   );
   return bxlMutation;
+}
+
+// Whether `name` is the `record` the base log types declare: an `appendLine`
+// whose input program composes the line, reading `actor()` to stamp who
+// wrote it, so the caller writes only what happened.
+function stampsItsLine(name: string, definition: OperationDefinition): boolean {
+  return (
+    name === 'record' &&
+    definition.base === 'appendLine' &&
+    definition.input !== undefined &&
+    definition.readsActor === true
+  );
 }

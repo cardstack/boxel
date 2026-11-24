@@ -558,6 +558,13 @@ export type PolicyIssueCode =
   // policy type is recorded too, since it would contribute a filter that
   // lists policy cards.
   | 'grants-authorization-infrastructure'
+  // A grant on base JSONLFile or LogFile of an operation other than `record`
+  // and `query`: `update`, `readSource`, `appendLine`, `delete`, or any
+  // other the type carries. Who wrote each of a log's lines is the actor the
+  // realm stamped on it, which means nothing if a caller may read or rewrite
+  // the log's bytes, so the gate refuses every such operation on a log
+  // whatever a compiled policy holds. The grant is left out.
+  | 'grants-log-bytes'
   // A `where` that does not parse, or that the `policy` profile refuses.
   | 'invalid-predicate'
   // A `where` that calls a builtin which can hold for a value it matches only
