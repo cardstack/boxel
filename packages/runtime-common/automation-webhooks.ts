@@ -154,8 +154,8 @@ export interface AutomationWebhooksDocument {
   meta: { directWriter: true; webhookDeliveriesStartRuns: boolean };
 }
 
-// The answer to any other caller the realm ACL lets read: it says the caller
-// isn't a direct writer, and lists nothing.
+// The answer to any other caller the realm admits: it says the caller isn't a
+// direct writer, and lists nothing.
 export interface AutomationWebhooksNotDirectWriterDocument {
   data: [];
   meta: { directWriter: false };
@@ -175,9 +175,8 @@ export interface AutomationWebhooksAnswer {
 // lets read, a reader or a writer by the `*` or `users` row, is told it
 // isn't a direct writer and listed nothing, and the card's editor takes a
 // typed path. The answer isn't an HTTP refusal, for the reason
-// `answerAutomationStatus` gives. The route
-// answers on the realm ACL alone, so a caller only a policy grant admits
-// gets the ACL's refusal: a grant reaches a card, not the realm's webhooks.
+// `answerAutomationStatus` gives. A caller the realm hands to its policy asks
+// as no one, so they get the same answer.
 // A webhook's signing secret is never part of the answer; its path alone
 // lets no one send a delivery that verifies.
 export async function answerAutomationWebhooks({

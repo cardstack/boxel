@@ -5,6 +5,7 @@ import {
   type AnonymousRateLimit,
 } from './anonymous-access.ts';
 import {
+  ANONYMOUS_AUTOMATION_VIEW,
   ANONYMOUS_BYTES_READ,
   ANONYMOUS_CAPABILITY_CHECK,
   ANONYMOUS_CARD_READ,
@@ -27,6 +28,7 @@ import {
   type AnonymousRateLimiter,
 } from './anonymous-rate-limiter.ts';
 import { resolveRangeHeader } from './http-range.ts';
+import { isPlainObject } from './is-plain-object.ts';
 import {
   awaitRealmIndexSettled,
   INDEX_WRITING_JOB_TYPES,
@@ -83,18 +85,9 @@ import {
 // refuses every other method outright — so no HTTP cache reaches either body,
 // and the in-process caches that do hold one key on the served mode directly.
 const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
-// How long host routes that dropped a route for a type whose definition
-// couldn't be read are kept before they are read again, with those types. A failed render's
-// cached error row expires after the same interval.
-const HOST_ROUTES_RETRY_MS = 30_000;
-
-// The host routes when the routing rules can't be read.
-const NO_HOST_ROUTES: HostRoutesValidation = {
-  routes: [],
-  warnings: [],
-  complete: false,
-  unavailableRoutePatterns: [],
-};
+// How long after a realm starts an index of realm.json to store its host
+// routes, or to read a route type again, it may start another one.
+const HOST_ROUTES_INDEX_INTERVAL_MS = 60_000;
 
 // The cache directive a card+json response carries when a declared `output`
 // projected its body.
@@ -172,14 +165,16 @@ import type {
 import { HtmlResourceType } from './resource-types.ts';
 import type { HostRoutingRule } from './host-routing-validation.ts';
 import {
-  hostRouteTypeInfo,
   hostRouteTypeRefs,
   hostRoutingMapFromRoutes,
-  typeLookupKey,
+  readRawHostRoutingRules,
+  realmConfigCardURL,
   validateHostRoutes,
-  type HostRouteTypeInfo,
+  HostRoutesReadError,
   type HostRoutesValidation,
+  type RawHostRoutingRule,
 } from './host-routes.ts';
+import type { StoredHostRoutes } from './index-structure.ts';
 import type { LocalPath } from './paths.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -219,6 +214,7 @@ import {
   type RunTokenClaim,
 } from './run-token.ts';
 import { automationRef } from './automation-declaration.ts';
+import { MANUAL_RUN_TRIGGER } from './automation-declaration.ts';
 import {
   addAutomationRunCounts,
   automationRunForCall,
@@ -251,8 +247,14 @@ import {
 import {
   automationRunCallApiMeter,
   credentialRefusalOf,
+  readRunDeclaration,
   readRunLimits,
 } from './automation-run-limits.ts';
+import {
+  automationVersion,
+  type AutomationKeyApprovals,
+  type AutomationVersion,
+} from './automation-key-approval.ts';
 import {
   endsRunOnCredential,
   subjectOfRefusal,
@@ -386,7 +388,6 @@ import {
   type IndexedFile,
   type LooseCardResource,
   type FileMetaResource,
-  type ModuleDefinitionResult,
 } from './index.ts';
 import {
   canonicalizeTarget,
@@ -742,6 +743,12 @@ import {
   cancelAllJobsInLaneFamily,
   cancelRunningJobsInLaneFamily,
 } from './job-utils.ts';
+import {
+  admitsRoute,
+  isOAuthAccessTokenShaped,
+  realmPermissionCeiling,
+  type RealmOAuthResource,
+} from './oauth-route-admission.ts';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -969,8 +976,9 @@ export type RealmInfo = {
   // The lever is primarily set by the publish handler on the
   // published realm snapshot so anonymous-visitor SSR injection has
   // real content; unpublished realms typically have nothing reading
-  // the index's isolated HTML. Optional to avoid forcing every
-  // RealmInfo fixture to update.
+  // the index's isolated HTML. A realm with a host URL gets the full render
+  // without this, through `RenderRouteOptions.prerenderDefaultIndex`.
+  // Optional to avoid forcing every RealmInfo fixture to update.
   includePrerenderedDefaultRealmIndex?: boolean | null;
 };
 
@@ -987,71 +995,10 @@ export type RealmIndexCounts = {
   definitionCount: number | null;
 };
 
-// One host routing rule as the indexed realm.json's search document holds it,
-// before any validation: a value can have any shape a hand-edited realm.json
-// gives it. Fields the rule leaves unset are absent. Two fields differ from
-// what realm.json says: `instance` is the linked card as the search document
-// flattens it (`{ id, ...its searchable fields }`, `id` absolute), and `type`
-// is a code ref whose module is absolute (the search document stores it as
-// one `module/name` string, which the read splits back). Any other field the
-// search document holds comes through under its own name.
-export interface RawHostRoutingRule {
-  [field: string]: unknown;
-  path?: unknown;
-  name?: unknown;
-  card?: unknown;
-  type?: unknown;
-  where?: unknown;
-  match?: unknown;
-  parent?: unknown;
-  instance?: unknown;
-  redirectTo?: unknown;
-  statusCode?: unknown;
-  routes?: RawHostRoutingRule[];
-}
-
-// Reads the `hostRoutingRules` of a RealmConfig search document, child routes
-// included, in authored order. Anything that isn't an object is skipped.
-export function readRawHostRoutingRules(
-  searchDoc: Record<string, unknown> | null | undefined,
-): RawHostRoutingRule[] {
-  return readRawRoutingRuleList(searchDoc?.hostRoutingRules);
-}
-
-function readRawRoutingRuleList(value: unknown): RawHostRoutingRule[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.flatMap((rule) =>
-    rule && typeof rule === 'object' && !Array.isArray(rule)
-      ? [readRawRoutingRule(rule as Record<string, unknown>)]
-      : [],
-  );
-}
-
-function readRawRoutingRule(rule: Record<string, unknown>): RawHostRoutingRule {
-  let raw: RawHostRoutingRule = {};
-  for (let [key, value] of Object.entries(rule)) {
-    if (value != null && key !== 'type' && key !== 'routes') {
-      raw[key] = value;
-    }
-  }
-  let type = rule.type;
-  if (typeof type === 'string') {
-    let slash = type.lastIndexOf('/');
-    raw.type =
-      slash > 0 && slash < type.length - 1
-        ? { module: type.slice(0, slash), name: type.slice(slash + 1) }
-        : type;
-  } else if (type != null) {
-    raw.type = type;
-  }
-  let routes = readRawRoutingRuleList(rule.routes);
-  if (routes.length > 0) {
-    raw.routes = routes;
-  }
-  return raw;
-}
+export {
+  readRawHostRoutingRules,
+  type RawHostRoutingRule,
+} from './host-routes.ts';
 
 // Marker header the host SPA attaches to its outbound search calls and card
 // writes when it's running inside a prerender tab. Two different host-side
@@ -1093,22 +1040,67 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
-// A request URL safe to write to a log line: the capture-URL token (a bearer
-// credential carried in `?token=`) is redacted, since these lines ship to
-// Loki. Mirrors the request-log middleware's `loggableRequestURL`, needed
-// again here because the realm's own logger (auth-failure and capture-token
-// warnings) bypasses that middleware. A no-op when no token param is present.
+// A request URL safe to write to a log line: the bearer credentials a URL can
+// carry are redacted, since these lines ship to Loki. Those are the
+// capture-URL token (`?token=`) and an OAuth access token presented as
+// `?access_token=`, which the realm refuses but still logs the refusal of.
+// Mirrors the request-log middleware's `loggableRequestURL`, needed again here
+// because the realm's own logger (auth-failure and capture-token warnings)
+// bypasses that middleware. A no-op when no such param is present.
+const LOGGED_URL_TOKEN_PARAMS = [CAPTURE_URL_TOKEN_PARAM, 'access_token'];
 function maskLoggedURL(urlString: string): string {
   try {
     let url = new URL(urlString);
-    if (!url.searchParams.has(CAPTURE_URL_TOKEN_PARAM)) {
+    let present = LOGGED_URL_TOKEN_PARAMS.filter((name) =>
+      url.searchParams.has(name),
+    );
+    if (present.length === 0) {
       return urlString;
     }
-    url.searchParams.set(CAPTURE_URL_TOKEN_PARAM, 'REDACTED');
+    for (let name of present) {
+      url.searchParams.set(name, 'REDACTED');
+    }
     return url.href;
   } catch {
     return urlString;
   }
+}
+
+// The most of a form-encoded body the realm reads to look for a token in it,
+// as the realm server's OAuth controllers do.
+const OAUTH_FORM_BODY_LIMIT_BYTES = 64 * 1024;
+
+// A form-encoded request body as text, read from a clone so the handler can
+// still read it, or undefined when it is larger than the limit.
+async function readFormBody(request: Request): Promise<string | undefined> {
+  let reader = request.clone().body?.getReader();
+  if (!reader) {
+    return '';
+  }
+  let chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    let { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (!value) {
+      continue;
+    }
+    size += value.byteLength;
+    if (size > OAUTH_FORM_BODY_LIMIT_BYTES) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  let bytes = new Uint8Array(size);
+  let offset = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 // Opt-in signal a card-writing caller sets to say "don't block my write on the
@@ -1345,6 +1337,20 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // policy judges them, and runs the assistant's scripts for such a caller
 // (ADR 022 §1.8), so a change to whom `_info` answers changes that too.
 //
+// The automation routes a card's view, its editor and the realm config read
+// consume it too, and resolve no operation either:
+// `_automation-status`, `_automation-runs`, `_automations` and
+// `_automation-webhooks`. Each shows what it serves only to a direct writer
+// of the realm whom its ACL admits, and tells anyone else that they aren't
+// one (see `#statusViewer`). So a caller the realm hands to its policy is told
+// that too, and is shown nothing about the automations, their runs or the
+// realm's webhooks, rather than refused: a 401 or 403 the host reads while it
+// renders a card a grant admits them to fails whatever else it is loading.
+// Unlike `_info`, they also tell a caller who isn't signed in the same, where
+// the policy opens `read` or `query` to such callers (see
+// `ANONYMOUS_AUTOMATION_VIEW`). The answer runs nothing a grant admits, so an
+// archived realm gives it as it does while active, as `_info` does.
+//
 // No other route does, but for the byte routes and the hashed scoped-CSS
 // serve described below. Each of the rest is marked `ACL_ONLY` where it is
 // declared, or serves code and the file tree (`COARSE_READ_ONLY`), and each
@@ -1366,19 +1372,6 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   read.
 // - `_sign-capture-urls` signs the URLs of the capture serve, which the ACL
 //   alone admits a caller to.
-// - `_automation-status` answers an automation's server row, which only the
-//   realm's direct writers are shown (see `automation-status.ts`). A grant
-//   reaches a card, not the row.
-// - `_automations` lists every automation in the realm with its row's state,
-//   payer and spend, which only the realm's direct writers see (see
-//   `automation-list.ts`). A grant reaches a card, not the rows.
-// - `_automation-runs` lists an automation's runs, with who canceled each,
-//   which only the realm's direct writers see (see `automation-run-list.ts`).
-//   A grant reaches a card, not its runs.
-// - `_automation-webhooks` lists the incoming webhooks the realm's
-//   automations may name, which only the realm's direct writers are listed
-//   (see `automation-webhooks.ts`). A grant reaches a card, not the realm's
-//   webhooks.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
 // differently on some of them (see `#refusalUnderPolicy`), as does the
@@ -1415,6 +1408,13 @@ const ACL_ONLY = { aclOnly: true } as const;
 const APPLIES_ARCHIVED_SEAL = {
   consumesCoarseOutcome: true,
   appliesArchivedSeal: true,
+} as const;
+// The automation routes, which tell a caller the realm hands to its policy
+// that they aren't a direct writer, and never apply the archived seal, since
+// that answer runs nothing a grant admits (see `CONSUMES_COARSE_OUTCOME`).
+const AUTOMATION_VIEW_ROUTE = {
+  ...APPLIES_ARCHIVED_SEAL,
+  anonymous: ANONYMOUS_AUTOMATION_VIEW,
 } as const;
 // The realm's search routes. A verified user the ACL refuses is admitted to
 // them whether or not the realm names a policy, and a realm with none has no
@@ -3193,6 +3193,17 @@ export type RequestContext = {
   // in place of running what the caller asked for, and gives every refusal
   // ahead of that as the realm gives it while active.
   archivedSeal?: ArchivedRealmError;
+  // The verified caller of an OAuth access token (ADR 021 §1.5), which the
+  // request was judged as: the user its grant is for, read with that user's
+  // permissions, and never more than its scopes allow in a realm
+  // (`permissionCeiling`). Its token was removed from the request once it
+  // was checked.
+  oauthCaller?: {
+    user: string;
+    clientId: string;
+    scopes: readonly string[];
+    permissionCeiling: 'read' | 'write' | undefined;
+  };
   // Set for a dispatch made from inside the realm-server process (a worker's
   // or definition lookup's in-process fetch), which never reaches the realm
   // ACL and so records no identity. Every other context, including one a
@@ -3204,6 +3215,12 @@ export type RequestContext = {
 // and whether it consumes the realm ACL's recorded outcome.
 interface RequestDispatch {
   consumesCoarseOutcome: boolean;
+  // The route that answers, as its router registered it, which an OAuth
+  // token's scopes are matched against (ADR 021 §1.3): a router route, or the
+  // fallback file and module serve (`path` and `mimeType` `*`). A dispatch on
+  // the request's path alone (a capture, a hashed stylesheet, a reserved or
+  // partially written path) has none, and no OAuth token reaches it.
+  route?: { method: string; mimeType: string; path: string };
   coarseReadOnly?: boolean;
   appliesArchivedSeal?: boolean;
   // The dispatch admits a verified user the ACL refused in a realm with no
@@ -3518,6 +3535,7 @@ export class Realm {
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #callApi: CallApiSender | undefined;
   #policyWriteAuditor: PolicyWriteAuditor | undefined;
+  #oauth: RealmOAuthResource | undefined;
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // The change journal every write appends to, and the reader the history
   // operations read from. Absent in a realm that records no history, such as
@@ -3595,41 +3613,22 @@ export class Realm {
   // running the full per-url scan. Nulled once it settles (and on index swap).
   #indexCountsPromise: Promise<RealmIndexCounts> | null = null;
   // Cached host routing map, derived from the indexed RealmConfig card.
-  // `getHostRoutingMap()` is called on every host-mode index request
-  // (serve-index), so re-querying the index each time is wasteful — the map
-  // only changes when the realm is (re)indexed. Dropped by
-  // `clearRealmIndexCaches()` alongside `#cachedRealmInfo`, which fires on
-  // every index swap (full/incremental/publish) both locally and on peer
-  // replicas via the realm_index_updated broadcast. `null` means "not yet
-  // computed"; an empty array is a valid cached result (no routing rules).
-  #cachedHostRoutingMap: HostRoutingRule[] | null = null;
-  // The validated host routes the map is built from, cached and dropped
-  // with it.
-  #cachedHostRoutes: HostRoutesValidation | null = null;
-  // The definition generation the cached host routes were read at, when
-  // they use a type from another realm. A change to that type doesn't
-  // reindex this realm, so the cache is dropped when the generation moves.
-  #cachedHostRoutesGeneration: number | undefined;
-  // When the cached host routes dropped a route because its type's
-  // definition couldn't be read: the time after which they are read again.
-  // Only this time or an index refreshes them.
-  #cachedHostRoutesRetryAt: number | undefined;
-  // Moved by every index. A validation
-  // caches its result only when the epoch hasn't moved while it ran.
-  #hostRoutesEpoch = 0;
-  // The validation running now, shared by concurrent calls: the routes
-  // validated with the types the definitions cache already holds, ready
-  // with no module visit, and the whole validation, ready once every type
-  // is read.
-  #hostRoutesInFlight:
-    | {
-        withoutTypes: Promise<HostRoutesValidation | undefined>;
-        full: Promise<HostRoutesValidation | undefined>;
-      }
+  // The host routes the realm's last index stored, read once and kept until
+  // the next index: `clearRealmIndexCaches()` drops them, on every index swap
+  // here and on peer replicas through the realm_index_updated broadcast.
+  // `getHostRoutes()` and `getHostRoutingMap()` are called on every host-mode
+  // index request (serve-index), so the index isn't read each time.
+  #cachedHostRoutes: Promise<HostRoutesValidation> | undefined;
+  // The routing map built from the cached host routes, with the routes it was
+  // built from.
+  #cachedHostRoutingMap:
+    | { validation: HostRoutesValidation; map: HostRoutingRule[] }
     | undefined;
-  // The warnings of the last validation, so the same ones aren't logged on
-  // every read.
-  #loggedHostRouteWarnings: string | undefined;
+  // When this process last started an index of realm.json to store the
+  // host routes or read their types again, and whether that index is still
+  // running (`#indexRealmConfigForHostRoutes`).
+  #hostRoutesIndexStartedAt: number | undefined;
+  #hostRoutesIndexRunning = false;
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -3738,6 +3737,7 @@ export class Realm {
       anonymousRateLimiter,
       callApi,
       policyWriteAuditor,
+      oauth,
       history,
     }: {
       url: string;
@@ -3799,6 +3799,11 @@ export class Realm {
       // in the realms that policy governs (see `policy-share-audit.ts`).
       // Without it, a write is never audited.
       policyWriteAuditor?: PolicyWriteAuditor;
+      // The OAuth resource whose access tokens this realm accepts, as the
+      // realm server hands it over (ADR 021 §1.3, §1.5): the realm routes its
+      // scopes map, and the shared lookup. Without it, the realm refuses an
+      // OAuth token as an invalid JWT.
+      oauth?: RealmOAuthResource;
       // The change journal every write appends to, in the transaction that
       // updates its file meta, and the reader the history operations use.
       // Without it, the realm records no history.
@@ -3819,6 +3824,7 @@ export class Realm {
     this.#realmFor = realmFor;
     this.#callApi = callApi;
     this.#policyWriteAuditor = policyWriteAuditor;
+    this.#oauth = oauth;
     this.#history = history;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#skipBootIndex = opts?.skipBootIndex ?? false;
@@ -4019,43 +4025,45 @@ export class Realm {
         ACL_ONLY,
       )
       // An automation card's switched-on state, payer and each trigger's runs
-      // left, for the card's view. Answered on the realm ACL; a caller who
-      // isn't a direct writer is shown nothing (see `automation-status.ts`).
+      // left, for the card's view. A caller who isn't a direct writer,
+      // including one the realm hands to its policy, is shown nothing (see
+      // `automation-status.ts`).
       .get(
         '/_automation-status',
         SupportedMimeType.JSON,
         this.automationStatus.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
       )
       // Every automation in the realm, with its state, next run, payer, cap,
       // spend this month and last result, for the realm config's Automations
-      // section, the automations console. Answered on the realm ACL; a caller
-      // who isn't a direct writer is listed nothing (see
-      // `automation-list.ts`).
+      // section, the automations console. A caller who isn't a direct
+      // writer, including one the realm hands to its policy, is listed
+      // nothing (see `automation-list.ts`).
       .get(
         '/_automations',
         SupportedMimeType.JSON,
         this.automationList.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
       )
       // An automation's runs, newest first, a page at a time, for the
-      // Automation card's isolated view. Answered on the realm ACL; a caller
-      // who isn't a direct writer is listed nothing (see
+      // Automation card's isolated view. A caller who isn't a direct writer,
+      // including one the realm hands to its policy, is listed nothing (see
       // `automation-run-list.ts`).
       .get(
         '/_automation-runs',
         SupportedMimeType.JSON,
         this.automationRunList.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
       )
       // The incoming webhooks an automation card's webhook trigger may name,
-      // for the card's editor. Answered on the realm ACL; a caller who isn't
-      // a direct writer is listed nothing (see `automation-webhooks.ts`).
+      // for the card's editor. A caller who isn't a direct writer, including
+      // one the realm hands to its policy, is listed nothing (see
+      // `automation-webhooks.ts`).
       .get(
         '/_automation-webhooks',
         SupportedMimeType.JSON,
         this.automationWebhooks.bind(this),
-        ACL_ONLY,
+        AUTOMATION_VIEW_ROUTE,
       )
       .get(
         READINESS_CHECK_PATH,
@@ -5426,7 +5434,6 @@ export class Realm {
       );
     });
     this.#invalidateHostRoutes();
-    this.#loggedHostRouteWarnings = undefined;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
@@ -6033,6 +6040,169 @@ export class Realm {
     return audited.audit;
   }
 
+  // What an OAuth caller's commit would change about what a realm's policy
+  // admits, named for a person, or undefined when it changes nothing of that
+  // (ADR 021 §1.6): `realm.json`'s `policy`, `config` or type (its name, icon
+  // and the rest stay the caller's to edit, unless its type is a RealmConfig
+  // subclass, which may compute `config` from them), the card the policy pointer
+  // names, or any RealmPolicy card, as written or as the realm stores it,
+  // since a policy card here may govern another realm. Removing `realm.json`
+  // or such a card changes it too. A file only appended to is judged by its
+  // path alone.
+  async #oauthPolicyChange(
+    writes: Map<LocalPath, WriteContent>,
+    appended: LocalPath[],
+    deletes: LocalPath[],
+  ): Promise<string | undefined> {
+    for (let path of [...appended, ...deletes]) {
+      if (path === 'realm.json') {
+        return 'realm.json';
+      }
+      if (await this.#isPolicyCardPath(path)) {
+        return 'a policy card';
+      }
+    }
+    for (let [path, content] of writes) {
+      if (path === 'realm.json') {
+        if (await this.#changesRealmPolicySettings(content)) {
+          return "realm.json's policy or config";
+        }
+        continue;
+      }
+      if (!path.endsWith('.json')) {
+        continue;
+      }
+      if (
+        (await this.#isPolicyCardPath(path)) ||
+        (await this.#writesPolicyCard(
+          path,
+          await this.#writeContentText(content),
+        ))
+      ) {
+        return 'a policy card';
+      }
+    }
+    return undefined;
+  }
+
+  // Whether the card stored at `path` is the one the realm's policy pointer
+  // names, or a RealmPolicy card.
+  async #isPolicyCardPath(path: LocalPath): Promise<boolean> {
+    if (!path.endsWith('.json')) {
+      return false;
+    }
+    let policy = await this.getRealmPolicy();
+    if (policy) {
+      let cardURL = this.paths.fileURL(path.slice(0, -'.json'.length)).href;
+      try {
+        if (
+          new URL(this.#virtualNetwork.toURL(policy.card).href, this.url)
+            .href === cardURL
+        ) {
+          return true;
+        }
+      } catch {
+        // A pointer that names nothing protects no path.
+      }
+    }
+    let stored = (await this.readFileAsText(path))?.content;
+    return stored !== undefined && (await this.#writesPolicyCard(path, stored));
+  }
+
+  // Whether writing `content` as `realm.json` changes what the realm reads as
+  // its policy pointer or its config from what the realm stores. The file is
+  // a RealmConfig card document, so both are read from `data.attributes`. Its
+  // type (`data.meta.adoptsFrom`) counts too, since the indexed instance's
+  // `config` wins over the file's. A RealmConfig subclass can compute that
+  // `config` from any of the card's fields, so while the file names a type
+  // other than the base RealmConfig, any change to it counts. Content that
+  // isn't a JSON object changes them, since the realm would no longer read
+  // any of them.
+  async #changesRealmPolicySettings(content: WriteContent): Promise<boolean> {
+    type Settings = {
+      document: unknown;
+      policy: unknown;
+      config: unknown;
+      adoptsFrom: unknown;
+    };
+    let none: Settings = {
+      document: undefined,
+      policy: undefined,
+      config: undefined,
+      adoptsFrom: undefined,
+    };
+    let settingsOf = (text: string | undefined): Settings => {
+      if (text === undefined) {
+        return none;
+      }
+      let parsed: unknown = JSON.parse(text);
+      if (!isPlainObject(parsed)) {
+        throw new Error('realm.json is not a JSON object');
+      }
+      let member = (value: unknown): Record<string, unknown> =>
+        isPlainObject(value) ? value : {};
+      let data = member(parsed.data);
+      let attributes = member(data.attributes);
+      let meta = member(data.meta);
+      return {
+        document: parsed,
+        policy: attributes.policy,
+        config: attributes.config,
+        adoptsFrom: meta.adoptsFrom,
+      };
+    };
+    let nextText: string;
+    let next: Settings;
+    try {
+      nextText = await this.#writeContentText(content);
+      next = settingsOf(nextText);
+    } catch {
+      return true;
+    }
+    let currentText = (await this.readFileAsText('realm.json'))?.content;
+    let current: Settings;
+    try {
+      current = settingsOf(currentText);
+    } catch {
+      // A stored realm.json the realm can't read carries no policy, config or
+      // type to keep, so only a write that adds none of them leaves them as
+      // they are.
+      current = none;
+    }
+    if (
+      canonicalJSON(next.policy) !== canonicalJSON(current.policy) ||
+      canonicalJSON(next.config) !== canonicalJSON(current.config) ||
+      canonicalJSON(next.adoptsFrom) !== canonicalJSON(current.adoptsFrom)
+    ) {
+      return true;
+    }
+    return (
+      !this.#adoptsBaseRealmConfig(nextText) &&
+      canonicalJSON(next.document) !== canonicalJSON(current.document)
+    );
+  }
+
+  // Whether `realm.json`'s content names the base RealmConfig as its type,
+  // whose `config` is the file's own rather than computed.
+  #adoptsBaseRealmConfig(content: string): boolean {
+    let codeRef = this.#adoptedCodeRef('realm.json', content);
+    if (!codeRef) {
+      return false;
+    }
+    try {
+      return (
+        internalKeyFor(codeRef, undefined, this.#virtualNetwork) ===
+        internalKeyFor(
+          { module: rri('@cardstack/base/realm-config'), name: 'RealmConfig' },
+          undefined,
+          this.#virtualNetwork,
+        )
+      );
+    } catch {
+      return false;
+    }
+  }
+
   async #auditedContentOf(
     files: Map<LocalPath, WriteContent>,
     path: LocalPath,
@@ -6250,6 +6420,21 @@ export class Realm {
       // left to wait for here is a pass that registered after their last
       // re-check, not the bulk of a long pass.
       stageCursor?.mark('drain');
+    }
+    // An OAuth caller's commit is refused whole, before any byte is written,
+    // if it would change what a realm's policy admits (ADR 021 §1.6).
+    if (options?.policyAudit?.oauthCaller) {
+      let refusal = await this.#oauthPolicyChange(
+        files,
+        [...appends.keys()],
+        deletes,
+      );
+      if (refusal) {
+        throw new CardError(
+          `An app connected with OAuth may not change ${refusal}`,
+          { status: 403, title: 'Forbidden' },
+        );
+      }
     }
     // Audited once the drain has settled what the realm resolves against and
     // before any byte is written, so a refusal leaves the realm as it was.
@@ -7786,6 +7971,7 @@ export class Realm {
               policyAudit: policyAuditOptionsFor(
                 request,
                 requestContext.authenticatedUser,
+                { oauthCaller: Boolean(requestContext.oauthCaller) },
               ),
             });
           } catch (e: any) {
@@ -9579,6 +9765,7 @@ export class Realm {
       policyAudit: policyAuditOptionsFor(
         request,
         requestContext.authenticatedUser,
+        { oauthCaller: Boolean(requestContext.oauthCaller) },
       ),
     };
   }
@@ -9990,6 +10177,17 @@ export class Realm {
         );
       }
       let dispatch = this.#routeRequest(request, localPath, requestContext);
+      if (!isLocal && !automation) {
+        let oauthRefusal = await this.#admitOAuthToken(
+          request,
+          requestContext,
+          dispatch,
+          requiredPermission,
+        );
+        if (oauthRefusal) {
+          return oauthRefusal;
+        }
+      }
       // A run's writes are staged, never written to the realm while it runs
       // (ADR 027 §1.2), so a run's write reaches only a route that stages
       // it, or one that answers why it can't (a card or file removal). Any
@@ -10347,9 +10545,13 @@ export class Realm {
       let matched: Route = route;
       let serve = () => this.#router.handle(request, requestContext, matched);
       if (matched.grantableBytes && namesGrantableBytes(localPath)) {
-        return this.#grantableBytesDispatch(request, requestContext, serve);
+        return {
+          ...this.#grantableBytesDispatch(request, requestContext, serve),
+          route: matched.registered,
+        };
       }
       return {
+        route: matched.registered,
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
         coarseReadOnly: matched.coarseReadOnly,
         appliesArchivedSeal: matched.appliesArchivedSeal,
@@ -10390,10 +10592,15 @@ export class Realm {
     // coarse-read-only route gives.
     let serve = () => this.fallbackHandle(request, requestContext);
     let reads = request.method === 'GET' || request.method === 'HEAD';
+    let fallbackRoute = { method: request.method, mimeType: '*', path: '*' };
     if (reads && namesGrantableBytes(localPath)) {
-      return this.#grantableBytesDispatch(request, requestContext, serve);
+      return {
+        ...this.#grantableBytesDispatch(request, requestContext, serve),
+        route: fallbackRoute,
+      };
     }
     return {
+      route: fallbackRoute,
       consumesCoarseOutcome: false,
       coarseReadOnly: reads,
       handle: serve,
@@ -13286,6 +13493,17 @@ export class Realm {
         this.#log.warn(message);
       }
     };
+    let oauthCaller = requestContext.oauthCaller;
+    if (oauthCaller) {
+      await this.#checkOAuthCallerPermission(
+        request,
+        requestContext,
+        oauthCaller,
+        requiredPermission,
+        warnRefusal,
+      );
+      return;
+    }
     let run = requestContext.automationRun;
     if (run) {
       await this.#checkRunPermission(
@@ -13770,6 +13988,217 @@ export class Realm {
       );
     }
     requestContext.principal = run.actsAs;
+  }
+
+  // The realm as one of the Boxel API's controllers (ADR 021 §1.3, §1.5). A
+  // bearer token that isn't one of Boxel's session JWTs is looked up through
+  // the shared lookup the realm server handed over, once, and must be for
+  // that resource, on a route one of its scopes maps, as the router selected
+  // it. The caller it yields is recorded on the request context, and its
+  // token is removed from the request, so nothing past this point (a
+  // handler, a log, a request the realm sends on) sees it.
+  //
+  // Answers, as RFC 6750 §3.1 says: a token in the query string or a
+  // form-encoded body, `400` without a lookup (and a form body too large to
+  // look through, `413`); one the lookup refuses, or on a route no scope maps,
+  // `401 invalid_token`, whatever the reason, which a refusal on a public
+  // realm also gets rather than falling back to an anonymous read; one whose
+  // scopes don't reach the route or the permission it needs, `403
+  // insufficient_scope`. Undefined when the request carries no OAuth token,
+  // or carries one that was admitted.
+  async #admitOAuthToken(
+    request: Request,
+    requestContext: RequestContext,
+    dispatch: RequestDispatch,
+    requiredPermission: RequiredPermission,
+  ): Promise<Response | undefined> {
+    let oauth = this.#oauth;
+    if (!oauth) {
+      return undefined;
+    }
+    let refuse = (
+      status: 400 | 401 | 403 | 413,
+      error: 'invalid_request' | 'invalid_token' | 'insufficient_scope',
+      challenge?: string,
+    ) =>
+      createResponse({
+        body: JSON.stringify({ error }),
+        init: {
+          status,
+          headers: {
+            'content-type': SupportedMimeType.JSON,
+            ...(challenge ? { 'WWW-Authenticate': challenge } : {}),
+          },
+        },
+        requestContext,
+      });
+    let notInHeader = () => {
+      this.#log.info(
+        `OAuth token refused for ${request.method} ${maskLoggedURL(request.url)}: not in the header`,
+      );
+      return refuse(400, 'invalid_request', 'Bearer error="invalid_request"');
+    };
+    if (new URL(request.url).searchParams.has('access_token')) {
+      return notInHeader();
+    }
+    let header = request.headers.get('Authorization') ?? '';
+    let bearer = /^Bearer[ ]+(\S+)[ ]*$/i.exec(header)?.[1];
+    if (header && !(bearer && isOAuthAccessTokenShaped(bearer))) {
+      return undefined;
+    }
+    // A token in a form-encoded body is refused as one in the query string
+    // is, whatever the header carries, as the realm server's controllers do.
+    if (
+      (request.headers.get('content-type') ?? '')
+        .split(';')[0]
+        .trim()
+        .toLowerCase() === 'application/x-www-form-urlencoded'
+    ) {
+      let body = await readFormBody(request);
+      if (body === undefined) {
+        this.#log.info(
+          `request refused for ${request.method} ${maskLoggedURL(request.url)}: form body too large to read`,
+        );
+        return refuse(413, 'invalid_request');
+      }
+      if (new URLSearchParams(body).has('access_token')) {
+        return notInHeader();
+      }
+    }
+    if (!bearer) {
+      return undefined;
+    }
+    let result = await oauth.resolve(bearer);
+    if (!result.ok) {
+      return refuse(
+        401,
+        'invalid_token',
+        oauth.challenge({ error: 'invalid_token' }),
+      );
+    }
+    let { caller } = result;
+    let described = `${request.method} ${maskLoggedURL(request.url)}, client ${caller.clientId}`;
+    let admitted = dispatch.route
+      ? admitsRoute(oauth.scopes, caller, { on: 'realm', ...dispatch.route })
+      : { admitted: false as const, scopes: [] as string[] };
+    if (!admitted.admitted) {
+      if (admitted.scopes.length === 0) {
+        this.#log.info(
+          `OAuth token refused for ${described}: route not mapped`,
+        );
+        return refuse(
+          401,
+          'invalid_token',
+          oauth.challenge({ error: 'invalid_token' }),
+        );
+      }
+      this.#log.info(
+        `OAuth token refused for ${described}: insufficient scope`,
+      );
+      return refuse(
+        403,
+        'insufficient_scope',
+        oauth.challenge({
+          error: 'insufficient_scope',
+          scope: admitted.scopes,
+        }),
+      );
+    }
+    // The scopes are a ceiling on what the realm requires of the caller,
+    // over and above the route map, so a route the map admits can't be
+    // reached for more than the token allows. Nothing admits administering
+    // the realm.
+    let permissionCeiling = realmPermissionCeiling(oauth.scopes, caller.scopes);
+    if (
+      requiredPermission === 'administer' ||
+      !permissionCeiling ||
+      (requiredPermission === 'write' && permissionCeiling !== 'write')
+    ) {
+      this.#log.info(
+        `OAuth token refused for ${described}: requires ${requiredPermission}, scopes allow ${permissionCeiling ?? 'nothing'}`,
+      );
+      return refuse(
+        403,
+        'insufficient_scope',
+        oauth.challenge({
+          error: 'insufficient_scope',
+          scope: oauth.scopes
+            .filter(
+              ({ realmPermission }) =>
+                requiredPermission !== 'administer' &&
+                (realmPermission === 'write' ||
+                  (realmPermission === 'read' &&
+                    requiredPermission === 'read')),
+            )
+            .map(({ name }) => name),
+        }),
+      );
+    }
+    // An OAuth caller acts as its own user and no one else.
+    if (request.headers.get('X-Boxel-Assume-User')) {
+      this.#log.info(
+        `OAuth token refused for ${described}: it can't assume another user`,
+      );
+      return refuse(
+        401,
+        'invalid_token',
+        oauth.challenge({ error: 'invalid_token' }),
+      );
+    }
+    requestContext.oauthCaller = {
+      user: caller.user,
+      clientId: caller.clientId,
+      scopes: caller.scopes,
+      permissionCeiling,
+    };
+    request.headers.delete('Authorization');
+    return undefined;
+  }
+
+  // The realm ACL's decision for an OAuth caller (`#admitOAuthToken`): the
+  // caller's user, with that user's effective permissions, read fresh, as a
+  // session's user is. Its grant was checked by the lookup, against the
+  // user's OAuth cutoff, so `isSessionRevoked` is never asked about it (ADR
+  // 021 §1.9). A probe for more than its scopes allow is refused outright,
+  // so no policy can admit it either.
+  async #checkOAuthCallerPermission(
+    request: Request,
+    requestContext: RequestContext,
+    caller: NonNullable<RequestContext['oauthCaller']>,
+    requiredPermission: RequiredPermission,
+    warnRefusal: (message: string) => void,
+  ): Promise<void> {
+    let described = `${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')})`;
+    if (
+      requiredPermission === 'administer' ||
+      !caller.permissionCeiling ||
+      (requiredPermission === 'write' && caller.permissionCeiling !== 'write')
+    ) {
+      warnRefusal(
+        `auth failed for ${described}, OAuth client ${caller.clientId} for user ${caller.user} asked for ${requiredPermission}, which its scopes don't allow`,
+      );
+      throw new AuthorizationError(
+        'This OAuth token does not allow this action',
+      );
+    }
+    let realmPermissionChecker = new RealmPermissionChecker(
+      requestContext.permissions,
+      this.#dbAdapter,
+      this.#matrixClient.serverName,
+    );
+    requestContext.authenticatedUser = caller.user;
+    if (!(await realmPermissionChecker.can(caller.user, requiredPermission))) {
+      warnRefusal(
+        `auth failed for ${described}, OAuth client ${caller.clientId} for user ${caller.user}: permissions insufficient, requires ${requiredPermission}`,
+      );
+      // The user is known; only their permission fell short. The realm's
+      // policy judges such a caller by who they are, as it judges a
+      // session's user, so the identity is kept with the refusal.
+      throw new CoarsePermissionInsufficient(
+        'Insufficient permissions to perform this action',
+      );
+    }
+    requestContext.principal = caller.user;
   }
 
   // Verifies a session presented to this realm: a diagnostic session under its
@@ -14819,7 +15248,11 @@ export class Realm {
       secrets: token ? [token] : [],
       attempt: call.attempt,
     });
-    if (result.milestones > 0) {
+    // One event for each request that records a milestone or a task. The
+    // tab sends a run's lines in batches, at most one a second unless a
+    // batch fills, so a script that reports many tasks quickly sends one
+    // event a batch, and the realm event line merges a run's queued events.
+    if (result.milestones > 0 || result.tasks > 0) {
       // Not awaited: the run's tab is waiting on this answer, and the event
       // is a report the run doesn't depend on.
       void this.reportRunChange(call.runId);
@@ -14907,11 +15340,106 @@ export class Realm {
         }
       },
     );
-    return answer(
-      refusal
-        ? { refusal }
-        : { refusal: null, operations: limits.operations.length },
-    );
+    if (refusal) {
+      return answer({ refusal });
+    }
+    // A run of the automation's triggers, or a batch's follow-up of one,
+    // also needs each binding's approval for this automation, matching it as
+    // its card and script read now (ADR 039 §1.7). The run's own row says
+    // which kind it is; only a Preview or a Run now needs no automation
+    // approval.
+    let run = await getAutomationRun(this.#dbAdapter, call.runId);
+    if (run && run.trigger !== MANUAL_RUN_TRIGGER) {
+      let read = await readRunDeclaration({
+        dbAdapter: this.#dbAdapter,
+        definitionLookup: this.#definitionLookup,
+        virtualNetwork: this.#virtualNetwork,
+        automationId: call.automationId,
+      });
+      let approvals = read.ok
+        ? await this.checkAutomationKeyApprovals({
+            automationId: call.automationId,
+            declaration: read.declaration,
+            payer: call.actsAs,
+          })
+        : undefined;
+      if (approvals && !approvals.approved) {
+        let operation = approvals.operations.find(
+          ({ state }) => state === 'missing',
+        )!;
+        return answer({
+          refusal: {
+            code: 'key-approval-ended',
+            detail: `a key approval this automation needs for operation "${operation.operation}" ended, or the automation changed since its key's owner approved it, so the run waits until it is approved again`,
+            operation: operation.operation,
+            targetType: operation.targetType,
+          },
+        });
+      }
+    }
+    return answer({ refusal: null, operations: limits.operations.length });
+  }
+
+  // Checks each operation the automation declares for the key approvals a
+  // run of its triggers needs, with `payer` as its payer and its card read as
+  // `declaration` and its script as this realm holds it now
+  // (`CallApiSender.checkAutomationKeyApprovals`). Undefined when this realm
+  // can't check, or the script can't be read, which a run's admission refuses
+  // on its own.
+  async checkAutomationKeyApprovals({
+    automationId,
+    declaration,
+    payer,
+  }: {
+    automationId: string;
+    declaration: AutomationDeclaration;
+    payer: string;
+  }): Promise<AutomationKeyApprovals | undefined> {
+    let check = this.#callApi?.checkAutomationKeyApprovals;
+    if (!check) {
+      return undefined;
+    }
+    let script = await this.#readAutomationScript(declaration);
+    if (script === undefined) {
+      return undefined;
+    }
+    return await check({
+      core: this.operationCore,
+      realmURL: new URL(this.url),
+      automationId,
+      declaration,
+      payer,
+      script,
+    });
+  }
+
+  // The automation's version with `payer` as its payer, its card read as
+  // `declaration` and its script as this realm holds it now: what a key's
+  // owner approves (`automation-key-approval.ts`). Undefined when the script
+  // can't be read.
+  async automationVersionOf({
+    declaration,
+    payer,
+  }: {
+    declaration: AutomationDeclaration;
+    payer: string;
+  }): Promise<AutomationVersion | undefined> {
+    let script = await this.#readAutomationScript(declaration);
+    return script === undefined
+      ? undefined
+      : await automationVersion(declaration, { payer, script });
+  }
+
+  // The automation's script, as this realm holds it, or undefined when it
+  // isn't in this realm or can't be read.
+  async #readAutomationScript(
+    declaration: AutomationDeclaration,
+  ): Promise<string | undefined> {
+    let scriptURL = this.#virtualNetwork.toURLHref(declaration.script);
+    let script = this.paths.inRealm(new URL(scriptURL))
+      ? await this.readFileAsText(this.paths.local(new URL(scriptURL)))
+      : undefined;
+    return script?.content;
   }
 
   // Checks, before a resume makes `payer` the payer of the automation
@@ -14920,24 +15448,28 @@ export class Realm {
   // passes as `payer`, so each `{{userKey}}` slot fills from their own key
   // bindings. Answers the first refusal, with the code a run would end with,
   // or undefined. Nothing is recorded, since there is no run.
+  //
+  // `passOver` names refusal codes to skip, going on to the next declared
+  // operation, as a resume does for a missing key approval, which makes the
+  // automation wait rather than refusing the resume.
   async admitAutomationPayer({
     declaration,
     payer,
+    passOver = [],
   }: {
     declaration: AutomationDeclaration;
     payer: string;
+    passOver?: readonly string[];
   }): Promise<AdmissionRefusal | undefined> {
     let scriptURL = this.#virtualNetwork.toURLHref(declaration.script);
-    let script = this.paths.inRealm(new URL(scriptURL))
-      ? await this.readFileAsText(this.paths.local(new URL(scriptURL)))
-      : undefined;
-    if (!script) {
+    let script = await this.#readAutomationScript(declaration);
+    if (script === undefined) {
       return {
         reason: 'missing-script',
         message: `The script ${scriptURL} could not be read`,
       };
     }
-    let unrunnable = scriptRefusal(script.content, scriptURL);
+    let unrunnable = scriptRefusal(script, scriptURL);
     if (unrunnable) {
       return unrunnable;
     }
@@ -14952,6 +15484,8 @@ export class Realm {
       admit,
       declaration.operations,
       payer,
+      undefined,
+      passOver,
     );
     return refusal
       ? { reason: refusal.code, message: operationRefusalMessage(refusal) }
@@ -14959,12 +15493,14 @@ export class Realm {
   }
 
   // The first of `operations` that `payer` may not invoke as an automation
-  // call, as `admit` answers, told to `onRefused` before it is answered.
+  // call, as `admit` answers, told to `onRefused` before it is answered. A
+  // refusal whose code `passOver` names is skipped.
   async #declaredOperationRefusal(
     admit: NonNullable<CallApiSender['admitAutomation']>,
     operations: AutomationOperationDeclaration[],
     payer: string,
     onRefused?: (refused: OperationFailure) => Promise<void>,
+    passOver: readonly string[] = [],
   ): Promise<RunAdmissionAnswer['refusal']> {
     for (let declared of operations) {
       let refused = await admit({
@@ -14974,7 +15510,7 @@ export class Realm {
         operation: declared.operation,
         payer,
       });
-      if (refused) {
+      if (refused && !passOver.includes(refused.error.code)) {
         await onRefused?.(refused);
         return {
           code: refused.error.code,
@@ -15742,6 +16278,7 @@ export class Realm {
           policyAudit: policyAuditOptionsFor(
             request,
             requestContext.authenticatedUser,
+            { oauthCaller: Boolean(requestContext.oauthCaller) },
           ),
           beforeCommit: () => admission.locked(),
         },
@@ -16148,6 +16685,20 @@ export class Realm {
     let declined = this.#coarseDeclined(requestContext) !== 'none';
     if (!handle && !declined) {
       return notFound(request, requestContext, `${localName} not found`);
+    }
+    // An OAuth caller may not remove what decides a realm's policy (ADR 021
+    // §1.6).
+    if (requestContext.oauthCaller && handle) {
+      let refusal = await this.#oauthPolicyChange(new Map(), [], [handle.path]);
+      if (refusal) {
+        return responseWithError(
+          new CardError(
+            `An app connected with OAuth may not change ${refusal}`,
+            { status: 403, title: 'Forbidden' },
+          ),
+          requestContext,
+        );
+      }
     }
     let options = {
       waitForIndex: false,
@@ -16976,6 +17527,7 @@ export class Realm {
             policyAudit: policyAuditOptionsFor(
               request,
               requestContext.authenticatedUser,
+              { oauthCaller: Boolean(requestContext.oauthCaller) },
             ),
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
@@ -17536,6 +18088,7 @@ export class Realm {
             policyAudit: policyAuditOptionsFor(
               request,
               requestContext.authenticatedUser,
+              { oauthCaller: Boolean(requestContext.oauthCaller) },
             ),
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
@@ -19782,6 +20335,18 @@ export class Realm {
           ...(requestContext.authenticatedUser
             ? { actor: requestContext.authenticatedUser }
             : {}),
+          // An OAuth caller's removal is held to what it may not change
+          // (ADR 021 §1.6). A removal writes no bytes, so nothing is audited
+          // for the shares it opens.
+          ...(requestContext.oauthCaller
+            ? {
+                policyAudit: policyAuditOptionsFor(
+                  request,
+                  requestContext.authenticatedUser,
+                  { oauthCaller: true },
+                ),
+              }
+            : {}),
           ...(precondition ? { precondition } : {}),
         },
       );
@@ -21341,11 +21906,18 @@ export class Realm {
   // session the realm vouches for (`#sessionPrincipal`), so a revoked session
   // or one delegated to another realm asks as no one. A realm-authority session is a realm rendering its
   // own cards, and a diagnostic session is an operator reading as a user;
-  // neither is a person looking at the card, so neither sees the payer.
+  // neither is a person looking at the card, so neither sees the payer. A
+  // caller the realm ACL refused, whom the realm handed to its policy, asks as
+  // no one too: no grant reaches what these routes serve, so they are told
+  // they aren't a direct writer, which reads nothing about the realm.
   async #statusViewer(
     requestContext: RequestContext,
   ): Promise<string | undefined> {
-    if (requestContext.realmAuthority || requestContext.diagnosticSession) {
+    if (
+      requestContext.coarseAllowed === false ||
+      requestContext.realmAuthority ||
+      requestContext.diagnosticSession
+    ) {
       return undefined;
     }
     return await this.#sessionPrincipal(requestContext);
@@ -21789,15 +22361,11 @@ export class Realm {
   }
 
   // The realm's routing rules exactly as the indexed RealmConfig card's search
-  // document holds them, child routes included and nothing validated. Only
-  // the validation in `#validateHostRoutes` reads them: the server routes on
-  // validated routes alone.
+  // document holds them, child routes included and nothing validated.
   async #readRawHostRoutingRules(): Promise<RawHostRoutingRule[]> {
-    let realmConfigCardURL = new URL(
-      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    let indexEntry = await this.#realmIndexQueryEngine.instance(
+      realmConfigCardURL(new URL(this.url)),
     );
-    let indexEntry =
-      await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
     if (indexEntry?.type !== 'instance') {
       return [];
     }
@@ -21806,296 +22374,114 @@ export class Realm {
 
   // The realm's host routes, validated: every route form, child routes
   // included, in authored order, with the warnings for the routes that were
-  // dropped. Cached until the next index. A validation that dropped a route
-  // because its type's definition couldn't be read is cached too, until
-  // `HOST_ROUTES_RETRY_MS` passes, so a request doesn't repeat a read that
-  // just failed. Resolves to no routes when the
-  // rules can't be read, without caching that.
+  // dropped. The index validates them when it reads the definitions of the
+  // types field-match routes name, and stores them with the rest of the index
+  // (`realm_meta`), so this is always the whole tree the last index
+  // validated, and reading it never reads a type. A route whose type
+  // couldn't be read then was dropped with a `type-unavailable` warning.
+  // Kept until the next index. When the index can't be read, this rejects
+  // with a `HostRoutesReadError`, and nothing is kept: an empty tree would
+  // read as a realm with no routes.
   async getHostRoutes(): Promise<HostRoutesValidation> {
-    let { full } = await this.#validateHostRoutes();
-    return (await full) ?? NO_HOST_ROUTES;
-  }
-
-  // The host routes without waiting for a module visit: the cached
-  // validation when there is one, else the routes validated with the types
-  // the definitions cache already holds, and every other field-match type
-  // taken as unavailable. When the cache holds every type, that is the
-  // whole validation, and it is complete. The whole validation goes on, and
-  // `getHostRoutes` gives it. Only a field-match route needs its type, so a
-  // request no field-match route could answer doesn't wait for a module
-  // visit.
-  async getHostRoutesWithoutTypeReads(): Promise<HostRoutesValidation> {
-    return (await this.#validateHostRoutes()).withoutTypes ?? NO_HOST_ROUTES;
-  }
-
-  // Drops the cached host routes and the map built from them, and makes a
-  // validation that is running now leave its result uncached.
-  #invalidateHostRoutes(): void {
-    this.#hostRoutesEpoch++;
-    this.#cachedHostRoutes = null;
-    this.#cachedHostRoutingMap = null;
-    this.#cachedHostRoutesGeneration = undefined;
-    this.#cachedHostRoutesRetryAt = undefined;
-    this.#hostRoutesInFlight = undefined;
-  }
-
-  // Makes the next call read the host routes and the types it couldn't read
-  // again, as it would once `HOST_ROUTES_RETRY_MS` has passed.
-  __testOnlyRetryHostRoutesNow(): void {
-    if (this.#cachedHostRoutesRetryAt !== undefined) {
-      this.#cachedHostRoutesRetryAt = 0;
-    }
-  }
-
-  // Drops the cached host routes and the map built from them when they use
-  // a type from another realm whose definitions may have changed since, or
-  // when they dropped a route because its type's definition couldn't be read
-  // and the retry time has passed.
-  #dropStaleHostRoutes(): void {
-    if (
-      (this.#cachedHostRoutesGeneration !== undefined &&
-        this.#definitionLookup.definitionGeneration?.() !==
-          this.#cachedHostRoutesGeneration) ||
-      (this.#cachedHostRoutesRetryAt !== undefined &&
-        Date.now() >= this.#cachedHostRoutesRetryAt)
-    ) {
-      this.#invalidateHostRoutes();
-    }
-  }
-
-  // Coalesced: concurrent calls on a cold cache share one validation.
-  // Resolves when the rules and the types the definitions cache holds are
-  // read; `full` resolves when every type is read.
-  async #validateHostRoutes(): Promise<{
-    withoutTypes: HostRoutesValidation | undefined;
-    full: Promise<HostRoutesValidation | undefined>;
-  }> {
-    this.#dropStaleHostRoutes();
     let cached = this.#cachedHostRoutes;
     if (cached) {
-      return { withoutTypes: cached, full: Promise.resolve(cached) };
+      return await cached;
     }
-    let inFlight = this.#hostRoutesInFlight;
-    if (!inFlight) {
-      // Taken before anything is read: an index moves the epoch, and a
-      // validation that started before that isn't cached.
-      let epoch = this.#hostRoutesEpoch;
-      // Read before the definitions, so a change made while they are read
-      // moves it past this value.
-      let generation = this.#definitionLookup.definitionGeneration?.();
-      let rules = this.#readRawHostRoutingRules();
-      // Rules that name no type need no read: that validation is the whole
-      // one, cached as soon as the rules are read.
-      let withoutTypes = rules.then(
-        (rules) =>
-          hostRouteTypeRefs(rules).length === 0
-            ? this.#finishHostRoutesValidation(
-                rules,
-                [],
-                new Map(),
-                epoch,
-                generation,
-              )
-            : this.#validateHostRoutesFromCachedTypes(rules),
-        () => undefined,
-      );
-      let started = {
-        withoutTypes,
-        full: this.#readAndValidateHostRoutes(
-          rules,
-          withoutTypes,
-          epoch,
-          generation,
-        ),
-      };
-      inFlight = started;
-      this.#hostRoutesInFlight = started;
-      void started.full.finally(() => {
-        if (this.#hostRoutesInFlight === started) {
-          this.#hostRoutesInFlight = undefined;
-        }
-      });
-    }
-    return { withoutTypes: await inFlight.withoutTypes, full: inFlight.full };
-  }
-
-  // The definition of one host route type, read through the definitions
-  // cache as a search reads it. On a cache miss the read runs the type's
-  // module in the prerender server (a module visit), and a host page request
-  // for a path a field-match route could answer waits for it: the
-  // module only reports the type's fields, and the routes still make the
-  // routing decision (ADR 015 §1.1, ADR 036 §1.5). A type whose read fails is
-  // unavailable, and its routes are dropped for now. A module with no such
-  // export is `undefined`: the route is dropped until the module changes.
-  async #readHostRouteType(
-    ref: ResolvedCodeRef,
-  ): Promise<HostRouteTypeInfo | 'unavailable' | undefined> {
+    let read = this.#readHostRoutes();
+    this.#cachedHostRoutes = read;
     try {
-      return this.#hostRouteTypeInfo(
-        await this.#definitionLookup.lookupDefinitionEntry(ref),
-      );
+      return await read;
     } catch (e) {
-      // The read throws for a missing export as it does for a failed render.
-      // The cache it just filled tells the two apart.
-      let cached = await this.#readCachedHostRouteType(ref);
-      if (cached === 'unavailable') {
-        this.#log.warn(
-          `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
-        );
+      if (this.#cachedHostRoutes === read) {
+        this.#cachedHostRoutes = undefined;
       }
-      return cached;
+      throw e;
     }
   }
 
-  #hostRouteTypeInfo(entry: ModuleDefinitionResult): HostRouteTypeInfo {
-    return hostRouteTypeInfo(entry, (codeRef) =>
-      internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-    );
-  }
-
-  // The definition of one host route type as the definitions cache holds
-  // it now, with no module visit. A type the cache doesn't hold, or holds
-  // only a failed render of, is unavailable. A cached module with no such
-  // export is `undefined`.
-  async #readCachedHostRouteType(
-    ref: ResolvedCodeRef,
-  ): Promise<HostRouteTypeInfo | 'unavailable' | undefined> {
+  async #readHostRoutes(): Promise<HostRoutesValidation> {
+    let stored: StoredHostRoutes | undefined;
+    let rules: RawHostRoutingRule[] = [];
     try {
-      let cached =
-        await this.#definitionLookup.lookupCachedDefinitionEntry(ref);
-      if (cached.status === 'found') {
-        return this.#hostRouteTypeInfo(cached.entry);
+      stored = await this.#realmIndexQueryEngine.fetchHostRoutes();
+      if (!stored) {
+        rules = await this.#readRawHostRoutingRules();
       }
-      if (cached.status === 'missing-export') {
-        return undefined;
-      }
-    } catch {
-      // A cache that can't be read holds no type.
+    } catch (e) {
+      throw new HostRoutesReadError(
+        `could not read the host routes of ${this.url} from the index: ${e}`,
+        { cause: e },
+      );
     }
-    return 'unavailable';
-  }
-
-  // The rules validated with the types the definitions cache holds now.
-  // Nothing here waits for a module visit, so a request that must not wait
-  // for one can use the result: the prerender server's import of a route
-  // type's module is such a request. The result isn't cached: the whole
-  // validation reads each type as a search does, and caches that.
-  async #validateHostRoutesFromCachedTypes(
-    rules: RawHostRoutingRule[],
-  ): Promise<HostRoutesValidation> {
-    let types = new Map(
-      await Promise.all(
-        hostRouteTypeRefs(rules).map(
-          async (ref) =>
-            [
-              typeLookupKey(ref),
-              await this.#readCachedHostRouteType(ref),
-            ] as const,
-        ),
-      ),
-    );
+    if (stored) {
+      if (stored.retryTypeReads) {
+        // A type read failed for a reason that may pass when the realm was
+        // indexed, and its route was dropped. Nothing else may index this
+        // realm for a long time, so an index of realm.json reads it again.
+        this.#indexRealmConfigForHostRoutes();
+      }
+      return { routes: stored.routes, warnings: stored.warnings };
+    }
+    // An index written before the index stored host routes. Its rules are
+    // validated without type definitions, so each field-match route is
+    // dropped as `type-unavailable` until the realm is indexed again, and an
+    // index of realm.json is started to store the tree: nothing else may
+    // index this realm for a long time.
+    if (hostRouteTypeRefs(rules).length > 0) {
+      this.#indexRealmConfigForHostRoutes();
+    }
     return validateHostRoutes(rules, {
       realmURL: new URL(this.url),
-      lookupType: (ref) => types.get(typeLookupKey(ref)),
+      lookupType: () => 'unavailable',
     });
   }
 
-  async #readAndValidateHostRoutes(
-    rulesRead: Promise<RawHostRoutingRule[]>,
-    withoutTypes: Promise<HostRoutesValidation | undefined>,
-    epoch: number,
-    generation: number | undefined,
-  ): Promise<HostRoutesValidation | undefined> {
-    try {
-      let rules = await rulesRead;
-      // The types field-match routes name, read before validating so the
-      // validation itself stays synchronous.
-      let refs = hostRouteTypeRefs(rules);
-      if (refs.length === 0) {
-        return await withoutTypes;
-      }
-      let types = new Map(
-        await Promise.all(
-          refs.map(
-            async (ref) =>
-              [typeLookupKey(ref), await this.#readHostRouteType(ref)] as const,
-          ),
-        ),
-      );
-      return this.#finishHostRoutesValidation(
-        rules,
-        refs,
-        types,
-        epoch,
-        generation,
-      );
-    } catch (e) {
-      this.#log.warn(
-        `failed to read host routing rules from RealmConfig card: ${e}`,
-      );
-      // Don't cache a transient read failure — leave `null` so the next
-      // call retries the index query.
-      return undefined;
-    }
-  }
-
-  // Validates the rules with the types that were read, logs the warnings,
-  // and caches the result unless an index ran since `epoch` was taken.
-  #finishHostRoutesValidation(
-    rules: RawHostRoutingRule[],
-    refs: ResolvedCodeRef[],
-    types: Map<string, HostRouteTypeInfo | 'unavailable' | undefined>,
-    epoch: number,
-    generation: number | undefined,
-  ): HostRoutesValidation {
-    let usesOtherRealmTypes = refs.some(
-      (ref) => !this.paths.inRealm(ref.module),
-    );
-    let validation = validateHostRoutes(rules, {
-      realmURL: new URL(this.url),
-      lookupType: (ref) => types.get(typeLookupKey(ref)),
-    });
-    this.#logHostRouteWarnings(validation);
-    if (epoch !== this.#hostRoutesEpoch) {
-      return validation;
-    }
-    if (!validation.complete) {
-      // Kept until the retry time, when the types that couldn't be read
-      // are read again: a failed render's error row expires by then, and
-      // a failed read is tried again.
-      this.#cachedHostRoutes = validation;
-      this.#cachedHostRoutesRetryAt = Date.now() + HOST_ROUTES_RETRY_MS;
-      this.#cachedHostRoutesGeneration = usesOtherRealmTypes
-        ? generation
-        : undefined;
-    } else if (!usesOtherRealmTypes || generation !== undefined) {
-      // A validation that uses another realm's types is kept only while
-      // the definition generation holds, and not at all by a lookup
-      // without one.
-      this.#cachedHostRoutes = validation;
-      this.#cachedHostRoutesRetryAt = undefined;
-      this.#cachedHostRoutesGeneration = usesOtherRealmTypes
-        ? generation
-        : undefined;
-    }
-    return validation;
-  }
-
-  // Logs the warnings of a validation, unless the last validation logged
-  // the same ones.
-  #logHostRouteWarnings(validation: HostRoutesValidation): void {
-    let logged = validation.warnings
-      .map((w) => `${w.code} ${w.path} ${w.message}`)
-      .join('\n');
-    if (logged === this.#loggedHostRouteWarnings) {
+  // Starts an index of realm.json, which stores the host routes with the
+  // types it reads: for an index written before the index stored them, or a
+  // stored tree that dropped a route for a type read that may pass. At most
+  // one runs at a time in this process, and one starts at most once every
+  // `HOST_ROUTES_INDEX_INTERVAL_MS`, so a type that still can't be read
+  // isn't read on every request.
+  #indexRealmConfigForHostRoutes(): void {
+    let now = Date.now();
+    if (
+      this.#hostRoutesIndexRunning ||
+      (this.#hostRoutesIndexStartedAt !== undefined &&
+        now - this.#hostRoutesIndexStartedAt < HOST_ROUTES_INDEX_INTERVAL_MS)
+    ) {
       return;
     }
-    this.#loggedHostRouteWarnings = logged;
-    for (let warning of validation.warnings) {
-      this.#log.warn(
-        `${warning.dropped ? 'dropping' : 'warning for'} host routing rule for path "${warning.path}": ${warning.message}`,
-      );
-    }
+    this.#hostRoutesIndexStartedAt = now;
+    this.#hostRoutesIndexRunning = true;
+    void this.#realmIndexUpdater
+      .enqueueUpdate([this.paths.fileURL('realm.json')], {
+        // As for any write: the swap drops this realm's index caches, the
+        // stored-routes read among them, here and on peer replicas.
+        onInvalidation: async () => {
+          await this.clearRealmIndexCachesAndBroadcast();
+        },
+      })
+      .then(({ settled }) => settled)
+      .catch((e: unknown) => {
+        this.#log.warn(
+          `failed to index realm.json to store the host routes of ${this.url}: ${e}`,
+        );
+      })
+      .finally(() => {
+        this.#hostRoutesIndexRunning = false;
+      });
+  }
+
+  // Lets the next read start an index of realm.json at once, as it would
+  // once `HOST_ROUTES_INDEX_INTERVAL_MS` has passed.
+  __testOnlyAllowHostRoutesIndexNow(): void {
+    this.#hostRoutesIndexStartedAt = undefined;
+  }
+
+  // Drops the cached host routes and the map built from them.
+  #invalidateHostRoutes(): void {
+    this.#cachedHostRoutes = undefined;
+    this.#cachedHostRoutingMap = undefined;
   }
 
   // The fixed paths the realm routes: each top-level fixed card route and
@@ -22105,21 +22491,15 @@ export class Realm {
   // that starts with `:` is literal text, as it always was, and the
   // validation warns about it (`literal-param-segment`). Built from the validated routes
   // (`getHostRoutes`), so the same checks apply; dynamic and nested routes
-  // are not in it. Cached with the validation. A fixed route needs no type,
-  // so the map doesn't wait for the types to be read.
+  // are not in it. Cached with them.
   async getHostRoutingMap(): Promise<HostRoutingRule[]> {
-    this.#dropStaleHostRoutes();
-    if (this.#cachedHostRoutingMap) {
-      return this.#cachedHostRoutingMap;
-    }
-    let validation = (await this.#validateHostRoutes()).withoutTypes;
-    if (!validation) {
-      return [];
+    let validation = await this.getHostRoutes();
+    let cached = this.#cachedHostRoutingMap;
+    if (cached?.validation === validation) {
+      return cached.map;
     }
     let map = hostRoutingMapFromRoutes(validation.routes);
-    if (this.#cachedHostRoutes === validation) {
-      this.#cachedHostRoutingMap = map;
-    }
+    this.#cachedHostRoutingMap = { validation, map };
     return map;
   }
 
@@ -23557,4 +23937,25 @@ async function* lazyIterable(
   pending: Promise<AsyncIterable<Uint8Array>>,
 ): AsyncIterable<Uint8Array> {
   yield* await pending;
+}
+
+// A JSON value written with its object keys sorted, so two values that differ
+// only in key order compare as equal. `undefined` stands for a key that is
+// absent.
+function canonicalJSON(value: unknown): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJSON).join(',')}]`;
+  }
+  let entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, member]) => member !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries
+    .map(([key, member]) => `${JSON.stringify(key)}:${canonicalJSON(member)}`)
+    .join(',')}}`;
 }

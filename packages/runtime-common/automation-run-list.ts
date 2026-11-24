@@ -177,8 +177,8 @@ export type AutomationRunListAnswer =
 // other caller the realm ACL lets read is told it isn't a direct writer and
 // listed nothing, rather than refused, for the reason `answerAutomationStatus`
 // gives: a 401 or 403 back through `authedFetch` fails the loads in flight
-// wherever an auth-error guard listens. A caller only a policy grant admits
-// gets the ACL's refusal, since the route is `ACL_ONLY`.
+// wherever an auth-error guard listens. A caller the realm hands to its
+// policy asks as no one, so they get the same answer.
 export async function answerAutomationRunList({
   dbAdapter,
   realmURL,

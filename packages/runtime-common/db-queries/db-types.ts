@@ -62,7 +62,10 @@ export type LedgerChargeKind =
 // `automationId` the automation card's identifier, `batchId` the AI
 // provider's batch id, and `day` a `YYYY-MM-DD` UTC date. The metered kinds
 // (`run`, `run_indexing`, `storage`) carry the pricing version that priced
-// them.
+// them. An AI kind (`ai`, `batched_ai`) is the provider's cost with no margin,
+// and carries the pricing version of the process that wrote it when that
+// process has prices. An AI entry without a version reads back with a null
+// `pricingVersion`.
 //
 // A charge whose reference names exactly one charge (every consumption kind
 // but `ai`) is written at most once: its kind and reference are its identity,

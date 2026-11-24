@@ -26,7 +26,10 @@ export type ErrorState =
   | 'not-allowed'
   | 'unsupported'
   | 'cant-continue'
-  | 'rate-limited';
+  | 'rate-limited'
+  // A flow already answered, usually in another window. Only the authorize
+  // page shows it, from the consent routes' 409: no address names it.
+  | 'answered';
 
 // What the page's address asks for.
 export type ErrorParam =

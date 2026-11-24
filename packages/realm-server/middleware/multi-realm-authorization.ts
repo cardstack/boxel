@@ -41,6 +41,17 @@ import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.t
 import { mayNameRealmPolicy } from '../lib/realm-policy-pointer.ts';
 import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 import {
+  admitOAuthCaller,
+  presentedCredential,
+  refuseOAuthToken,
+  refusePresentation,
+  type BoxelApi,
+} from '../lib/oauth-provider/boxel-api.ts';
+import {
+  resolveOAuthAccessToken,
+  type OAuthCaller,
+} from '../lib/oauth-provider/lookup.ts';
+import {
   retrieveDiagnosticSessionClaim,
   retrieveTokenClaim,
   type RealmServerTokenClaim,
@@ -100,7 +111,12 @@ export function multiRealmAuthorization(
     reconciler,
     realmsRootPath,
     virtualNetwork,
+    boxelApi,
   }: {
+    // The Boxel API, whose OAuth tokens this admits on a route a scope maps
+    // (ADR 021 §1.5). Without it (the OAuth provider is off), an OAuth token
+    // is refused as an invalid JWT.
+    boxelApi?: BoxelApi;
     dbAdapter: DBAdapter;
     matrixClient: MatrixClient;
     realmSecretSeed: string;
@@ -190,13 +206,46 @@ export function multiRealmAuthorization(
       return;
     }
 
+    // An OAuth access token for the Boxel API is looked up here, once, and
+    // judged before anything else about the request: the caller it yields is
+    // a user like any session's, read with that user's permissions, and is
+    // never a delegated session, a diagnostic session or a realm-authority
+    // principal. The body was read above, so only the query string is looked
+    // through for a token sent outside the header.
+    let oauthCaller: OAuthCaller | undefined;
+    if (boxelApi) {
+      let presented = await presentedCredential(ctxt, { readFormBody: false });
+      if (
+        presented.kind === 'elsewhere' ||
+        presented.kind === 'body-too-large'
+      ) {
+        refusePresentation(ctxt, presented.kind);
+        return;
+      }
+      if (presented.kind === 'oauth') {
+        let result = await resolveOAuthAccessToken(
+          boxelApi.dbAdapter,
+          presented.token,
+          boxelApi.resource.id,
+        );
+        if (!result.ok) {
+          refuseOAuthToken(ctxt, boxelApi);
+          return;
+        }
+        if (!admitOAuthCaller(ctxt, boxelApi, result.caller)) {
+          return;
+        }
+        oauthCaller = result.caller;
+      }
+    }
+
     let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, realmList);
 
     let readableRealms = new Set<string>();
     let principal: SearchPrincipal | undefined;
     let anonymousCallers: Map<string, AnonymousCaller> | undefined;
     let authorization = ctxt.req.headers['authorization'];
-    if (!authorization) {
+    if (!authorization && !oauthCaller) {
       let publicPermissions = await fetchUserPermissions(dbAdapter, {
         userId: '*',
         onlyOwnRealms: false,
@@ -241,17 +290,28 @@ export function multiRealmAuthorization(
         }
       }
     } else {
-      let token: RealmServerTokenClaim & { iat: number; exp: number };
+      let token: Pick<
+        RealmServerTokenClaim,
+        'user' | 'delegated' | 'realm' | 'diagnostic' | 'realmAuthority'
+      >;
       try {
-        token = presentsAsDiagnosticSession(
-          authorization.replace('Bearer ', ''),
-        )
-          ? retrieveDiagnosticSessionClaim(authorization, realmSecretSeed)
-          : retrieveTokenClaim(authorization, realmSecretSeed);
-        if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
-          throw new AuthenticationError(
-            AuthenticationErrorMessages.SessionRevoked,
-          );
+        // An OAuth caller's user is the one its grant is for. Its grant's
+        // revocation was checked by the lookup, against the user's OAuth
+        // cutoff, never `isSessionRevoked` (ADR 021 §1.9).
+        if (oauthCaller) {
+          token = { user: oauthCaller.user };
+        } else {
+          let session = presentsAsDiagnosticSession(
+            authorization!.replace('Bearer ', ''),
+          )
+            ? retrieveDiagnosticSessionClaim(authorization!, realmSecretSeed)
+            : retrieveTokenClaim(authorization!, realmSecretSeed);
+          if (await isSessionRevoked(dbAdapter, session.user, session.iat)) {
+            throw new AuthenticationError(
+              AuthenticationErrorMessages.SessionRevoked,
+            );
+          }
+          token = session;
         }
       } catch (e) {
         if (e instanceof AuthenticationError) {

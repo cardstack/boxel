@@ -28,7 +28,9 @@ import {
   insertProxyEndpoints,
   insertUser,
   setupPermissionedRealmCached,
+  setupProcessPricing,
   setupSecretsKeyring,
+  testPricing,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
@@ -650,6 +652,33 @@ module(basename(import.meta.filename), function (hooks) {
         });
       assert.strictEqual(response.status, 403, JSON.stringify(response.body));
       assert.strictEqual(forwarded.length, 0);
+    });
+
+    module('in a process with prices', function (hooks) {
+      setupProcessPricing(hooks, 'automation-run-limits-test');
+
+      test("a resolve's AI charge records the pricing version of the process that wrote it", async function (assert) {
+        let { token, run } = await runOf(ROOMY);
+        let response = await resolve(token);
+        assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+
+        let charges = await aiChargesOf(run.id);
+        assert.deepEqual(
+          charges.map(({ chargeKind, runId, pricingVersion }) => ({
+            chargeKind,
+            runId,
+            pricingVersion,
+          })),
+          [
+            {
+              chargeKind: 'ai',
+              runId: run.id,
+              pricingVersion: testPricing().version,
+            },
+          ],
+          "the run's AI charge carries the realm server's pricing version",
+        );
+      });
     });
   });
 });

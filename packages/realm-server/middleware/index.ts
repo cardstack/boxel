@@ -20,6 +20,17 @@ import {
 import { nodeStreamToText } from '../stream.ts';
 import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
 import { retrieveUserSessionClaim } from '../utils/jwt.ts';
+import {
+  admitOAuthCaller,
+  presentedCredential,
+  refuseOAuthToken,
+  refusePresentation,
+  type BoxelApi,
+} from '../lib/oauth-provider/boxel-api.ts';
+import {
+  resolveOAuthAccessToken,
+  type OAuthCaller,
+} from '../lib/oauth-provider/lookup.ts';
 import { getPublicInstanceId, INSTANCE_ID_HEADER } from '../lib/instance-id.ts';
 import {
   verifyOperatorToken,
@@ -697,12 +708,48 @@ export async function fetchRequestFromContext(
 // whose only effect is to end something, or the secure window's renewal,
 // where the row the token names decides (see `retrieveTokenClaim`). Every
 // other route takes only an unexpired token.
+// The realm-server routes' controller for a user's own token: a realm-server
+// session JWT, or an OAuth access token for the Boxel API (ADR 021 §1.5). A
+// session token is checked as it always was. An OAuth token is looked up here,
+// once, and must be for the Boxel API, on a route a scope it holds maps; the
+// route then sees the verified caller as `ctxt.state.oauthCaller`, never a
+// session token's claims, and no `Authorization` header. Without `boxelApi`
+// (the OAuth provider is off), an OAuth token is refused as an invalid JWT.
 export function jwtMiddleware(
   secretSeed: string,
   dbAdapter: DBAdapter,
-  opts: { expiredWithinSeconds?: number } = {},
+  opts: { expiredWithinSeconds?: number; boxelApi?: BoxelApi } = {},
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let { boxelApi, ...sessionOpts } = opts;
   return async function (ctxt: Koa.Context, next: Koa.Next) {
+    if (boxelApi) {
+      let presented = await presentedCredential(ctxt);
+      if (
+        presented.kind === 'elsewhere' ||
+        presented.kind === 'body-too-large'
+      ) {
+        refusePresentation(ctxt, presented.kind);
+        return;
+      }
+      if (presented.kind === 'oauth') {
+        let result = await resolveOAuthAccessToken(
+          boxelApi.dbAdapter,
+          presented.token,
+          boxelApi.resource.id,
+        );
+        if (!result.ok) {
+          refuseOAuthToken(ctxt, boxelApi);
+          return;
+        }
+        if (!admitOAuthCaller(ctxt, boxelApi, result.caller)) {
+          return;
+        }
+        ctxt.state.oauthCaller = result.caller;
+        await next();
+        return;
+      }
+    }
+
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
       await sendResponseForUnauthorizedRequest(
@@ -724,7 +771,7 @@ export function jwtMiddleware(
         authorization,
         secretSeed,
         dbAdapter,
-        opts,
+        sessionOpts,
       );
     } catch (e) {
       if (e instanceof AuthenticationError) {
@@ -736,6 +783,20 @@ export function jwtMiddleware(
 
     await next();
   };
+}
+
+// The user a request that passed `jwtMiddleware` acts for: the one its
+// session token names, or the one its OAuth token's grant is for. A route
+// that a Boxel API scope maps reads its user through this, since an OAuth
+// caller carries no session claims. Undefined for a request that passed
+// neither.
+export function requestUser(ctxt: Koa.Context): string | undefined {
+  let caller = ctxt.state.oauthCaller as OAuthCaller | undefined;
+  if (caller) {
+    return caller.user;
+  }
+  let token = ctxt.state.token as { user?: string } | undefined;
+  return token?.user;
 }
 
 // Admits a request whose `Authorization: Bearer <token>` carries `secret`,

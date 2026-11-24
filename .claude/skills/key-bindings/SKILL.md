@@ -319,6 +319,19 @@ connection or `client_credentials` client can't mint a token, with `reason`
 `rejected` or `needs-admin` (see the `oauth-connections` skill). A rejected
 grant or service-account key admits the run only while its probe is due.
 
+A run of an automation's own triggers needs more than an active binding: an
+**automation approval**, the key owner's approval for that automation to use
+that binding, as the automation was then (ADR 039; `automation_key_approvals`,
+written when a `POST /_key-bindings` confirmation names `automation: { id,
+version }`). The realm checks it at the run's admission, and an approval
+missing or no longer matching refuses the run `key-approval-ended` and moves
+the automation to waiting for key approval. Revoking or removing a binding
+removes its automation approvals, and so does moving it to another share or
+key (`writeApproval`, `moveShareBindingsIn`) unless the same confirmation
+approves those automations again. The call itself (`fillSlots`) doesn't read
+automation approvals. The `automations` skill's _Key approvals_ section has
+the version, who can approve, and the states.
+
 ## Anonymous use
 
 People who aren't signed in can use a shared key, for a public card such as a

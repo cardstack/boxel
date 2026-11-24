@@ -8,6 +8,7 @@ import {
 import * as Sentry from '@sentry/node';
 
 import type { AICallCharge, CreditStrategy } from './credit-strategies.ts';
+import { currentPricing } from './pricing.ts';
 
 const log = logger('billable-call');
 
@@ -55,12 +56,15 @@ export interface BillableCallOptions {
   // `corr=<id>` like the request's `realm:requests` lines, so the three join.
   correlationId?: string;
   // What the call's spend is recorded as paying for. Omitted, it is an AI call
-  // with no reference; a call an automation run makes names the run.
+  // with no reference; a call an automation run makes names the run. Either
+  // way the charge also records this process's pricing version.
   charge?: AICallCharge;
   // Told what the upstream response cost in USD once the credit strategy has
-  // priced it, or undefined when it couldn't be. Not called for a call that
+  // priced it, or undefined when it couldn't be, with what `call` returned
+  // (the request forward's `{ id, usage }`, whose `usage` carries the token
+  // counts of a response that wasn't streamed). Not called for a call that
   // returned nothing to price.
-  onCostResolved?: (costInUsd: number | undefined) => void;
+  onCostResolved?: (costInUsd: number | undefined, usage: unknown) => void;
 }
 
 // How a call ended, as the timing line reports it:
@@ -266,7 +270,7 @@ async function settle(
   } finally {
     timing.costMs = Date.now() - costStartedAt;
   }
-  onCostResolved?.(costInUsd);
+  onCostResolved?.(costInUsd, usage);
   if (costInUsd === undefined) {
     return false;
   }
@@ -274,12 +278,31 @@ async function settle(
   let lockRequestedAt = Date.now();
   await dbAdapter.withUserCostLock(matrixUserId, async () => {
     timing.lockWaitMs += Date.now() - lockRequestedAt;
-    await creditStrategy.spendUsageCost(dbAdapter, matrixUserId, cost, charge);
+    await creditStrategy.spendUsageCost(
+      dbAdapter,
+      matrixUserId,
+      cost,
+      withPricingVersion(charge),
+    );
     // Given back in the same critical section as the spend, so the next
     // admission sees either both or neither.
     await releaseBillableCall(dbAdapter, reservationId);
   });
   return true;
+}
+
+// The charge a call records: what its caller says it paid for, plus the
+// pricing version this process checked at startup, so every AI charge can be
+// read beside the prices in force when it was written, like a metered charge.
+// An AI charge is the provider's cost with no margin whatever the version, so
+// a process whose pricing check failed still charges the call and records no
+// version.
+function withPricingVersion(charge: AICallCharge | undefined): AICallCharge {
+  let pricingVersion = currentPricing()?.version;
+  return {
+    ...(charge ?? { kind: 'ai' }),
+    ...(pricingVersion ? { pricingVersion } : {}),
+  };
 }
 
 async function release(

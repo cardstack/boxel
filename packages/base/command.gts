@@ -136,8 +136,16 @@ export class CardIdCard extends CardDef {
   @field cardId = contains(StringField);
 }
 
+// The cards are `cardId`, then `cardIds`, all in one workspace, pinned in
+// that order or unpinned in one save.
 export class SetWorkspacePinInput extends CardIdCard {
+  @field cardIds = containsMany(StringField);
   @field pinned = contains(BooleanField);
+}
+
+// The cards a pin call left out while it pinned the others, and why.
+export class SetWorkspacePinResult extends CardDef {
+  @field leftOut = contains(StringField);
 }
 
 export class CardTypeSchemaInput extends CardDef {
@@ -1604,6 +1612,40 @@ export class AuthedFetchResult extends CardDef {
   @field ok = contains(BooleanField);
   @field status = contains(NumberField);
   @field body = contains(JsonField);
+}
+
+// A request to one of the realm server's automation routes, which a direct
+// writer of the realm makes: `route` names the route (such as
+// `_automation-pause`), and the other fields are what that route takes. A
+// GET sends them as query parameters, and any other method as the route's
+// JSON:API body.
+export class AutomationRequestInput extends CardDef {
+  @field route = contains(StringField);
+  @field method = contains(StringField);
+  // The realm the automation is in, by the URL its permissions use.
+  @field realm = contains(StringField);
+  // The Automation card's URL.
+  @field automation = contains(StringField);
+  // A run's id, for the routes about one run.
+  @field run = contains(StringField);
+  // A realm-local path, for a Preview's staged file.
+  @field filePath = contains(StringField);
+  // The monthly credit cap the caller agrees to, for switch-on and resume.
+  @field monthlyCredits = contains(NumberField);
+  // A fresh id per click, for Preview and Run now.
+  @field click = contains(StringField);
+}
+
+// What an automation route answered: its JSON document in `body`, or the
+// answer's bytes, base64-encoded, in `bytesBase64` when the answer isn't JSON
+// (a Preview's staged file), and the route's own messages in `errors` when it
+// refused.
+export class AutomationRequestResult extends CardDef {
+  @field ok = contains(BooleanField);
+  @field status = contains(NumberField);
+  @field body = contains(JsonField);
+  @field bytesBase64 = contains(StringField);
+  @field errors = containsMany(StringField);
 }
 
 export class GetDefaultWritableRealmResult extends CardDef {

@@ -188,6 +188,8 @@ module(basename(import.meta.filename), function (hooks) {
       tokens: OAuthTokenResponse;
       refreshed: OAuthTokenResponse;
       errorReference: string;
+      endedInteractionId: string;
+      endedReference: string;
       clientId: string;
       grantId: string;
       secondClientId: string;
@@ -324,6 +326,38 @@ module(basename(import.meta.filename), function (hooks) {
         'with its error',
       );
 
+      // A flow ended at consent: the answer the provider was sent couldn't
+      // be read, so it ends the flow and answers an error reference the
+      // authorize page reads.
+      values.endedInteractionId = await startOAuthFlow(
+        browserKeepingCookies(),
+        values.clientId,
+        { resources: [RESOURCE], codeChallenge: OAUTH_TEST_CODE_CHALLENGE },
+      );
+      let ended = await supertest(server!)
+        .post(`/_oauth-provider/consent/${values.endedInteractionId}`)
+        .set('Host', HOST)
+        .set('Origin', SECURE_ORIGIN)
+        .set('Authorization', who.session)
+        .set('Content-Type', 'application/json')
+        .send(JSON.stringify({ decision: 'maybe', renew: true }));
+      assert.strictEqual(ended.status, 400, 'an unreadable answer ends a flow');
+      values.endedReference = ended.body.reference;
+      await snapshot('ended');
+      let endedError = await supertest(server!)
+        .get(`/_oauth-provider/error/${values.endedReference}`)
+        .set('Host', HOST)
+        .set('Origin', SECURE_ORIGIN);
+      assert.strictEqual(endedError.status, 200, 'the authorize page reads it');
+      let endedReturn = await supertest(server!)
+        .get(`/_oauth-provider/error/${values.endedReference}/return`)
+        .set('Host', HOST);
+      assert.strictEqual(
+        new URL(endedReturn.headers.location).searchParams.get('error'),
+        'server_error',
+        'and returns it to the app',
+      );
+
       // The second app: connected, then disconnected by the user through
       // the route Connected apps calls.
       values.secondClientId = await registerOAuthClient(server!, {
@@ -374,6 +408,8 @@ module(basename(import.meta.filename), function (hooks) {
       'refreshed access token': values.refreshed.access_token,
       'refreshed refresh token': values.refreshed.refresh_token!,
       'error reference': values.errorReference,
+      "ended flow's interaction ID": values.endedInteractionId,
+      "ended flow's error reference": values.endedReference,
       "second app's interaction ID": values.secondInteractionId,
       "second app's ticket": values.secondTicket,
       "second app's code": values.secondCode,
@@ -436,6 +472,7 @@ module(basename(import.meta.filename), function (hooks) {
         [',RefreshToken,', `,${values.grantId},`],
       ],
       ['refused', 'oauth_provider_objects', ['(ErrorReference,']],
+      ['ended', 'oauth_provider_objects', ['(ErrorReference,']],
       ['second started', 'oauth_provider_objects', ['(Interaction,']],
       ['second decided', 'oauth_provider_objects', ['(ConsentTicket,']],
       [
@@ -464,6 +501,7 @@ module(basename(import.meta.filename), function (hooks) {
     for (let line of [
       'consent shown:',
       'authorization error returned to the client:',
+      'consent refused: unreadable decision',
       `grant ended: client, client ${values.clientId}`,
       `grant ended: user, client ${values.secondClientId}`,
     ]) {

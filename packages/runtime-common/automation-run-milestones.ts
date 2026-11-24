@@ -1,20 +1,23 @@
-// An automation run's milestones. The script is their only source: it
-// declares them up front with `realm.progress.plan([...names])`, marks each
-// as it reaches it with `realm.progress.milestone(name)`, and reports how far
-// it is inside one with `realm.progress.count(done, total)`. The automation
-// card holds no list of them, since a list kept on the card drifts from what
-// the code does.
+// An automation run's milestones, and the notable tasks inside each. The
+// script is their only source: it declares the milestones up front with
+// `realm.progress.plan([...names])`, marks each as it reaches it with
+// `realm.progress.milestone(name)`, and reports each notable task inside one
+// with `realm.progress.task(text)`, such as "Grouped the bug label". The
+// automation card holds no list of them, since a list kept on the card drifts
+// from what the code does.
 //
 // Those calls reach the realm server as the run's log lines (`/_run-log`),
 // and `appendRunLog` hands them here under the run row's lock, before the
 // log's cap is checked, so a run whose log is full still records where it
 // got to. The plan is `automation_runs.milestone_plan`; each milestone the
-// run reaches is one `automation_run_milestones` row, in the order reached.
-// A milestone lasts until the next one starts, or until the run ends.
+// run reaches is one `automation_run_milestones` row, in the order reached,
+// and each task one `automation_run_tasks` row, under the milestone the run
+// was in. A milestone lasts until the next one starts, or until the run ends.
 //
 // When a run ends, each of its milestones is written once to the
-// `boxel:automation-milestones` telemetry channel with the time spent in it,
-// tagged with the run's automation, run and queue job.
+// `boxel:automation-milestones` telemetry channel with the time spent in it
+// and how many tasks the script reported in it, tagged with the run's
+// automation, run and queue job.
 
 import type { AutomationRun, AutomationRunState } from './automation-runs.ts';
 import type { RunLogLine } from './automation-run-log.ts';
@@ -43,8 +46,14 @@ export const RUN_MILESTONE_MAX_NAME_CHARS = 80;
 // lasts until the run ends.
 export const RUN_MAX_MILESTONES = 200;
 
-// The largest count Postgres's `integer` holds.
-const MAX_COUNT = 2 ** 31 - 1;
+// The longest task `realm.progress.task` takes: the automation surface's
+// `MAX_TASK_CHARS` (host `lib/realm-runner/surfaces.ts`).
+export const RUN_TASK_MAX_CHARS = 200;
+
+// The most tasks one run records. A script that reports one per item of a
+// long loop would otherwise write a row per item, and the card would list
+// them all; past this, tasks are counted in `tasks_dropped`.
+export const RUN_MAX_TASKS = 200;
 
 export const AUTOMATION_MILESTONES_CHANNEL = 'boxel:automation-milestones';
 
@@ -58,9 +67,14 @@ export interface RunMilestone {
   // Time spent in the milestone: to its end, or, while the run is in it, to
   // now.
   ms: number;
-  // The last count the script reported inside the milestone.
-  done?: number;
-  total?: number;
+  // The notable tasks the script reported inside the milestone, in order.
+  tasks: RunTask[];
+}
+
+export interface RunTask {
+  text: string;
+  // ISO time the script reported the task.
+  at: string;
 }
 
 export interface RunMilestones {
@@ -81,26 +95,36 @@ export interface RunMilestones {
   failedIn: string | null;
   // Milestones marked past `RUN_MAX_MILESTONES`, not recorded.
   dropped: number;
+  // Tasks not recorded: reported past `RUN_MAX_TASKS`, or inside a milestone
+  // marked past `RUN_MAX_MILESTONES`.
+  tasksDropped: number;
 }
 
-// Records the plan, milestone and count lines among `lines`, in order, for
+export interface RecordedRunProgress {
+  // The milestones the lines marked that the run recorded.
+  milestones: number;
+  // The tasks the lines reported that the run recorded.
+  tasks: number;
+}
+
+// Records the plan, milestone and task lines among `lines`, in order, for
 // the run whose row the caller's transaction has locked. Every other line is
-// ignored, as is a count before the run's first milestone and anything the
+// ignored, as is a task before the run's first milestone and anything the
 // automation surface would have refused.
 export async function recordRunMilestones(
   txQuery: Querier,
   runId: string,
   lines: readonly RunLogLine[],
-): Promise<number> {
+): Promise<RecordedRunProgress> {
   let progress = lines.filter(
     (line) =>
       line.source === 'script' &&
       (line.kind === 'plan' ||
         line.kind === 'milestone' ||
-        line.kind === 'count'),
+        line.kind === 'task'),
   );
   if (progress.length === 0) {
-    return 0;
+    return { milestones: 0, tasks: 0 };
   }
   let [run] = (await txQuery([
     'SELECT milestones_dropped FROM automation_runs WHERE id =',
@@ -112,20 +136,32 @@ export async function recordRunMilestones(
     'ORDER BY position DESC LIMIT 1',
   ])) as { position: number }[];
   let nextPosition = last ? Number(last.position) + 1 : 0;
+  let nextTaskPosition = 0;
+  if (progress.some((line) => line.kind === 'task')) {
+    let [lastTask] = (await txQuery([
+      'SELECT position FROM automation_run_tasks WHERE run_id =',
+      param(runId),
+      'ORDER BY position DESC LIMIT 1',
+    ])) as { position: number }[];
+    nextTaskPosition = lastTask ? Number(lastTask.position) + 1 : 0;
+  }
+  // The milestone the run is in, by position, or none before its first.
+  let milestonePosition: number | undefined = last
+    ? Number(last.position)
+    : undefined;
   let plan: string[] | undefined;
-  let reached: {
+  let reached: { position: number; name: string; at: number }[] = [];
+  let tasks: {
     position: number;
-    name: string;
+    milestonePosition: number;
+    text: string;
     at: number;
-    done?: number;
-    total?: number;
   }[] = [];
-  // A count for the milestone the run was in before this batch.
-  let earlierCount: { done: number; total?: number } | undefined;
   let dropped = 0;
+  let tasksDropped = 0;
   // Whether the milestone the run is in went unrecorded. Once one mark is
   // past the cap every later one is too, so a run that has dropped a mark is
-  // in an unrecorded milestone, and its counts belong to none.
+  // in an unrecorded milestone, and its tasks belong to none.
   let inDropped = Number(run?.milestones_dropped ?? 0) > 0;
   for (let line of progress) {
     let data = line.data ?? {};
@@ -146,24 +182,23 @@ export async function recordRunMilestones(
         continue;
       }
       inDropped = false;
+      milestonePosition = nextPosition;
       reached.push({ position: nextPosition++, name, at: line.at });
     } else {
-      let done = countValue(data.done);
-      let total = data.total === undefined ? undefined : countValue(data.total);
-      if (
-        done === undefined ||
-        (data.total !== undefined && total === undefined) ||
-        inDropped
-      ) {
+      let text = taskText(data.text);
+      if (text === undefined || milestonePosition === undefined) {
         continue;
       }
-      let current = reached.at(-1);
-      if (current) {
-        current.done = done;
-        current.total = total;
-      } else if (last) {
-        earlierCount = { done, total };
+      if (inDropped || nextTaskPosition >= RUN_MAX_TASKS) {
+        tasksDropped++;
+        continue;
       }
+      tasks.push({
+        position: nextTaskPosition++,
+        milestonePosition,
+        text,
+        at: line.at,
+      });
     }
   }
   if (plan) {
@@ -172,18 +207,6 @@ export async function recordRunMilestones(
       param(JSON.stringify(plan)),
       '::jsonb)) WHERE id =',
       param(runId),
-    ]);
-  }
-  if (earlierCount && last) {
-    await txQuery([
-      'UPDATE automation_run_milestones SET count_done =',
-      param(earlierCount.done),
-      ', count_total =',
-      param(earlierCount.total ?? null),
-      'WHERE run_id =',
-      param(runId),
-      'AND position =',
-      param(Number(last.position)),
     ]);
   }
   if (reached.length > 0) {
@@ -198,41 +221,65 @@ export async function recordRunMilestones(
         param(milestone.name),
         ',',
         param(new Date(milestone.at).toISOString()),
-        '::timestamptz,',
-        param(milestone.done ?? null),
-        ',',
-        param(milestone.total ?? null),
-        ')',
+        '::timestamptz)',
       );
     }
     await txQuery([
-      'INSERT INTO automation_run_milestones (run_id, position, name, started_at, count_done, count_total) VALUES',
+      'INSERT INTO automation_run_milestones (run_id, position, name, started_at) VALUES',
       ...values,
     ]);
   }
-  if (dropped > 0) {
+  if (tasks.length > 0) {
+    let values: Expression = [];
+    for (let [index, task] of tasks.entries()) {
+      values.push(
+        index === 0 ? '(' : ', (',
+        param(runId),
+        ',',
+        param(task.position),
+        ',',
+        param(task.milestonePosition),
+        ',',
+        param(task.text),
+        ',',
+        param(new Date(task.at).toISOString()),
+        '::timestamptz)',
+      );
+    }
+    await txQuery([
+      'INSERT INTO automation_run_tasks (run_id, position, milestone_position, text, reported_at) VALUES',
+      ...values,
+    ]);
+  }
+  if (dropped > 0 || tasksDropped > 0) {
     await txQuery([
       'UPDATE automation_runs SET milestones_dropped = milestones_dropped +',
       param(dropped),
+      ', tasks_dropped = tasks_dropped +',
+      param(tasksDropped),
       'WHERE id =',
       param(runId),
     ]);
   }
-  return reached.length;
+  return { milestones: reached.length, tasks: tasks.length };
 }
 
-// Clears a run's milestones, inside the caller's transaction, for an attempt
-// that runs the script again from its start.
+// Clears a run's milestones and their tasks, inside the caller's
+// transaction, for an attempt that runs the script again from its start.
 export async function clearRunMilestones(
   txQuery: Querier,
   runId: string,
 ): Promise<void> {
   await txQuery([
+    'DELETE FROM automation_run_tasks WHERE run_id =',
+    param(runId),
+  ]);
+  await txQuery([
     'DELETE FROM automation_run_milestones WHERE run_id =',
     param(runId),
   ]);
   await txQuery([
-    'UPDATE automation_runs SET milestone_plan = NULL, milestones_dropped = 0 WHERE id =',
+    'UPDATE automation_runs SET milestone_plan = NULL, milestones_dropped = 0, tasks_dropped = 0 WHERE id =',
     param(runId),
   ]);
 }
@@ -245,7 +292,7 @@ export async function readRunMilestones(
   { now = Date.now() }: { now?: number } = {},
 ): Promise<RunMilestones | undefined> {
   let [run] = (await query(dbAdapter, [
-    'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped FROM automation_runs WHERE id =',
+    'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped, tasks_dropped FROM automation_runs WHERE id =',
     param(runId),
   ])) as unknown as RunRow[];
   return run ? await milestonesOf(dbAdapter, run, now) : undefined;
@@ -260,7 +307,7 @@ export async function readLastRunMilestones(
   automationId: RealmResourceIdentifier,
 ): Promise<RunMilestones | undefined> {
   let [run] = (await query(dbAdapter, [
-    'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped FROM automation_runs WHERE automation_id =',
+    'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped, tasks_dropped FROM automation_runs WHERE automation_id =',
     param(automationId),
     'AND finished_at IS NOT NULL AND started_at IS NOT NULL AND NOT dry_run',
     'ORDER BY finished_at DESC, id LIMIT 1',
@@ -277,7 +324,7 @@ export async function readCurrentRunMilestones(
   { now = Date.now() }: { now?: number } = {},
 ): Promise<RunMilestones | undefined> {
   let [run] = (await query(dbAdapter, [
-    'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped FROM automation_runs WHERE automation_id =',
+    'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped, tasks_dropped FROM automation_runs WHERE automation_id =',
     param(automationId),
     "AND state = 'running' AND NOT dry_run",
     'ORDER BY started_at DESC NULLS LAST, id LIMIT 1',
@@ -313,8 +360,7 @@ export async function closeRunMilestones(
         position,
         planned: milestone.planned,
         ms: milestone.ms,
-        ...(milestone.done !== undefined ? { done: milestone.done } : {}),
-        ...(milestone.total !== undefined ? { total: milestone.total } : {}),
+        tasks: milestone.tasks.length,
         failedHere:
           milestones.failedIn !== null &&
           position === milestones.milestones.length - 1,
@@ -342,8 +388,9 @@ export interface AutomationMilestoneEvent {
   position: number;
   planned: boolean;
   ms: number;
-  done?: number;
-  total?: number;
+  // How many tasks the script reported inside the milestone that the run
+  // recorded.
+  tasks: number;
   // The run ended with an error while in this milestone.
   failedHere: boolean;
 }
@@ -381,13 +428,19 @@ interface RunRow {
   finished_at: string | Date | null;
   milestone_plan: string[] | null;
   milestones_dropped: number;
+  tasks_dropped: number;
 }
 
 interface MilestoneRow {
+  position: number;
   name: string;
   started_at: string | Date;
-  count_done: number | null;
-  count_total: number | null;
+}
+
+interface TaskRow {
+  milestone_position: number;
+  text: string;
+  reported_at: string | Date;
 }
 
 async function milestonesOf(
@@ -396,15 +449,20 @@ async function milestonesOf(
   now: number,
 ): Promise<RunMilestones> {
   let rows = (await query(dbAdapter, [
-    'SELECT name, started_at, count_done, count_total FROM automation_run_milestones WHERE run_id =',
+    'SELECT position, name, started_at FROM automation_run_milestones WHERE run_id =',
     param(String(run.id)),
     'ORDER BY position',
   ])) as unknown as MilestoneRow[];
-  return milestonesFrom(run, rows, now);
+  let tasks = (await query(dbAdapter, [
+    'SELECT milestone_position, text, reported_at FROM automation_run_tasks WHERE run_id =',
+    param(String(run.id)),
+    'ORDER BY position',
+  ])) as unknown as TaskRow[];
+  return milestonesFrom(run, rows, tasks, now);
 }
 
 // Many runs' milestones at once, by run id, as `readRunMilestones` reads each
-// one: two queries however many runs, for a page of runs. A run id that
+// one: three queries however many runs, for a page of runs. A run id that
 // names no run is left out.
 export async function readRunMilestonesFor(
   dbAdapter: DBAdapter,
@@ -417,35 +475,64 @@ export async function readRunMilestonesFor(
   }
   let ids = separatedByCommas(runIds.map((id) => [param(id)]));
   let runs = (await query(dbAdapter, [
-    'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped FROM automation_runs WHERE id IN',
+    'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped, tasks_dropped FROM automation_runs WHERE id IN',
     ...(addExplicitParens(ids) as Expression),
   ])) as unknown as RunRow[];
   let rows = (await query(dbAdapter, [
-    'SELECT run_id, name, started_at, count_done, count_total FROM automation_run_milestones WHERE run_id IN',
+    'SELECT run_id, position, name, started_at FROM automation_run_milestones WHERE run_id IN',
     ...(addExplicitParens(ids) as Expression),
     'ORDER BY run_id, position',
   ])) as unknown as (MilestoneRow & { run_id: string })[];
-  let byRun = new Map<string, MilestoneRow[]>();
-  for (let row of rows) {
-    let list = byRun.get(String(row.run_id)) ?? [];
-    list.push(row);
-    byRun.set(String(row.run_id), list);
-  }
+  let taskRows = (await query(dbAdapter, [
+    'SELECT run_id, milestone_position, text, reported_at FROM automation_run_tasks WHERE run_id IN',
+    ...(addExplicitParens(ids) as Expression),
+    'ORDER BY run_id, position',
+  ])) as unknown as (TaskRow & { run_id: string })[];
+  let byRun = groupByRun(rows);
+  let tasksByRun = groupByRun(taskRows);
   for (let run of runs) {
     found.set(
       String(run.id),
-      milestonesFrom(run, byRun.get(String(run.id)) ?? [], now),
+      milestonesFrom(
+        run,
+        byRun.get(String(run.id)) ?? [],
+        tasksByRun.get(String(run.id)) ?? [],
+        now,
+      ),
     );
   }
   return found;
 }
 
+function groupByRun<Row extends { run_id: string }>(
+  rows: Row[],
+): Map<string, Row[]> {
+  let byRun = new Map<string, Row[]>();
+  for (let row of rows) {
+    let list = byRun.get(String(row.run_id)) ?? [];
+    list.push(row);
+    byRun.set(String(row.run_id), list);
+  }
+  return byRun;
+}
+
 function milestonesFrom(
   run: RunRow,
   rows: MilestoneRow[],
+  taskRows: TaskRow[],
   now: number,
 ): RunMilestones {
   let plan = planOf(run.milestone_plan);
+  let tasksByMilestone = new Map<number, RunTask[]>();
+  for (let row of taskRows) {
+    let position = Number(row.milestone_position);
+    let list = tasksByMilestone.get(position) ?? [];
+    list.push({
+      text: row.text,
+      at: new Date(row.reported_at).toISOString(),
+    });
+    tasksByMilestone.set(position, list);
+  }
   let planned = new Set(plan);
   let finishedAt = run.finished_at ? new Date(run.finished_at) : undefined;
   let milestones: RunMilestone[] = rows.map((row, index) => {
@@ -460,8 +547,7 @@ function milestonesFrom(
       // The tab stamps a milestone's start and the realm server stamps the
       // run's end, so the two clocks can disagree by a little.
       ms: Math.max(0, (endedAt?.getTime() ?? now) - startedAt.getTime()),
-      ...(row.count_done != null ? { done: Number(row.count_done) } : {}),
-      ...(row.count_total != null ? { total: Number(row.count_total) } : {}),
+      tasks: tasksByMilestone.get(Number(row.position)) ?? [],
     };
   });
   // A plan may name a milestone more than once, so each one reached accounts
@@ -490,6 +576,7 @@ function milestonesFrom(
     ahead,
     failedIn: run.state === 'error' && last ? last.name : null,
     dropped: Number(run.milestones_dropped),
+    tasksDropped: Number(run.tasks_dropped),
   };
 }
 
@@ -505,11 +592,12 @@ function milestoneName(value: unknown): string | undefined {
   return name && name.length <= RUN_MILESTONE_MAX_NAME_CHARS ? name : undefined;
 }
 
-function countValue(value: unknown): number | undefined {
-  return typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value >= 0 &&
-    value <= MAX_COUNT
-    ? value
-    : undefined;
+function taskText(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  // The tab's limit holds the script to `RUN_TASK_MAX_CHARS`; redaction can
+  // lengthen a task past it, and the cut keeps the task.
+  let text = value.trim();
+  return text ? text.slice(0, RUN_TASK_MAX_CHARS) : undefined;
 }

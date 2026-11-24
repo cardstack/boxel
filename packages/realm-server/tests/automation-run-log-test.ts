@@ -24,6 +24,8 @@ import {
 import { callApiLogLine } from '@cardstack/runtime-common/automation-run-limits';
 import {
   RUN_MAX_MILESTONES,
+  RUN_MAX_TASKS,
+  RUN_TASK_MAX_CHARS,
   readLastRunMilestones,
   readRunMilestones,
   setAutomationMilestoneSink,
@@ -43,7 +45,10 @@ import {
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
-import { resolveLogLine } from '../handlers/handle-request-forward.ts';
+import {
+  resolveLogLine,
+  tokensOf,
+} from '../handlers/handle-request-forward.ts';
 
 // An automation run's log: the script's lines its tab sends to the realm's
 // `_run-log` with the run's token, and the platform's own lines for each
@@ -200,7 +205,7 @@ module(basename(import.meta.filename), function (hooks) {
       events: [
         { kind: 'plan', at, milestones: ['fetch', 'write'] },
         { kind: 'milestone', at, name: 'fetch' },
-        { kind: 'count', at, done: 3, total: 10 },
+        { kind: 'task', at, text: 'Fetched 3 rosters' },
         { kind: 'activity', at, line: 'Fetching the roster' },
         { kind: 'console', at, level: 'warn', message: 'slow page', line: 7 },
         {
@@ -247,9 +252,9 @@ module(basename(import.meta.filename), function (hooks) {
         {
           seq: 2,
           source: 'script',
-          kind: 'count',
+          kind: 'task',
           level: undefined,
-          message: '3 of 10',
+          message: 'Task: Fetched 3 rosters',
           scriptLine: undefined,
         },
         {
@@ -430,11 +435,16 @@ module(basename(import.meta.filename), function (hooks) {
       [line('one'), line('two'), line('three')],
       { maxLines: 2 },
     );
-    assert.deepEqual(first, { stored: 2, dropped: 1, milestones: 0 });
+    assert.deepEqual(first, { stored: 2, dropped: 1, milestones: 0, tasks: 0 });
     let second = await appendRunLog(dbAdapter, run.id, [line('four')], {
       maxLines: 2,
     });
-    assert.deepEqual(second, { stored: 0, dropped: 1, milestones: 0 });
+    assert.deepEqual(second, {
+      stored: 0,
+      dropped: 1,
+      milestones: 0,
+      tasks: 0,
+    });
 
     let { lines, dropped } = await logOf(run.id);
     assert.strictEqual(dropped, 2);
@@ -457,7 +467,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(
       capped,
-      { stored: 2, dropped: 1, milestones: 0 },
+      { stored: 2, dropped: 1, milestones: 0, tasks: 0 },
       'characters cap it too',
     );
   });
@@ -714,10 +724,35 @@ module(basename(import.meta.filename), function (hooks) {
         model: 'anthropic/claude',
         status: 200,
         ms: 800,
-        costInUsd: 0.0012,
+        inputTokens: 1200,
+        outputTokens: 300,
       }).message,
-      'resolve anthropic/claude: 200 (800 ms, $0.001200)',
+      'resolve anthropic/claude: 200 (800 ms, 1200 tokens in, 300 out)',
+      'the message names the tokens',
     );
+    assert.deepEqual(
+      resolveLogLine({
+        model: 'anthropic/claude',
+        status: 200,
+        ms: 800,
+        inputTokens: 1200,
+        outputTokens: 300,
+      }).data,
+      {
+        model: 'anthropic/claude',
+        status: 200,
+        ms: 800,
+        inputTokens: 1200,
+        outputTokens: 300,
+      },
+      'the data holds the tokens',
+    );
+    assert.deepEqual(
+      tokensOf({ usage: { prompt_tokens: 12, completion_tokens: 3, cost: 1 } }),
+      { inputTokens: 12, outputTokens: 3 },
+    );
+    assert.deepEqual(tokensOf({ usage: { prompt_tokens: -1 } }), {});
+    assert.deepEqual(tokensOf(undefined), {});
     assert.strictEqual(
       resolveLogLine({ model: 'anthropic/claude' }).level,
       'error',
@@ -730,12 +765,30 @@ module(basename(import.meta.filename), function (hooks) {
     });
     assert.false(parsed.ok, 'an unknown console level is refused');
     let ok = scriptRunLogLines({
-      events: [{ kind: 'count', at: 1, done: 2 }],
+      events: [
+        { kind: 'task', at: 1, text: 'Grouped the bug label' },
+        { kind: 'count', at: 1, done: 2 },
+      ],
     });
     assert.true(ok.ok);
     if (ok.ok) {
-      assert.strictEqual(ok.lines[0].message, '2');
+      assert.deepEqual(
+        ok.lines.map(({ kind, message, data }) => ({ kind, message, data })),
+        [
+          {
+            kind: 'task',
+            message: 'Task: Grouped the bug label',
+            data: { text: 'Grouped the bug label' },
+          },
+          { kind: 'count', message: '2', data: { done: 2 } },
+        ],
+        'a task, and a count from a tab whose host still sends one',
+      );
     }
+    assert.false(
+      scriptRunLogLines({ events: [{ kind: 'task', at: 1, text: 3 }] }).ok,
+      'a task that is not text is refused',
+    );
   });
   module('milestones', function (hooks) {
     let telemetry: AutomationMilestoneEvent[];
@@ -751,7 +804,7 @@ module(basename(import.meta.filename), function (hooks) {
       return (await readRunMilestones(dbAdapter, runId, { now }))!;
     }
 
-    test('the run records the plan it declared, each milestone in the order reached, and the counts inside each', async function (assert) {
+    test('the run records the plan it declared, each milestone in the order reached, and the tasks inside each', async function (assert) {
       let { token, run } = await runOf();
       let t0 = Date.parse('2026-11-16T10:00:00.000Z');
       let sent = await sendLog(token, {
@@ -762,10 +815,11 @@ module(basename(import.meta.filename), function (hooks) {
             milestones: ['Fetch issues', 'Group', 'Write digest'],
           },
           { kind: 'milestone', at: t0, name: 'Fetch issues' },
-          { kind: 'count', at: t0 + 100, done: 1, total: 3 },
-          { kind: 'count', at: t0 + 200, done: 3, total: 3 },
+          { kind: 'task', at: t0 + 100, text: 'Skipped 3 archived issues' },
+          { kind: 'task', at: t0 + 200, text: '  Fetched 42 open issues  ' },
           { kind: 'milestone', at: t0 + 1_000, name: 'Group' },
-          { kind: 'count', at: t0 + 1_100, done: 7 },
+          { kind: 'count', at: t0 + 1_050, done: 7 },
+          { kind: 'task', at: t0 + 1_100, text: 'Grouped the bug label' },
         ],
       });
       assert.strictEqual(sent.status, 200, JSON.stringify(sent.json));
@@ -783,8 +837,16 @@ module(basename(import.meta.filename), function (hooks) {
           startedAt: new Date(t0).toISOString(),
           endedAt: new Date(t0 + 1_000).toISOString(),
           ms: 1_000,
-          done: 3,
-          total: 3,
+          tasks: [
+            {
+              text: 'Skipped 3 archived issues',
+              at: new Date(t0 + 100).toISOString(),
+            },
+            {
+              text: 'Fetched 42 open issues',
+              at: new Date(t0 + 200).toISOString(),
+            },
+          ],
         },
         {
           name: 'Group',
@@ -792,17 +854,26 @@ module(basename(import.meta.filename), function (hooks) {
           startedAt: new Date(t0 + 1_000).toISOString(),
           endedAt: null,
           ms: 500,
-          done: 7,
+          tasks: [
+            {
+              text: 'Grouped the bug label',
+              at: new Date(t0 + 1_100).toISOString(),
+            },
+          ],
         },
       ]);
 
-      // A later batch's count belongs to the milestone the run is still in.
+      // A later batch's task belongs to the milestone the run is still in.
       await sendLog(token, {
-        events: [{ kind: 'count', at: t0 + 1_200, done: 9, total: 12 }],
+        events: [
+          { kind: 'task', at: t0 + 1_200, text: 'Grouped the docs label' },
+        ],
       });
       let [, group] = (await milestonesOf(run.id, t0 + 1_500)).milestones;
-      assert.strictEqual(group.done, 9);
-      assert.strictEqual(group.total, 12);
+      assert.deepEqual(
+        group.tasks.map(({ text }) => text),
+        ['Grouped the bug label', 'Grouped the docs label'],
+      );
 
       await finishAutomationRun(dbAdapter, run.id, run.attempt!, {
         state: 'complete',
@@ -844,6 +915,11 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(telemetry[0].ms, 1_000);
       assert.strictEqual(telemetry[0].run, run.id);
+      assert.deepEqual(
+        telemetry.map(({ tasks }) => tasks),
+        [2, 2],
+        'each milestone tells telemetry how many tasks the run recorded in it',
+      );
     });
 
     test('a run that fails inside a milestone names it', async function (assert) {
@@ -853,7 +929,7 @@ module(basename(import.meta.filename), function (hooks) {
         events: [
           { kind: 'plan', at, milestones: ['Fetch', 'Write'] },
           { kind: 'milestone', at, name: 'Fetch' },
-          { kind: 'count', at, done: 2, total: 5 },
+          { kind: 'task', at, text: 'Fetched page 1 of the vendor list' },
           { kind: 'error', at, message: 'Error: the vendor answered 503' },
         ],
       });
@@ -866,8 +942,11 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(milestones.state, 'error');
       assert.strictEqual(milestones.failedIn, 'Fetch');
       assert.deepEqual(milestones.ahead, ['Write']);
-      assert.strictEqual(milestones.milestones[0].done, 2);
-      assert.strictEqual(milestones.milestones[0].total, 5);
+      assert.deepEqual(
+        milestones.milestones[0].tasks.map(({ text }) => text),
+        ['Fetched page 1 of the vendor list'],
+        'the milestone a run failed in keeps the tasks the script reported before the error',
+      );
       assert.deepEqual(
         telemetry.map(({ milestone, outcome, errorReason, failedHere }) => ({
           milestone,
@@ -970,12 +1049,12 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a run without a plan records its milestones, and a count before the first milestone is ignored', async function (assert) {
+    test('a run without a plan records its milestones, and a task before the first milestone is ignored', async function (assert) {
       let { token, run } = await runOf();
       let at = Date.now();
       await sendLog(token, {
         events: [
-          { kind: 'count', at, done: 1, total: 2 },
+          { kind: 'task', at, text: 'Read the settings' },
           { kind: 'milestone', at, name: 'Only' },
         ],
       });
@@ -983,12 +1062,121 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(milestones.plan, []);
       assert.deepEqual(milestones.ahead, []);
       assert.deepEqual(
-        milestones.milestones.map(({ name, planned, done }) => ({
+        milestones.milestones.map(({ name, planned, tasks }) => ({
           name,
           planned,
-          done,
+          tasks,
         })),
-        [{ name: 'Only', planned: false, done: undefined }],
+        [{ name: 'Only', planned: false, tasks: [] }],
+      );
+      assert.strictEqual(milestones.tasksDropped, 0, 'nor counted as dropped');
+    });
+
+    test("a task past the run's limit is counted, not recorded, and a task past the length limit is cut", async function (assert) {
+      let { run } = await runOf();
+      let at = Date.now();
+      let task = (text: string) => ({
+        at,
+        source: 'script' as const,
+        kind: 'task' as const,
+        message: `Task: ${text}`,
+        data: { text },
+      });
+      let result = await appendRunLog(dbAdapter, run.id, [
+        {
+          at,
+          source: 'script',
+          kind: 'milestone',
+          message: 'Milestone: Import',
+          data: { name: 'Import' },
+        },
+        ...Array.from({ length: RUN_MAX_TASKS + 2 }, (_, i) =>
+          task(`Imported invoice ${i}`),
+        ),
+      ]);
+      assert.strictEqual(result.milestones, 1);
+      assert.strictEqual(result.tasks, RUN_MAX_TASKS);
+      let capped = await milestonesOf(run.id);
+      assert.strictEqual(capped.milestones[0].tasks.length, RUN_MAX_TASKS);
+      assert.strictEqual(capped.tasksDropped, 2);
+      let later = await appendRunLog(dbAdapter, run.id, [
+        task('Imported one more'),
+      ]);
+      assert.strictEqual(later.tasks, 0, 'a later batch records none either');
+      assert.strictEqual((await milestonesOf(run.id)).tasksDropped, 3);
+
+      let other = await runOf();
+      await appendRunLog(dbAdapter, other.run.id, [
+        {
+          at,
+          source: 'script',
+          kind: 'milestone',
+          message: 'Milestone: Import',
+          data: { name: 'Import' },
+        },
+        task('x'.repeat(RUN_TASK_MAX_CHARS + 20)),
+      ]);
+      assert.strictEqual(
+        (await milestonesOf(other.run.id)).milestones[0].tasks[0].text,
+        'x'.repeat(RUN_TASK_MAX_CHARS),
+      );
+    });
+
+    test('a request that records a milestone or a task reports the run moved, and one that records neither does not', async function (assert) {
+      let { token, run } = await runOf();
+      let reported: string[] = [];
+      let reportRunChange = realm.reportRunChange;
+      realm.reportRunChange = async (runId: string) => {
+        reported.push(runId);
+      };
+      try {
+        let at = Date.now();
+        let send = async (events: unknown[]) => {
+          let sent = await sendLog(token, { events });
+          assert.strictEqual(sent.status, 200, JSON.stringify(sent.json));
+          return reported.length;
+        };
+        assert.strictEqual(
+          await send([{ kind: 'milestone', at, name: 'Group by label' }]),
+          1,
+          'a milestone reports',
+        );
+        assert.strictEqual(
+          await send([
+            { kind: 'task', at: at + 1, text: 'Grouped the bug label' },
+            { kind: 'task', at: at + 2, text: 'Grouped the docs label' },
+          ]),
+          2,
+          'a batch of tasks reports once',
+        );
+        assert.strictEqual(
+          await send([
+            { kind: 'count', at: at + 3, done: 2, total: 5 },
+            { kind: 'console', at: at + 3, level: 'log', message: 'hi' },
+          ]),
+          2,
+          'a count or a console line reports nothing',
+        );
+        assert.deepEqual([...new Set(reported)], [run.id]);
+      } finally {
+        realm.reportRunChange = reportRunChange;
+      }
+    });
+
+    test('a count inside a milestone records nothing on the milestone', async function (assert) {
+      let { token, run } = await runOf();
+      let at = Date.now();
+      let sent = await sendLog(token, {
+        events: [
+          { kind: 'milestone', at, name: 'Import' },
+          { kind: 'count', at, done: 3, total: 9 },
+        ],
+      });
+      assert.strictEqual(sent.status, 200, JSON.stringify(sent.json));
+      assert.deepEqual((await milestonesOf(run.id)).milestones[0].tasks, []);
+      assert.true(
+        (await logOf(run.id)).lines.some(({ kind }) => kind === 'count'),
+        'the log keeps the line',
       );
     });
 
@@ -1018,7 +1206,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         result,
-        { stored: 0, dropped: 2, milestones: 1 },
+        { stored: 0, dropped: 2, milestones: 1, tasks: 0 },
         'the log is full, and the milestone is recorded',
       );
       let milestones = await milestonesOf(run.id);
@@ -1045,17 +1233,18 @@ module(basename(import.meta.filename), function (hooks) {
         {
           at,
           source: 'script',
-          kind: 'count',
-          message: '5 of 9',
-          data: { done: 5, total: 9 },
+          kind: 'task',
+          message: 'Task: Wrote the digest',
+          data: { text: 'Wrote the digest' },
         },
       ]);
-      let last = (await milestonesOf(many.run.id)).milestones.at(-1)!;
-      assert.strictEqual(
-        last.done,
-        undefined,
-        "a later batch's count inside an unrecorded milestone belongs to none",
+      let afterTask = await milestonesOf(many.run.id);
+      assert.deepEqual(
+        afterTask.milestones.at(-1)!.tasks,
+        [],
+        "a later batch's task inside an unrecorded milestone belongs to none",
       );
+      assert.strictEqual(afterTask.tasksDropped, 1, 'and is counted');
     });
 
     test('an attempt that takes the run from another clears its milestones, since the script runs again', async function (assert) {
@@ -1065,7 +1254,7 @@ module(basename(import.meta.filename), function (hooks) {
         events: [
           { kind: 'plan', at, milestones: ['Fetch', 'Write'] },
           { kind: 'milestone', at, name: 'Fetch' },
-          { kind: 'count', at, done: 2, total: 4 },
+          { kind: 'task', at, text: 'Fetched 2 pages' },
         ],
       });
       let retry = await startAutomationRunAttempt(
@@ -1077,6 +1266,11 @@ module(basename(import.meta.filename), function (hooks) {
       let cleared = await milestonesOf(run.id);
       assert.deepEqual(cleared.plan, []);
       assert.deepEqual(cleared.milestones, []);
+      assert.strictEqual(cleared.tasksDropped, 0);
+      let [{ n }] = (await dbAdapter.execute(
+        `SELECT count(*)::int AS n FROM automation_run_tasks WHERE run_id = '${run.id}'`,
+      )) as { n: number }[];
+      assert.strictEqual(n, 0, "the retry clears the run's tasks too");
 
       await appendRunLog(dbAdapter, run.id, [
         {

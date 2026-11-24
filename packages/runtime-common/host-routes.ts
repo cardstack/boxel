@@ -20,7 +20,6 @@
 
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { Definition, FieldDefinition } from './definitions.ts';
-import type { RawHostRoutingRule } from './realm.ts';
 import { assertQuery, type Filter } from './query.ts';
 import { isClientEvaluable } from './instance-filter-matcher.ts';
 import { RealmPaths } from './paths.ts';
@@ -36,10 +35,83 @@ import {
 } from './host-routing-validation.ts';
 import {
   parseCardIdPattern,
+  matchRoutePathPattern,
   parseRoutePathPattern,
   type CardIdPattern,
   type RoutePathPattern,
 } from './route-pattern.ts';
+
+// One host routing rule as the indexed realm.json's search document holds it,
+// before any validation: a value can have any shape a hand-edited realm.json
+// gives it. Fields the rule leaves unset are absent. Two fields differ from
+// what realm.json says: `instance` is the linked card as the search document
+// flattens it (`{ id, ...its searchable fields }`, `id` absolute), and `type`
+// is a code ref whose module is absolute (the search document stores it as
+// one `module/name` string, which the read splits back). Any other field the
+// search document holds comes through under its own name.
+export interface RawHostRoutingRule {
+  [field: string]: unknown;
+  path?: unknown;
+  name?: unknown;
+  card?: unknown;
+  type?: unknown;
+  where?: unknown;
+  match?: unknown;
+  parent?: unknown;
+  instance?: unknown;
+  redirectTo?: unknown;
+  statusCode?: unknown;
+  routes?: RawHostRoutingRule[];
+}
+
+// Reads the `hostRoutingRules` of a RealmConfig search document, child routes
+// included, in authored order. Anything that isn't an object is skipped.
+export function readRawHostRoutingRules(
+  searchDoc: Record<string, unknown> | null | undefined,
+): RawHostRoutingRule[] {
+  return readRawRoutingRuleList(searchDoc?.hostRoutingRules);
+}
+
+function readRawRoutingRuleList(value: unknown): RawHostRoutingRule[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((rule) =>
+    rule && typeof rule === 'object' && !Array.isArray(rule)
+      ? [readRawRoutingRule(rule as Record<string, unknown>)]
+      : [],
+  );
+}
+
+function readRawRoutingRule(rule: Record<string, unknown>): RawHostRoutingRule {
+  let raw: RawHostRoutingRule = {};
+  for (let [key, value] of Object.entries(rule)) {
+    if (value != null && key !== 'type' && key !== 'routes') {
+      raw[key] = value;
+    }
+  }
+  let type = rule.type;
+  if (typeof type === 'string') {
+    let slash = type.lastIndexOf('/');
+    raw.type =
+      slash > 0 && slash < type.length - 1
+        ? { module: type.slice(0, slash), name: type.slice(slash + 1) }
+        : type;
+  } else if (type != null) {
+    raw.type = type;
+  }
+  let routes = readRawRoutingRuleList(rule.routes);
+  if (routes.length > 0) {
+    raw.routes = routes;
+  }
+  return raw;
+}
+
+// The URL the index keys a realm's RealmConfig card by: its realm.json,
+// without the extension.
+export function realmConfigCardURL(realmURL: URL): URL {
+  return new URL('realm', realmURL);
+}
 
 // The most dynamic routes a realm may have. Routes after the limit, in
 // depth-first authored order, are dropped.
@@ -293,8 +365,9 @@ export type HostRouteWarningCode =
   | 'invalid-type'
   // `type` isn't a card type the index knows.
   | 'not-card-type'
-  // The definition of `type` can't be read now. The validation is
-  // incomplete.
+  // The definition of `type` couldn't be read when the realm was indexed:
+  // its module has an error or can't be found, its render timed out, or a
+  // server couldn't be reached. The next index reads it again.
   | 'type-unavailable'
   // `match` is missing or malformed, or doesn't match each `:name` of the
   // route's own path with exactly one field.
@@ -338,14 +411,83 @@ export interface HostRouteWarning {
 export interface HostRoutesValidation {
   routes: readonly HostRoute[];
   warnings: readonly HostRouteWarning[];
-  // False when `lookupType` answered `'unavailable'` for a type: its routes
-  // were dropped for now, and a later validation may keep them. A caller
-  // must not keep an incomplete validation as final.
-  complete: boolean;
-  // The path patterns of the routes dropped because their type was
-  // unavailable, and of the routes under them: the paths a later validation
-  // may route. Empty when the validation is complete.
-  unavailableRoutePatterns: readonly RoutePathPattern[];
+}
+
+// The definitions of the types a realm's field-match routes name, by
+// `typeLookupKey`, as `ValidateHostRoutesOptions.lookupType` answers for
+// each.
+export type HostRouteTypes = ReadonlyMap<
+  string,
+  HostRouteTypeInfo | 'unavailable' | undefined
+>;
+
+// What the index read for each type a realm's field-match routes name, by
+// `typeLookupKey`: as `HostRouteTypes`, and `'transient'` for a read that
+// failed for a reason that may pass (a render timeout, a prerender server
+// or another realm's server that can't be reached). The commit then
+// validates with the definition the stored routes were validated with.
+export type HostRouteTypeReads = ReadonlyMap<
+  string,
+  HostRouteTypeInfo | 'unavailable' | 'transient' | undefined
+>;
+
+// Thrown by a read of a realm's host routes when the index can't be read.
+// The read may pass when tried again, so a server answers 503 rather than
+// a page without routes.
+export class HostRoutesReadError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'HostRoutesReadError';
+  }
+}
+
+// The path patterns of the routes dropped because their type's definition
+// couldn't be read (`type-unavailable`), and of the routes under them: the
+// paths the realm's next index may route. Such a path isn't known to be
+// not found.
+export function unavailableRoutePatterns(
+  validation: HostRoutesValidation,
+): RoutePathPattern[] {
+  let unavailable = validation.warnings
+    .filter((w) => w.code === 'type-unavailable')
+    .map((w) => w.position);
+  if (unavailable.length === 0) {
+    return [];
+  }
+  let patterns: RoutePathPattern[] = [];
+  for (let warning of validation.warnings) {
+    let underUnavailable = unavailable.some((position) =>
+      position.every((index, i) => warning.position[i] === index),
+    );
+    if (!warning.dropped || !underUnavailable) {
+      continue;
+    }
+    let parsed = parseRoutePathPattern(warning.path);
+    if (parsed.ok) {
+      patterns.push(parsed.pattern);
+    }
+  }
+  return patterns;
+}
+
+// Whether a route dropped because its type's definition couldn't be read,
+// or a route under it, matches `pathInRealm` (a path within the realm that
+// starts with `/`).
+export function unavailableRouteMayAnswer(
+  validation: HostRoutesValidation,
+  pathInRealm: string,
+): boolean {
+  return unavailableRoutePatterns(validation).some(
+    (pattern) => matchRoutePathPattern(pattern, pathInRealm) !== undefined,
+  );
+}
+
+// Whether a route was dropped because its type's definition couldn't be
+// read. The tree may then be missing a card's canonical route.
+export function hasUnavailableRoutes(
+  validation: HostRoutesValidation,
+): boolean {
+  return validation.warnings.some((w) => w.code === 'type-unavailable');
 }
 
 export interface ValidateHostRoutesOptions {
@@ -353,9 +495,8 @@ export interface ValidateHostRoutesOptions {
   // must be in it.
   realmURL: URL;
   // The definition of a type a field-match route names. `undefined` when
-  // there is no such type; `'unavailable'` when its definition can't be read
-  // now (it isn't cached yet, or the read failed), which drops its routes
-  // and makes the validation incomplete.
+  // there is no such type; `'unavailable'` when its definition couldn't be
+  // read, which drops its routes like any other invalid route.
   lookupType: (
     type: ResolvedCodeRef,
   ) => HostRouteTypeInfo | 'unavailable' | undefined;
@@ -411,7 +552,6 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
 class Validator {
   private warnings: HostRouteWarning[] = [];
-  private complete = true;
   private realmPaths: RealmPaths;
   private options: ValidateHostRoutesOptions;
 
@@ -427,32 +567,7 @@ class Validator {
     routes = this.applyRealmWideRules(routes);
     routes = this.dropRedirectCycles(routes);
     this.warnNoAddressFromOneCard(routes);
-    return {
-      routes,
-      warnings: this.warnings,
-      complete: this.complete,
-      unavailableRoutePatterns: this.unavailableRoutePatterns(),
-    };
-  }
-
-  private unavailableRoutePatterns(): RoutePathPattern[] {
-    let unavailable = this.warnings
-      .filter((w) => w.code === 'type-unavailable')
-      .map((w) => w.position);
-    let patterns: RoutePathPattern[] = [];
-    for (let warning of this.warnings) {
-      let underUnavailable = unavailable.some((position) =>
-        position.every((index, i) => warning.position[i] === index),
-      );
-      if (!warning.dropped || !underUnavailable) {
-        continue;
-      }
-      let parsed = parseRoutePathPattern(warning.path);
-      if (parsed.ok) {
-        patterns.push(parsed.pattern);
-      }
-    }
-    return patterns;
+    return { routes, warnings: this.warnings };
   }
 
   private validateList(
@@ -781,10 +896,9 @@ class Validator {
       }
       let found = this.options.lookupType(type);
       if (found === 'unavailable') {
-        this.complete = false;
         return drop(
           'type-unavailable',
-          `The definition of ${type.name} from ${type.module} is not available yet`,
+          `The definition of ${type.name} from ${type.module} could not be read when the realm was indexed`,
         );
       }
       typeInfo = found;

@@ -16,8 +16,8 @@ import {
   sendResponseForBadRequest,
   sendResponseForSystemError,
   setContextResponse,
+  requestUser,
 } from '../middleware/index.ts';
-import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 /**
  * Handler for `POST /_run-command`.
@@ -95,14 +95,14 @@ export default function handleRunCommand({
     }
 
     // The authenticated user from JWT middleware
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token?.user) {
+    let user = requestUser(ctxt);
+    if (!user) {
       return sendResponseForBadRequest(
         ctxt,
         'Authenticated user not found in JWT',
       );
     }
-    let userId = token.user;
+    let userId = user;
 
     let result: RunCommandResponse;
     try {

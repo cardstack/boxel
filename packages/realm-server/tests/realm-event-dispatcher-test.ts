@@ -710,5 +710,26 @@ module(basename(import.meta.filename), function () {
         undefined,
       );
     });
+
+    test("merges a run's queued job event into the run's newer one, and keeps two runs' apart", function (assert) {
+      let job = (runId: string, milestone: string): RealmEventContent => ({
+        eventName: 'job',
+        runId,
+        automation: `${REALM_A}automations/nightly`,
+        state: 'running',
+        step: 'script',
+        milestone,
+        realmURL: REALM_A,
+      });
+      assert.deepEqual(
+        coalesce(job('run-1', 'Fetch'), job('run-1', 'Group')),
+        job('run-1', 'Group'),
+        'the newer event, which the realm reads again as the event is sent',
+      );
+      assert.strictEqual(
+        coalesce(job('run-1', 'Fetch'), job('run-2', 'Fetch')),
+        undefined,
+      );
+    });
   });
 });

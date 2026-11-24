@@ -16,6 +16,7 @@ import {
   type QueueCoalesceDecision,
   registerQueueJobDefinition,
 } from '../queue.ts';
+import { SupportedMimeType } from '../supported-mime-type.ts';
 import { IndexRunner } from '../index-runner.ts';
 import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
@@ -576,14 +577,18 @@ function chooseFromScratchCoalesceDecision(
   // the swapped files. Force a fresh row instead. The same holds for every
   // pass a realm publish enqueues (`awaitedByPublish`), with or without the
   // clear: the publish has just swapped in new files, and an already-running
-  // pass may have read the file mtimes before that swap.
+  // pass may have read the file mtimes before that swap. And the same holds
+  // for a pass whose caller asks for a fresh one (`freshPass`): the caller
+  // changed something a pass reads only when it starts, such as one row's
+  // modified time or whether the realm has a host URL.
   //
   // A pass that announces never rides on a running one that doesn't: a
   // running job's args can no longer change, so its subscribers would never
   // hear of a pass someone asked to announce.
   if (
     !incomingClearsLastModified(incoming.args) &&
-    !argsAwaitedByPublish(incoming.args)
+    !argsAwaitedByPublish(incoming.args) &&
+    !argsAskForFreshPass(incoming.args)
   ) {
     for (let candidate of inFlightCandidates) {
       if (
@@ -631,6 +636,12 @@ function incomingClearsLastModified(args: unknown): boolean {
 // so a job enqueued before this field existed reads as false.
 function argsAwaitedByPublish(args: unknown): boolean {
   return isObjectLike(args) && args.awaitedByPublish === true;
+}
+
+// Set by a caller that changed what a pass reads when it starts, so a pass
+// already running can't serve it. Absent on every other index path.
+function argsAskForFreshPass(args: unknown): boolean {
+  return isObjectLike(args) && args.freshPass === true;
 }
 
 // The index pass a spawned prerender_html job waits on: this one. A pass run
@@ -833,6 +844,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       definitionLookup,
       virtualNetwork,
       realmURL,
+      readFile: realmFileReader(_fetch),
       reportRunChange: taskRunChangeReporter({
         dbAdapter,
         virtualNetwork,
@@ -1076,6 +1088,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       virtualNetwork,
       realmURL,
       touched: [...invalidations, ...changes.map(({ url }) => url)],
+      readFile: realmFileReader(_fetch),
       reportRunChange: taskRunChangeReporter({
         dbAdapter,
         virtualNetwork,
@@ -1162,6 +1175,24 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ...(chargedRunIndexing ? { chargedRunIndexing } : {}),
     };
   };
+
+// Reads a realm file's source as text with the pass's authorized fetch, for
+// the automation hook to compare an automation's script with its key
+// approvals; undefined when it can't be read.
+function realmFileReader(
+  _fetch: typeof globalThis.fetch,
+): (url: string) => Promise<string | undefined> {
+  return async (url) => {
+    try {
+      let response = await _fetch(url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+      return response.ok ? await response.text() : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+}
 
 // The automation card's index hook, run once the pass has committed. The index
 // is already committed, so a failure here is logged, naming the automation

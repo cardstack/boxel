@@ -5,6 +5,7 @@ import * as UseAiAssistantToolModule from './ai-assistant';
 import * as ApplyMarkdownEditToolModule from './apply-markdown-edit';
 import * as AskUserToolModule from './ask-user';
 import * as AuthedFetchToolModule from './authed-fetch';
+import * as AutomationRequestToolModule from './automation-request';
 import * as CreateListingPRRequestToolModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventToolModule from './bot-requests/send-bot-trigger-event';
 import * as CanReadRealmToolModule from './can-read-realm';
@@ -67,6 +68,7 @@ import * as PersistModuleInspectorViewToolModule from './persist-module-inspecto
 import * as PopulateWithSampleDataToolModule from './populate-with-sample-data';
 import * as PreviewFormatToolModule from './preview-format';
 import * as PublishRealmToolModule from './publish-realm';
+import * as ReadAutomationRunToolModule from './read-automation-run';
 import * as ReadBinaryFileToolModule from './read-binary-file';
 import * as ReadCardForAiAssistantToolModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantToolModule from './read-file-for-ai-assistant';
@@ -134,6 +136,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     AddFieldToCardDefinitionToolModule,
   );
   shimHostToolModule(virtualNetwork, 'authed-fetch', AuthedFetchToolModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'automation-request',
+    AutomationRequestToolModule,
+  );
   shimHostToolModule(
     virtualNetwork,
     'apply-markdown-edit',
@@ -262,6 +269,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     PatchCardInstanceToolModule,
   );
   shimHostToolModule(virtualNetwork, 'run-realm-code', RunRealmCodeToolModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'read-automation-run',
+    ReadAutomationRunToolModule,
+  );
   shimHostToolModule(virtualNetwork, 'run-automation', RunAutomationToolModule);
   shimHostToolModule(virtualNetwork, 'patch-fields', PatchFieldsToolModule);
   shimHostToolModule(virtualNetwork, 'patch-theme', PatchThemeToolModule);
@@ -532,6 +544,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   CopySourceToolModule.default,
   DownloadFileToRealmToolModule.default,
   AuthedFetchToolModule.default,
+  AutomationRequestToolModule.default,
   CanReadRealmToolModule.default,
   CreateAIAssistantRoomToolModule.default,
   CopyAndEditToolModule.default,
@@ -573,6 +586,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   OpenSecureWindowToolModule.default,
   OpenWorkspaceToolModule.default,
   GenerateThemeExampleToolModule.default,
+  ReadAutomationRunToolModule.default,
   RunAutomationToolModule.default,
   RunRealmCodeToolModule.default,
   PatchFieldsToolModule.default,
