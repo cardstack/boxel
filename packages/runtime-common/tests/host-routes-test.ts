@@ -672,6 +672,57 @@ const tests: SharedTests<unknown> = Object.freeze({
     );
   },
 
+  'validateHostRoutes: parent cannot name a query-backed link when one type is known':
+    async (assert) => {
+      let { routes, warnings } = validate([
+        // Only the parent route's type is known.
+        fieldMatch(
+          '/d/:department',
+          'Department',
+          { slug: ':department' },
+          {
+            routes: [
+              { path: '/:gadget', card: './Gadget/:gadget', parent: 'gadgets' },
+            ],
+          },
+        ),
+        // Only the child route's type is known.
+        {
+          path: '/g/:gadget',
+          card: './Gadget/:gadget',
+          routes: [
+            fieldMatch(
+              '/:department',
+              'Department',
+              { slug: ':department' },
+              { parent: 'gadgets' },
+            ),
+          ],
+        },
+      ]);
+      assert.deepEqual(paths(routes), ['/d/:department', '/g/:gadget']);
+      assert.deepEqual(codes(warnings), [
+        {
+          code: 'invalid-parent-link',
+          path: '/d/:department/:gadget',
+          dropped: true,
+        },
+        {
+          code: 'invalid-parent-link',
+          path: '/g/:gadget/:department',
+          dropped: true,
+        },
+      ]);
+      assert.true(
+        warnings.every((w) =>
+          w.message.includes('gadgets is a query-backed link'),
+        ),
+        `the warnings say the named link is query-backed: ${warnings
+          .map((w) => w.message)
+          .join(' / ')}`,
+      );
+    },
+
   'hostRouteTypeInfo: a link field with a query is query-backed': async (
     assert,
   ) => {

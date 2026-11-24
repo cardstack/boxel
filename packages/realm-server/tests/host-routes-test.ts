@@ -61,6 +61,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 
+  test('validateHostRoutes: parent cannot name a query-backed link when one type is known', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
   test('hostRouteTypeInfo: a link field with a query is query-backed', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });

@@ -1051,8 +1051,17 @@ class Validator {
         // show which card holds the link, since the child's card may have a
         // field of that name too, so it is left for the resolver to read on
         // whichever card has it, as is a field the known type doesn't have.
+        // A query-backed link of that name on the known type is refused
+        // either way: it stores no link for the resolver to read.
         let field = childType?.fields[named];
-        if (field && isLinkType(field.type) && field.isQueryBacked) {
+        let parentField = parentType?.fields[named];
+        if (
+          (field && isLinkType(field.type) && field.isQueryBacked) ||
+          (!field &&
+            parentField &&
+            isLinkType(parentField.type) &&
+            parentField.isQueryBacked)
+        ) {
           return queryBackedParent(named);
         }
         if (field && isLinkType(field.type)) {
