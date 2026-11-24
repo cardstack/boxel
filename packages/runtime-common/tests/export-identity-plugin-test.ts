@@ -388,7 +388,7 @@ const tests = Object.freeze({
         '@cardstack/base',
         // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- the alias spelling is what this case refuses
         'https://cardstack.com/base/mark-definition',
-        // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- the alias spelling is what this case refuses
+
         'https://cardstack.com/base',
       ]) {
         assert.throws(

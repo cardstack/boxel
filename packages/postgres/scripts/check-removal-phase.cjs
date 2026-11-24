@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-/* eslint-env node */
-/* eslint-disable @typescript-eslint/no-var-requires */
+
 'use strict';
 
 // Guard: a migration added to `migrations/` (the additive phase) must not drop

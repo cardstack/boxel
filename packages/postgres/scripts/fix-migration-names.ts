@@ -1,4 +1,3 @@
-/* eslint-env node */
 import { Client } from 'pg';
 
 import migrationNameFixes from './migration-name-fixes.cjs';

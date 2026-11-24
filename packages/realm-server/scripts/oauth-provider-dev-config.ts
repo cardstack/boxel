@@ -1,5 +1,3 @@
-/* eslint-env node */
-
 // Prints the OAuth provider's configuration for a development stack: cookie
 // keys and a signing key, made the first time this runs and kept in a
 // gitignored file beside the package, so restarting the stack keeps flows in

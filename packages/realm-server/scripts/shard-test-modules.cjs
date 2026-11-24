@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-env node */
 'use strict';
 
 // Discovers all *-test.ts files under tests/ and outputs the subset assigned
@@ -28,8 +27,8 @@
 // Exports its parts for tests/shard-assignment-test.ts, which pins the
 // property CI depends on: the shards partition the files.
 
-const fs = require('node:fs'); // eslint-disable-line @typescript-eslint/no-var-requires
-const path = require('node:path'); // eslint-disable-line @typescript-eslint/no-var-requires
+const fs = require('node:fs');
+const path = require('node:path');
 
 const testsDir = path.resolve(__dirname, '..', 'tests');
 
