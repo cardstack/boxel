@@ -119,6 +119,18 @@ import {
   type DeclaredCaptureSpecPayload,
   type DeclaredCaptureFormat,
   type CapturesMeta,
+  assertFieldSearchOption,
+  cardSearchIntentOf,
+  isNonTextString,
+  NON_TEXT_SERIALIZERS,
+  searchTierOf,
+  searchesByPattern,
+  SearchTextBuilder,
+  type CardSearchIntent,
+  type FieldSearchIntent,
+  type IndexFieldDeclarations,
+  type FieldSearchOption,
+  type SearchText,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -375,6 +387,10 @@ interface Options {
   description?: string;
   // Names which links this field makes searchable. See `Searchable`.
   searchable?: Searchable;
+  // What this field is and how people look for it (docs/search-intent.md):
+  // its role in full-text ranking, whether it ranks the card, facets, and
+  // more. `false` keeps the field out of the search doc.
+  search?: FieldSearchOption;
   // Optional: per-usage configuration provider merged with FieldDef-level configuration
   configuration?: ConfigurationInput<any>;
 }
@@ -812,6 +828,8 @@ export interface Field<
   // `FieldDefinition` for the loaderless query compiler and definition-build
   // validation. See `Searchable`.
   searchable?: Searchable;
+  // The field's own `search` option, as declared. See `FieldSearchOption`.
+  searchIntent?: FieldSearchOption;
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -887,6 +905,7 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
   readonly description: string | undefined;
   readonly isPolymorphic: undefined | true;
   readonly searchable: Searchable | undefined;
+  searchIntent: FieldSearchOption | undefined;
   configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
@@ -1214,6 +1233,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly description: string | undefined;
   readonly isPolymorphic: undefined | true;
   readonly searchable: Searchable | undefined;
+  searchIntent: FieldSearchOption | undefined;
   configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
@@ -1477,6 +1497,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly description: string | undefined;
   readonly isPolymorphic: undefined | true;
   readonly searchable: Searchable | undefined;
+  searchIntent: FieldSearchOption | undefined;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
   readonly eager?: boolean;
@@ -1953,6 +1974,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   readonly name: string;
   readonly isPolymorphic: undefined | true;
   readonly searchable: Searchable | undefined;
+  searchIntent: FieldSearchOption | undefined;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
   readonly eager?: boolean;
@@ -2697,6 +2719,8 @@ export function containsMany<FieldT extends FieldDefConstructor>(
         searchable,
       });
       (instance as any).configuration = options?.configuration;
+      assertFieldSearchOption(options?.search, `field "${fieldName}"`);
+      instance.searchIntent = options?.search;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2717,6 +2741,8 @@ export function contains<FieldT extends FieldDefConstructor>(
         searchable,
       });
       (instance as any).configuration = options?.configuration;
+      assertFieldSearchOption(options?.search, `field "${fieldName}"`);
+      instance.searchIntent = options?.search;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2747,6 +2773,8 @@ export function linksTo<CardT extends LinkableDefConstructor>(
         eager,
       });
       (instance as any).configuration = options?.configuration;
+      assertFieldSearchOption(options?.search, `field "${fieldName}"`);
+      instance.searchIntent = options?.search;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2777,6 +2805,8 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
         eager,
       });
       (instance as any).configuration = options?.configuration;
+      assertFieldSearchOption(options?.search, `field "${fieldName}"`);
+      instance.searchIntent = options?.search;
       return makeDescriptor(instance);
     },
     description: options?.description,
@@ -2814,6 +2844,19 @@ export class BaseDef {
   static data?: Record<string, any>; // TODO probably refactor this away all together
   static displayName = 'Base';
   static icon: CardOrFieldTypeIcon;
+  // What the index holds for every row of this type beside its fields, with
+  // the same `search` options a field declares (docs/search.md, Facets):
+  // its type (the row's own type, labeled with its display name, as the
+  // realm's type summary shows it), its realm, and when it was created and
+  // last modified. They are index columns rather than fields, so they never
+  // serialize; declaring `facet: true` here is what lets any query facet by
+  // them, cards and files alike.
+  static indexFields: IndexFieldDeclarations = {
+    _type: { search: { facet: true } },
+    _realm: { search: { facet: true } },
+    createdAt: { search: { facet: true } },
+    lastModified: { search: { facet: true } },
+  };
 
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;
@@ -3729,6 +3772,15 @@ export class FieldDef extends BaseDef {
   // Optional provider for default configuration, merged with per-usage configuration
   static configuration?: ConfigurationInput<any>;
 
+  // The search intent a field of this type has when its declaration gives
+  // none (docs/search-intent.md, Defaults). A subclass inherits its parent's.
+  static searchDefaults: FieldSearchIntent | undefined;
+
+  // The subfield a field of this type counts by when a facet names the
+  // field itself (`facets: [{ by: 'price' }]` over `price.amount`), once its
+  // usage declares `search: { facet: true }` (docs/search.md, Facets).
+  static facetValue: string | undefined;
+
   static embedded: BaseDefComponent = MissingTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
@@ -3791,6 +3843,10 @@ export class StringField extends FieldDef {
 
 // TODO: This is a simple workaround until the thumbnailURL is converted into an actual image field
 export class MaybeBase64Field extends StringField {
+  // Often an inline data URL: matched exactly, never ranked as words.
+  static searchDefaults: FieldSearchIntent | undefined = {
+    role: 'identifier',
+  };
   static embedded = class Embedded extends Component<typeof this> {
     get isBase64() {
       return this.args.model?.startsWith('data:');
@@ -3825,6 +3881,7 @@ export class MaybeBase64Field extends StringField {
 }
 
 export class TextAreaField extends StringField {
+  static searchDefaults: FieldSearchIntent | undefined = { role: 'body' };
   static displayName = 'TextArea';
   static icon = TextAreaIcon;
   static edit = class Edit extends Component<typeof this> {
@@ -3859,6 +3916,7 @@ export class TextAreaField extends StringField {
 // enumField has moved to packages/base/enum.gts
 
 export class CSSField extends TextAreaField {
+  static searchDefaults: FieldSearchIntent | undefined = { role: 'code' };
   static displayName = 'CSS Field';
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -3977,6 +4035,7 @@ export class CSSField extends TextAreaField {
 // file), which own the `linkedCards`/`linkedFiles` relationships, when embeds
 // must render live.
 export class MarkdownField extends StringField {
+  static searchDefaults: FieldSearchIntent | undefined = { role: 'body' };
   static displayName = 'Markdown';
   static icon = MarkdownIcon;
 
@@ -4120,8 +4179,12 @@ export class FileDef extends BaseDef {
     ReadOnlyField,
   ) as unknown as RealmResourceIdentifier;
   @field sourceUrl = contains(StringField);
-  @field url = contains(StringField);
-  @field name = contains(StringField);
+  // A file is found by its path and its name with a glob
+  // (`pattern: { url: '**/components/*.gts' }`), on every file type. The
+  // file indexer stamps both into the row's pattern text
+  // (`FILE_PATTERN_FIELDS`).
+  @field url = contains(StringField, { search: { patterns: true } });
+  @field name = contains(StringField, { search: { patterns: true } });
   @field contentType = contains(StringField);
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
@@ -4307,12 +4370,140 @@ export class ImageDef extends FileDef {
 
 export class CardInfoField extends FieldDef {
   static displayName = 'Card Info';
-  @field name = contains(StringField);
-  @field summary = contains(StringField);
+  @field name = contains(StringField, { search: { role: 'title' } });
+  @field summary = contains(StringField, { search: { role: 'summary' } });
   @field cardThumbnail = linksTo(() => ImageDef);
   @field cardThumbnailURL = contains(MaybeBase64Field);
   @field theme = linksTo(() => Theme);
-  @field notes = contains(MarkdownField);
+  @field notes = contains(MarkdownField, { search: { role: 'note' } });
+}
+
+// The search intent a field has: its own `search` option, else the card's
+// `static searchDefaults` choice for it, else what a containing field passes down,
+// else its type's default (docs/search-intent.md, Precedence).
+function resolvedSearchIntent(
+  field: Field,
+  cardIntent: CardSearchIntent | undefined,
+  inherited: FieldSearchIntent | undefined,
+  topLevel: boolean,
+): FieldSearchOption | undefined {
+  if (field.searchIntent !== undefined) {
+    return field.searchIntent;
+  }
+  if (topLevel && cardIntent?.title === field.name) {
+    return { role: 'title' };
+  }
+  return (
+    inherited ??
+    (field.card as unknown as { searchDefaults?: FieldSearchIntent })
+      .searchDefaults
+  );
+}
+
+// Fields a card never takes out of its search doc, whatever they declare:
+// its id and title are how every search finds and labels it.
+const ALWAYS_SEARCHED_FIELDS = new Set(['id', 'cardTitle']);
+const SEARCH_INTENT_MAX_DEPTH = 6;
+
+// Walks a card's search doc beside its field tree, in two ways at once: drops
+// every field declared `search: false` (unless `ALWAYS_SEARCHED_FIELDS` holds
+// it), and gathers every text field's words into the weight tier its role
+// says. Links are left alone: their own cards carry their text. `searchDoc`
+// is changed in place.
+function applySearchIntent(
+  cardClass: typeof BaseDef,
+  searchDoc: Record<string, unknown>,
+): SearchText | undefined {
+  let text = new SearchTextBuilder();
+  let cardIntent = cardSearchIntentOf(
+    cardClass as unknown as { searchDefaults?: CardSearchIntent },
+  );
+  let visit = (
+    klass: typeof BaseDef,
+    doc: Record<string, unknown>,
+    inherited: FieldSearchIntent | undefined,
+    depth: number,
+  ) => {
+    if (depth > SEARCH_INTENT_MAX_DEPTH) {
+      return;
+    }
+    for (let [name, field] of Object.entries(
+      getFields(klass, { includeComputeds: true }),
+    )) {
+      if (depth === 0 && name === 'id') {
+        continue;
+      }
+      let intent = resolvedSearchIntent(
+        field,
+        cardIntent,
+        inherited,
+        depth === 0,
+      );
+      if (intent === false) {
+        if (!(depth === 0 && ALWAYS_SEARCHED_FIELDS.has(name))) {
+          delete doc[name];
+        }
+        continue;
+      }
+      if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
+        continue;
+      }
+      let value = doc[name];
+      if (value == null) {
+        continue;
+      }
+      let values = Array.isArray(value) ? value : [value];
+      if (primitive in field.card) {
+        let serializer = (field.card as unknown as Record<symbol, unknown>)[
+          fieldSerializer
+        ];
+        if (
+          typeof serializer === 'string' &&
+          NON_TEXT_SERIALIZERS.has(serializer)
+        ) {
+          continue;
+        }
+        let tier = searchTierOf(intent);
+        let byPattern = searchesByPattern(intent);
+        for (let item of values) {
+          if (typeof item !== 'string' || isNonTextString(item)) {
+            continue;
+          }
+          if (tier) {
+            text.add(tier, item);
+          }
+          if (intent?.typos) {
+            text.add('typos', item);
+          }
+          if (byPattern) {
+            text.add('patterns', item.replace(/\s*\n\s*/g, ' '));
+          }
+        }
+        continue;
+      }
+      // A compound field: its subfields inherit its role unless they declare
+      // their own.
+      let passed = intent?.role ? intent : inherited;
+      for (let item of values) {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          visit(field.card, item as Record<string, unknown>, passed, depth + 1);
+        }
+      }
+    }
+  };
+  visit(cardClass, searchDoc, undefined, 0);
+  return text.build();
+}
+
+// A card's searchable text by weight tier, after taking its `search: false`
+// fields out of `searchDoc` (in place). The render stamps the result into the
+// search doc for the index writer, which builds the row's weighted full-text
+// vector from it. See docs/search-intent.md.
+export function searchTextOf(
+  cardClass: typeof BaseDef,
+  searchDoc: Record<string, unknown>,
+): SearchText | undefined {
+  return applySearchIntent(cardClass, searchDoc);
 }
 
 export class CardDef extends BaseDef {
@@ -4339,6 +4530,7 @@ export class CardDef extends BaseDef {
   ) as unknown as RealmResourceIdentifier;
   @field cardInfo = contains(CardInfoField);
   @field cardTitle = contains(StringField, {
+    search: { role: 'title' },
     computeVia: function (this: CardDef) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
@@ -4346,6 +4538,7 @@ export class CardDef extends BaseDef {
     },
   });
   @field cardDescription = contains(StringField, {
+    search: { role: 'summary' },
     computeVia: function (this: CardDef) {
       return this.cardInfo.summary;
     },
@@ -4376,6 +4569,16 @@ export class CardDef extends BaseDef {
   });
   static displayName = 'Card';
   static isCardDef = true;
+  // A card also has its type's display name under `_cardType`, the key
+  // `eq: { _cardType }` filters by.
+  static indexFields: IndexFieldDeclarations = {
+    ...BaseDef.indexFields,
+    _cardType: { search: { facet: true } },
+  };
+  // Search defaults for the whole type: which field is its title, which
+  // fields rank it, its language. See docs/search-intent.md. Not `search`,
+  // which a card may declare as an `@operation`.
+  static searchDefaults: CardSearchIntent | undefined;
   static icon = CaptionsIcon;
 
   static assignInitialFieldValue(
@@ -4498,6 +4701,9 @@ export class CardDef extends BaseDef {
 }
 
 export class CssImportField extends StringField {
+  static searchDefaults: FieldSearchIntent | undefined = {
+    role: 'identifier',
+  };
   static displayName = 'CSS Import';
   static icon = ImportIcon;
 }

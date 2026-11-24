@@ -6392,15 +6392,15 @@ module(basename(import.meta.filename), function () {
       // It must come back as it was: the same search doc, the generated
       // columns derived from it, the text columns empty until the writer
       // fills them.
-      test('a kept last-known-good row comes back with the search columns as the database left them', async function (assert) {
+      test('a kept last-known-good row comes back with the search columns it had', async function (assert) {
         await realm.write('mango.json', JSON.stringify(mangoDoc('Mango')));
         let read = async () =>
           (
             (await testDbAdapter.execute(
               `SELECT search_doc, title_sort,
                       (search_keys IS NOT NULL) AS has_search_keys,
-                      (search_tsv IS NULL AND pattern_text IS NULL
-                        AND rank_tsv IS NULL AND search_title IS NULL) AS text_columns_empty
+                      search_tsv::text AS search_tsv, pattern_text,
+                      rank_tsv::text AS rank_tsv, search_title
                FROM boxel_index
                WHERE url = '${testRealm}mango.json' AND type = 'instance'`,
             )) as Record<string, unknown>[]
@@ -6420,7 +6420,11 @@ module(basename(import.meta.filename), function () {
           'title_sort is still derived from its search doc',
         );
         assert.true(kept.has_search_keys, 'so is search_keys');
-        assert.true(kept.text_columns_empty, 'the text columns stay empty');
+        assert.notStrictEqual(
+          kept.search_tsv,
+          null,
+          'the text columns hold what the card last indexed with',
+        );
       });
 
       test('a failed visit for a brand-new card records an instance error via the source-parse fallback', async function (assert) {

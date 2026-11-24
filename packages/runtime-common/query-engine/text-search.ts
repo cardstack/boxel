@@ -338,13 +338,13 @@ export abstract class TextSearch extends FilterCompiler {
       ])) as { word: string; correction: string }[];
       // A union's word list is its realms' lists together, and its floor
       // counts their rows together, as one realm holding every card would.
-      if (anonymize) {
-        offered = await this.#aboveTypoFloor(
-          q,
-          [...new Set(nominated.map((r) => r.correction))],
-          realmURL,
-        );
-      }
+      let corrections = [...new Set(nominated.map((r) => r.correction))];
+      offered = anonymize
+        ? await this.#aboveTypoFloor(q, corrections, realmURL)
+        : // The word list only grows (a card's words stay listed after the
+          // card goes, and survive an index emptied by a crash), so every
+          // correction is offered only if a live card holds it.
+          await this.#heldByLiveCards(q, corrections, realmURL);
       return nominated;
     })) as { word: string; correction: string }[];
     let candidates = new Map<string, string[]>();
@@ -358,6 +358,29 @@ export abstract class TextSearch extends FilterCompiler {
         typoCorrections(word, list),
       ]),
     );
+  }
+
+  // The corrections at least one live card of the realm (or union) holds,
+  // through the full-text index: one probe per candidate, each stopping at
+  // its first row.
+  async #heldByLiveCards(
+    q: Querier,
+    corrections: string[],
+    realmURL: URL,
+  ): Promise<Set<string>> {
+    if (corrections.length === 0) {
+      return new Set();
+    }
+    let rows = (await q([
+      'SELECT c.w AS word FROM jsonb_array_elements_text(',
+      param(JSON.stringify(corrections)),
+      `::jsonb) AS c(w) WHERE EXISTS (SELECT 1 FROM boxel_index AS i WHERE`,
+      `i.search_tsv @@ plainto_tsquery('boxel_english', c.w) AND`,
+      // not the realm's index: see `#aboveTypoFloor`
+      ...typoRealmIs(`(i.realm_url || '')`, realmURL),
+      `AND i.is_deleted IS NOT TRUE AND NOT COALESCE(i.has_error, FALSE))`,
+    ])) as { word: string }[];
+    return new Set(rows.map((r) => r.word));
   }
 
   // The small-count floor on the corrections a caller the policy scopes is

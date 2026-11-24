@@ -768,9 +768,14 @@ module('Integration | searchable search doc', function (hooks) {
     if (!entry || entry.type === 'instance-error') {
       return undefined;
     }
-    let { _cardType, _title, ...rest } =
-      (entry as IndexedInstance).searchDoc ?? {};
-    return rest;
+    // `_`-prefixed top-level keys are the synthetics the indexer stamps after
+    // generation (`_cardType`, `_title`, `_typeahead`, ...), not generator
+    // output.
+    return Object.fromEntries(
+      Object.entries((entry as IndexedInstance).searchDoc ?? {}).filter(
+        ([key]) => !key.startsWith('_'),
+      ),
+    );
   }
 
   let agentUrl = `${testRealmURL}Agent/a1`;

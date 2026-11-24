@@ -1,6 +1,7 @@
 import stringify from 'safe-stable-stringify';
 
 import { SYNTHETIC_SEARCH_DOC_KEYS } from './search-doc-keys.ts';
+import { SEARCH_TEXT_KEY } from './search-intent.ts';
 
 // Parity comparison between a store-driven search doc and a searchable-driven
 // one. Shared by the realm-scale validator (`scripts/searchable-parity-diff.ts`)
@@ -120,13 +121,29 @@ function diffValue(
 
 // Compare two search docs and return a list of human-readable divergences
 // (empty when equivalent). Synthetic keys stamped after generation
-// (SYNTHETIC_SEARCH_DOC_KEYS) are ignored; object key order is normalized.
+// (SYNTHETIC_SEARCH_DOC_KEYS) are ignored, as is the render's top-level
+// `_searchText`; object key order is normalized.
 export function diffDoc(
   live: SearchDoc,
   generated: SearchDoc,
   ignoreShallowLinks: boolean,
 ): string[] {
   let diffs: string[] = [];
-  diffValue('', live ?? {}, generated ?? {}, ignoreShallowLinks, diffs);
+  diffValue(
+    '',
+    withoutSearchText(live),
+    withoutSearchText(generated),
+    ignoreShallowLinks,
+    diffs,
+  );
   return diffs;
+}
+
+// The render's `_searchText` (its words, grouped by search weight) becomes the
+// row's full-text vector and is dropped from the stored doc, so no stored doc
+// holds it and a generated doc is compared without it.
+function withoutSearchText(doc: SearchDoc | undefined): SearchDoc {
+  if (!doc || !(SEARCH_TEXT_KEY in doc)) return doc ?? {};
+  let { [SEARCH_TEXT_KEY]: _searchText, ...rest } = doc;
+  return rest;
 }
