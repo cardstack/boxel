@@ -137,8 +137,9 @@ export default class HostRouteLinksService
 
   // On a page served on a host URL: the card each routed address was made
   // for, by address, for the links rendered since `forgetLinkedCards` was
-  // last called. A click on a link with that address opens the card with
-  // no lookup. Not tracked: nothing renders from it.
+  // last called. A click uses it only to tell a routed address whose last
+  // segment looks like a file name from a file; the address itself opens
+  // the card the routes resolve it to. Not tracked: nothing renders from it.
   //
   // When Host Mode v2 lands, store the key as the address on the host URL
   // the page is served on. A click looks the key up by the link's URL on
@@ -192,9 +193,8 @@ export default class HostRouteLinksService
     return this.linkedCards.get(href);
   }
 
-  // Forgets the cards of the links rendered so far. Called when the visitor
-  // leaves a page, so an address is only ever opened from a link that the
-  // page the visitor is on rendered.
+  // Forgets the cards of the links rendered so far. Called once the visitor
+  // has left a page, so only the links of the page the visitor is on count.
   forgetLinkedCards(): void {
     this.linkedCards.clear();
   }

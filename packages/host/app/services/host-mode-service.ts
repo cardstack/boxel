@@ -63,6 +63,22 @@ export type DynamicRoutedPath =
   | { kind: 'redirect'; redirectTo: string }
   | { kind: 'error'; error: unknown };
 
+// A path as a followed link and the index route compare it: canonical, with
+// its percent-escapes decoded. A link's path is the browser's percent-encoded
+// form, and the router may give its own path in either form, so a path with
+// a non-ASCII or escaped character compares the same both ways. An escape
+// that decodes to a reserved character, such as `%2F`, stays as it is.
+function comparablePath(path: string): string {
+  let pathname = path.startsWith('/') ? path : `/${path}`;
+  let decoded = pathname;
+  try {
+    decoded = decodeURI(pathname);
+  } catch {
+    // A malformed escape: compared as it is.
+  }
+  return normalizeRoutingPath(decoded);
+}
+
 function parsesAsURL(value: string): boolean {
   try {
     return new URL(value).href.length > 0;
@@ -341,9 +357,8 @@ export default class HostModeService extends Service {
   // about to follow opens, so its decision for that path runs no lookup.
   // The caller calls the returned function when the navigation ends.
   followLink(path: string, cardHref: string): () => void {
-    let pathname = path.startsWith('/') ? path : `/${path}`;
     let followed = {
-      path: normalizeRoutingPath(pathname),
+      path: comparablePath(path),
       result: { kind: 'card' as const, cardHref },
     };
     this.followedLink = followed;
@@ -479,7 +494,7 @@ export default class HostModeService extends Service {
       return this.currentDynamicRoutedPath.result;
     }
     // A link the visitor followed, whose card is already known.
-    if (this.followedLink?.path === canonical) {
+    if (this.followedLink?.path === comparablePath(pathname)) {
       return this.followedLink.result;
     }
     // The page the server served: its first render keeps the card the

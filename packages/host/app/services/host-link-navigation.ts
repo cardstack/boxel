@@ -53,10 +53,11 @@ const LEAVE: Destination = { kind: 'leave' };
 //
 // - A fixed route's path is the route's. A redirect is left to the browser,
 //   so the server answers it.
-// - An address the `hrefTo` helper made on this page opens the card it was
-//   made for, with no lookup.
 // - Any other path goes through the realm's dynamic routes, with the same
-//   lookups the index route runs, and then loads as a card's own path.
+//   lookups the index route runs, and then loads as a card's own path. That
+//   includes an address the `hrefTo` helper made: where more than one card
+//   has the same value, the address opens the card a page load of it serves,
+//   not the card the link was made for (ADR 036 §1.4).
 //
 // The card is loaded before the navigation starts. When the path resolves to
 // a card, the index route is told which, so it runs no lookup. When it
@@ -66,7 +67,10 @@ const LEAVE: Destination = { kind: 'leave' };
 // build.
 //
 // What is worked out is kept only while the visitor stays on the page, as
-// are the cards the helper's links were made for.
+// are the cards the helper's links were made for. A link whose lookup
+// failed, or whose destination couldn't be worked out, is not kept: a click
+// on it now is left to the browser, and the next hover or click tries
+// again.
 export default class HostLinkNavigationService extends Service {
   @service declare private hostModeService: HostModeService;
   @service('host-route-links')
@@ -77,8 +81,9 @@ export default class HostLinkNavigationService extends Service {
   private destinations = new Map<string, Promise<Destination>>();
   // The link the pointer or the focus rests on, until its delay ends.
   private intent: { href: string; timer: ReturnType<typeof later> } | undefined;
-  // Counts the clicks taken over, so a click that another one follows
-  // before it navigates is dropped.
+  // Counts the clicks taken over and the pages left, so a click that
+  // another click or a move to another page follows before it navigates is
+  // dropped.
   private follows = 0;
   private installs = 0;
 
@@ -88,7 +93,7 @@ export default class HostLinkNavigationService extends Service {
       document.addEventListener('click', this.onClick);
       document.addEventListener('mouseover', this.onLinkIntent);
       document.addEventListener('focusin', this.onLinkIntent);
-      this.router.on('routeWillChange', this.onRouteWillChange);
+      this.router.on('routeDidChange', this.onRouteDidChange);
     }
     let installed = true;
     return () => {
@@ -114,7 +119,7 @@ export default class HostLinkNavigationService extends Service {
     document.removeEventListener('click', this.onClick);
     document.removeEventListener('mouseover', this.onLinkIntent);
     document.removeEventListener('focusin', this.onLinkIntent);
-    this.router.off('routeWillChange', this.onRouteWillChange);
+    this.router.off('routeDidChange', this.onRouteDidChange);
     this.cancelIntent();
     this.forgetPage();
   }
@@ -124,10 +129,15 @@ export default class HostLinkNavigationService extends Service {
     this.hostRouteLinks.forgetLinkedCards();
   }
 
-  // The visitor leaves the page when the path changes. A change to the
-  // stack of cards open on the page keeps the path.
-  private onRouteWillChange = (transition: Transition) => {
+  // The visitor has left the page once a transition to another path is
+  // done. A transition that is aborted or fails leaves the visitor on the
+  // page, with its links, so nothing is forgotten before then. A change to
+  // the stack of cards open on the page keeps the path. A click still
+  // waiting for its destination is dropped, so it can't take the visitor
+  // away from the page they went to.
+  private onRouteDidChange = (transition: Transition) => {
     if (pageOf(transition.from) !== pageOf(transition.to)) {
+      this.follows++;
       this.cancelIntent();
       this.forgetPage();
     }
@@ -231,53 +241,59 @@ export default class HostLinkNavigationService extends Service {
     return link;
   }
 
+  // Never rejects: a link whose destination can't be worked out is left to
+  // the browser. That answer is not kept, so the next hover or click on the
+  // link works it out again.
   private destination(link: SiteLink): Promise<Destination> {
-    let destination = this.destinations.get(link.href);
-    if (!destination) {
-      destination = this.findDestination(link);
-      this.destinations.set(link.href, destination);
+    let held = this.destinations.get(link.href);
+    if (held) {
+      return held;
     }
+    let destination: Promise<Destination> = this.findDestination(link).catch(
+      (e: unknown) => {
+        log.debug(`could not work out where ${link.href} leads: ${String(e)}`);
+        if (this.destinations.get(link.href) === destination) {
+          this.destinations.delete(link.href);
+        }
+        return LEAVE;
+      },
+    );
+    this.destinations.set(link.href, destination);
     return destination;
   }
 
-  // Never rejects: a link whose destination can't be worked out is left to
-  // the browser.
   private async findDestination(link: SiteLink): Promise<Destination> {
-    try {
-      let rule = this.hostModeService.fixedRoutingRule(link.path || '/');
-      if (rule) {
-        if (isRedirectRoutingRule(rule)) {
-          return LEAVE;
-        }
-        // As for a dynamic route: a card that can't be loaded is left to
-        // the browser, so the server answers.
-        let card = await this.store.get(rule.id);
-        return isCardInstance(card) ? { kind: 'app' } : LEAVE;
+    let rule = this.hostModeService.fixedRoutingRule(link.path || '/');
+    if (rule) {
+      if (isRedirectRoutingRule(rule)) {
+        return LEAVE;
       }
-      let cardHref = this.hostRouteLinks.linkedCard(link.href);
-      if (!cardHref) {
-        let routed = await this.hostModeService.lookUpDynamicRoutedPath(
-          link.path,
-        );
-        if (routed?.kind === 'card') {
-          cardHref = routed.cardHref;
-        } else if (routed) {
-          return LEAVE;
-        } else {
-          // No route serves the path, so it is a card's own path or nothing.
-          // When Host Mode v2 lands, build the card's URL from the realm's
-          // URL + path instead, because a card's id is always on the realm's
-          // URL. Until then a site is served at its realm's URL, so the
-          // page's origin + path is the card's URL.
-          cardHref = `${this.hostModeService.hostModeOrigin}/${link.path}`;
-        }
-      }
-      let card = await this.store.get(cardHref);
-      return isCardInstance(card) ? { kind: 'app', cardHref } : LEAVE;
-    } catch (e) {
-      log.debug(`could not work out where ${link.href} leads: ${String(e)}`);
-      return LEAVE;
+      // As for a dynamic route: a card that can't be loaded is left to the
+      // browser, so the server answers.
+      let card = await this.store.get(rule.id);
+      return isCardInstance(card) ? { kind: 'app' } : LEAVE;
     }
+    // Even for an address a link was made for: the path opens the card the
+    // routes resolve it to, as a page load of the address does.
+    let routed = await this.hostModeService.lookUpDynamicRoutedPath(link.path);
+    let cardHref: string;
+    if (routed?.kind === 'card') {
+      cardHref = routed.cardHref;
+    } else if (routed?.kind === 'error') {
+      // A lookup that failed may pass when tried again.
+      throw routed.error;
+    } else if (routed) {
+      return LEAVE;
+    } else {
+      // No route serves the path, so it is a card's own path or nothing.
+      // When Host Mode v2 lands, build the card's URL from the realm's
+      // URL + path instead, because a card's id is always on the realm's
+      // URL. Until then a site is served at its realm's URL, so the
+      // page's origin + path is the card's URL.
+      cardHref = `${this.hostModeService.hostModeOrigin}/${link.path}`;
+    }
+    let card = await this.store.get(cardHref);
+    return isCardInstance(card) ? { kind: 'app', cardHref } : LEAVE;
   }
 
   private async follow(link: SiteLink): Promise<void> {
@@ -359,8 +375,8 @@ function pageOf(
 }
 
 // Whether a path's last segment has a file extension. A card's own path has
-// none, and a routed address that has one is known from the link it was
-// made for.
+// none, and a routed address that has one is told from a file by the link
+// the `hrefTo` helper made for it on this page.
 function namesFile(path: string): boolean {
   let last = path.replace(/\/+$/, '').split('/').pop() ?? '';
   return last.includes('.');

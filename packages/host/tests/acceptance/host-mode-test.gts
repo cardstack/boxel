@@ -430,6 +430,8 @@ module('Acceptance | host mode tests', function (hooks) {
     class LinkPage extends CardDef {
       static displayName = 'Link Page';
       @field post = linksTo(Post);
+      // A post whose slug another post shares, and sorts after it.
+      @field twin = linksTo(Post);
 
       static isolated = class Isolated extends Component<typeof this> {
         realm = testHostModeRealmURL;
@@ -443,6 +445,14 @@ module('Acceptance | host mode tests', function (hooks) {
               data-test-link='routed'
               href={{this.routedHref @model.post}}
             >Routed</a>
+            <a
+              data-test-link='routed-twin'
+              href={{this.routedHref @model.twin}}
+            >Routed twin</a>
+            <a
+              data-test-link='non-ascii'
+              href='{{this.realm}}posts/josé'
+            >Non-ASCII</a>
             <a data-test-link='by-hand' href='{{this.realm}}by-name/Mango'>By
               hand</a>
             <a data-test-link='own-url' href='{{this.realm}}Pet/mango'>Own URL</a>
@@ -523,11 +533,47 @@ module('Acceptance | host mode tests', function (hooks) {
             },
           },
         },
+        'Post/twin-a.json': {
+          data: {
+            attributes: { slug: 'twin' },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}post`,
+                name: 'Post',
+              },
+            },
+          },
+        },
+        'Post/twin-b.json': {
+          data: {
+            attributes: { slug: 'twin' },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}post`,
+                name: 'Post',
+              },
+            },
+          },
+        },
+        'Post/jose.json': {
+          data: {
+            attributes: { slug: 'josé' },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}post`,
+                name: 'Post',
+              },
+            },
+          },
+        },
         'LinkPage/index.json': {
           data: {
             relationships: {
               post: {
                 links: { self: `${testHostModeRealmURL}Post/trail-runner` },
+              },
+              twin: {
+                links: { self: `${testHostModeRealmURL}Post/twin-b` },
               },
             },
             meta: {
@@ -2097,15 +2143,55 @@ module('Acceptance | host mode tests', function (hooks) {
         globalThis.removeEventListener('click', stopNavigation);
       });
 
-      test('a click on a routed link opens its card with no lookup and no page load', async function (assert) {
+      test('a click on a routed link opens its card with one lookup and no page load', async function (assert) {
         // A keyboard activation of a link arrives as a click too.
         await click(link('routed'));
 
         assert.dom(post).exists();
         assert.dom('[data-test-post-isolated="trail-runner"]').exists();
         assert.strictEqual(currentURL(), '/test/posts/trail-runner');
-        assert.strictEqual(searches(), 0, 'the link knew its card');
+        assert.strictEqual(
+          searches(),
+          1,
+          'the address was looked up once, as a page load of it is',
+        );
         assert.deepEqual(leftToBrowser, [], 'the app took the click');
+        assert.strictEqual(window.location.href, pageURL, 'no page load');
+      });
+
+      test('a click and a page load of an address that two cards share open the same card', async function (assert) {
+        let twinA = `[data-test-host-mode-card="${testHostModeRealmURL}Post/twin-a"]`;
+        let twinB = `[data-test-host-mode-card="${testHostModeRealmURL}Post/twin-b"]`;
+        await waitFor(`${link('routed-twin')}[href$="/posts/twin"]`);
+
+        await click(link('routed-twin'));
+
+        assert.strictEqual(currentURL(), '/test/posts/twin');
+        assert
+          .dom(twinA)
+          .exists(
+            'the link to the second card opens the first, which sorts first',
+          );
+        assert.dom(twinB).doesNotExist();
+
+        await visit('/test/LinkPage/index');
+        await visit('/test/posts/twin');
+        assert.dom(twinA).exists('a page load of the address opens it too');
+      });
+
+      test('a link to an address with a non-ASCII value opens its card with one lookup', async function (assert) {
+        await click(link('non-ascii'));
+
+        assert
+          .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Post/jose"]`)
+          .exists();
+        assert.strictEqual(decodeURI(currentURL()), '/test/posts/josé');
+        assert.strictEqual(
+          searches(),
+          1,
+          'the index route used the card the click resolved',
+        );
+        assert.deepEqual(leftToBrowser, []);
         assert.strictEqual(window.location.href, pageURL, 'no page load');
       });
 
@@ -2131,7 +2217,7 @@ module('Acceptance | host mode tests', function (hooks) {
         assert.deepEqual(leftToBrowser, []);
       });
 
-      test('a link written by hand to an address a routed link has needs no lookup', async function (assert) {
+      test("a link written by hand to a routed link's address opens the same card", async function (assert) {
         // The new-tab link has the routed link's address. Without its
         // target, it is an ordinary link to that address.
         document.querySelector(link('new-tab'))!.removeAttribute('target');
@@ -2140,7 +2226,7 @@ module('Acceptance | host mode tests', function (hooks) {
 
         assert.dom(post).exists();
         assert.strictEqual(currentURL(), '/test/posts/trail-runner');
-        assert.strictEqual(searches(), 0);
+        assert.strictEqual(searches(), 1);
       });
 
       test("a link to a card's own URL opens the card", async function (assert) {
@@ -2276,6 +2362,84 @@ module('Acceptance | host mode tests', function (hooks) {
         await triggerEvent(link('other-site'), 'mouseover');
 
         assert.strictEqual(searches(), 0);
+      });
+
+      test('a click still waiting for its lookup when the visitor goes to another page does nothing', async function (assert) {
+        searchGate = new Deferred<void>();
+        searchStarted = new Deferred<void>();
+        // Not through `click`, which would wait for the held lookup.
+        document
+          .querySelector(link('by-hand'))!
+          .dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true }),
+          );
+        await searchStarted.promise;
+
+        await getService('router').transitionTo('/test/terms');
+        searchGate.fulfill();
+        await settled();
+
+        assert.strictEqual(
+          currentURL(),
+          '/test/terms',
+          'the visitor stays on the page they went to',
+        );
+        assert.dom(mango).exists();
+        assert.deepEqual(leftToBrowser, []);
+        assert.strictEqual(window.location.href, pageURL, 'no page load');
+      });
+
+      test("a page's linked cards are kept through a transition that is aborted, and forgotten once the visitor leaves", async function (assert) {
+        let links = getService('host-route-links');
+        let routedHref = (
+          document.querySelector(link('routed')) as HTMLAnchorElement
+        ).href;
+        assert.ok(links.linkedCard(routedHref), 'the routed link is known');
+
+        let transition = getService('router').transitionTo('/test/terms');
+        transition.abort();
+        await transition.catch(() => undefined);
+        await settled();
+        assert.strictEqual(currentURL(), '/test/LinkPage/index');
+        assert.ok(
+          links.linkedCard(routedHref),
+          'an aborted transition leaves the visitor on the page, with its links',
+        );
+
+        await visit('/test/terms');
+        assert.strictEqual(
+          links.linkedCard(routedHref),
+          undefined,
+          'a page the visitor left keeps no linked cards',
+        );
+      });
+
+      test('a lookup that fails on hover is tried again on click', async function (assert) {
+        let failSearches = true;
+        let failed = false;
+        let failing = async (request: Request) => {
+          if (failSearches && request.url.endsWith('_search')) {
+            failed = true;
+            return new Response('unavailable', { status: 503 });
+          }
+          return null;
+        };
+        let network = getService('network');
+        network.virtualNetwork.mount(failing, { prepend: true });
+        try {
+          await triggerEvent(link('by-hand'), 'mouseover');
+          await waitUntil(() => failed);
+          await settled();
+
+          failSearches = false;
+          await click(link('by-hand'));
+
+          assert.dom(mango).exists('the click worked out the link again');
+          assert.strictEqual(currentURL(), '/test/by-name/Mango');
+          assert.deepEqual(leftToBrowser, []);
+        } finally {
+          network.virtualNetwork.unmount(failing);
+        }
       });
 
       test('a failed prefetch leaves the page as it is', async function (assert) {
