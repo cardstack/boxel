@@ -111,6 +111,9 @@ export const GTS_LANGUAGE_OPTIONS = {
 // root. A package's config matches relative to the package, so keep the
 // globs under `packages/<name>/` and strip that prefix.
 function forPackage(globs, pkg) {
+  if (!pkg) {
+    return globs;
+  }
   let prefix = `packages/${pkg}/`;
   return globs
     .filter((glob) => glob.startsWith(prefix))
@@ -118,7 +121,8 @@ function forPackage(globs, pkg) {
 }
 
 // The monorepo-wide config, for the package named `pkg` (its directory under
-// `packages/`).
+// `packages/`). Without `pkg`, for the repository root's own config, which
+// also covers packages that have no config of their own.
 export function rootConfig(pkg) {
   let runtimeFiles = forPackage(RUNTIME_PACKAGE_FILES, pkg);
   let adapterModules = forPackage(CLOUD_PROVIDER_ADAPTER_MODULES, pkg);

@@ -11,8 +11,7 @@
     "lib"
   ],
   "exports": {
-    ".": "./lib/index.js",
-    "./config/*": "./lib/config/*.js"
+    ".": "./lib/index.js"
   },
   "scripts": {
     "lint": "eslint .",

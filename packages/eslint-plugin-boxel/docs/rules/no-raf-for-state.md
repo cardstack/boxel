@@ -1,4 +1,6 @@
-# Disallow `requestAnimationFrame` in Ember component files — use `scheduleOnce("afterRender", ...)` from `@ember/runloop` instead so that `settled()` in tests can track the work (`@cardstack/boxel/no-raf-for-state`)
+# @cardstack/boxel/no-raf-for-state
+
+📝 Disallow `requestAnimationFrame` in Ember component files — use `scheduleOnce("afterRender", ...)` from `@ember/runloop` instead so that `settled()` in tests can track the work.
 
 <!-- end auto-generated rule header -->
 
