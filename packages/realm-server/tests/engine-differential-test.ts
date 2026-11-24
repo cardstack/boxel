@@ -7,8 +7,10 @@ import type { IndexQueryEngine, Realm } from '@cardstack/runtime-common';
 import {
   LegacyIndexQueryEngine,
   VirtualNetwork,
+  parseSearchEntryQueryFromPayload as parseLegacyEntryQuery,
   rri,
 } from '@cardstack/runtime-common';
+import { parseSearchEntryQueryFromPayload as parseV2EntryQuery } from '@cardstack/runtime-common/query-v2/search-entry';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   readVectors,
@@ -27,6 +29,7 @@ import {
 } from './helpers/index.ts';
 import {
   compareEngines,
+  compareGrammars,
   countLine,
   type Tally,
 } from './helpers/engine-differential.ts';
@@ -221,6 +224,15 @@ module(basename(import.meta.filename), function () {
       });
     },
   );
+
+  // The request members only Query V2's entry grammar has, which the federated
+  // route reads from row 24a: main refuses each as an unknown member.
+  module("main's entry grammar and Query V2's", function () {
+    test('they differ only where a member is the newer grammar’s', function (assert) {
+      compareGrammars(parseLegacyEntryQuery, parseV2EntryQuery, total);
+      assert.ok(true, 'compared');
+    });
+  });
 
   module('the count', function () {
     test('every difference is an intentional change', function (assert) {

@@ -1941,10 +1941,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
         assert.strictEqual(matchesNothing.status, 200);
         assert.strictEqual(grantsNothing.status, 200);
+        // Query V2's federated answer also names each realm in its sections
+        // and its per-realm statuses.
         let withRealmsElided = (body: {
           meta: {
             realmTotals?: Record<string, number>;
             policyScopedRealms?: string[];
+            sections?: { realm: string }[];
+            realms?: Record<string, unknown>;
           };
         }) => ({
           ...body,
@@ -1952,6 +1956,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             ...body.meta,
             realmTotals: Object.values(body.meta.realmTotals ?? {}),
             policyScopedRealms: body.meta.policyScopedRealms?.length,
+            ...(body.meta.sections
+              ? {
+                  sections: body.meta.sections.map(
+                    ({ realm: _realm, ...section }) => section,
+                  ),
+                }
+              : {}),
+            ...(body.meta.realms
+              ? { realms: Object.values(body.meta.realms) }
+              : {}),
           },
         });
         assert.deepEqual(

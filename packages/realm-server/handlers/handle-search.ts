@@ -1,17 +1,26 @@
 import type Koa from 'koa';
 import { isLogQuery } from '@cardstack/runtime-common/log-query';
 import { queryEngineFor } from '@cardstack/runtime-common/query-engine/engine-choice';
+import { deferredSelectRefusal } from '@cardstack/runtime-common/query-engine/deferred-select';
+import { isLogBinding } from '@cardstack/runtime-common/query-v2/query-values';
+import { applyServerSearchPageBound as applyV2ServerSearchPageBound } from '@cardstack/runtime-common/query-v2/search-bounds';
+import {
+  emptySearchEntryDocument,
+  markPolicyScoped,
+  parseSearchEntryQueryFromPayload as parseV2SearchEntryQuery,
+  policyScopedQuery as v2PolicyScopedQuery,
+  searchEntryRealms as v2SearchEntryRealms,
+  type SearchEntryQuery,
+} from '@cardstack/runtime-common/query-v2/search-entry';
 import { respondToLogSearch } from './log-search.ts';
 import {
   applyFederatedRowBudget,
   applyServerSearchPageBound,
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
-  emptySearchEntryDocument,
   ifNoneMatchMatches,
   isCodeRef,
   logger,
-  markPolicyScoped,
   parseRealmsFromPayload,
   registeredRealmURL,
   parseSearchRequestPayload,
@@ -41,7 +50,7 @@ import {
   type LinkShapeDecision,
   type PrerenderedHtmlFormat,
   type Query,
-  type SearchEntryQuery,
+  type SearchEntryQuery as LegacySearchEntryQuery,
   type SearchShapeCacheOutcome,
   type SearchShapeDescriptor,
   type SearchShapeLinkMode,
@@ -105,6 +114,72 @@ import {
 export const LIVE_SEARCH_CACHE_HEADER = 'x-boxel-live-search-cache';
 
 const log = logger('realm-server:search');
+
+// How the federated route reads a request and fans it out: with Query V2's
+// entry grammar once the 'federated' caller's switch row moved it
+// (`engine-choice.ts`), with main's until then and under
+// `BOXEL_QUERY_ENGINE=legacy`. Query V2's reads the newer wire grammar (`let`
+// bindings, a log's lines among them, facets, collapse, a merged federation)
+// and reports each realm's answer in `meta.realms`; both answer a search of
+// several realms by merging each realm's own search. Its refusals are main's
+// `SearchRequestError`, carrying the grammar's code. Main's half goes with
+// main's engine.
+interface FederatedEntryGrammar {
+  parse(payload: unknown): SearchEntryQuery;
+  boundPage(
+    query: SearchEntryQuery['itemQuery'],
+  ): SearchEntryQuery['itemQuery'];
+  // `linkedGrants` (Query V2 only): the grants each card a `linkedFrom`
+  // names would face on a direct read (`Realm.linkedFromGrants`).
+  policyScopedQuery(
+    query: SearchEntryQuery,
+    grantFilters: Filter[],
+    linkedGrants?: Map<string, Filter[] | null>,
+  ): SearchEntryQuery;
+  searchEntryRealms: typeof v2SearchEntryRealms;
+}
+
+const V2_ENTRY_GRAMMAR: FederatedEntryGrammar = {
+  parse: (payload) => parseV2SearchEntryQuery(payload),
+  boundPage: applyV2ServerSearchPageBound,
+  policyScopedQuery: v2PolicyScopedQuery,
+  searchEntryRealms: v2SearchEntryRealms,
+};
+
+// Main's grammar parses only main's members, so every query it hands on is
+// one main's functions take.
+const LEGACY_ENTRY_GRAMMAR: FederatedEntryGrammar = {
+  parse: (payload) => parseSearchEntryQueryFromPayload(payload),
+  boundPage: (query) => applyServerSearchPageBound(query as Query),
+  policyScopedQuery: (query, grantFilters) =>
+    policyScopedQuery(query as LegacySearchEntryQuery, grantFilters),
+  searchEntryRealms: (realms, query, opts, queryForRealm) =>
+    searchEntryRealms(
+      realms,
+      query as LegacySearchEntryQuery,
+      opts,
+      queryForRealm as ((realm: object) => LegacySearchEntryQuery) | undefined,
+    ),
+};
+
+function federatedEntryGrammar(): FederatedEntryGrammar {
+  return queryEngineFor('federated') === 'v2'
+    ? V2_ENTRY_GRAMMAR
+    : LEGACY_ENTRY_GRAMMAR;
+}
+
+// A request's entry query, read with `grammar`. A card query's `select` is
+// refused on either engine until its own row (`deferred-select.ts`).
+function parseFederatedEntryQuery(
+  grammar: FederatedEntryGrammar,
+  payload: unknown,
+): SearchEntryQuery {
+  let refused = deferredSelectRefusal(payload);
+  if (refused) {
+    throw refused;
+  }
+  return grammar.parse(payload);
+}
 
 // The federated search: the entry wire model over every requested
 // realm. Parses the entry-rooted query (the `item.` membership query,
@@ -344,7 +419,7 @@ export default function handleSearch(opts: {
       : undefined;
     if (anonymousRequest) {
       try {
-        parseSearchEntryQueryFromPayload(payload);
+        parseFederatedEntryQuery(federatedEntryGrammar(), payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           await respondToInvalidSearch(ctxt, e);
@@ -354,7 +429,14 @@ export default function handleSearch(opts: {
       }
     }
     let access: RealmAccess = unresolved
-      ? { readable: new Set(), scoped: new Map(), failed: unresolved }
+      ? {
+          readable: new Set(),
+          scoped: new Map(),
+          grantsForType: new Map(),
+          realms: new Map(),
+          judgedFor: new Map(),
+          failed: unresolved,
+        }
       : await withSearchConnectionTenant(ctxt, named, () =>
           policyAccess(
             readable,
@@ -441,6 +523,9 @@ export default function handleSearch(opts: {
     let access: RealmAccess = {
       readable,
       scoped: new Map(),
+      grantsForType: new Map(),
+      realms: new Map(),
+      judgedFor: new Map(),
       failed: new Set(),
     };
     if (
@@ -491,6 +576,44 @@ export default function handleSearch(opts: {
             return;
           }
           access.scoped.set(url, scope.filters);
+          // What a linked card read for this search (a link facet's label, a
+          // `linkedFrom` card) faces: its own type's grants, judged for the
+          // same caller, as on the realm's own `_search`.
+          let judged = new Map<string, Promise<Filter[] | null>>();
+          let grantsFor = (type: CodeRef) => {
+            let key = `${type && 'module' in type ? type.module : ''}#${type && 'name' in type ? type.name : ''}`;
+            let known = judged.get(key);
+            if (!known) {
+              known = (async () => {
+                try {
+                  let own = await policyQueryScope(realm.operationCore, {
+                    ...invocation,
+                    types: [type],
+                    principal: caller
+                      ? { kind: 'anonymous', request: caller.request }
+                      : principal!,
+                    transport: 'federated-search',
+                  });
+                  return own.kind === 'scoped' ? own.filters : null;
+                } catch (err: unknown) {
+                  if (isOperationFailure(err)) return null;
+                  throw err;
+                }
+              })();
+              judged.set(key, known);
+            }
+            return known;
+          };
+          access.grantsForType.set(url, grantsFor);
+          access.realms.set(url, realm);
+          access.judgedFor.set(
+            url,
+            caller
+              ? `anonymous:${caller.clientIP ?? ''}`
+              : principal?.kind === 'user'
+                ? `user:${principal.user}`
+                : 'none',
+          );
         } catch (e) {
           // Not a policy that could not be judged but a principal no policy
           // may be asked about, which only broken wiring gets here with. It
@@ -629,11 +752,13 @@ export default function handleSearch(opts: {
     let timings =
       loggingCorrelationId !== null ? new RequestTimings() : undefined;
 
+    let grammar = federatedEntryGrammar();
     let parsed;
     let request = await fetchRequestFromContext(ctxt);
     try {
       let parseRequest = async () =>
-        parseSearchEntryQueryFromPayload(
+        parseFederatedEntryQuery(
+          grammar,
           payload === undefined
             ? await parseSearchRequestPayload(request)
             : payload,
@@ -691,19 +816,24 @@ export default function handleSearch(opts: {
     // searches are bounded as well, because the headers that mark a render are
     // set by the caller, so an exemption keyed on them is one anyone can
     // claim. Clamping never rejects, so a render still draws the first page.
-    parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
-    // Each realm answers its own page and the merge concatenates them, so the
-    // realms that contribute rows share the absolute maximum: naming more
-    // realms — and a caller may name every public one — doesn't buy a larger
-    // response.
-    parsed.itemQuery = applyFederatedRowBudget(
-      parsed.itemQuery,
-      new Set(
-        realmList.filter(
-          (realm) => access.readable.has(realm) || access.scoped.has(realm),
-        ),
-      ).size,
-    );
+    parsed.itemQuery = grammar.boundPage(parsed.itemQuery);
+    // The bound is rows per response. Results by realm (the default) are each
+    // realm's own page, concatenated, so the realms that contribute rows share
+    // the absolute maximum: naming more realms — and a caller may name every
+    // public one — doesn't buy a larger response. Merged results (the union
+    // statement, or the merge of each realm's top rows) are one page across
+    // every realm, already held to the absolute maximum by the page bound
+    // above, so no share is taken: the page keeps the size and number asked.
+    if (parsed.federation?.results !== 'merged') {
+      parsed.itemQuery = applyFederatedRowBudget(
+        parsed.itemQuery as Query,
+        new Set(
+          realmList.filter(
+            (realm) => access.readable.has(realm) || access.scoped.has(realm),
+          ),
+        ).size,
+      ) as typeof parsed.itemQuery;
+    }
 
     // The query each policy-scoped realm runs. Composed here, off the bounded
     // query, so the page the engine fills is a page of rows the policy admits:
@@ -712,7 +842,24 @@ export default function handleSearch(opts: {
     // sparse. Every other realm runs `parsed` untouched.
     let scopedQueries = new Map<string, SearchEntryQuery>();
     for (let [realm, filters] of access.scoped) {
-      scopedQueries.set(realm, policyScopedQuery(parsed, filters));
+      // Query V2's grammar reads linked cards (`linkedFrom`, a link facet's
+      // labels): each under its own type's grants, as on the realm's own
+      // `_search`. Main's grammar reads none.
+      let grantsFor = access.grantsForType.get(realm);
+      let mounted = access.realms.get(realm);
+      if (grammar === V2_ENTRY_GRAMMAR && grantsFor && mounted) {
+        let own = linkedFromInRealm(parsed, mounted.url);
+        scopedQueries.set(realm, {
+          ...grammar.policyScopedQuery(
+            own,
+            filters,
+            await mounted.linkedFromGrants(own.itemQuery, grantsFor),
+          ),
+          grantsForType: grantsFor,
+        });
+      } else {
+        scopedQueries.set(realm, grammar.policyScopedQuery(parsed, filters));
+      }
     }
     // Whether any realm this search names is one the caller does not read.
     // Where none is, the search is the one it would be with no policy
@@ -803,6 +950,12 @@ export default function handleSearch(opts: {
     if (parsed.scope && parsed.scope !== 'all') {
       cacheKeyOpts.scope = parsed.scope;
     }
+    // A merged federation orders, pages and sections the body differently
+    // from a per-realm one, so it keys the body. Folded only when set, so
+    // other keys stay as they were.
+    if (parsed.federation?.results === 'merged') {
+      cacheKeyOpts.federation = 'merged';
+    }
     // The mark is part of the body, and it is the one part a declared query
     // and the ad-hoc query it resolves to do not share, so it keys the cache
     // too. Folded only when some realm carries it, like the policy scope.
@@ -831,6 +984,15 @@ export default function handleSearch(opts: {
               (access.failed.has(realm) ? 'failed' : 'none'),
           ]),
       );
+      // A query that reads linked cards (a facet's labels, a `linkedFrom`
+      // card) reads each under its own type's grants, judged for this caller,
+      // so its answer is this caller's even where the query's grant filters
+      // name no one.
+      if (grammar === V2_ENTRY_GRAMMAR && readsLinkedCards(parsed)) {
+        cacheKeyOpts.linkedCardsJudgedFor = Object.fromEntries(
+          [...access.judgedFor].sort(([a], [b]) => a.localeCompare(b)),
+        );
+      }
     }
 
     // `loggingCorrelationId` / `timings` deliberately stay OUT of the
@@ -858,7 +1020,8 @@ export default function handleSearch(opts: {
       ? 'prerender'
       : searchShapeLinkMode(links);
     shape = describeSearchShape({
-      query: parsed,
+      // The shape line reads the members both grammars share.
+      query: parsed as LegacySearchEntryQuery,
       realms: realmList,
       linkMode,
       ...(linkShapeDecision
@@ -902,7 +1065,7 @@ export default function handleSearch(opts: {
           unread.length === 0
             ? workingInstances
             : realmInstancesFor(realmList, working, workingInstances, access);
-        let merged = await searchEntryRealms(
+        let merged = await grammar.searchEntryRealms(
           realmInstances,
           parsed,
           {
@@ -935,9 +1098,17 @@ export default function handleSearch(opts: {
         // Serialize compact: an entry doc can run to many MB, so indentation
         // whitespace is pure wire overhead the consumer parses straight back off.
         let stringify = async () => JSON.stringify(doc);
-        return timings
+        let body = timings
           ? await timings.time('stringify', stringify)
-          : stringify();
+          : await stringify();
+        // A merge some realm failed to answer (a timeout, a definition that
+        // could not be read) is served to this caller as it is, but never
+        // retained: a cached copy would keep answering with the failed
+        // realm's rows missing after it recovers.
+        if (resultIncomplete) {
+          throw new UncacheableSearchBody(body);
+        }
+        return body;
       };
       // Cut an over-budget live search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
@@ -973,38 +1144,48 @@ export default function handleSearch(opts: {
     };
 
     let jobId = searchCache ? prerenderJobId : null;
+    // A query that binds a log's lines (`isLogBinding`) is never served from
+    // a cache: the caches are keyed by the realms' index generations, which
+    // an append the realm indexes as it lands does not move, so a cached
+    // answer would miss the appended lines.
+    let bindsLog = Object.values(parsed.itemQuery.let ?? {}).some((binding) =>
+      isLogBinding(binding),
+    );
     try {
       await respondWithJobScopedSearchCache(ctxt, {
-        searchCache,
+        searchCache: bindsLog ? undefined : searchCache,
         jobId,
         consumingRealm,
         realms: realmList,
-        query: parsed.itemQuery,
+        // Keyed by its canonical JSON, whichever grammar read it.
+        query: parsed.itemQuery as Query,
         opts: cacheKeyOpts,
         runSearch,
         emitTelemetry,
         recordCacheOutcome: (outcome) => {
           cacheOutcome = outcome;
         },
-        liveSearch: {
-          cache: liveSearchCache,
-          dbAdapter,
-          virtualNetwork,
-          typeAnchors: refusal ? refusal.typeAnchors : parsed.typeAnchors,
-          // Only realms this process already holds. Resolving an anchor's
-          // canonical spelling must never be the thing that forces a mount —
-          // this request may well be a cache hit, which skips mounting
-          // entirely.
-          mountedRealm: () => {
-            for (let url of realmList) {
-              let realm = reconciler.mounted.get(url);
-              if (realm) {
-                return realm;
-              }
-            }
-            return undefined;
-          },
-        },
+        liveSearch: bindsLog
+          ? undefined
+          : {
+              cache: liveSearchCache,
+              dbAdapter,
+              virtualNetwork,
+              typeAnchors: refusal ? refusal.typeAnchors : parsed.typeAnchors,
+              // Only realms this process already holds. Resolving an anchor's
+              // canonical spelling must never be the thing that forces a mount —
+              // this request may well be a cache hit, which skips mounting
+              // entirely.
+              mountedRealm: () => {
+                for (let url of realmList) {
+                  let realm = reconciler.mounted.get(url);
+                  if (realm) {
+                    return realm;
+                  }
+                }
+                return undefined;
+              },
+            },
       });
     } catch (e) {
       // The per-request time budget fired inside `runSearch`. A time-budgeted
@@ -1031,6 +1212,34 @@ export default function handleSearch(opts: {
   }
 }
 
+// The body of a search that must be answered but not cached: thrown out of the
+// populate so neither cache stores it (a rejected populate is never retained,
+// `TtlResponseCache.getOrPopulate`), and answered by whoever catches it.
+export class UncacheableSearchBody extends Error {
+  readonly body: string;
+  constructor(body: string) {
+    super('this search body is not cacheable');
+    this.name = 'UncacheableSearchBody';
+    this.body = body;
+  }
+}
+
+async function respondWithUncacheableBody(
+  ctxt: Koa.Context,
+  e: UncacheableSearchBody,
+  recordCacheOutcome: (outcome: SearchShapeCacheOutcome) => void,
+  emitTelemetry: () => void,
+): Promise<void> {
+  recordCacheOutcome('miss');
+  await setContextResponse(
+    ctxt,
+    new Response(e.body, {
+      headers: { 'content-type': SupportedMimeType.CardJson },
+    }),
+  );
+  emitTelemetry();
+}
+
 // What a named query whose refusal is hidden from the caller is cached under:
 // the members the request named it by, and the types its generations are read
 // through.
@@ -1055,8 +1264,70 @@ interface RealmAccess {
   // The realms the caller reaches through their policy, with the grant
   // filters composed into the query each runs.
   scoped: Map<string, Filter[]>;
+  // For each of those, the grants a linked card of a given type faces (null
+  // where none admits the caller), and the mounted realm.
+  grantsForType: Map<string, (type: CodeRef) => Promise<Filter[] | null>>;
+  realms: Map<string, Realm>;
+  // For each of those, who its grants were judged for: a linked card's own
+  // grants depend on the caller, as the query's grant filters may not.
+  judgedFor: Map<string, string>;
   // The realms whose policy could not be judged.
   failed: Set<string>;
+}
+
+// `query` with each `linkedFrom` card named `$REALM/<path>` spelled as the
+// card in `realmURL`, as that realm reads `$REALM`. A policy composes a
+// `linkedFrom` into a binding on the card's id, which the engine compares as
+// written.
+function linkedFromInRealm(
+  query: SearchEntryQuery,
+  realmURL: string,
+): SearchEntryQuery {
+  let resolve = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(resolve);
+    if (!v || typeof v !== 'object') return v;
+    let out: Record<string, unknown> = {};
+    for (let [key, value] of Object.entries(v)) {
+      if (
+        key === 'linkedFrom' &&
+        value &&
+        typeof value === 'object' &&
+        typeof (value as { card?: unknown }).card === 'string' &&
+        (value as { card: string }).card.startsWith('$REALM/')
+      ) {
+        let card = (value as { card: string }).card;
+        out[key] = {
+          ...value,
+          card: new URL(card.slice('$REALM/'.length), realmURL).href,
+        };
+      } else {
+        out[key] = resolve(value);
+      }
+    }
+    return out;
+  };
+  let { filter, sort } = query.itemQuery;
+  if (!JSON.stringify({ filter, sort }).includes('"$REALM/')) {
+    return query;
+  }
+  return {
+    ...query,
+    itemQuery: {
+      ...query.itemQuery,
+      ...(filter ? { filter: resolve(filter) as typeof filter } : {}),
+      ...(sort ? { sort: resolve(sort) as typeof sort } : {}),
+    },
+  };
+}
+
+// Whether a Query V2 search reads linked cards a policy judges apart from the
+// query's own type: a facet (whose labels come from linked cards) or a
+// `linkedFrom`.
+function readsLinkedCards(query: SearchEntryQuery): boolean {
+  return (
+    Boolean((query.itemQuery as { facets?: unknown[] }).facets?.length) ||
+    JSON.stringify(query.itemQuery).includes('"linkedFrom":')
+  );
 }
 
 // The realm instances a fan-out searches, positional with `realmURLs`. A realm
@@ -1165,10 +1436,43 @@ async function respondWithJobScopedSearchCache(
     };
   },
 ): Promise<void> {
-  let { searchCache, jobId, consumingRealm, realms, query, runSearch } = args;
   let emitTelemetry = args.emitTelemetry ?? (() => {});
   let recordCacheOutcome = args.recordCacheOutcome ?? (() => {});
-  let cacheable = searchCache && jobId && consumingRealm;
+  let cacheable = args.searchCache && args.jobId && args.consumingRealm;
+  try {
+    await respondThroughSearchCaches(ctxt, args, {
+      cacheable: Boolean(cacheable),
+      emitTelemetry,
+      recordCacheOutcome,
+    });
+  } catch (e) {
+    if (e instanceof UncacheableSearchBody) {
+      await respondWithUncacheableBody(
+        ctxt,
+        e,
+        recordCacheOutcome,
+        emitTelemetry,
+      );
+      return;
+    }
+    throw e;
+  }
+}
+
+async function respondThroughSearchCaches(
+  ctxt: Koa.Context,
+  args: Parameters<typeof respondWithJobScopedSearchCache>[1],
+  {
+    cacheable,
+    emitTelemetry,
+    recordCacheOutcome,
+  }: {
+    cacheable: boolean;
+    emitTelemetry: () => void;
+    recordCacheOutcome: (outcome: SearchShapeCacheOutcome) => void;
+  },
+): Promise<void> {
+  let { searchCache, jobId, consumingRealm, realms, query, runSearch } = args;
 
   if (cacheable) {
     // Fold each realm's generation fingerprint (index + prerendered-HTML) into
@@ -1310,7 +1614,10 @@ async function respondToInvalidSearch(
   e: SearchRequestError,
 ): Promise<void> {
   if (e.code === 'invalid-query' || e.code === 'invalid-render') {
-    await setContextResponse(ctxt, buildSearchErrorResponse(e.message));
+    await setContextResponse(
+      ctxt,
+      buildSearchErrorResponse(e.message, 400, e.queryCode),
+    );
   } else {
     await sendResponseForBadRequest(ctxt, e.message);
   }

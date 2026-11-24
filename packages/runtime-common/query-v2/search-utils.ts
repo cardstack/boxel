@@ -5,30 +5,14 @@ import { SupportedMimeType } from '../router.ts';
 import type { PrerenderedHtmlFormat } from '../prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 
-export type SearchRequestErrorCode =
-  | 'missing-realms'
-  | 'invalid-json'
-  | 'unsupported-method'
-  | 'invalid-query'
-  | 'invalid-render'
-  | 'invalid-prerendered-html-format';
-
-export class SearchRequestError extends Error {
-  code: SearchRequestErrorCode;
-  // the query grammar's own code for the mistake, when it has one
-  queryCode?: string;
-
-  constructor(
-    code: SearchRequestErrorCode,
-    message: string,
-    queryCode?: string,
-  ) {
-    super(message);
-    this.code = code;
-    this.name = 'SearchRequestError';
-    if (queryCode) this.queryCode = queryCode;
-  }
-}
+// One class for each request refusal, shared with main's search-utils.ts, so
+// a refusal from either engine's grammar is the same error to every caller
+// that tests it (`instanceof SearchRequestError` answers 400, not 500).
+import {
+  SearchRequestError,
+  type SearchRequestErrorCode,
+} from '../search-utils.ts';
+export { SearchRequestError, type SearchRequestErrorCode };
 
 export function parseRealmsParam(url: URL): string[] {
   return url.searchParams
@@ -208,10 +192,6 @@ export type SearchOpts = {
   // `realmDeadlineWithin`): a realm that has not answered by then is cut off
   // and reported as a timeout, and the search answers with the others.
   realmDeadline?: number;
-  // Per realm URL, the time this request already spent on that realm before
-  // the fan-out reached it (mounting it), so `meta.realms[url].ms` reports the
-  // realm's whole part of the request.
-  realmPreparedMs?: Record<string, number>;
 };
 
 // Indirection so a host integration test can deterministically capture

@@ -312,6 +312,25 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.true(get.body.errors[0].message.includes('method must be QUERY'));
     });
 
+    test('select is refused with a 400 until its own row', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        select: ['firstName'],
+      });
+      assert.strictEqual(response.status, 400, response.text);
+      assert.strictEqual(
+        response.body.errors[0].code,
+        'unknown-key',
+        response.text,
+      );
+      assert.true(
+        response.body.errors[0].message.includes(
+          'select (a table of values) is not answered yet',
+        ),
+        response.text,
+      );
+    });
+
     test('the item-leg page size is bounded server-side', async function (assert) {
       // The server bounds the live item leg for every caller, as a pair: a
       // request naming no page takes the default, and one naming a size is

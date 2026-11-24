@@ -484,6 +484,48 @@ module(basename(import.meta.filename), function () {
     }
   });
 
+  test('a type named at the top of the query is judged as an anchor is', async function (assert) {
+    let typesOf = (payload: Record<string, unknown>) =>
+      searchInvocation(payload)!
+        .types.map((type) => key(type as ResolvedCodeRef))
+        .sort();
+    assert.deepEqual(
+      typesOf({ type: SCHEDULE }),
+      [key(SCHEDULE)],
+      'a query whose only type is the top-level one',
+    );
+    assert.deepEqual(
+      typesOf({ type: SCHEDULE, filter: { eq: { 'item.title': 'x' } } }),
+      [key(SCHEDULE)],
+      'beside a filter that anchors nothing',
+    );
+    assert.deepEqual(
+      typesOf({ type: SCHEDULE, filter: { 'item.on': SCHEDULE } }),
+      [key(SCHEDULE)],
+      'named again in the filter, it is judged once',
+    );
+    assert.deepEqual(
+      typesOf({ type: SCHEDULE, filter: { 'item.on': BASE_SCHEDULE } }),
+      [key(BASE_SCHEDULE), key(SCHEDULE)].sort(),
+      'beside another anchor, both are judged',
+    );
+    assert.deepEqual(
+      typesOf({ type: 'not a code ref' }),
+      [],
+      'a top-level type that is not a code ref anchors nothing',
+    );
+    // An anonymous search names its type at the top in the newer spelling,
+    // so a policy that grants query on that type admits it.
+    assert.deepEqual(
+      await scope(
+        'query',
+        [{ operation: 'query', filter: OWN_FILTER }],
+        searchInvocation({ type: SCHEDULE })!.types,
+      ),
+      { kind: 'scoped', filters: [scoped(OWN)] },
+    );
+  });
+
   test('a type named twice is judged once', async function (assert) {
     assert.deepEqual(
       await scope(
