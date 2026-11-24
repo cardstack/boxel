@@ -56,7 +56,7 @@ export default class DanglingRoutingWarning extends Component<Signature> {
           @title='Some host routing rules point to a card that no longer exists'
           data-test-dangling-routing-warning
         >
-          Visitors to these paths see a “page not found” page at each host URL.
+          Visitors to these paths get a “page not found” error at each host URL.
           <ul class='rules'>
             {{#each this.rules as |rule|}}
               <li data-test-dangling-routing-rule={{rule.path}}>
