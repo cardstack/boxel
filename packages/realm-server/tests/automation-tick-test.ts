@@ -1080,7 +1080,8 @@ module(basename(import.meta.filename), function (hooks) {
         deadline: new Date(DEADLINE),
         expiresAt: null,
         state: 'in_progress',
-        submittedAt: new Date(NOON * 1000),
+        // Submitted by the database's clock, as the batch path records it,
+        // so after the automation's switch-on.
       });
       return submitting;
     }
@@ -1277,7 +1278,7 @@ module(basename(import.meta.filename), function (hooks) {
       await submitBatch();
       // Removed and switched on again after the batch was submitted.
       await query(dbAdapter, [
-        `UPDATE automations SET switched_on_at = '2026-11-10T12:30:00Z'`,
+        `UPDATE automations SET switched_on_at = now() + interval '1 minute'`,
       ]);
 
       assert.deepEqual(await followUps(ONE + 30), []);
