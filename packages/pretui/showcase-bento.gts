@@ -54,7 +54,11 @@ class Tile extends Component<TileSignature> {
   }
   is = (slug: string) => this.slug === slug;
   <template>
-    <div class='tile {{this.span}}' data-category={{this.slug}}>
+    <div
+      class='tile {{this.span}}'
+      data-category={{this.slug}}
+      data-test-showcase-tile={{this.slug}}
+    >
       <div class='tile-demo' aria-hidden='true' inert>
         {{#if (this.is 'inputs')}}
           <div class='demo-stack'>
@@ -141,10 +145,17 @@ class Tile extends Component<TileSignature> {
           <div class='demo-cards'><i></i><i></i><i></i></div>
         {{/if}}
       </div>
-      <button type='button' class='tile-open' {{on 'click' this.open}}>
+      <button
+        type='button'
+        class='tile-open'
+        data-test-showcase-tile-open
+        {{on 'click' this.open}}
+      >
         <span class='tile-meta'>
           <span class='tile-name'>{{@category.name}}</span>
-          {{#if this.count}}<span class='tile-count'>{{this.count}}</span>{{/if}}
+          {{#if this.count}}<span
+              class='tile-count'
+            >{{this.count}}</span>{{/if}}
         </span>
         <span class='tile-blurb'>{{@category.blurb}}</span>
       </button>

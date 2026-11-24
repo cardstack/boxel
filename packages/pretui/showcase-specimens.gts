@@ -181,6 +181,7 @@ class SpecimenFoot extends Component<{
         <button
           type='button'
           class='spec-open'
+          data-test-showcase-specimen-open
           aria-label='Open the {{@specimen.name}} docs'
           {{on 'click' this.open}}
         >Docs →</button>

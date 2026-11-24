@@ -265,7 +265,7 @@ export class DocsView extends Component<DocsSignature> {
   };
 
   <template>
-    <div class='docs' ...attributes>
+    <div class='docs' data-test-showcase-docs ...attributes>
       <nav class='docs-side' aria-label='Components'>
         <div class='docs-search'>
           <label class='docs-sr' for={{this.searchId}}>Search components</label>
@@ -301,6 +301,7 @@ export class DocsView extends Component<DocsSignature> {
           <button
             type='button'
             class='docs-group-head docs-all'
+            data-test-showcase-all
             aria-current={{if (this.isActiveCategory undefined) 'page'}}
             {{on 'click' (fn this.openCategory undefined)}}
           >
@@ -312,6 +313,7 @@ export class DocsView extends Component<DocsSignature> {
               <button
                 type='button'
                 class='docs-group-head'
+                data-test-showcase-group={{category.name}}
                 aria-expanded={{if (this.isOpen category.name) 'true' 'false'}}
                 {{on 'click' (fn this.toggle category.name)}}
               >
@@ -431,7 +433,7 @@ export class DocsView extends Component<DocsSignature> {
           <div class='docs-landing'>
             <header class='docs-cat-head'>
               <span class='docs-eyebrow'>Category</span>
-              <h1>{{this.active.name}}</h1>
+              <h1 data-test-showcase-title>{{this.active.name}}</h1>
               <p class='docs-lede'>{{this.active.blurb}}</p>
             </header>
             <ul class='docs-grid'>
@@ -463,7 +465,7 @@ export class DocsView extends Component<DocsSignature> {
         {{else}}
           <div class='docs-landing'>
             <header class='docs-cat-head'>
-              <h1>Components</h1>
+              <h1 data-test-showcase-title>Components</h1>
               <p class='docs-lede'>Every Pret UI component, by category. Pick
                 one to see it live, with its arguments, examples and code.</p>
             </header>
@@ -472,6 +474,7 @@ export class DocsView extends Component<DocsSignature> {
                 <li><button
                     type='button'
                     class='docs-catcard'
+                    data-test-showcase-catcard
                     {{on 'click' (fn this.openCategory category.name)}}
                   >
                     <span class='docs-catcard-head'>

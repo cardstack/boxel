@@ -36,7 +36,13 @@ export class ShowcaseApp extends Component<ShowcaseAppSignature> {
     return this.mode === 'auto' ? undefined : this.mode;
   }
   @tracked view: 'home' | 'docs' = this.args.start;
-  @tracked category: string | undefined = this.args.category ?? undefined;
+  // the reader's own choice, once they navigate; until then the card's field
+  @tracked chosen?: { category: string | undefined };
+  get category(): string | undefined {
+    return this.chosen
+      ? this.chosen.category
+      : (this.args.category ?? undefined);
+  }
   @tracked selectedId: string | undefined;
 
   goHome = () => {
@@ -44,25 +50,23 @@ export class ShowcaseApp extends Component<ShowcaseAppSignature> {
   };
   goDocs = () => {
     this.view = 'docs';
-    this.category = undefined;
+    this.chosen = { category: undefined };
     this.selectedId = undefined;
   };
   browse = (category?: string) => {
     this.view = 'docs';
-    this.category = category;
+    this.chosen = { category };
     this.selectedId = undefined;
   };
   select = (id: string | undefined, category?: string) => {
     this.view = 'docs';
     this.selectedId = id;
-    if (category) {
-      this.category = category;
-    }
+    this.chosen = { category };
   };
   openByName = (name: string, category: string) =>
     this.select(specIdFor(name), category);
   setCategory = (category: string | undefined) => {
-    this.category = category;
+    this.chosen = { category };
     this.selectedId = undefined;
   };
   get atHome() {
@@ -70,7 +74,7 @@ export class ShowcaseApp extends Component<ShowcaseAppSignature> {
   }
 
   <template>
-    <div class='showcase' data-theme={{this.dataTheme}}>
+    <div class='showcase' data-test-showcase data-theme={{this.dataTheme}}>
       <ShowcaseTopbar
         @here={{this.view}}
         @onHome={{this.goHome}}

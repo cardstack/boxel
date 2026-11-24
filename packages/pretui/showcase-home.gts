@@ -62,6 +62,9 @@ export class HomeView extends GlimmerComponent<{
       realms: [SPEC_REALM],
     };
   }
+  get agenticCount() {
+    return this.args.specs.count('Agentic');
+  }
   browseAll = () => this.args.onBrowse();
   browseAgentic = () => this.args.onBrowse('Agentic');
   toQuickStart = (event: Event) => {
@@ -77,7 +80,11 @@ export class HomeView extends GlimmerComponent<{
 
   <template>
     <div class='home'>
-      <section class='hero' aria-labelledby='{{this.uid}}-title'>
+      <section
+        class='hero'
+        data-test-showcase-hero
+        aria-labelledby='{{this.uid}}-title'
+      >
         <div class='hero-copy'>
           <Chip @label='Boxel UI kit' @dot={{true}} />
           <h1 class='hero-title' id='{{this.uid}}-title'>One kit,<br />
@@ -138,7 +145,8 @@ export class HomeView extends GlimmerComponent<{
         <section class='band' aria-labelledby='{{this.uid}}-categories'>
           <div class='band-head'>
             <h2 id='{{this.uid}}-categories'>Find it by what it does</h2>
-            <p>Fourteen categories. Each tile is the real component, running.</p>
+            <p>{{this.categoryCount}}
+              categories. Each tile is the real component, running.</p>
           </div>
           <CategoryBento @specs={{@specs}} @onBrowse={{@onBrowse}} />
         </section>
@@ -156,7 +164,8 @@ export class HomeView extends GlimmerComponent<{
             type='button'
             class='cta cta-primary'
             {{on 'click' this.browseAgentic}}
-          >See all 22 →</button>
+          >See all{{#if this.agenticCount}} {{this.agenticCount}}{{/if}}
+            →</button>
         </div>
         <AgentWall class='agents-wall' @onOpen={{@onOpen}} />
       </section>

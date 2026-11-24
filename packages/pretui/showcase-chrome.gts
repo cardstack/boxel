@@ -28,7 +28,13 @@ export class CardLink extends Component<{
     let viewCard = this.args.viewCard;
     if (!viewCard) return;
     let mouse = event as MouseEvent;
-    if (mouse.metaKey || mouse.ctrlKey || mouse.shiftKey || mouse.button) {
+    if (
+      mouse.metaKey ||
+      mouse.ctrlKey ||
+      mouse.shiftKey ||
+      mouse.altKey ||
+      mouse.button
+    ) {
       return;
     }
     event.preventDefault();
@@ -122,6 +128,8 @@ const SPEC_INDEX_QUERY: SearchEntryWireQuery = {
     {
       filter: { type: SPEC_REF },
       sort: [{ by: 'cardTitle', on: SPEC_REF, direction: 'asc' }],
+      // the whole kit in one page; the server's default page is smaller
+      page: { number: 0, size: 1000 },
     },
     { fields: SPEC_FIELDS.map((field) => `item.${field}`) },
   ),
@@ -193,6 +201,7 @@ export class ShowcaseTopbar extends Component<{
       <button
         type='button'
         class='sc-brand'
+        data-test-showcase-home-link
         aria-current={{if this.atHome 'page'}}
         {{on 'click' @onHome}}
       >
@@ -203,11 +212,12 @@ export class ShowcaseTopbar extends Component<{
         <button
           type='button'
           class='sc-nav-link'
+          data-test-showcase-docs-link
           aria-current={{if this.atHome false 'page'}}
           {{on 'click' @onDocs}}
         >Components</button>
       </nav>
-      <div class='sc-top-end'>{{yield}}</div>
+      <div class='sc-top-end' data-test-showcase-scheme>{{yield}}</div>
     </header>
     <style scoped>
       .sc-top {

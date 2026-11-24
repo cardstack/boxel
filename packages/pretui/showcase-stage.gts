@@ -149,11 +149,17 @@ export class ThemeStage extends Component<{
             aria-label='Previous theme'
             {{on 'click' this.prev}}
           >‹</button>
-          <div class='picker-body' aria-live='polite'>
+          <div class='picker-body' aria-live={{if this.cycling 'off' 'polite'}}>
             <div class='picker-line'>
               <span class='picker-cap'>Theme</span>
-              <span class='picker-name'>{{this.active.cardTitle}}</span>
-              <span class='picker-pos'>{{this.position}}</span>
+              <span
+                class='picker-name'
+                data-test-theme-name
+              >{{this.active.cardTitle}}</span>
+              <span
+                class='picker-pos'
+                data-test-theme-position
+              >{{this.position}}</span>
             </div>
             {{#if this.active.cardDescription}}
               <p class='picker-desc'>{{this.active.cardDescription}}</p>
@@ -163,6 +169,7 @@ export class ThemeStage extends Component<{
                 {{#each this.activeList key='id'}}
                   <span
                     class='picker-tick'
+                    data-test-theme-tick
                     {{on 'animationiteration' this.advance}}
                   ></span>
                 {{/each}}
@@ -178,6 +185,7 @@ export class ThemeStage extends Component<{
           <button
             type='button'
             class='picker-play'
+            data-test-theme-play
             aria-pressed={{if this.paused 'false' 'true'}}
             aria-label={{if
               this.paused
@@ -393,7 +401,7 @@ export class ThemeStage extends Component<{
         animation: picker-tick 5s linear infinite;
       }
       .stage:hover .picker-tick,
-      .stage:focus-within .picker-tick {
+      .stage:has(:focus-visible) .picker-tick {
         animation-play-state: paused;
       }
       @keyframes picker-tick {
