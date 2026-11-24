@@ -7,6 +7,7 @@ import {
   RealmPaths,
 } from '@cardstack/runtime-common/paths';
 import { resolveRealmAuthenticator } from '../lib/auth-resolver.ts';
+import { OAUTH_REFUSALS } from '../lib/oauth-refusals.ts';
 import { cliLog } from '../lib/cli-log.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../lib/colors.ts';
 import { describeFetchError } from '../lib/describe-fetch-error.ts';
@@ -158,6 +159,16 @@ export async function capture(
   cardUrl: string | undefined,
   options: CaptureOptions = {},
 ): Promise<CaptureResult> {
+  if (
+    !options.realmSecretSeed &&
+    !options.authenticator &&
+    !options.serverFetch &&
+    (options.profileManager ?? getProfileManager()).getActiveProfile()?.profile
+      .oauth
+  ) {
+    return topLevelError(OAUTH_REFUSALS.capture);
+  }
+
   // Assemble the jobs: one server request (one settle) per card.
   let jobs: CaptureJob[];
   if (options.specPath) {

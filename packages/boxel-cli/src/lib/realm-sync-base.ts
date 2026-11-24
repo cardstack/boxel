@@ -54,6 +54,20 @@ function decodeAtomicResultId(id: string): string {
   }
 }
 
+// A realm refuses an OAuth caller's write whole when it would change what the
+// realm's policy admits: `realm.json`'s policy or config, or a policy card.
+// The CLI says what to do instead, since the same change works from the app
+// or a profile signed in with Matrix.
+const OAUTH_POLICY_REFUSAL =
+  /An app connected with OAuth may not change (?:realm\.json's policy or config|realm\.json|a policy card)/;
+
+export function describeOAuthPolicyRefusal(text: string): string | undefined {
+  let refusal = text.match(OAUTH_POLICY_REFUSAL)?.[0];
+  return refusal
+    ? `${refusal}. This profile is signed in with OAuth, which can't change who a realm admits: make this change in the app, or with a profile signed in with Matrix.`
+    : undefined;
+}
+
 // Builds a structured upload error: the message embeds the response
 // status + statusText + a snippet of the response body (the realm
 // returns useful detail there — size limits, missing scopes, etc.),
@@ -64,8 +78,9 @@ async function throwUploadError(
   relativePath: string,
 ): Promise<never> {
   const bodyText = await response.text().catch(() => '');
+  const refusal = describeOAuthPolicyRefusal(bodyText);
   const message = `Failed to upload ${relativePath}: ${response.status} ${response.statusText}${
-    bodyText ? ` — ${bodyText.slice(0, 200)}` : ''
+    refusal ? ` — ${refusal}` : bodyText ? ` — ${bodyText.slice(0, 200)}` : ''
   }`;
   const err = new Error(message) as Error & {
     status?: number;
@@ -826,6 +841,22 @@ export abstract class RealmSyncBase {
       // ignore JSON parse failures — fall through to the generic message
     }
 
+    const refusal = (errorBody.errors ?? [])
+      .map((e) => describeOAuthPolicyRefusal(e.detail ?? ''))
+      .find((r) => r !== undefined);
+    if (refusal) {
+      // The whole batch was refused for this one reason; no file failed on
+      // its own.
+      return {
+        succeeded: [],
+        failed: [],
+        fatal: {
+          status: response.status,
+          message: `Atomic upload failed: ${response.status} ${response.statusText}. ${refusal}`,
+        },
+      };
+    }
+
     const failed: UploadFailure[] = (errorBody.errors ?? []).map((e) => {
       const detail = e.detail ?? '';
       const match = detail.match(/Resource (\S+) /);
@@ -948,8 +979,11 @@ export abstract class RealmSyncBase {
     );
 
     if (!response.ok && response.status !== 404) {
+      const refusal = describeOAuthPolicyRefusal(
+        await response.text().catch(() => ''),
+      );
       throw new Error(
-        `Failed to delete: ${response.status} ${response.statusText}`,
+        `Failed to delete: ${response.status} ${response.statusText}${refusal ? ` — ${refusal}` : ''}`,
       );
     }
 
