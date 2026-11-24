@@ -21164,8 +21164,12 @@ export class Realm {
         declaredLinks,
         this.#decideLinkShape(request, rowClass)?.mode === 'links-only',
       );
-      let runSearch = (signal?: AbortSignal) =>
-        this.searchEntries(searchEntryQuery, {
+      // The request's own signal aborts when its client goes away (the
+      // realm server raises it for a search), and the time budget's when the
+      // budget runs out; either stops the search, its SQL included.
+      let runSearch = (budgetSignal?: AbortSignal) => {
+        let signal = mergeAbortSignals(budgetSignal, request.signal);
+        return this.searchEntries(searchEntryQuery, {
           cacheOnlyDefinitions: duringPrerender,
           // Inside a prerender the search skips the `loadLinks`
           // relationship-assembly pass entirely: the host re-resolves every
@@ -21182,6 +21186,7 @@ export class Realm {
           ...(duringPrerender ? {} : { unshareableFormats }),
           ...(signal ? { signal } : {}),
         });
+      };
       // Cut an over-budget live search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
       let doc = withDefaultPageTruncation(

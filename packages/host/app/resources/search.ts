@@ -54,6 +54,7 @@ import type { Filter, Query, Sort } from '@cardstack/runtime-common/query';
 import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
 import { LiveSearchTypeGate } from '../lib/live-search-type-gate';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
+import { isAbortError } from '../lib/search-abort';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -1357,7 +1358,17 @@ export class SearchResource<
       // the Task instance to a promise which makes it uncancellable. When this is
       // uncancellable it results in a flaky test.
       let token = waiter.beginAsync();
+      // Owned by this run and aborted when it ends: a run cancelled by a
+      // restart (a newer query) or by teardown closes its `_federated-search`
+      // request, so the realm server stops executing it. A no-op once the
+      // fetch has completed.
+      let controller = new AbortController();
       try {
+        // Coalesce a burst: several query changes in one turn each perform
+        // this restartable task, and this await is a cancellation point, so
+        // every run but the last is cancelled before it fetches. One
+        // microtask, so no added delay.
+        await Promise.resolve();
         let dependencyTrackingContext = this.dependencyTrackingContext(
           'search-resource:search',
         );
@@ -1382,6 +1393,7 @@ export class SearchResource<
               // with every identical live search in the tab: a newly built
               // resource asking what another just asked sends nothing.
               live: this.#isLive,
+              signal: controller.signal,
               // A search that queued behind the concurrency ceiling can outlive
               // its reason to run: a newer query restarts this task, or the
               // resource is torn down with the request still waiting. Either
@@ -1422,7 +1434,8 @@ export class SearchResource<
             dependencyTrackingContext,
           );
         } catch (err) {
-          if (didCancel(err)) {
+          if (didCancel(err) || isAbortError(err)) {
+            // A superseded or torn-down run: a silent cancel, never an error.
             throw err;
           }
           this.#log.error(`search task failed`, err);
@@ -1462,6 +1475,7 @@ export class SearchResource<
           }
         }
       } finally {
+        controller.abort();
         waiter.endAsync(token);
       }
     },

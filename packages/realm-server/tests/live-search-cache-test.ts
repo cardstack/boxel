@@ -67,6 +67,73 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(a.body, b.body, 'both callers share the body');
   });
 
+  test('a shared compute is abandoned only once every waiter has gone', async function (assert) {
+    let cache = new LiveSearchCache({ ttlMs: 60_000 });
+    let realms = ['http://a/'];
+    let computeSignal: AbortSignal | undefined;
+    let populate = (abandoned?: AbortSignal) => {
+      computeSignal = abandoned;
+      return new Promise<string>((_resolve, reject) => {
+        abandoned?.addEventListener('abort', () => reject(abandoned.reason), {
+          once: true,
+        });
+      });
+    };
+    let firstClient = new AbortController();
+    let secondClient = new AbortController();
+    let first = cache.getOrPopulate({
+      realms,
+      query: personQuery(),
+      opts: undefined,
+      populate,
+      signal: firstClient.signal,
+    });
+    let second = cache.getOrPopulate({
+      realms,
+      query: personQuery(),
+      opts: undefined,
+      populate,
+      signal: secondClient.signal,
+    });
+    first.catch(() => {});
+    second.catch(() => {});
+    assert.ok(computeSignal, 'the compute is handed a signal');
+    firstClient.abort(new Error('first left'));
+    await sleep(5);
+    assert.false(computeSignal!.aborted, 'the joiner is still waiting for it');
+    secondClient.abort(new Error('second left'));
+    assert.true(computeSignal!.aborted, 'abandoned once both have gone');
+    await assert.rejects(second);
+  });
+
+  test('a waiter without a signal keeps a shared compute alive', async function (assert) {
+    let cache = new LiveSearchCache({ ttlMs: 60_000 });
+    let deferred = deferredPopulate('{"data":[1]}');
+    let computeSignal: AbortSignal | undefined;
+    let client = new AbortController();
+    let first = cache.getOrPopulate({
+      realms: ['http://a/'],
+      query: personQuery(),
+      opts: undefined,
+      populate: (abandoned) => {
+        computeSignal = abandoned;
+        return deferred.populate();
+      },
+      signal: client.signal,
+    });
+    let second = cache.getOrPopulate({
+      realms: ['http://a/'],
+      query: personQuery(),
+      opts: undefined,
+      populate: deferred.populate,
+    });
+    client.abort();
+    assert.false(computeSignal!.aborted, 'not abandoned');
+    deferred.resolve();
+    assert.strictEqual((await second).body, '{"data":[1]}');
+    await first;
+  });
+
   test('onOutcome fires when the cache decides, not when the body resolves', async function (assert) {
     let cache = new LiveSearchCache({ ttlMs: 60_000 });
     let deferred = deferredPopulate('{"data":[1]}');

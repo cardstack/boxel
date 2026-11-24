@@ -358,6 +358,19 @@ export function releaseSearchAdmission(ctxt: Koa.Context): void {
 // that learns which realms the search names can attribute it to them.
 const SEARCH_REQUEST = 'searchRequest';
 
+// Where `searchAdmission` leaves the signal that aborts when the search's
+// client goes away before its response has been written.
+const SEARCH_ABANDONED = 'searchAbandoned';
+
+// Aborts when the client of a search request closes its connection before the
+// response has been written, so the work done for it (its SQL included) can be
+// stopped. Undefined for a request the admission gate did not see.
+export function searchRequestSignal(
+  ctxt: Koa.Context,
+): AbortSignal | undefined {
+  return ctxt.state[SEARCH_ABANDONED] as AbortSignal | undefined;
+}
+
 // Count a search request toward the realms it names, from now until its
 // response ends — the reading each realm's link-shape level follows. Called by
 // whichever handler first knows the realms: the gate runs before the body is
@@ -466,12 +479,21 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
     searchRequest = undefined;
   };
   ctxt.state[SEARCH_ADMISSION_RELEASE] = releaseSlot;
+  let abandoned = new AbortController();
+  ctxt.state[SEARCH_ABANDONED] = abandoned.signal;
   // `finish` fires on a fully-sent response; `close` covers a connection
   // torn down before that, so neither count can leak on an abort.
   ctxt.res.on('finish', end);
   ctxt.res.on('close', () => {
     closed = true;
     end();
+    // A close before the response was fully written is the client leaving:
+    // the search it asked for is abandoned (`searchRequestSignal`).
+    if (!ctxt.res.writableFinished) {
+      abandoned.abort(
+        new DOMException('the client closed the search request', 'AbortError'),
+      );
+    }
   });
 
   if (isIndexing) {
@@ -629,6 +651,7 @@ export function setRequestText(ctxt: Koa.Context, text: string): void {
 
 export async function fetchRequestFromContext(
   ctxt: Koa.Context,
+  opts?: { signal?: AbortSignal },
 ): Promise<Request> {
   let reqBody: string | Buffer | ReadableStream<Uint8Array> | undefined;
   if (['POST', 'PATCH', 'PUT', 'QUERY', 'DELETE'].includes(ctxt.method)) {
@@ -690,6 +713,7 @@ export async function fetchRequestFromContext(
     ...(reqBody !== undefined
       ? { body: reqBody as BodyInit, duplex: 'half' }
       : {}),
+    ...(opts?.signal ? { signal: opts.signal } : {}),
   });
 }
 

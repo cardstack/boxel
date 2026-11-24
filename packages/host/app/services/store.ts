@@ -130,6 +130,11 @@ import {
   MAX_UNAVAILABLE_RETRY_AFTER_SECONDS,
   retryAfterDelayMs,
 } from '../lib/retry-after';
+import {
+  abortReason,
+  raceAbort,
+  SharedAbortableRequest,
+} from '../lib/search-abort';
 import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
@@ -382,6 +387,11 @@ interface SearchOptions<S extends SearchEntryScope = 'cards'> {
   // `.json` file row, so an untyped `scope: 'all'` search yields each card
   // twice unless the caller dedups (e.g. `excludeCardInstanceFileRows()`).
   scope?: S;
+  // Aborts the search's `_federated-search` request when the caller no longer
+  // wants the answer (a superseded live-search run, a torn-down resource), so
+  // the realm server stops executing it. The search then rejects with an
+  // AbortError, which the caller treats as a silent cancel.
+  signal?: AbortSignal;
 }
 
 export default class StoreService extends Service implements StoreInterface {
@@ -484,7 +494,13 @@ export default class StoreService extends Service implements StoreInterface {
   // user searches stay uncoalesced — write-then-read freshness story
   // unchanged outside prerender. Entries self-clear on `.finally()` via
   // identity check.
-  private inflightSearch: Map<string, Promise<SearchEntryResults>> = new Map();
+  // Each slot is shared by every consumer that joins it, and its request is
+  // aborted only once none of them still wants it (see
+  // `SharedAbortableRequest`).
+  private inflightSearch: Map<
+    string,
+    SharedAbortableRequest<SearchEntryResults>
+  > = new Map();
   // Shares identical live searches outside a prerender (see `fetchSearchDoc`).
   // Keyed like `inflightSearch`.
   #liveSearches = new LiveSearchCoalescer<SearchEntryResults>();
@@ -1634,6 +1650,7 @@ export default class StoreService extends Service implements StoreInterface {
         opts?.dependencyTrackingContext,
         opts?.scope,
         opts?.live,
+        opts?.signal,
       );
     let lane: SearchThrottleLane | undefined = opts?.cardInitiated
       ? 'card'
@@ -1642,6 +1659,8 @@ export default class StoreService extends Service implements StoreInterface {
         : undefined;
     let result = lane
       ? await this.performThrottledSearch(async () => {
+          // An aborted caller hands its slot back without fetching.
+          opts?.signal?.throwIfAborted();
           if (opts?.isObsolete?.()) {
             return {
               instances: [] as ElementForScope[S][],
@@ -1670,6 +1689,9 @@ export default class StoreService extends Service implements StoreInterface {
       // the linked cards' own resources in `included[]` — for a caller that
       // reads the rows' data and never resolves what they link to.
       linksOnly?: boolean;
+      // Aborts the request when the caller no longer wants the answer; the
+      // call then rejects with an AbortError.
+      signal?: AbortSignal;
     },
   ): Promise<SearchEntryResults> {
     let searchRealms = opts?.cardInitiated
@@ -1680,6 +1702,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     return await this.fetchSearchEntryDoc(query, searchRealms, {
       linksOnly: opts?.linksOnly,
+      signal: opts?.signal,
     });
   }
 
@@ -1866,8 +1889,17 @@ export default class StoreService extends Service implements StoreInterface {
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
     scope?: SearchEntryScope,
     live?: boolean,
+    signal?: AbortSignal,
   ): Promise<{ instances: T[]; meta: SearchEntryResults['meta'] }> {
-    let collectionDoc = await this.fetchSearchDoc(query, realms, scope, live);
+    let collectionDoc = await this.fetchSearchDoc(
+      query,
+      realms,
+      scope,
+      live,
+      signal,
+    );
+    // A caller that went away while the doc arrived skips the hydration too.
+    signal?.throwIfAborted();
     return await this.hydrateSearchDoc<T>(
       collectionDoc,
       dependencyTrackingContext,
@@ -1982,18 +2014,26 @@ export default class StoreService extends Service implements StoreInterface {
     realms: string[],
     scope?: SearchEntryScope,
     live?: boolean,
+    signal?: AbortSignal,
   ): Promise<SearchEntryResults> {
+    signal?.throwIfAborted();
     let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
     if (!inPrerender && live) {
       let shareable = this.#liveSearchIdentity(query, realms, scope);
       if (shareable) {
         let { key, fingerprint } = shareable;
-        return await this.#liveSearches.run(key, fingerprint, () =>
-          this.fetchSearchDocUncoalesced(
-            query,
-            realms,
-            this.resolveWireScope(query, scope),
+        // A live search is shared with every identical one in the tab, so a
+        // caller that leaves stops waiting for it without cancelling it for
+        // the others.
+        return await raceAbort(
+          this.#liveSearches.run(key, fingerprint, () =>
+            this.fetchSearchDocUncoalesced(
+              query,
+              realms,
+              this.resolveWireScope(query, scope),
+            ),
           ),
+          signal,
         );
       }
     }
@@ -2057,28 +2097,41 @@ export default class StoreService extends Service implements StoreInterface {
     let doc: SearchEntryResults;
     if (inflightKey !== undefined) {
       let existing = this.inflightSearch.get(inflightKey);
-      if (existing) {
-        doc = await existing;
+      // A slot whose request every earlier consumer abandoned (and so was
+      // aborted) is not joined: this consumer still wants an answer.
+      if (existing && !existing.aborted) {
+        doc = await existing.join(signal);
       } else {
-        let pending = this.fetchSearchDocUncoalesced(
-          query,
-          realms,
-          wireScope,
-        ).finally(() => {
-          // Identity-check before deletion: a concurrent
-          // `clearInFlightSearch()` could in principle have removed
-          // (and a later caller re-set) this slot while we were
-          // in-flight. Only clean up if the map still points at *this*
-          // pending promise.
-          if (this.inflightSearch.get(inflightKey) === pending) {
-            this.inflightSearch.delete(inflightKey);
-          }
-        });
+        let pending = new SharedAbortableRequest((sharedSignal) =>
+          this.fetchSearchDocUncoalesced(
+            query,
+            realms,
+            wireScope,
+            sharedSignal,
+          ),
+        );
+        pending.promise
+          .finally(() => {
+            // Identity-check before deletion: a concurrent
+            // `clearInFlightSearch()` could in principle have removed
+            // (and a later caller re-set) this slot while we were
+            // in-flight. Only clean up if the map still points at *this*
+            // pending request.
+            if (this.inflightSearch.get(inflightKey) === pending) {
+              this.inflightSearch.delete(inflightKey);
+            }
+          })
+          .catch(() => {});
         this.inflightSearch.set(inflightKey, pending);
-        doc = await pending;
+        doc = await pending.join(signal);
       }
     } else {
-      doc = await this.fetchSearchDocUncoalesced(query, realms, wireScope);
+      doc = await this.fetchSearchDocUncoalesced(
+        query,
+        realms,
+        wireScope,
+        signal,
+      );
     }
 
     // Populate only if the cache generation hasn't moved under us. A
@@ -2205,6 +2258,7 @@ export default class StoreService extends Service implements StoreInterface {
     // Already resolved to the wire scope by `fetchSearchDoc` (via
     // `resolveWireScope`) so the value keyed on and the value sent match.
     wireScope?: SearchEntryScope,
+    signal?: AbortSignal,
   ): Promise<SearchEntryResults> {
     return await this.fetchSearchEntryDoc(
       searchEntryWireQueryFromQuery(query, {
@@ -2212,6 +2266,7 @@ export default class StoreService extends Service implements StoreInterface {
         ...(wireScope ? { scope: wireScope } : {}),
       }),
       realms,
+      { signal },
     );
   }
 
@@ -2244,8 +2299,12 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchEntryDoc(
     query: SearchEntryWireQuery,
     realms: string[],
-    opts?: { linksOnly?: boolean },
+    opts?: { linksOnly?: boolean; signal?: AbortSignal },
   ): Promise<SearchEntryResults> {
+    // The signal rides every attempt into `fetch()`, so aborting it closes the
+    // request and the realm server cancels the search it was running.
+    let signal = opts?.signal;
+    signal?.throwIfAborted();
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
@@ -2271,6 +2330,7 @@ export default class StoreService extends Service implements StoreInterface {
               : {}),
           },
           body: JSON.stringify({ ...query, realms }),
+          signal,
         },
       );
       // A 429 is the realm-server shedding load: it is running its maximum
@@ -2282,11 +2342,16 @@ export default class StoreService extends Service implements StoreInterface {
       if (response.status !== 429 || attempt >= MAX_SHED_SEARCH_RETRIES) {
         break;
       }
-      await timeout(
-        retryAfterDelayMs(
-          response.headers.get('Retry-After'),
-          MAX_SHED_RETRY_AFTER_SECONDS,
+      await raceAbort(
+        Promise.resolve(
+          timeout(
+            retryAfterDelayMs(
+              response.headers.get('Retry-After'),
+              MAX_SHED_RETRY_AFTER_SECONDS,
+            ),
+          ),
         ),
+        signal,
       );
     }
     if (!response.ok) {
@@ -2300,6 +2365,9 @@ export default class StoreService extends Service implements StoreInterface {
       throw err;
     }
     let json = await response.json();
+    if (signal?.aborted) {
+      throw abortReason(signal);
+    }
     if (!isEntryCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a valid entry collection document:
