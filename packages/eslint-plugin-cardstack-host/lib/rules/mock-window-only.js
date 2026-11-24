@@ -24,8 +24,8 @@ module.exports = {
         if (
           node.object.type === 'Identifier' &&
           node.object.name === 'localStorage' &&
-          !context
-            .getAncestors()
+          !context.sourceCode
+            .getAncestors(node)
             .some(
               (ancestor) =>
                 ancestor.type === 'MemberExpression' &&
