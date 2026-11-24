@@ -1424,8 +1424,14 @@ function unionRealmsFor(
     if (access.readable.has(url)) {
       return { url: realm?.url ?? url, realm, access: 'readable' as const };
     }
-    if (access.scoped.has(url)) {
-      return { url: realm?.url ?? url, realm, access: 'scoped' as const };
+    let grants = access.scoped.get(url);
+    if (grants) {
+      return {
+        url: realm?.url ?? url,
+        realm,
+        access: 'scoped' as const,
+        grants,
+      };
     }
     return {
       url,

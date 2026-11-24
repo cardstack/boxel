@@ -6,6 +6,7 @@ import {
   IndexQueryEngine,
   IndexWriter,
   RealmUnion,
+  realmAdmissionFilter,
   VectorSerializer,
   VirtualNetwork,
   internalKeyFor,
@@ -553,6 +554,100 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  module('a realm the caller reads only through its policy', function () {
+    // The caller reads the corpus outright, and only the public videos of
+    // the other realm.
+    const grants = [{ on: videoRef, eq: { visibility: 'public' } }];
+    function scopedOpts() {
+      let admission = realmAdmissionFilter(
+        [HN],
+        [{ realm: MINE, grants: grants as any }],
+      );
+      return { grantFilter: admission, labelFilter: admission };
+    }
+    const scopedUnion = () => new RealmUnion([HN, MINE], { typoRealms: [HN] });
+
+    test('only the rows its grants admit, counted and faceted over those alone', async function (assert) {
+      let got = await ask(scopedUnion(), videoFeed(0), scopedOpts());
+      let all = await ask(
+        scopedUnion(),
+        { ...videoFeed(0), page: { size: 50, number: 0 } },
+        scopedOpts(),
+      );
+      assert.false(all.rows.includes('mine/m2'), 'the private video is out');
+      assert.true(all.rows.includes('mine/m1'));
+      assert.true(all.rows.includes('mine/m3'));
+      assert.strictEqual(got.total, 5, 'h1–h5 collapse m1 into y1; m3');
+      assert.deepEqual(got.realmTotals, { [HN]: 3, [MINE]: 2 });
+      let facets = got.facets as Record<string, { value: string }[]>;
+      assert.deepEqual(facets.channel.map((c) => c.value).sort(), [
+        'db',
+        'food',
+        'notes',
+        'talks',
+      ]);
+    });
+
+    test('a hidden row changes nothing the union shows', async function (assert) {
+      let before = [];
+      let queries = [
+        videoFeed(0),
+        videoFeed(1),
+        {
+          type: videoRef,
+          filter: { matches: 'rust', typos: true },
+          sort: [{ by: 'textRelevance' }],
+          facets: [{ by: 'channel' }, { by: 'hnScore' }],
+          page: { size: 10, number: 0 },
+        },
+      ];
+      for (let q of queries) {
+        before.push(await ask(scopedUnion(), q, scopedOpts()));
+      }
+      // Private videos that would move every count, rank and statistic.
+      await write(MINE, [
+        {
+          id: 'm9',
+          title: 'Rust rust rust rust secret',
+          youtubeId: 'y2',
+          source: 'mine',
+          visibility: 'private',
+          channel: 'secret',
+          hnScore: 100_000,
+          published: 100_000,
+          taste: [1, 0, 0],
+        },
+        {
+          id: 'm8',
+          title: 'Rustacean pasta secrets',
+          youtubeId: 'y9',
+          source: 'mine',
+          visibility: 'private',
+          channel: 'secret',
+          hnScore: 90_000,
+          published: 90_000,
+          taste: [1, 0, 0],
+        },
+      ]);
+      for (let [i, q] of queries.entries()) {
+        let after = await ask(scopedUnion(), q, scopedOpts());
+        assertSameAnswer(assert, after, before[i], `query ${i}`);
+        assert.deepEqual(after.realmTotals, before[i].realmTotals);
+      }
+    });
+
+    test('an admission node only the union makes compiles', async function (assert) {
+      // The same shape from a request is no filter the engine knows.
+      await assert.rejects(
+        ask(new URL(HN), {
+          filter: {
+            realmAdmission: { readable: [MINE], scoped: [] },
+          } as any,
+        }),
+      );
+    });
+  });
+
   module('which searches take the union', function () {
     function realmStandIn(shares = true) {
       return { sharesIndexWith: () => shares } as unknown as Realm;
@@ -598,13 +693,23 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a realm the caller reads only through its policy takes the merge', async function (assert) {
+    test('a realm the caller reads only through its policy takes the union, unless a linkedFrom reads it', async function (assert) {
+      let realms = [
+        { url: HN, realm: realmStandIn(), access: 'readable' as const },
+        { url: MINE, realm: realmStandIn(), access: 'scoped' as const },
+      ];
+      assert.strictEqual(unionPathRefusal(merged(), realms), undefined);
       assert.strictEqual(
-        unionPathRefusal(merged(), [
-          { url: HN, realm: realmStandIn(), access: 'readable' },
-          { url: MINE, realm: realmStandIn(), access: 'scoped' },
-        ]),
-        'a realm is policy-scoped',
+        unionPathRefusal(
+          merged({
+            filter: {
+              linkedFrom: { card: `${HN}h1`, field: 'related' },
+            },
+          }),
+          realms,
+        ),
+        'linkedFrom under a realm policy',
+        'a linkedFrom under a policy is composed per realm by the merge',
       );
     });
   });
