@@ -10,6 +10,7 @@ import {
   MAX_TRANSFORM_OUTPUT_BYTES,
   MAX_TRANSFORM_SOURCE_BYTES,
   MAX_TRANSFORM_BYTES_PER_RUN,
+  MAX_TRANSFORMS_IN_FLIGHT,
   MAX_TRANSFORMS_PER_RUN,
   TRANSFORM_STALL_GRACE_MS,
   TRANSFORM_TIMEOUT_MS,
@@ -235,17 +236,26 @@ interface Waiting {
   inputShape: string;
 }
 
-// The most programs one run may run and the most bytes they may move in and
-// out together (ADR 031 §1.4). An automation run has no limit on the number
-// of programs, since its time limit bounds it.
+// The most programs one run may run, the most bytes they may move in and out
+// together (ADR 031 §1.4), and the most that may wait for the worker at once.
+// An automation run has no limit on the number of programs, since its time
+// limit bounds it, so it bounds how many wait instead.
 export interface TransformRunLimits {
   calls: number;
   bytes: number;
+  inFlight: number;
 }
+
+export const AUTOMATION_TRANSFORM_LIMITS: TransformRunLimits = {
+  calls: Infinity,
+  bytes: MAX_TRANSFORM_BYTES_PER_RUN,
+  inFlight: MAX_TRANSFORMS_IN_FLIGHT,
+};
 
 export const INTERACTIVE_TRANSFORM_LIMITS: TransformRunLimits = {
   calls: MAX_TRANSFORMS_PER_RUN,
   bytes: MAX_TRANSFORM_BYTES_PER_RUN,
+  inFlight: Infinity,
 };
 
 // What one run's realm.transform calls came to: every call the script made,
@@ -309,6 +319,13 @@ export class RealmTransformer {
       return Promise.reject(
         new Error(
           `Realm code may call realm.transform at most ${this.limits.calls} times per run`,
+        ),
+      );
+    }
+    if (this.waiting.size >= this.limits.inFlight) {
+      return Promise.reject(
+        new RangeError(
+          `realm.transform runs at most ${this.limits.inFlight} programs waiting at once; await a call before starting another`,
         ),
       );
     }

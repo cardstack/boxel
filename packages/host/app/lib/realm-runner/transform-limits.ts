@@ -25,3 +25,9 @@ export const TRANSFORM_WORKER_START_TIMEOUT_MS = 30_000;
 // automation run's time limit bounds how many programs it runs.
 export const MAX_TRANSFORMS_PER_RUN = 100;
 export const MAX_TRANSFORM_BYTES_PER_RUN = 10_000_000;
+// How many of an automation run's programs may wait for the worker at once.
+// The worker runs one program at a time, and each waiting call holds its
+// program and input in a tab other runs share, so a script that starts calls
+// without awaiting them is refused past this rather than queuing without
+// bound.
+export const MAX_TRANSFORMS_IN_FLIGHT = 8;

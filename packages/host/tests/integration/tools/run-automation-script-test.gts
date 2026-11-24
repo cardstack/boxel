@@ -22,7 +22,10 @@ import {
   NOTIFY_METHODS,
 } from '@cardstack/host/lib/realm-runner/surfaces';
 import { setTransformTimeLimitsForTests } from '@cardstack/host/lib/realm-runner/transform';
-import { MAX_TRANSFORMS_PER_RUN } from '@cardstack/host/lib/realm-runner/transform-limits';
+import {
+  MAX_TRANSFORMS_IN_FLIGHT,
+  MAX_TRANSFORMS_PER_RUN,
+} from '@cardstack/host/lib/realm-runner/transform-limits';
 import type { AutomationRunContext } from '@cardstack/host/lib/realm-runner/types';
 import { watchedScriptOutcome } from '@cardstack/host/tools/run-automation';
 import RunRealmCodeTool, {
@@ -870,6 +873,42 @@ return 'done';`);
     let [line] = transformLines(assert, events);
     assert.strictEqual(line?.calls, count, 'one line counts every call');
     assert.strictEqual(line?.failed, 0);
+  });
+
+  test('an automation run has only so many transforms waiting at once, and an awaited call after them runs', async function (assert) {
+    let { events, done } = run(`
+      const settled = await Promise.allSettled(
+        Array.from({ length: ${MAX_TRANSFORMS_IN_FLIGHT + 4} }, (_, i) =>
+          realm.transform({ i }, '.i'),
+        ),
+      );
+      const after = await realm.transform({ a: 1 }, '.a');
+      return {
+        ran: settled.filter((s) => s.status === 'fulfilled').length,
+        refused: settled.filter((s) => s.status === 'rejected').map((s) => s.reason.message),
+        after,
+      };
+    `);
+    let { ran, refused, after } = JSON.parse((await done).scriptResult);
+    assert.true(
+      refused.length > 0,
+      `some calls were refused: ${refused.length}`,
+    );
+    assert.strictEqual(ran + refused.length, MAX_TRANSFORMS_IN_FLIGHT + 4);
+    assert.true(
+      refused.every((message: string) =>
+        message.includes(
+          `realm.transform runs at most ${MAX_TRANSFORMS_IN_FLIGHT} programs waiting at once`,
+        ),
+      ),
+      refused.join(' | '),
+    );
+    assert.strictEqual(after, 1, 'an awaited call after them runs');
+    let [line] = transformLines(assert, events);
+    assert.deepEqual(
+      [line?.calls, line?.failed],
+      [MAX_TRANSFORMS_IN_FLIGHT + 5, refused.length],
+    );
   });
 
   test("a transform doesn't wait behind the run's queue of realm calls", async function (assert) {

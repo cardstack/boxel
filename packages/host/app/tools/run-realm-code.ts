@@ -136,8 +136,10 @@ import {
   offSurfaceMessage,
 } from '../lib/realm-runner/surfaces';
 import {
+  AUTOMATION_TRANSFORM_LIMITS,
   INTERACTIVE_TRANSFORM_LIMITS,
   RealmTransformer,
+  type TransformRunLimits,
   type TransformTally,
 } from '../lib/realm-runner/transform';
 import { STOPPED_BY_USER } from '../lib/realm-runner/types';
@@ -310,9 +312,8 @@ export interface SessionSurface {
     operations: number;
     resolveCalls: number;
     researchBytes: number;
-    // realm.transform calls, and the bytes they move in and out together
-    transforms: number;
-    transformBytes: number;
+    // realm.transform's per-run limits
+    transforms: TransformRunLimits;
     // characters of file content the session holds at once
     heldChars: number;
   };
@@ -332,8 +333,7 @@ export const INTERACTIVE_SURFACE: SessionSurface = {
     operations: MAX_OPERATIONS,
     resolveCalls: MAX_RESOLVE_CALLS,
     researchBytes: MAX_RESEARCH_BYTES_PER_RUN,
-    transforms: INTERACTIVE_TRANSFORM_LIMITS.calls,
-    transformBytes: INTERACTIVE_TRANSFORM_LIMITS.bytes,
+    transforms: INTERACTIVE_TRANSFORM_LIMITS,
     heldChars: Infinity,
   },
   writeTextReplaces: false,
@@ -349,8 +349,7 @@ export const AUTOMATION_SURFACE: SessionSurface = {
     resolveCalls: Infinity,
     researchBytes: Infinity,
     // The run's time limit bounds how many transforms it runs.
-    transforms: Infinity,
-    transformBytes: INTERACTIVE_TRANSFORM_LIMITS.bytes,
+    transforms: AUTOMATION_TRANSFORM_LIMITS,
     heldChars: MAX_AUTOMATION_HELD_CHARS,
   },
   writeTextReplaces: true,
@@ -928,10 +927,7 @@ class RealmFsSession {
     readonly surface: SessionSurface = INTERACTIVE_SURFACE,
   ) {
     this.captures = new RealmCaptures(captureURL);
-    this.transformer = new RealmTransformer({
-      calls: surface.limits.transforms,
-      bytes: surface.limits.transformBytes,
-    });
+    this.transformer = new RealmTransformer(surface.limits.transforms);
   }
 
   // What the run's realm.transform calls came to so far.

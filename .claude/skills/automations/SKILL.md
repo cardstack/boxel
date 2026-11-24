@@ -1086,7 +1086,8 @@ How a method differs from the interactive surface:
   interactive surface only creates, and edits through `fs.replace`. A write
   of the content the file already holds is reported as unchanged.
 - **No interactive per-run limits**: no 20-file, 200-card-update,
-  200-operation, 3-`resolve` or 100-`transform` limit. The card's caps take their place, and
+  200-operation, 3-`resolve` or 100-`transform` limit (a run has at most 8
+  transforms waiting at once instead). The card's caps take their place, and
   the realm server counts each against the run row (_Declared operations and
   the per-run caps_).
 - **A limit on file content held**: a run keeps every file it reads, every
@@ -1155,11 +1156,15 @@ program never runs inside QuickJS.
   on it rejects, and the next call starts a new worker. Either way the call
   rejects in the script, which can catch it and go on.
 - **Per run**, nothing counts the calls (the interactive surface allows
-  100): `AUTOMATION_SURFACE.limits.transforms` is `Infinity`, and the run's
+  100): `AUTOMATION_TRANSFORM_LIMITS.calls` is `Infinity`, and the run's
   time limit bounds them (ADR 031 §1.4). The bytes they move in and out
-  together stay bounded at `MAX_TRANSFORM_BYTES_PER_RUN` (10 MB), as on the
-  interactive surface. Their time is part of the tab time the run is
-  charged.
+  together are bounded at `MAX_TRANSFORM_BYTES_PER_RUN` (10 MB), as on the
+  interactive surface. At most `MAX_TRANSFORMS_IN_FLIGHT` (8) calls wait for
+  the worker at once, and a call past that is refused: the worker runs one
+  program at a time, and each waiting call holds its program and input in a
+  tab other runs share, so a script that starts calls without awaiting them
+  can't queue them without bound. Their time is part of the tab time the run
+  is charged.
 - **Outside the queue**: a transform touches no file, so it neither waits
   behind the run's queued realm calls nor holds them up. The run's `idle` waits
   for it too.
