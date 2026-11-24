@@ -58,6 +58,7 @@
    title_sort TEXT,
    search_keys BLOB,
    search_text_fp TEXT,
+   search_keys_fp TEXT,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
