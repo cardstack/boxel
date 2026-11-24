@@ -18,7 +18,10 @@ import {
   setupPermissionedRealmCached,
   testRealmURLFor,
 } from './helpers/index.ts';
-import { HostURLTranslator } from '../lib/realm-host-urls-boundary.ts';
+import {
+  HostURLTranslator,
+  StoredHTMLBackMapper,
+} from '../lib/realm-host-urls-boundary.ts';
 import { notifyHostURLsChanged } from '../lib/realm-host-urls.ts';
 
 // The realm is served at two host URLs: its canonical one at the root of
@@ -29,6 +32,11 @@ const CANONICAL_HOST_URL = `http://${CANONICAL_HOST}/`;
 const SPACE_HOST = 'space.localhost';
 const SPACE_PREFIX = '/shop/';
 const SPACE_HOST_URL = `http://${SPACE_HOST}${SPACE_PREFIX}`;
+// A URL the realm's stored HTML was rendered against that is no longer one
+// of its host URLs, as a canonical host URL is while the realm's HTML is
+// rendered again against a new one.
+const OLD_HOST = 'old.localhost';
+const OLD_HOST_URL = `http://${OLD_HOST}/`;
 
 const personSource = `
   import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
@@ -40,6 +48,11 @@ const personSource = `
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <a data-person-self href={{@model.id}}><@fields.firstName /></a>
+      </template>
+    };
+    static fitted = class Fitted extends Component<typeof this> {
+      <template>
+        <a data-person-fitted href={{@model.id}}><@fields.firstName /></a>
       </template>
     };
     static head = class Head extends Component<typeof this> {
@@ -191,6 +204,40 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('translates from a URL stored HTML was rendered against', function (assert) {
+      let match = {
+        hostURL: 'https://site.example.test/shop/',
+        realmURL: 'https://realms.example.test/owner/store/',
+        isCanonical: false,
+        canonicalHostURL: 'https://store.example.test/',
+      };
+      let renderedAgainst = new HostURLTranslator({
+        ...match,
+        renderedAgainstURLs: ['https://old.example.test/'],
+      });
+      assert.strictEqual(
+        renderedAgainst.outbound('<a href="https://old.example.test/a">a</a>'),
+        '<a href="https://site.example.test/shop/a">a</a>',
+      );
+      assert.strictEqual(
+        renderedAgainst.outboundHTML(
+          '<link rel="canonical" href="https://old.example.test/a" />',
+        ),
+        '<link rel="canonical" href="https://store.example.test/a" />',
+        'a canonical link names the canonical host URL',
+      );
+      assert.strictEqual(
+        renderedAgainst.inbound('{"href":"https://old.example.test/a"}'),
+        '{"href":"https://old.example.test/a"}',
+        'a request is not translated from it',
+      );
+      assert.notStrictEqual(
+        renderedAgainst.outboundETag('"abc"'),
+        new HostURLTranslator(match).outboundETag('"abc"'),
+        'the ETag changes with the URLs stored HTML was rendered against',
+      );
+    });
+
     test('translates the markup inside a +html envelope', function (assert) {
       let envelope = JSON.stringify({
         data: { id: 'https://realms.example.test/owner/store/a' },
@@ -210,6 +257,91 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         doc.included[0].attributes.html,
         '<link rel="canonical" href="https://store.example.test/a"><a href="https://site.example.test/shop/a">a</a>',
+      );
+    });
+  });
+
+  module('StoredHTMLBackMapper', function () {
+    let realmURL = 'https://realms.example.test/owner/store/';
+    let mapper = new StoredHTMLBackMapper(
+      new Map([[realmURL, ['https://store.example.test/']]]),
+    );
+
+    test('names the realm URL in stored HTML, except in the canonical link and og:url', function (assert) {
+      let html = [
+        '<link rel="canonical" href="https://store.example.test/a" />',
+        '<meta property="og:url" content="https://store.example.test/a" />',
+        '<meta property="og:image" content="https://store.example.test/i.png" />',
+        '<a href="https://store.example.test/a">a</a>',
+        '<a href="https://store.example.test">home</a>',
+      ].join('\n');
+      assert.strictEqual(
+        mapper.html(html, `${realmURL}a`),
+        [
+          '<link rel="canonical" href="https://store.example.test/a" />',
+          '<meta property="og:url" content="https://store.example.test/a" />',
+          `<meta property="og:image" content="${realmURL}i.png" />`,
+          `<a href="${realmURL}a">a</a>`,
+          '<a href="https://realms.example.test/owner/store">home</a>',
+        ].join('\n'),
+      );
+      assert.strictEqual(
+        mapper.html(html, 'https://realms.example.test/owner/other/a'),
+        html,
+        "another realm's HTML is not mapped",
+      );
+    });
+
+    test('maps only the markup of html resources in a JSON document', function (assert) {
+      let doc = {
+        data: [
+          {
+            type: 'entry',
+            id: `${realmURL}a`,
+            attributes: { website: 'https://store.example.test/' },
+          },
+        ],
+        included: [
+          {
+            type: 'html',
+            id: `${realmURL}a#fitted`,
+            attributes: {
+              html: '<a href="https://store.example.test/a">a</a>',
+            },
+          },
+          {
+            type: 'card',
+            id: `${realmURL}a`,
+            attributes: { website: 'https://store.example.test/' },
+          },
+        ],
+      };
+      let mapped = JSON.parse(
+        mapper.body(
+          JSON.stringify(doc),
+          'application/vnd.card+json',
+          `${realmURL}_search`,
+        ),
+      );
+      assert.strictEqual(
+        mapped.included[0].attributes.html,
+        `<a href="${realmURL}a">a</a>`,
+      );
+      assert.strictEqual(
+        mapped.included[1].attributes.website,
+        'https://store.example.test/',
+        "a card's own data is left as it is",
+      );
+      assert.strictEqual(
+        mapped.data[0].attributes.website,
+        'https://store.example.test/',
+      );
+
+      let unrelated = JSON.stringify({ data: { type: 'card', id: 'x' } });
+      assert.strictEqual(
+        mapper.body(unrelated, 'application/vnd.card+json', realmURL),
+        unrelated,
+        'a document that names no such URL is returned as it is',
       );
     });
   });
@@ -605,6 +737,208 @@ module(basename(import.meta.filename), function () {
         'a host URL in the body is stored as the realm URL',
       );
       assert.false(stored.includes(SPACE_HOST), 'no host URL is stored');
+    });
+
+    // Makes the realm's stored HTML read as if it was rendered against `url`:
+    // records `url` on every row, and, unless `html` is false, names `url` in
+    // the HTML wherever it names the realm's URL.
+    async function renderAgainst(url: string, { html = true } = {}) {
+      let replace = (column: string, cast = '') => [
+        `, ${column} = replace(${column}${cast},`,
+        param(realmURL.href),
+        `,`,
+        param(url),
+        cast ? `)::jsonb` : `)`,
+      ];
+      await query(dbAdapter, [
+        `UPDATE prerendered_html SET rendered_against_url =`,
+        param(url),
+        ...(html
+          ? [
+              ...replace('isolated_html'),
+              ...replace('head_html'),
+              ...replace('fitted_html', '::text'),
+            ]
+          : []),
+        `WHERE realm_url =`,
+        param(realmURL.href),
+      ]);
+    }
+
+    function realmGet(path: string, accept: string) {
+      return request.get(`${realmURL.pathname}${path}`).set('Accept', accept);
+    }
+
+    function htmlResource(text: string, id?: string): string {
+      let doc = JSON.parse(text);
+      return doc.included.find(
+        (resource: { type: string; id: string }) =>
+          resource.type === 'html' && (!id || resource.id.startsWith(id)),
+      ).attributes.html;
+    }
+
+    test('a page on a host URL is translated from a URL its HTML was rendered against', async function (assert) {
+      await renderAgainst(OLD_HOST_URL);
+
+      let response = await get(`${SPACE_PREFIX}person-1`, 'text/html');
+
+      assert.strictEqual(response.status, 200, response.text.slice(0, 300));
+      let html = response.text;
+      assert.strictEqual(
+        attr(html, /<a [^>]*data-person-self[^>]*>/, 'href'),
+        `${SPACE_HOST_URL}person-1`,
+        'a link in the page names the host URL',
+      );
+      assert.strictEqual(
+        attr(html, /<link [^>]*rel="canonical"[^>]*>/, 'href'),
+        `${CANONICAL_HOST_URL}person-1`,
+      );
+      assert.strictEqual(
+        attr(html, /<meta [^>]*property="og:url"[^>]*>/, 'content'),
+        `${CANONICAL_HOST_URL}person-1`,
+      );
+      assert.false(html.includes(OLD_HOST), 'the page names no such URL');
+
+      let head = await get(
+        `${SPACE_PREFIX}person-1?format=head`,
+        SupportedMimeType.CardHtml,
+      );
+      assert.strictEqual(head.status, 200, head.text);
+      assert.false(head.text.includes(OLD_HOST), 'nor does a +html read');
+    });
+
+    test('an ETag on a host URL changes when the URL stored HTML was rendered against changes', async function (assert) {
+      let path = `${SPACE_PREFIX}person-1?format=isolated`;
+      let first = await get(path, SupportedMimeType.CardHtml);
+      let etag = first.headers.etag;
+      assert.strictEqual(first.status, 200, first.text);
+      assert.ok(etag, 'the host URL answers with an ETag');
+
+      await renderAgainst(OLD_HOST_URL, { html: false });
+      await notifyHostURLsChanged(dbAdapter, OLD_HOST);
+
+      let after = await get(path, SupportedMimeType.CardHtml).set(
+        'If-None-Match',
+        etag,
+      );
+      for (let attempt = 0; attempt < 50 && after.status === 304; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        after = await get(path, SupportedMimeType.CardHtml).set(
+          'If-None-Match',
+          etag,
+        );
+      }
+      assert.strictEqual(
+        after.status,
+        200,
+        'a validator from before the URL changed does not revalidate',
+      );
+      assert.notStrictEqual(after.headers.etag, etag);
+    });
+
+    test('stored HTML on the realm URL names the realm URL, except in its canonical link and og:url', async function (assert) {
+      await renderAgainst(CANONICAL_HOST_URL);
+
+      let isolated = await realmGet(
+        'person-1?format=isolated',
+        SupportedMimeType.CardHtml,
+      );
+      assert.strictEqual(isolated.status, 200, isolated.text);
+      assert.strictEqual(
+        attr(
+          htmlResource(isolated.text),
+          /<a [^>]*data-person-self[^>]*>/,
+          'href',
+        ),
+        `${realmURL.href}person-1`,
+        'a +html read links into the realm',
+      );
+
+      let head = await realmGet(
+        'person-1?format=head',
+        SupportedMimeType.CardHtml,
+      );
+      assert.strictEqual(head.status, 200, head.text);
+      let headHTML = htmlResource(head.text);
+      assert.strictEqual(
+        attr(headHTML, /<link [^>]*rel="canonical"[^>]*>/, 'href'),
+        `${CANONICAL_HOST_URL}person-1`,
+      );
+      assert.strictEqual(
+        attr(headHTML, /<meta [^>]*property="og:url"[^>]*>/, 'content'),
+        `${CANONICAL_HOST_URL}person-1`,
+      );
+
+      let page = await realmGet('person-1', 'text/html');
+      assert.strictEqual(page.status, 200, page.text.slice(0, 300));
+      assert.strictEqual(
+        attr(page.text, /<a [^>]*data-person-self[^>]*>/, 'href'),
+        `${realmURL.href}person-1`,
+        'a page links into the realm',
+      );
+      assert.strictEqual(
+        attr(page.text, /<link [^>]*rel="canonical"[^>]*>/, 'href'),
+        `${CANONICAL_HOST_URL}person-1`,
+      );
+    });
+
+    test('a search on the realm URL maps only its stored HTML', async function (assert) {
+      await renderAgainst(CANONICAL_HOST_URL);
+
+      let response = await request
+        .post(`${realmURL.pathname}_search`)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .send({
+          filter: {
+            'item.on': { module: `${realmURL.href}person`, name: 'Person' },
+          },
+          fields: { entry: ['html', 'item'] },
+        });
+
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(
+        attr(
+          htmlResource(response.text, `${realmURL.href}person-1`),
+          /<a [^>]*data-person-fitted[^>]*>/,
+          'href',
+        ),
+        `${realmURL.href}person-1`,
+        'a rendering links into the realm',
+      );
+      let item = JSON.parse(response.text).included.find(
+        (resource: { type: string; id: string }) =>
+          resource.type === 'card' &&
+          resource.id === `${realmURL.href}person-1`,
+      );
+      assert.strictEqual(
+        item?.attributes.website,
+        `${CANONICAL_HOST_URL}about`,
+        "a card's data is served as the realm holds it",
+      );
+    });
+
+    test("a file's stored bytes on the realm URL are not mapped", async function (assert) {
+      await renderAgainst(CANONICAL_HOST_URL);
+
+      let source = await realmGet(
+        'person-1.json',
+        SupportedMimeType.CardSource,
+      );
+      assert.strictEqual(source.status, 200, source.text);
+      assert.strictEqual(
+        source.text,
+        readFileSync(join(testRealmPath, 'person-1.json'), 'utf8'),
+        "a card's source is served as the realm stores it",
+      );
+
+      let file = await realmGet('docs/page.html', '*/*');
+      assert.strictEqual(file.status, 200, file.text);
+      assert.strictEqual(
+        file.text,
+        readFileSync(join(testRealmPath, 'docs/page.html'), 'utf8'),
+        'an HTML file is served as the realm stores it',
+      );
     });
   });
 });
