@@ -2373,6 +2373,35 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
+      test('a realm with only fixed routes gets its route tree in the host config', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200);
+        let match = response.text.match(
+          /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)"/,
+        );
+        assert.ok(match, 'the config meta tag is there');
+        let config = JSON.parse(decodeURIComponent(match![1]));
+        assert.deepEqual(
+          config.hostDynamicRoutes?.routes.map(
+            (route: { kind: string; fullPath: string }) => [
+              route.kind,
+              route.fullPath,
+            ],
+          ),
+          [
+            ['fixed-card', '/'],
+            ['fixed-card', '/pricing'],
+            ['redirect', '/tos'],
+            ['redirect', '/external'],
+          ],
+          "the page's links get their routed addresses from the tree",
+        );
+      });
+
       test('a non-public realm does not disclose routes via a canonical redirect', async function (assert) {
         // Drop the published realm's permissions so it is no longer publicly
         // readable. `fetchRealmPermissions` reads this table uncached, so the

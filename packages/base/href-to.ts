@@ -120,8 +120,14 @@ function linkTarget(
   positional: unknown[],
   named: HrefToNamed,
 ): HostRouteAddressTarget | undefined {
-  if (typeof named.route === 'string') {
-    if (!positional.every(isRouteArgument)) {
+  if ('route' in named) {
+    // A route name that isn't a string yet, such as one still loading, is
+    // no link, never a link of another form.
+    if (
+      typeof named.route !== 'string' ||
+      named.route === '' ||
+      !positional.every(isRouteArgument)
+    ) {
       return undefined;
     }
     return { kind: 'route-name', name: named.route, args: positional };
@@ -131,8 +137,7 @@ function linkTarget(
     if (positional.length !== 1) {
       return undefined;
     }
-    let { route: _route, ...values } = named;
-    return { kind: 'type', type: first, values };
+    return { kind: 'type', type: first, values: named };
   }
   if (positional.length === 0 || !positional.every(isCardOrId)) {
     return undefined;

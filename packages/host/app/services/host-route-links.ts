@@ -1,6 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -18,11 +19,9 @@ import {
   type UnresolvedHostRouteLink,
 } from '@cardstack/runtime-common';
 
-import {
-  CardError,
-  isGatewayFailureStatus,
-} from '@cardstack/runtime-common/error';
+import { CardError } from '@cardstack/runtime-common/error';
 
+import { currentRenderScope } from '@cardstack/host/lib/gc-card-store';
 import { duringPrerenderHeaders } from '@cardstack/host/lib/prerender-fetch-headers';
 
 import type HostModeService from './host-mode-service';
@@ -36,15 +35,22 @@ import type { BaseDef, CardDef } from '@cardstack/base/card-api';
 const log = logger('host-route-links');
 
 // What an HTML visit read of its realm's routes. `routes` is `undefined`
-// when the read got none. `key`
-// says which read it was; see `routesReadKey`. `failure` is set when the
-// read itself failed (the endpoint answered a server error, or the network
-// failed). That is a failure to reach the routes, never a state of them: the
-// endpoint always answers the whole tree the realm's last index stored.
+// when the endpoint answered that the realm has none for this reader (a
+// 404). `key` says which read it was; see `routesReadKey`. Only an answer is
+// kept: a read that failed is not.
 interface RealmRoutes {
   key: string;
   routes: HostRouteLinkRoutes | undefined;
-  failure?: CardError;
+}
+
+// The cards links asked the store for, for one store identity in one render
+// scope; see `scopedCards`.
+interface AskedCards {
+  scope: string;
+  // By the id the link gave. `null` for a card that could not be loaded,
+  // which is not asked for again in this scope.
+  cards: TrackedMap<string, CardDef | null>;
+  loads: Map<string, Promise<void>>;
 }
 
 type RenderGlobals = {
@@ -72,20 +78,22 @@ type RenderGlobals = {
 // yet, and links keep card URLs: the app doesn't open a routed address on a
 // workspace's URL.
 //
-// The endpoint serves routes the realm already validated, so nothing here
-// validates them again. An HTML visit reads once for each indexing job.
-// Until the read lands, and when it gets no routes, links fall back.
+// The endpoint serves the routes the realm's last index validated and
+// stored, so nothing here validates them again. That tree can lack routes
+// the realm's next index restores, and nothing runs the HTML visits that
+// read it again then (the ADR 036 remediation file lists this). An HTML
+// visit reads once for each indexing job, and waits for the read. Only two
+// answers are kept for the job: a 200, which is the routes, and a 404, which
+// is no routes, so links fall back.
 //
-// One case fails the render instead: the read of the routes fails to reach
-// them, because the endpoint answers a server error (a 5xx) or the network
-// fails.
-// That is a transport failure, not a state of the routes, which the realm
-// always answers whole. The links would otherwise be stored with card URLs
-// that nothing corrects later. The visit doesn't ask again: a transport
-// failure seldom passes within one render, and the prerender runs a visit
-// that failed this way again. The link throws an error marked as a gateway
-// failure, so the HTML that is stored stays as it was and the visit is tried
-// again.
+// Any other answer fails the render instead: a server error, a timeout, a
+// rate limit, a refusal (401, 403), or a network failure. It is a failure
+// to read the routes, never a state of them, and the links would otherwise
+// be stored with card URLs that nothing corrects later. The first link that
+// asks after the failure lands throws an error marked as a gateway failure,
+// so the HTML that is stored stays as it was and the prerender runs the
+// visit again. The failure is then forgotten, so the next visit, or the
+// visit's retry, reads the routes again.
 export default class HostRouteLinksService
   extends Service
   implements HostRouteLinks
@@ -96,11 +104,13 @@ export default class HostRouteLinksService
   @service declare private session: SessionService;
   @service('store') declare private appStore: StoreService;
 
-  // The cards a link asked the store for, by the id the link gave. `null`
-  // for a card that could not be loaded, which is not asked for again. The
-  // map is written only when a load settles, never during a render.
-  private askedCards = new TrackedMap<string, CardDef | null>();
-  private cardLoads = new Map<string, Promise<void>>();
+  // The cards links asked the store for. Kept only as long as the store
+  // keeps its cards: a new render scope or a store reset drops them, so a
+  // link never reads a card's fields from a scope the store left, and the
+  // card is asked for again, which records it as a dependency of the render
+  // that asks. A card map is written only when a load settles, never during
+  // a render; a new scope replaces the whole record.
+  private askedCards: AskedCards | undefined;
 
   // The page config's routes as the lookup takes them, kept so that the
   // realm URL is parsed once.
@@ -111,9 +121,18 @@ export default class HostRouteLinksService
   // The routes an HTML visit read from each realm's endpoint, by realm URL.
   // Written only when a read settles, never during a render.
   private realmRoutes = new TrackedMap<string, RealmRoutes>();
+  // A read of a realm's routes that failed, until a link throws it.
+  // `routeFailureCount` changes when one lands, so the links that wait for
+  // the read render again. The map itself is not tracked, so the link that
+  // throws a failure can forget it during the render.
+  private routeFailures = new Map<string, CardError>();
+  @tracked private routeFailureCount = 0;
   // The read under way for each realm. A read that settles after another
   // took its place is dropped.
-  private routeReads = new Map<string, { key: string; read: number }>();
+  private routeReads = new Map<
+    string,
+    { key: string; read: number; promise: Promise<void> }
+  >();
   private routeReadCount = 0;
 
   constructor(owner: Owner) {
@@ -123,11 +142,11 @@ export default class HostRouteLinksService
   }
 
   resetState() {
-    this.askedCards.clear();
-    this.cardLoads.clear();
+    this.askedCards = undefined;
     this.pageRoutes = undefined;
     this.routeReads.clear();
     this.realmRoutes.clear();
+    this.routeFailures.clear();
   }
 
   // Whether this render is an HTML visit, not a render for a person looking
@@ -159,7 +178,7 @@ export default class HostRouteLinksService
     let fromPage = this.routesFromPageConfig();
     if (fromPage || this.hostModeService.isActive) {
       // A page served on a host URL has its routes in its config, or the
-      // realm has no dynamic route.
+      // realm has no routes.
       return fromPage;
     }
     if (!this.inHTMLVisit) {
@@ -196,10 +215,14 @@ export default class HostRouteLinksService
     let key = this.routesReadKey();
     let held = this.realmRoutes.get(realmURL);
     if (held?.key === key) {
-      if (held.failure) {
-        throw held.failure;
-      }
       return held.routes;
+    }
+    // Read so that the link renders again when a failure lands.
+    void this.routeFailureCount;
+    let failure = this.routeFailures.get(realmURL);
+    if (failure) {
+      this.routeFailures.delete(realmURL);
+      throw failure;
     }
     this.readRoutes(realmURL, key);
     // What another job or visit read may be out of date, and stored HTML
@@ -210,14 +233,18 @@ export default class HostRouteLinksService
 
   // Reads the realm's routes, unless that read is already under way. The
   // read is tracked as a load of the render's store, so the HTML visit waits
-  // for it before its HTML is stored.
+  // for it before its HTML is stored. A visit that finds the read under way
+  // waits for it too.
   private readRoutes(realmURL: string, key: string): void {
-    if (this.routeReads.get(realmURL)?.key === key) {
+    let inFlight = this.routeReads.get(realmURL);
+    if (inFlight?.key === key) {
+      this.store.trackLoad(inFlight.promise);
       return;
     }
     let read = ++this.routeReadCount;
-    this.routeReads.set(realmURL, { key, read });
-    this.store.trackLoad(this.fetchRoutes(realmURL, key, read));
+    let promise = this.fetchRoutes(realmURL, key, read);
+    this.routeReads.set(realmURL, { key, read, promise });
+    this.store.trackLoad(promise);
   }
 
   private async fetchRoutes(
@@ -240,26 +267,22 @@ export default class HostRouteLinksService
           ...duringPrerenderHeaders(),
         },
       });
-      let body = response.ok
-        ? ((await response.json()) as { routes?: unknown })
-        : undefined;
-      if (Array.isArray(body?.routes)) {
+      if (response.status === 200) {
+        let body = (await response.json()) as { routes?: unknown };
+        if (!Array.isArray(body?.routes)) {
+          throw new Error(`${url} answered 200 with no routes`);
+        }
         routes = {
           realmURL: new URL(realmURL),
           routes: body.routes as HostRoute[],
         };
+      } else if (response.status === 404) {
+        // The realm serves no routes endpoint: no routes, so links fall back.
+        log.debug(`no host routes from ${realmURL}: ${url} answered 404`);
       } else {
-        // The endpoint failed (a transport failure), or this session can't
-        // read the realm.
-        log.debug(
-          `no host routes from ${realmURL} for now (status ${response.status})`,
-        );
-        if (response.status >= 500 || isGatewayFailureStatus(response.status)) {
-          failure = routesReadFailure(
-            `the host routes of ${realmURL} could not be read: ${url} answered HTTP ${response.status}`,
-            response.status,
-          );
-        }
+        let message = `the host routes of ${realmURL} could not be read: ${url} answered HTTP ${response.status}`;
+        log.debug(message);
+        failure = routesReadFailure(message, response.status);
       }
     } catch (e) {
       log.debug(`reading the host routes of ${realmURL} failed: ${String(e)}`);
@@ -276,11 +299,13 @@ export default class HostRouteLinksService
       return;
     }
     this.routeReads.delete(realmURL);
-    this.realmRoutes.set(realmURL, {
-      key,
-      routes,
-      ...(failure ? { failure } : {}),
-    });
+    if (failure) {
+      this.routeFailures.set(realmURL, failure);
+      this.routeFailureCount++;
+      return;
+    }
+    this.routeFailures.delete(realmURL);
+    this.realmRoutes.set(realmURL, { key, routes });
   }
 
   private routesFromPageConfig(): HostRouteLinkRoutes | undefined {
@@ -306,19 +331,33 @@ export default class HostRouteLinksService
     if (isCardInstance(held)) {
       return held;
     }
-    let asked = this.askedCards.get(id);
-    if (asked !== undefined) {
-      return asked ?? undefined;
+    let asked = this.scopedCards();
+    let card = asked.cards.get(id);
+    if (card !== undefined) {
+      return card ?? undefined;
     }
-    if (!this.cardLoads.has(id)) {
-      let load = this.loadCard(id);
-      this.cardLoads.set(id, load);
+    if (!asked.loads.has(id)) {
+      let load = this.loadCard(id, asked);
+      asked.loads.set(id, load);
       this.store.trackLoad(load);
     }
     return undefined;
   };
 
-  private async loadCard(id: string): Promise<void> {
+  // The cards asked for in the store's current identity and render scope:
+  // a new, empty record when either moved since the last ask.
+  private scopedCards(): AskedCards {
+    let renderScope = this.inHTMLVisit
+      ? (currentRenderScope() ?? 'visit')
+      : 'app';
+    let scope = `${renderScope}#${this.store.identityEpoch}`;
+    if (this.askedCards?.scope !== scope) {
+      this.askedCards = { scope, cards: new TrackedMap(), loads: new Map() };
+    }
+    return this.askedCards;
+  }
+
+  private async loadCard(id: string, asked: AskedCards): Promise<void> {
     // A link asks from inside a render, and the store's load writes tracked
     // state, so the load starts in a later microtask.
     await Promise.resolve();
@@ -336,8 +375,10 @@ export default class HostRouteLinksService
     if (this.isDestroying || this.isDestroyed) {
       return;
     }
-    this.cardLoads.delete(id);
-    this.askedCards.set(id, card);
+    // A load that settles after its scope ended goes into that scope's
+    // record, which nothing reads any more.
+    asked.loads.delete(id);
+    asked.cards.set(id, card);
   }
 
   // The one place a link that got no routed address is reported. Nothing is

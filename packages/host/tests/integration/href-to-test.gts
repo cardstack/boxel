@@ -13,6 +13,8 @@ import {
   type RawHostRoutingRule,
 } from '@cardstack/runtime-common';
 
+import type { Realm } from '@cardstack/runtime-common/realm';
+
 import ENV from '@cardstack/host/config/environment';
 
 import {
@@ -101,6 +103,20 @@ function realmConfig(path: string) {
   };
 }
 
+function postDocument(slug: string) {
+  return {
+    data: {
+      attributes: { slug },
+      relationships: {
+        author: { links: { self: '../Author/jane' } },
+      },
+      meta: {
+        adoptsFrom: { module: testRRI('test-cards'), name: 'Post' },
+      },
+    },
+  };
+}
+
 // The page config the realm server writes for a page served on a host URL.
 type PageConfig = { hostDynamicRoutes?: unknown };
 
@@ -115,6 +131,7 @@ module('Integration | hrefTo', function (hooks) {
   });
 
   let hrefTo: (typeof HrefToModule)['hrefTo'];
+  let realm: Realm;
 
   setupCardLogs(
     hooks,
@@ -125,7 +142,7 @@ module('Integration | hrefTo', function (hooks) {
   );
 
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
+    ({ realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'realm.json': realmConfig('/people/:id'),
@@ -138,19 +155,9 @@ module('Integration | hrefTo', function (hooks) {
             },
           },
         },
-        'Post/hello.json': {
-          data: {
-            attributes: { slug: 'hello-world' },
-            relationships: {
-              author: { links: { self: '../Author/jane' } },
-            },
-            meta: {
-              adoptsFrom: { module: testRRI('test-cards'), name: 'Post' },
-            },
-          },
-        },
+        'Post/hello.json': postDocument('hello-world'),
       },
-    });
+    }));
     // The app starts this service at boot; a rendering test has no boot.
     getService('host-route-links');
     ({ hrefTo } = await getService('loader-service').loader.import<
@@ -189,6 +196,10 @@ module('Integration | hrefTo', function (hooks) {
         <a data-test-route href={{hrefTo author route='people'}}>route</a>
         <a data-test-no-type href={{hrefTo AuthorType slug='x'}}>no type</a>
         <a data-test-no-route href={{hrefTo author route='team'}}>no route</a>
+        <a
+          data-test-route-pending
+          href={{hrefTo author.id route=undefined}}
+        >pending route</a>
         <a data-test-empty href={{hrefTo undefined}}>empty</a>
       </template>,
     );
@@ -227,6 +238,11 @@ module('Integration | hrefTo', function (hooks) {
       href('[data-test-no-route]'),
       null,
       'no route with the name: no href',
+    );
+    assert.strictEqual(
+      href('[data-test-route-pending]'),
+      null,
+      'a route name that is not a string yet: no href, not the card form',
     );
     assert.strictEqual(href('[data-test-empty]'), null, 'an empty link');
   });
@@ -421,64 +437,147 @@ module('Integration | hrefTo', function (hooks) {
     );
   });
 
-  test('an HTML visit fails, and does not ask again, when the routes endpoint fails', async function (assert) {
+  // Asks for the routes after a read that failed: the first ask throws the
+  // failure, which fails the visit.
+  function thrownByNextAsk() {
+    let links = getService('host-route-links');
+    let thrown: { gatewayFailure?: boolean; status?: number } | undefined;
+    try {
+      links.routes();
+    } catch (e) {
+      thrown = e as typeof thrown;
+    }
+    return thrown;
+  }
+
+  test('an HTML visit fails when the routes endpoint fails, and the next visit reads again', async function (assert) {
     let links = getService('host-route-links');
     let requests = 0;
+    let reachable = false;
 
     await inHTMLVisit(
       () => {
         requests++;
-        return new Response(
-          JSON.stringify({ errors: [{ status: 503, title: 'unavailable' }] }),
-          { status: 503 },
-        );
+        if (!reachable) {
+          return new Response(
+            JSON.stringify({ errors: [{ status: 503, title: 'unavailable' }] }),
+            { status: 503 },
+          );
+        }
+        return new Response(JSON.stringify({ routes: validatedRoutes() }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
       },
       async () => {
         links.routes();
         await getService('render-store').loaded();
-        let thrown: { gatewayFailure?: boolean; status?: number } | undefined;
-        try {
-          links.routes();
-        } catch (e) {
-          thrown = e as typeof thrown;
-        }
+        let thrown = thrownByNextAsk();
         assert.true(
           thrown?.gatewayFailure,
           'a link throws an error that makes the visit run again',
         );
         assert.strictEqual(thrown?.status, 503);
         assert.strictEqual(requests, 1, 'the endpoint was asked once');
+
+        reachable = true;
+        assert.strictEqual(
+          links.routes(),
+          undefined,
+          'the failure is not kept: the next visit reads again',
+        );
+        await getService('render-store').loaded();
+        assert.deepEqual(
+          links.routes()?.routes.map((route) => route.fullPath),
+          ['/people/:id', '/posts/:slug', '/by-name/:name'],
+          'and gets the routes',
+        );
+        assert.strictEqual(requests, 2, 'the endpoint was asked again once');
       },
     );
   });
 
-  test('an HTML visit fails, and does not ask again, when the routes endpoint answers a server error', async function (assert) {
+  test('an HTML visit fails on any answer but the routes or a 404, and keeps none of them', async function (assert) {
     let links = getService('host-route-links');
+    let status = 500;
     let requests = 0;
 
     await inHTMLVisit(
       () => {
         requests++;
-        return new Response(
-          JSON.stringify({ errors: [{ status: 500, title: 'Server Error' }] }),
-          { status: 500 },
-        );
+        return new Response(JSON.stringify({ errors: [{ status }] }), {
+          status,
+        });
       },
       async () => {
+        for (let failing of [500, 503, 401, 403, 408, 429]) {
+          status = failing;
+          let before = requests;
+          links.routes();
+          await getService('render-store').loaded();
+          assert.strictEqual(requests, before + 1, `${failing}: read once`);
+          let thrown = thrownByNextAsk();
+          assert.true(
+            thrown?.gatewayFailure,
+            `${failing}: a link throws an error that makes the visit run again`,
+          );
+          assert.strictEqual(thrown?.status, failing);
+        }
+
+        status = 404;
         links.routes();
         await getService('render-store').loaded();
-        let thrown: { gatewayFailure?: boolean; status?: number } | undefined;
-        try {
-          links.routes();
-        } catch (e) {
-          thrown = e as typeof thrown;
-        }
-        assert.true(
-          thrown?.gatewayFailure,
-          'a link throws an error that makes the visit run again',
+        assert.strictEqual(
+          links.routes(),
+          undefined,
+          'a 404 is no routes, and no failure',
         );
-        assert.strictEqual(thrown?.status, 500);
-        assert.strictEqual(requests, 1, 'the endpoint was asked once');
+        let before = requests;
+        links.routes();
+        await getService('render-store').loaded();
+        assert.strictEqual(requests, before, 'and is kept for the visit');
+      },
+    );
+  });
+
+  test('an HTML visit asks the store again for a linked card once the store is reset', async function (assert) {
+    let links = getService('host-route-links');
+    let renderStore = getService('render-store');
+    let postId = `${testRealmURL}Post/hello`;
+
+    await inHTMLVisit(
+      () =>
+        new Response(JSON.stringify({ routes: validatedRoutes() }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      async () => {
+        links.routes();
+        await renderStore.loaded();
+        hrefTo(postId);
+        await renderStore.loaded();
+        assert.strictEqual(
+          hrefTo(postId),
+          `${testRealmURL}posts/hello-world`,
+          'the linked card was loaded for the link',
+        );
+
+        await realm.write(
+          'Post/hello.json',
+          JSON.stringify(postDocument('renamed')),
+        );
+        renderStore.resetCache();
+        assert.strictEqual(
+          hrefTo(postId),
+          undefined,
+          'the card asked for before the reset is not used',
+        );
+        await renderStore.loaded();
+        assert.strictEqual(
+          hrefTo(postId),
+          `${testRealmURL}posts/renamed`,
+          'the link has the address of the card as it is now',
+        );
       },
     );
   });

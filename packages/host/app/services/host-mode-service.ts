@@ -47,8 +47,8 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SessionService from '@cardstack/host/services/session';
 
 // The routing realm's validated routes, the whole tree, as the realm server
-// injects them next to the fixed routing map, for a realm with dynamic
-// routes. `realmURL` is the URL the realm is served at, ending with `/`.
+// injects them next to the fixed routing map, for a realm with any routes.
+// `realmURL` is the URL the realm is served at, ending with `/`.
 export interface HostDynamicRoutes {
   realmURL: string;
   routes: readonly HostRoute[];
