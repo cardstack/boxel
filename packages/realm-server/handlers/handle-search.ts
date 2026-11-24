@@ -12,6 +12,11 @@ import {
   searchEntryRealms as v2SearchEntryRealms,
   type SearchEntryQuery,
 } from '@cardstack/runtime-common/query-v2/search-entry';
+import {
+  searchEntryUnion,
+  unionPathRefusal,
+  type UnionRealm,
+} from '@cardstack/runtime-common/query-v2/search-entry-union';
 import { respondToLogSearch } from './log-search.ts';
 import {
   applyFederatedRowBudget,
@@ -1065,22 +1070,38 @@ export default function handleSearch(opts: {
           unread.length === 0
             ? workingInstances
             : realmInstancesFor(realmList, working, workingInstances, access);
-        let merged = await grammar.searchEntryRealms(
-          realmInstances,
-          parsed,
-          {
-            ...runSearchOpts,
-            ...(signal ? { signal } : {}),
-          },
-          scopedQueries.size === 0
-            ? undefined
-            : queryForRealmInstance(
-                realmInstances,
-                realmList,
-                scopedQueries,
+        let fanOutOpts = {
+          ...runSearchOpts,
+          ...(signal ? { signal } : {}),
+        };
+        // A merged search over realms the caller reads outright that all
+        // share this server's index database runs as one statement over all
+        // of them (the union path, Query V2's grammar only); any other runs
+        // in each realm and is merged.
+        let unionRealms =
+          grammar === V2_ENTRY_GRAMMAR
+            ? unionRealmsFor(realmList, working, workingInstances, access)
+            : undefined;
+        let merged =
+          unionRealms && !unionPathRefusal(parsed, unionRealms)
+            ? await searchEntryUnion(
+                unionRealms as UnionRealm[],
                 parsed,
-              ),
-        );
+                fanOutOpts,
+              )
+            : await grammar.searchEntryRealms(
+                realmInstances,
+                parsed,
+                fanOutOpts,
+                scopedQueries.size === 0
+                  ? undefined
+                  : queryForRealmInstance(
+                      realmInstances,
+                      realmList,
+                      scopedQueries,
+                      parsed,
+                    ),
+              );
         let doc = markPolicyScoped(merged, scopedRealms);
         // If the budget already fired, skip stringifying a document we're about
         // to discard (the time-budget race has already resolved with the 408).
@@ -1356,6 +1377,33 @@ function realmInstancesFor(
       url,
       searchEntries: async (query: SearchEntryQuery) =>
         emptySearchEntryDocument(query),
+    };
+  });
+}
+
+// The realms a search names as the union path reads them (see
+// `searchEntryUnion`), positional with `realmURLs`: each with the access the
+// caller has, and the mounted realm where rows are read from it (missing when
+// it would not mount, which sends the search to the merge).
+function unionRealmsFor(
+  realmURLs: string[],
+  working: string[],
+  workingInstances: Array<Realm | null | undefined>,
+  access: RealmAccess,
+) {
+  let byURL = new Map<string, Realm | null | undefined>();
+  working.forEach((url, index) => byURL.set(url, workingInstances[index]));
+  return realmURLs.map((url) => {
+    let realm = byURL.get(url);
+    if (access.readable.has(url)) {
+      return { url: realm?.url ?? url, realm, access: 'readable' as const };
+    }
+    if (access.scoped.has(url)) {
+      return { url: realm?.url ?? url, realm, access: 'scoped' as const };
+    }
+    return {
+      url,
+      access: access.failed.has(url) ? ('failed' as const) : ('none' as const),
     };
   });
 }
