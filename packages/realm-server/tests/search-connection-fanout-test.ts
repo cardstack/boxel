@@ -5,6 +5,8 @@ import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
+  insertPermissions,
+  notifyRealmIndexUpdated,
   SupportedMimeType,
   type QueuePublisher,
   type QueueRunner,
@@ -23,6 +25,7 @@ import {
   setupDB,
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
+import { RealmIndexUpdatedListener } from '../lib/realm-index-updated-listener.ts';
 import {
   ConnectionFanoutRecorder,
   untilPoolQuiet,
@@ -526,11 +529,32 @@ function setupFanoutRealm(hooks: NestedHooks) {
     };
   }
 
+  async function patchPermissions(permissions: RealmPermissions) {
+    return await request
+      .patch(`${new URL(APP).pathname}_permissions`)
+      .set('Accept', 'application/vnd.api+json')
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(realm, OWNER, ['read', 'write', 'realm-owner'])}`,
+      )
+      .send({
+        data: {
+          id: APP,
+          type: 'permissions',
+          attributes: { permissions },
+        },
+      });
+  }
+
   return {
     get adapter() {
       return adapter;
     },
+    get realm() {
+      return realm;
+    },
     search,
+    patchPermissions,
   };
 }
 
@@ -746,4 +770,159 @@ module(basename(import.meta.filename), function () {
       });
     },
   );
+
+  // A warm search checks out its request's own connections and its read
+  // snapshot, and reads neither a definitions row nor the realm's permissions
+  // for a definition lookup; and whatever changes either is seen by the very
+  // next search.
+  module('warm definition and permissions reads', function (hooks) {
+    let realm = setupFanoutRealm(hooks);
+
+    // One search, recorded: its definition lookups' checkouts, and their
+    // statements inside its read snapshot.
+    async function lookupReads(body: Record<string, unknown>) {
+      let { adapter, search } = realm;
+      await untilPoolQuiet(adapter);
+      let recorder = new ConnectionFanoutRecorder(adapter);
+      try {
+        recorder.start();
+        let result = await search(body);
+        recorder.stop();
+        let summary = recorder.summary({ exclude: BACKGROUND });
+        let count = (pattern: RegExp) =>
+          Object.entries(summary.bySource)
+            .filter(([source]) => pattern.test(source))
+            .reduce((n, [, entry]) => n + entry.checkouts, 0);
+        let inSnapshot = Object.entries(summary.snapshotStatements)
+          .filter(([source]) => /^definition lookup/.test(source))
+          .reduce((n, [, entry]) => n + entry.statements, 0);
+        return {
+          result,
+          checkouts: summary.checkouts,
+          definitionReads: count(/^definition lookup: definition read/),
+          permissionsReads: count(/^definition lookup: permissions read/),
+          inSnapshot,
+        };
+      } finally {
+        recorder.dispose();
+      }
+    }
+
+    async function publicRows(): Promise<number> {
+      let rows = (await realm.adapter.execute(
+        `SELECT count(*)::int AS n FROM modules WHERE resolved_realm_url = $1 AND cache_scope = 'public'`,
+        { bind: [APP] },
+      )) as { n: number }[];
+      return rows[0].n;
+    }
+
+    test('a warm search reads no definitions row and no permissions', async function (assert) {
+      assert.timeout(120_000);
+      for (let shape of SHAPE_NAMES) await realm.search(SHAPES[shape](0));
+      for (let shape of SHAPE_NAMES) {
+        let reads = await lookupReads(SHAPES[shape](1));
+        report(`warm-reads ${shape}`, reads);
+        assert.strictEqual(reads.result.status, 200, shape);
+        assert.strictEqual(reads.definitionReads, 0, `${shape}: rows`);
+        assert.strictEqual(reads.permissionsReads, 0, `${shape}: permissions`);
+        assert.strictEqual(reads.inSnapshot, 0, `${shape}: in its snapshot`);
+      }
+    });
+
+    test('a permissions change through the endpoint is seen by the next search', async function (assert) {
+      assert.timeout(120_000);
+      await realm.search(SHAPES.homeConcepts(0));
+      assert.notStrictEqual(
+        (await realm.realm.ownerAndVisibility()).visibility,
+        'public',
+        'baseline: the realm is not public',
+      );
+      assert.strictEqual(await publicRows(), 0, 'baseline: no public rows');
+
+      let response = await realm.patchPermissions({ '*': ['read'] });
+      assert.strictEqual(response.status, 200, response.text);
+
+      let reads = await lookupReads(SHAPES.homeConcepts(1));
+      assert.strictEqual(reads.result.status, 200, reads.result.error);
+      assert.true(
+        reads.permissionsReads > 0,
+        'the next search read the permissions again',
+      );
+      assert.strictEqual(
+        (await realm.realm.ownerAndVisibility()).visibility,
+        'public',
+      );
+      assert.true(
+        (await publicRows()) > 0,
+        'its definitions were looked up under the public scope',
+      );
+      let again = await lookupReads(SHAPES.homeConcepts(2));
+      assert.strictEqual(again.permissionsReads, 0, 'and held once more');
+    });
+
+    test('a direct permissions write with its notification is seen by the next search', async function (assert) {
+      assert.timeout(120_000);
+      let listener = new RealmIndexUpdatedListener({
+        dbAdapter: realm.adapter,
+        lookupMountedRealm: (url) =>
+          url === realm.realm.url ? realm.realm : undefined,
+        listMountedRealms: () => [realm.realm],
+      });
+      await listener.start();
+      try {
+        await realm.search(SHAPES.homeConcepts(0));
+        assert.strictEqual(await publicRows(), 0, 'baseline: no public rows');
+
+        // as a peer's write arrives: the row, then the notification
+        await insertPermissions(realm.adapter, new URL(APP), { '*': ['read'] });
+        await notifyRealmIndexUpdated(realm.adapter, realm.realm.url);
+        let deadline = Date.now() + 5_000;
+        while (
+          (await realm.realm.ownerAndVisibility()).visibility !== 'public'
+        ) {
+          if (Date.now() > deadline) {
+            throw new Error('the notification never reached the realm');
+          }
+          await new Promise((r) => setTimeout(r, 20));
+        }
+
+        let result = await realm.search(SHAPES.homeConcepts(1));
+        assert.strictEqual(result.status, 200, result.error);
+        assert.true(
+          (await publicRows()) > 0,
+          'its definitions were looked up under the public scope',
+        );
+      } finally {
+        await listener.shutDown();
+      }
+    });
+
+    test('a module change is seen by the next search', async function (assert) {
+      assert.timeout(120_000);
+      let byMood = {
+        filter: { 'item.on': Concept, eq: { 'item.mood': 'calm' } },
+        page: { size: 5 },
+      };
+      await realm.search(SHAPES.homeConcepts(0));
+      let before = await realm.search(byMood);
+      assert.notStrictEqual(
+        before.status,
+        200,
+        'baseline: Concept has no mood field',
+      );
+
+      await realm.realm.write(
+        'concept.gts',
+        CONCEPT_MODULE.replace(
+          '@field slug = contains(StringField);',
+          '@field slug = contains(StringField);\n    @field mood = contains(StringField);',
+        ),
+      );
+
+      let after = await realm.search(byMood);
+      assert.strictEqual(after.status, 200, after.error);
+      let warm = await lookupReads(SHAPES.homeConcepts(1));
+      assert.strictEqual(warm.result.status, 200, warm.result.error);
+    });
+  });
 });

@@ -110,6 +110,12 @@ const POPULATE_RACE_MAX_ATTEMPTS = 3;
 export const REMEMBERED_ROW_MS = 5_000;
 // A bound on the remembered rows; the map starts over once it holds this many.
 const MAX_REMEMBERED_ROWS = 2_000;
+// Bounds on the definitions rows `readFromDatabaseCache` holds in memory
+// (`#heldRows`): how many, how much of their serialized size in all, and the
+// largest one worth holding. The least recently read go first.
+const MAX_HELD_ROWS = 2_000;
+const MAX_HELD_ROW_CHARS = 64 * 1024 * 1024;
+const MAX_HELD_ONE_ROW_CHARS = 2 * 1024 * 1024;
 // A module in a realm this server does not host can only be placed by asking
 // the realm that holds it, so `buildLookupContext` reaches the network — and
 // the cost of that request is set by the far end, not by anything local. An
@@ -216,6 +222,22 @@ function moduleGenerationKey(
   return `${resolvedRealmURL}|${moduleURL}`;
 }
 
+// The size a held row is counted at: its definitions as the database sent
+// them, which is most of a row.
+function serializedLength(value: unknown): number {
+  if (value == null) {
+    return 0;
+  }
+  if (typeof value === 'string') {
+    return value.length;
+  }
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return Infinity;
+  }
+}
+
 function parseJsonValue<T>(value: T | string | null): T | null {
   if (value == null) {
     return null;
@@ -231,7 +253,8 @@ function parseJsonValue<T>(value: T | string | null): T | null {
 }
 
 export type CacheScope = 'public' | 'realm-auth';
-type LocalRealm = Pick<Realm, 'url' | 'getRealmOwnerUserId' | 'visibility'>;
+type LocalRealm = Pick<Realm, 'url' | 'getRealmOwnerUserId' | 'visibility'> &
+  Partial<Pick<Realm, 'ownerAndVisibility'>>;
 
 export interface DefinitionCacheEntry {
   definitions: Record<string, ModuleDefinitionResult | ErrorEntry>;
@@ -626,6 +649,17 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     string,
     { generation: number; at: number; entry: DefinitionCacheEntry }
   >();
+  // Definitions rows read from the database, keyed by what selected them (the
+  // realm, the module URL, the cache scope and user), and held for as long as
+  // the definition generation stays where it was when they were read: every
+  // invalidation, here or replayed from a peer's notification, and a
+  // reconnect of that notification's connection, moves it and empties the
+  // map. So a warm lookup reads no row, and no row outlives the change that
+  // deleted it. Never an error row, and never an absent one: a miss always
+  // goes to the database, where a peer's populate may have landed.
+  #heldRows = new Map<string, { entry: DefinitionCacheEntry; chars: number }>();
+  #heldRowsGeneration = 0;
+  #heldRowChars = 0;
   // Remote-realm visibility probes. `#probeInFlight` shares one request among
   // concurrent probes of the same module and requesting user;
   // `#unreachableOrigins` maps an origin whose transport failed to the
@@ -1563,8 +1597,22 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return this.#definitionGeneration;
   }
 
+  // For a test that deletes rows from the table behind the lookup's back and
+  // expects the next lookup to find them gone, as an invalidation would.
+  __testOnlyForgetHeldRows(): void {
+    this.#heldRows.clear();
+    this.#heldRowChars = 0;
+  }
+
   registerRealm(realm: LocalRealm): void {
+    if (this.#realms.includes(realm)) {
+      return;
+    }
     this.#realms.push(realm);
+    // A realm mounted at a URL another occupied before it (a realm deleted
+    // and created again) must not be answered with the rows held for the
+    // earlier one, which its deletion removed from the table directly.
+    this.#definitionGeneration++;
   }
 
   forRealm(realm: LocalRealm): DefinitionLookup {
@@ -1634,8 +1682,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
 
     if (localRealm) {
-      let prerenderUserId = await localRealm.getRealmOwnerUserId();
-      let isPublic = (await localRealm.visibility()) === 'public';
+      // One permissions read where the realm offers it, not one per value.
+      let { ownerUserId: prerenderUserId, visibility } =
+        localRealm.ownerAndVisibility
+          ? await localRealm.ownerAndVisibility()
+          : {
+              ownerUserId: await localRealm.getRealmOwnerUserId(),
+              visibility: await localRealm.visibility(),
+            };
+      let isPublic = visibility === 'public';
       let cacheScope: CacheScope = isPublic ? 'public' : 'realm-auth';
 
       return {
@@ -1853,12 +1908,86 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
   }
 
+  // The held row for `key`, if the definition generation has not moved since
+  // it was read. A move empties the map, so it holds the current generation's
+  // rows and nothing else.
+  #heldRow(key: string): DefinitionCacheEntry | undefined {
+    if (this.#heldRowsGeneration !== this.#definitionGeneration) {
+      this.#heldRows.clear();
+      this.#heldRowChars = 0;
+      this.#heldRowsGeneration = this.#definitionGeneration;
+      return undefined;
+    }
+    let held = this.#heldRows.get(key);
+    if (!held) {
+      return undefined;
+    }
+    // most recently read last, so eviction takes the least recently read
+    this.#heldRows.delete(key);
+    this.#heldRows.set(key, held);
+    return held.entry;
+  }
+
+  #holdRow(
+    key: string,
+    entry: DefinitionCacheEntry,
+    chars: number,
+    readUnder: number,
+  ): void {
+    // An invalidation that landed while the row was being read may have
+    // deleted it: the row is good for this read and no other.
+    if (readUnder !== this.#definitionGeneration) {
+      return;
+    }
+    // An error row is not held: one recorded for a transient failure expires
+    // after `ERROR_CACHE_TTL_MS`, and only a read of the table sees it go.
+    if (
+      entry.error ||
+      Object.values(entry.definitions).some((d) => d?.type !== 'definition')
+    ) {
+      return;
+    }
+    if (chars > MAX_HELD_ONE_ROW_CHARS) {
+      return;
+    }
+    if (this.#heldRowsGeneration !== readUnder) {
+      this.#heldRows.clear();
+      this.#heldRowChars = 0;
+      this.#heldRowsGeneration = readUnder;
+    }
+    let previous = this.#heldRows.get(key);
+    if (previous) {
+      this.#heldRows.delete(key);
+      this.#heldRowChars -= previous.chars;
+    }
+    this.#heldRows.set(key, { entry, chars });
+    this.#heldRowChars += chars;
+    for (let [oldest, held] of this.#heldRows) {
+      if (
+        this.#heldRows.size <= MAX_HELD_ROWS &&
+        this.#heldRowChars <= MAX_HELD_ROW_CHARS
+      ) {
+        break;
+      }
+      this.#heldRows.delete(oldest);
+      this.#heldRowChars -= held.chars;
+    }
+  }
+
   private async readFromDatabaseCache(
     moduleUrl: string,
     cacheScope: CacheScope,
     authUserId: string,
     resolvedRealmURL: string,
   ): Promise<DefinitionCacheEntry | undefined> {
+    let heldKey = [resolvedRealmURL, moduleUrl, cacheScope, authUserId].join(
+      '\n',
+    );
+    let held = this.#heldRow(heldKey);
+    if (held) {
+      return held;
+    }
+    let readUnder = this.#definitionGeneration;
     let moduleAlias = normalizeExecutableURL(moduleUrl);
     let rows = (await this.query(
       [
@@ -1910,7 +2039,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
     let error = parseJsonValue<ErrorEntry>(row.error_doc) ?? undefined;
     let createdAt = row.created_at ? parseInt(row.created_at) : undefined;
-    return {
+    let entry: DefinitionCacheEntry = {
       definitions,
       deps,
       error,
@@ -1919,6 +2048,8 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL: row.resolved_realm_url || '',
       createdAt,
     };
+    this.#holdRow(heldKey, entry, serializedLength(row.definitions), readUnder);
+    return entry;
   }
 
   async getCachedDefinitionsBatch(

@@ -4,6 +4,7 @@ import {
   fetchRealmPermissions,
   insertPermissions,
   logger,
+  notifyRealmIndexUpdated,
   type RealmAction,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -134,6 +135,10 @@ export default function handleUpsertRealmUserPermission({
     await insertPermissions(dbAdapter, new URL(normalizedRealmHref), {
       [user]: actions,
     });
+    // What every realm server holds derived from the realm's permissions (its
+    // `RealmInfo.visibility`, the owner and visibility a definition lookup
+    // reads) is dropped on this notification, as on a `_permissions` PATCH.
+    await notifyRealmIndexUpdated(dbAdapter, normalizedRealmHref);
 
     // The realm's event room holds the users its grants name, so the grant
     // invites this user to it. Through the realm server's own matrix client,

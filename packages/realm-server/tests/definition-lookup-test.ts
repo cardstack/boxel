@@ -363,6 +363,7 @@ module(basename(import.meta.filename), function () {
       // reset the first lookup below would hit a populated row and never
       // reach the prerenderer, breaking the call-count assertions.
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
@@ -397,6 +398,7 @@ module(basename(import.meta.filename), function () {
     test('a populate threads the realm loader epoch the write path minted', async function (assert) {
       // Start from a cold modules cache; see lookupDefinition above.
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
       let epoch = await mintRealmLoaderEpoch(dbAdapter, realmURL);
 
       await definitionLookup.lookupDefinition({
@@ -414,6 +416,7 @@ module(basename(import.meta.filename), function () {
       );
 
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
       let rewriteEpoch = await mintRealmLoaderEpoch(dbAdapter, realmURL);
       prerenderModuleLoaderEpochs = [];
 
@@ -435,6 +438,7 @@ module(basename(import.meta.filename), function () {
     test('invalidation', async function (assert) {
       // Start from a cold modules cache; see lookupDefinition above.
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
@@ -536,6 +540,7 @@ module(basename(import.meta.filename), function () {
     test('invalidates module cache entries without file extensions', async function (assert) {
       // Start from a cold modules cache; see lookupDefinition above.
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
       let definition = await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
         name: 'Person',
@@ -563,6 +568,7 @@ module(basename(import.meta.filename), function () {
 
     test('getCachedDefinitions forwards priority to prerenderModule', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       await definitionLookup.getCachedDefinitions(`${realmURL}person.gts`, {
         priority: 10,
@@ -603,6 +609,7 @@ module(basename(import.meta.filename), function () {
 
     test('getCachedDefinitions caches non-card modules as no-card markers', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
       forceEmptyDefinitions = true;
 
       let first = await definitionLookup.getCachedDefinitions(
@@ -657,6 +664,7 @@ module(basename(import.meta.filename), function () {
 
     test('invalidates cached module after module update', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}person.gts`;
       let version = 1;
@@ -746,6 +754,7 @@ module(basename(import.meta.filename), function () {
 
     test('invalidates cached module after module deletion', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}deleted-card.gts`;
       let modulePresent = true;
@@ -814,6 +823,7 @@ module(basename(import.meta.filename), function () {
 
     test('invalidates module cache entries using dependency graph', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let deepModule = `${realmURL}deep-card.gts`;
       let middleModule = `${realmURL}middle-field.gts`;
@@ -952,6 +962,7 @@ module(basename(import.meta.filename), function () {
 
     test('invalidates module cache entries for branching dependency graph', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let blogAppModule = `${realmURL}blog-app.gts`;
       let authorModule = `${realmURL}author.gts`;
@@ -1108,6 +1119,7 @@ module(basename(import.meta.filename), function () {
 
     test('propagates module errors to dependents and recovers after missing modules are added', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let deepModule = `${realmURL}deep-card.gts`;
       let middleModule = `${realmURL}middle-field.gts`;
@@ -1334,6 +1346,7 @@ module(basename(import.meta.filename), function () {
 
     test('uses public cache scope when realm is public', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
       await dbAdapter.execute(
         `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) VALUES ($1, '*', true, false, false)`,
         { bind: [realmURL] },
@@ -1373,6 +1386,7 @@ module(basename(import.meta.filename), function () {
 
     test('uses realm-auth cache scope when realm is private on the same server', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       await definitionLookup.lookupDefinition({
         module: rri(`${realmURL}person.gts`),
@@ -1390,6 +1404,7 @@ module(basename(import.meta.filename), function () {
 
     test('uses public cache scope when requesting a public realm on another server', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
       let remoteRealmURL = 'http://remote-realm/';
       let remoteModuleURL = `${remoteRealmURL}person.gts`;
 
@@ -1437,6 +1452,7 @@ module(basename(import.meta.filename), function () {
 
     test('uses realm-auth cache scope when requesting a private realm on another server', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
       let remoteRealmURL = 'http://private-remote-realm/';
       let remoteModuleURL = `${remoteRealmURL}person.gts`;
       let requestingUserId = '@other-user:localhost';
@@ -1485,6 +1501,7 @@ module(basename(import.meta.filename), function () {
 
     test('re-prerenders when cached error entry expires', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}transient-error.gts`;
       let calls = 0;
@@ -1596,6 +1613,7 @@ module(basename(import.meta.filename), function () {
 
     test('coalesces concurrent lookups of the same module into one prerender call', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}coalesce-same.gts`;
       let calls = 0;
@@ -1669,6 +1687,7 @@ module(basename(import.meta.filename), function () {
 
     test('does not coalesce concurrent lookups of different modules', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleA = `${realmURL}coalesce-a.gts`;
       let moduleB = `${realmURL}coalesce-b.gts`;
@@ -1739,6 +1758,7 @@ module(basename(import.meta.filename), function () {
 
     test('shares errored prerender result with concurrent waiters and releases in-flight slot on rejection', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}coalesce-error.gts`;
       let calls = 0;
@@ -1858,6 +1878,7 @@ module(basename(import.meta.filename), function () {
 
     test('invalidate drops in-flight entries so post-invalidation lookups do not join the stale promise', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}coalesce-invalidate.gts`;
       let calls = 0;
@@ -1995,6 +2016,7 @@ module(basename(import.meta.filename), function () {
       // instead of as a race worth re-running. For a card write serializing
       // against this module, that is a spurious 500.
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}peer-invalidation-inflight.gts`;
       let calls = 0;
@@ -2075,6 +2097,7 @@ module(basename(import.meta.filename), function () {
 
     test('in-flight prerender result is dropped when invalidate runs concurrently', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}stale-persist-invalidate.gts`;
       let calls = 0;
@@ -2172,6 +2195,7 @@ module(basename(import.meta.filename), function () {
 
     test('in-flight prerender result is dropped when clearRealmDefinitions runs concurrently', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}stale-persist-clear-realm.gts`;
       let calls = 0;
@@ -2240,6 +2264,7 @@ module(basename(import.meta.filename), function () {
 
     test('in-flight prerender result is dropped when clearAllDefinitions runs concurrently', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       // clearAllDefinitions drains state for every realm — including realms
       // that have never been individually invalidated. Use a fresh module
@@ -2314,6 +2339,7 @@ module(basename(import.meta.filename), function () {
       // Per-module generation scoping regression guard: a realm-wide bump
       // would spuriously discard the unrelated in-flight's result.
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleInvalidated = `${realmURL}scoped-invalidate-target.gts`;
       let moduleUnaffected = `${realmURL}scoped-invalidate-bystander.gts`;
@@ -2392,6 +2418,7 @@ module(basename(import.meta.filename), function () {
       // loadDefinitionCacheEntry's .finally, A's settle would delete B's
       // freshly-installed entry and cause D to race a third prerender.
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}identity-check.gts`;
       let calls = 0;
@@ -2523,6 +2550,7 @@ module(basename(import.meta.filename), function () {
       // Regression guard against the generation check skipping persist
       // in the happy path (no concurrent invalidation).
       await dbAdapter.execute('DELETE FROM modules');
+      definitionLookup.__testOnlyForgetHeldRows();
 
       let moduleURL = `${realmURL}stale-persist-happy-path.gts`;
       let calls = 0;

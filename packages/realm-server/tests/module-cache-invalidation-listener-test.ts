@@ -11,7 +11,7 @@ import {
   type VirtualNetwork,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
-import { setupDB } from './helpers/index.ts';
+import { createVirtualNetwork, setupDB } from './helpers/index.ts';
 import {
   ModuleCacheInvalidationListener,
   parseModuleCacheInvalidationPayload,
@@ -569,6 +569,94 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(recorderA.global, 1);
         } finally {
           await listenerA.shutDown();
+        }
+      });
+
+      // B holds the definitions row it read, so its warm lookups read none;
+      // A's invalidation reaches B through the notification, and B's next
+      // lookup goes back to the table, where the row is gone.
+      test('A.invalidate(url) → B stops serving the definitions row it held', async function (assert) {
+        const realmURL = 'http://x.test/peer-held-row/';
+        const moduleURL = `${realmURL}foo.gts`;
+        await dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ($1, $2, '{}', '[]', $3, $4, 'realm-auth', 'owner')`,
+          { bind: [moduleURL, `${realmURL}foo`, Date.now(), realmURL] },
+        );
+        let rowReads = 0;
+        const countingAdapter = new Proxy(dbAdapter, {
+          get(target, prop) {
+            let value = Reflect.get(target, prop, target);
+            if (prop === 'execute') {
+              return (
+                sql: string,
+                opts: Parameters<PgAdapter['execute']>[1],
+              ) => {
+                if (/^\s*SELECT definitions,/.test(sql)) {
+                  rowReads++;
+                }
+                return (value as PgAdapter['execute']).call(target, sql, opts);
+              };
+            }
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        });
+        let prerenders = 0;
+        const prerenderer: Prerenderer = {
+          ...stubPrerenderer,
+          async prerenderModule() {
+            prerenders++;
+            throw new Error('the row is gone, so B prerenders');
+          },
+        };
+        const owner = {
+          url: realmURL,
+          async getRealmOwnerUserId() {
+            return 'owner';
+          },
+          async visibility() {
+            return 'private' as const;
+          },
+        };
+        const instanceB = new CachingDefinitionLookup(
+          countingAdapter,
+          prerenderer,
+          createVirtualNetwork(),
+          stubCreatePrerenderAuth,
+        );
+        instanceB.registerRealm(owner);
+        const recorderB = newRecorder();
+        recordBumpsOn(instanceB, recorderB);
+        const listenerB = new ModuleCacheInvalidationListener({
+          dbAdapter,
+          definitionLookup: instanceB,
+        });
+        await listenerB.start();
+        try {
+          assert.ok(await instanceB.getCachedDefinitions(moduleURL));
+          assert.ok(await instanceB.getCachedDefinitions(moduleURL));
+          assert.strictEqual(rowReads, 1, 'B read the row once and held it');
+
+          const instanceA = new CachingDefinitionLookup(
+            dbAdapter,
+            stubPrerenderer,
+            createVirtualNetwork(),
+            stubCreatePrerenderAuth,
+          );
+          instanceA.registerRealm(owner);
+          await instanceA.invalidate(moduleURL);
+          await waitFor(() =>
+            recorderB.module.some((b) => b.moduleURL === moduleURL)
+              ? true
+              : undefined,
+          );
+
+          // what B makes of the failed prerender is not this test's concern
+          await instanceB.getCachedDefinitions(moduleURL).catch(() => {});
+          assert.true(rowReads > 1, 'B read the table again');
+          assert.true(prerenders > 0, 'and found no row to serve');
+        } finally {
+          await listenerB.shutDown();
         }
       });
     },

@@ -5483,13 +5483,16 @@ export class Realm {
 
   // Drop every read-side cache whose content derives from server-side
   // state — currently `#cachedRealmInfo` (cached `RealmInfo` + ETag-hash;
-  // mostly index-derived, but its `visibility` field is permissions-derived)
-  // and the cached host routing map. Called by the realm_index_updated LISTEN
+  // mostly index-derived, but its `visibility` field is permissions-derived),
+  // the owner and visibility a definition lookup reads, and the cached host
+  // routing map. Called by the realm_index_updated LISTEN
   // handler on peer instances after a swap commits — or after a
   // `realm_permissions` PATCH lands — somewhere else in the fleet. Public so
   // the realm-server process can wire the listener without reaching into
   // private state.
   clearRealmIndexCaches(): void {
+    this.#permissionsGeneration++;
+    this.#heldOwnerAndVisibility = undefined;
     this.invalidateCachedRealmInfo();
     void this.#loadIgnoreRules().catch((err: unknown) => {
       this.#log.warn(
@@ -9999,7 +10002,53 @@ export class Realm {
       this.#dbAdapter,
       new URL(this.url),
     );
+    return this.#ownerUserIdFrom(permissions);
+  }
 
+  // The realm's owner and its visibility read from one fetch of its
+  // permissions: a definition lookup needs both, and two fetches would be two
+  // round trips for the same rows. Every definition lookup a search makes asks
+  // for them, so the answer is held until the permissions generation moves
+  // (`#permissionsGeneration`), and a warm search reads no permissions here.
+  // Only the definition lookup reads this: what a caller may do is decided
+  // from permissions read afresh for its request.
+  async ownerAndVisibility(): Promise<{
+    ownerUserId: string;
+    visibility: RealmVisibility;
+  }> {
+    let generation = this.#permissionsGeneration;
+    let held = this.#heldOwnerAndVisibility;
+    if (held?.generation === generation) {
+      return held.value;
+    }
+    let permissions = await fetchRealmPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+    let value = {
+      ownerUserId: this.#ownerUserIdFrom(permissions),
+      visibility: visibilityFrom(permissions),
+    };
+    // A write that landed while this read was out may not be in it.
+    if (this.#permissionsGeneration === generation) {
+      this.#heldOwnerAndVisibility = { generation, value };
+    }
+    return value;
+  }
+
+  // Moves with every write to this realm's permissions: a `_permissions`
+  // PATCH here, and on a peer the `realm_index_updated` notification the
+  // PATCH sends, which reaches `clearRealmIndexCaches` (as does a reconnect of
+  // that notification's connection, for whatever it missed).
+  #permissionsGeneration = 0;
+  #heldOwnerAndVisibility:
+    | {
+        generation: number;
+        value: { ownerUserId: string; visibility: RealmVisibility };
+      }
+    | undefined;
+
+  #ownerUserIdFrom(permissions: RealmPermissions): string {
     let userIds = Object.entries(permissions)
       .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
       .map(([userId]) => userId);
@@ -23976,17 +24025,7 @@ export class Realm {
       this.#dbAdapter,
       new URL(this.url),
     );
-
-    let usernames = Object.keys(permissions).filter(
-      (username) => !username.startsWith('@realm/'),
-    );
-    if (usernames.includes('*')) {
-      return 'public';
-    } else if (usernames.includes('users') || usernames.length > 1) {
-      return 'shared';
-    } else {
-      return 'private';
-    }
+    return visibilityFrom(permissions);
   }
 
   #logRequestPerformance(
@@ -23999,6 +24038,19 @@ export class Realm {
         request.url
       } ${request.headers.get('Accept') ?? ''}`,
     );
+  }
+}
+
+function visibilityFrom(permissions: RealmPermissions): RealmVisibility {
+  let usernames = Object.keys(permissions).filter(
+    (username) => !username.startsWith('@realm/'),
+  );
+  if (usernames.includes('*')) {
+    return 'public';
+  } else if (usernames.includes('users') || usernames.length > 1) {
+    return 'shared';
+  } else {
+    return 'private';
   }
 }
 
