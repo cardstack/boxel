@@ -17,6 +17,7 @@ import {
 import { MAX_REMEMBERED_MS } from './gate.ts';
 import type { SearchPrincipal } from './policy-query.ts';
 import { lowerQueryOperation } from './query.ts';
+import { resolveTypeReferences } from '../query-v2/type-reference.ts';
 import {
   emitNamedQueryRefusalHidden,
   recordSafely,
@@ -405,11 +406,16 @@ async function resolveDeclaredQuery(
   let actor =
     context.principal?.kind === 'user' ? context.principal.user : undefined;
   let definition = await declaredQuery(core, on, operation);
-  let lowered = lowerQueryOperation(definition, {
-    ...(actor === undefined ? {} : { actor }),
-    ...(params === undefined ? {} : { params }),
-    realms: context.realms,
-  });
+  // The declaration's `$REALM/` modules name the realm that holds it, the
+  // realm resolving it, wherever the request searches.
+  let lowered = resolveTypeReferences(
+    lowerQueryOperation(definition, {
+      ...(actor === undefined ? {} : { actor }),
+      ...(params === undefined ? {} : { params }),
+      realms: context.realms,
+    }),
+    { realm: core.realmURL },
+  );
   let permitted = new Set(context.realms.map(ensureTrailingSlash));
   let realms = [
     ...new Set((lowered.realms ?? []).map(ensureTrailingSlash)),

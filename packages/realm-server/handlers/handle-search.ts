@@ -38,6 +38,8 @@ import {
   SearchBoundError,
   isDefinitionsUnavailableError,
   SearchRequestError,
+  resolveTypeReferences,
+  searchTypeReferenceContext,
   sanitizeLoggingCorrelationId,
   SupportedMimeType,
   X_BOXEL_CONSUMING_REALM_HEADER,
@@ -212,6 +214,33 @@ export default function handleSearch(opts: {
     let named = parseRealmsFromPayload(payload, (realm) =>
       registeredRealmURL(virtualNetwork, realm),
     );
+    // The request's type references, as the absolute code refs they name: a
+    // shorthand parsed, and a `$REALM/` module resolved against the one realm
+    // the request names, or refused when it names several. Resolved here,
+    // where the request arrives, so the policy lookup, the checks, the cache
+    // and the engine read one spelling (ADR 044 §1.3).
+    let typeReferences = {
+      ...searchTypeReferenceContext(named, (url) =>
+        virtualNetwork.unresolveURL(url),
+      ),
+      resolveCardId: (id: string) => virtualNetwork.toURLHref(id),
+    };
+    try {
+      payload = resolveTypeReferences(payload, typeReferences);
+    } catch (e) {
+      if (e instanceof InvalidQueryError) {
+        await respondToInvalidSearch(
+          ctxt,
+          new SearchRequestError(
+            'invalid-query',
+            `Invalid query: ${e.message}`,
+            e.code,
+          ),
+        );
+        return;
+      }
+      throw e;
+    }
     // The realms the request named, before a declaration narrows them. The
     // policy-scoped mark names these, so it never says which of them a
     // declaration searched.

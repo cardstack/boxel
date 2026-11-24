@@ -76,6 +76,7 @@ import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import { InvalidQueryError } from './invalid-query-error.ts';
+import { resolveTypeReferences } from './query-v2/type-reference.ts';
 import {
   realmEntryGrammar,
   type RealmEntryQuery,
@@ -20727,6 +20728,34 @@ export class Realm {
         body: JSON.stringify(body),
         init: {
           status,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    }
+
+    // The request's type references, as the absolute code refs they name:
+    // a shorthand parsed, a `$REALM/` module resolved against this realm.
+    // A `linkedFrom.card` likewise, as the URL the index keys the card by.
+    // Resolved here, where the request arrives, so everything after (the
+    // policy lookup, the checks, the cache, the engine) reads one spelling
+    // (ADR 044 §1.3).
+    try {
+      payload = resolveTypeReferences(payload, {
+        realm: this.url,
+        canonicalize: (url) => this.#virtualNetwork.unresolveURL(url),
+        resolveCardId: (id) => this.#virtualNetwork.toURLHref(id),
+      });
+    } catch (e: unknown) {
+      if (!(e instanceof InvalidQueryError)) {
+        throw e;
+      }
+      return createResponse({
+        body: JSON.stringify(
+          buildSearchErrorBody(`Invalid query: ${e.message}`, 400, e.code),
+        ),
+        init: {
+          status: 400,
           headers: { 'content-type': SupportedMimeType.CardJson },
         },
         requestContext,
