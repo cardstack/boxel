@@ -169,6 +169,16 @@ export async function discoverBoxelApi(
         `issuer, not ${issuer}, so the CLI won't sign in there.`,
     );
   }
+  // The CLI accepts an authorization response only with the issuer it
+  // discovered named in `iss` (RFC 9207). A server that doesn't say it sends
+  // `iss` is turned away here, before the browser opens, rather than after
+  // the user has allowed the sign-in.
+  if (body.authorization_response_iss_parameter_supported !== true) {
+    throw new OAuthNotOfferedError(
+      realmServerUrl,
+      "its authorization server doesn't say it names itself in its responses (RFC 9207 `iss`)",
+    );
+  }
   let methods = body.code_challenge_methods_supported;
   if (
     typeof body.authorization_endpoint !== 'string' ||

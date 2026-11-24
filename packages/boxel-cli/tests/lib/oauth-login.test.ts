@@ -43,6 +43,8 @@ interface ServerOptions {
   resource?: string;
   scopes?: string[];
   metadataIssuer?: string;
+  // Whether the authorization server says it names itself in its responses.
+  issSupported?: boolean;
   tokenBody?: Record<string, unknown>;
   tokenStatus?: number;
   userStatus?: number;
@@ -90,7 +92,9 @@ function realmServer(options: ServerOptions = {}) {
         token_endpoint: PROVIDER.tokenEndpoint,
         revocation_endpoint: PROVIDER.revocationEndpoint,
         code_challenge_methods_supported: ['S256'],
-        authorization_response_iss_parameter_supported: true,
+        ...(options.issSupported === false
+          ? {}
+          : { authorization_response_iss_parameter_supported: true }),
       });
     }
     if (url === PROVIDER.tokenEndpoint) {
@@ -218,6 +222,13 @@ describe('discoverBoxelApi', () => {
     await expect(
       discoverBoxelApi(REALM_SERVER_URL, fetchFn),
     ).rejects.toBeInstanceOf(OAuthNotOfferedError);
+  });
+
+  it("refuses an authorization server that doesn't say it sends iss, before a browser opens", async () => {
+    let { fetchFn } = realmServer({ issSupported: false });
+    await expect(discoverBoxelApi(REALM_SERVER_URL, fetchFn)).rejects.toThrow(
+      /doesn't say it names itself in its responses/,
+    );
   });
 
   it('refuses an authorization server whose metadata names another issuer', async () => {

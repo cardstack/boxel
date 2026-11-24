@@ -172,6 +172,45 @@ describe('boxel profile add --oauth', () => {
     );
   });
 
+  it("ends the new connection when the profile can't be saved", async () => {
+    let failing = new ProfileManager(tmpDir, {
+      renameFile: () => {
+        throw Object.assign(new Error('no space left on device'), {
+          code: 'ENOSPC',
+        });
+      },
+    });
+    let { deps: d } = deps({ tty: false });
+    let error = vi.spyOn(console, 'error');
+
+    await addOAuthProfile(failing, environment, d);
+
+    expect(d.revokeConnection).toHaveBeenCalledTimes(1);
+    expect(process.exitCode).toBe(1);
+    expect(error.mock.calls.flat().join('\n')).toMatch(
+      /Couldn't save the profile: no space left on device\. The new connection was ended/,
+    );
+    expect(new ProfileManager(tmpDir).getProfile(matrixId)).toBeUndefined();
+    expect(d.ensurePersonalRealmWithOAuth).not.toHaveBeenCalled();
+  });
+
+  it('says what a Matrix profile it replaces gives up', async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      matrixAuth(),
+      'Example Name',
+      environment.realmServerUrl,
+    );
+    let { deps: d } = deps({ tty: false });
+    let log = vi.spyOn(console, 'log');
+
+    await addOAuthProfile(manager, environment, d);
+
+    expect(log.mock.calls.flat().join('\n')).toMatch(
+      /This replaces a profile signed in with Matrix\. A profile signed in with OAuth can't yet run `boxel run-command`/,
+    );
+  });
+
   it('asks nothing without a TTY', async () => {
     let { prompt, deps: d } = deps({ tty: false });
 

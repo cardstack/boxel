@@ -548,6 +548,20 @@ function addProfileContext(deps: AddProfileDeps): AddProfileContext {
   };
 }
 
+// What a profile gives up when `--oauth` replaces its Matrix sign-in.
+const OAUTH_REPLACES_MATRIX =
+  "This replaces a profile signed in with Matrix. A profile signed in with OAuth can't yet run `boxel run-command` or `boxel capture`, " +
+  'sign a browser in with `boxel browse`, give out a token with getServerToken(), or list realms outside your workspaces ' +
+  '(`boxel realm list --hidden`). Run `boxel profile add` without --oauth to go back to Matrix if you need those.';
+
+function replacesMatrixProfile(
+  manager: ProfileManager,
+  matrixId: string,
+): boolean {
+  let existing = manager.getProfile(matrixId);
+  return Boolean(existing) && signInKind(existing!) === 'matrix';
+}
+
 // Returns false when the user declined to replace an existing profile.
 async function confirmOverwrite(
   manager: ProfileManager,
@@ -909,6 +923,9 @@ async function addProfileViaOAuth(
       console.log('Cancelled.');
       return { status: 'cancelled' };
     }
+    if (replacesMatrixProfile(manager, user.userId)) {
+      console.log(`\n${FG_YELLOW}${OAUTH_REPLACES_MATRIX}${RESET}`);
+    }
     if (!(await confirmOverwrite(manager, user.userId, ctx))) {
       await endUnused();
       return { status: 'cancelled' };
@@ -919,19 +936,35 @@ async function addProfileViaOAuth(
   }
 
   const previous = manager.getProfile(user.userId);
-  manager.addOAuthProfile(
-    user.userId,
-    {
-      issuer: provider.issuer,
-      tokenEndpoint: provider.tokenEndpoint,
-      ...(provider.revocationEndpoint
-        ? { revocationEndpoint: provider.revocationEndpoint }
-        : {}),
-      ...tokens,
-    },
-    { matrixUrl, realmServerUrl },
-    displayName,
-  );
+  try {
+    manager.addOAuthProfile(
+      user.userId,
+      {
+        issuer: provider.issuer,
+        tokenEndpoint: provider.tokenEndpoint,
+        ...(provider.revocationEndpoint
+          ? { revocationEndpoint: provider.revocationEndpoint }
+          : {}),
+        ...tokens,
+      },
+      { matrixUrl, realmServerUrl },
+      displayName,
+    );
+  } catch (err) {
+    // Nothing holds the new connection if the profile wasn't saved, so it is
+    // ended rather than left live until it expires.
+    await endUnused();
+    console.error(
+      `\n${FG_RED}Error:${RESET} Couldn't save the profile: ${
+        err instanceof Error ? err.message : String(err)
+      }. The new connection was ended, so nothing is left connected.`,
+    );
+    process.exitCode = 1;
+    return { status: 'cancelled' };
+  }
+  if (!ctx.interactive && previous && signInKind(previous) === 'matrix') {
+    console.log(`\n${FG_YELLOW}${OAUTH_REPLACES_MATRIX}${RESET}`);
+  }
 
   // What the profile held before is ended on the server that issued it,
   // rather than left live with nothing holding it: an earlier OAuth
