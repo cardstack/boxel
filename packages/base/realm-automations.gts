@@ -99,7 +99,7 @@ const PAUSED_BECAUSE: Record<string, string> = {
   'webhook-changed':
     'Boxel paused the automation because a trigger names an incoming webhook the payer didn’t agree to.',
   'webhook-owner-lost-access':
-    'Boxel paused the automation because the person who made a trigger’s incoming webhook can no longer edit this workspace.',
+    'Boxel paused the automation because the person who made a trigger’s incoming webhook is no longer a realm administrator.',
   'payer-lost-access':
     'Boxel paused the automation because the payer is no longer a realm administrator.',
   'realm-archived':

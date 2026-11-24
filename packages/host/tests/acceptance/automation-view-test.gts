@@ -1148,6 +1148,11 @@ module('Acceptance | automation view', function (hooks) {
         'A workspace administrator pointed a trigger at an incoming webhook the payer didn’t agree to, so Boxel paused the automation. Boxel runs nothing until a workspace administrator resumes the automation and agrees to the new webhook.',
       ],
       [
+        { state: 'paused', pauseReason: 'webhook-owner-lost-access' },
+        'Paused',
+        'The person who made a trigger’s incoming webhook is no longer a realm administrator, so Boxel paused the automation. Boxel runs nothing until a realm administrator does one of two things and then resumes the automation: points the trigger at one of this workspace’s webhooks, or makes the webhook’s maker a realm administrator again. The trigger’s editor marks the webhook as “Not one of this workspace’s webhooks”.',
+      ],
+      [
         { state: 'paused', pauseReason: 'payer-lost-access' },
         'Paused',
         'The payer is no longer a realm administrator, so Boxel paused the automation. Boxel runs nothing until a realm administrator resumes the automation and becomes the new payer.',
@@ -1796,6 +1801,10 @@ module('Acceptance | automation view', function (hooks) {
         }),
         run('hidden', { state: 'canceled', canceledByAPerson: true }),
         run('raised', { state: 'canceled', errorReason: 'caps-raised' }),
+        run('unowned', {
+          state: 'canceled',
+          errorReason: 'webhook-owner-lost-access',
+        }),
       ]);
       await openRuns();
       assert
@@ -1813,6 +1822,11 @@ module('Acceptance | automation view', function (hooks) {
       assert.ok(
         runText('raised').includes(
           'Boxel canceled the run when Boxel paused the automation: someone raised a limit above what the payer agreed to pay for.',
+        ),
+      );
+      assert.ok(
+        runText('unowned').includes(
+          'Boxel canceled the run when Boxel paused the automation: the person who made a trigger’s incoming webhook is no longer a realm administrator.',
         ),
       );
     });
