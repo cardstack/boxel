@@ -22,7 +22,10 @@ export { destinationCovers };
 import type { KeyReadiness } from './capability-wire.ts';
 import type { OperationCore } from './dispatch.ts';
 import type { ResolvedCodeRef } from '../code-ref.ts';
-import type { CheckAutomationKeyApprovals } from '../automation-key-approval.ts';
+import {
+  KEY_APPROVAL_REFUSAL_REASONS,
+  type CheckAutomationKeyApprovals,
+} from '../automation-key-approval.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
@@ -1188,6 +1191,21 @@ export interface CallApiRunMeter {
     refusal: OperationError,
     subject: CallApiUseSubject | undefined,
   ): Promise<void>;
+  // Ends the run on a slot refused for a key approval it lacks
+  // (`KEY_APPROVAL_REFUSAL_REASONS`), with the refusal's code, which counts
+  // toward no failure streak, and moves a run of the automation's triggers
+  // to *waiting for key approval* (ADR 039 §1.4, §1.7). A run that already
+  // ended is left as it is.
+  endOnKeyApproval(refusal: OperationError): Promise<void>;
+}
+
+// Whether a refusal is a key approval the run lacks: the automation's
+// approval ended or stopped matching, or the binding a slot needs is
+// missing, changed or suspended. None is the script's fault.
+export function endsRunOnKeyApproval(refusal: OperationError): boolean {
+  return (KEY_APPROVAL_REFUSAL_REASONS as readonly string[]).includes(
+    refusal.code,
+  );
 }
 
 // Whether a refusal ends an automation run: a credential the vendor no longer
@@ -1737,7 +1755,8 @@ export async function callApiOperation(
   // A refusal of the credential a run's slot is filled from, when only a
   // person can fix it, ends the run as well as the call: a script that went
   // on without the call would commit a batch that is missing what it was
-  // for. The run records the share or key it ended on.
+  // for. The run records the share or key it ended on. A slot refused for a
+  // key approval the run lacks ends it the same way, as admission would have.
   let refuseCredential = async (
     failure: OperationFailure,
     url?: string,
@@ -1747,6 +1766,8 @@ export async function callApiOperation(
         failure.error,
         subjectOfRefusal(failure) ?? subjectOfSlot(filled, failure.error),
       );
+    } else if (runMeter && endsRunOnKeyApproval(failure.error)) {
+      await runMeter.endOnKeyApproval(failure.error);
     }
     return refuse(failure.error, url);
   };

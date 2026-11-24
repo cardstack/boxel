@@ -410,8 +410,9 @@ async function attemptRun(
     return await refuse(unrunnable.reason, unrunnable.message);
   }
   // The automation's version as this attempt read its card and script, with
-  // the run's identity as payer: the realm compares each binding's
-  // automation approval with it at admission and at every call the run
+  // the run's identity as payer, and the operations the card declared: the
+  // realm admits those operations and compares each binding's automation
+  // approval with that version, at admission and at every call the run
   // makes, so an edit landing after these reads never decides what the run
   // is served by.
   let version = await versionKeyOf(
@@ -420,7 +421,15 @@ async function attemptRun(
       script: code,
     }),
   );
-  if (!(await recordAutomationRunVersion(dbAdapter, runId, attempt, version))) {
+  if (
+    !(await recordAutomationRunVersion(
+      dbAdapter,
+      runId,
+      attempt,
+      version,
+      declaration.declaration.operations,
+    ))
+  ) {
     log.info(`${tag} left alone: another attempt owns the run, or it ended`);
     return { state: 'left', reason: 'superseded' };
   }

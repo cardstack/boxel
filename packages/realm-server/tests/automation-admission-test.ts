@@ -44,6 +44,8 @@ import {
   readAutomationDeclaration,
 } from '@cardstack/runtime-common/automation-declaration';
 import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
+import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
+import { versionKeyOf } from '@cardstack/runtime-common/automation-key-approval';
 import { automationCreditsSince } from '@cardstack/runtime-common/automation-spend';
 import {
   getAutomation,
@@ -450,13 +452,31 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(result.state, 'complete');
     let row = await getAutomationRun(dbAdapter, run.id);
     assert.ok(row?.admittedAt, 'the admission is on the run row');
-    assert.true(
-      /^[0-9a-f]{64}$/.test(row?.version?.versionKey ?? ''),
-      'the version the attempt read is on the run row, for the realm to compare approvals with',
+    // Approvals record the version the realm computes from the card and the
+    // script it holds; the attempt's, from the script it fetched as source,
+    // has to be the same one, or no approval would ever serve a run.
+    let read = await readRunDeclaration({
+      dbAdapter,
+      definitionLookup: {} as CachingDefinitionLookup,
+      virtualNetwork,
+      automationId: automationId(CLEAN),
+    });
+    if (!read.ok) {
+      throw new Error(`the card doesn't read: ${read.message}`);
+    }
+    let realmVersion = await realm.automationVersionOf({
+      declaration: read.declaration,
+      payer: OWNER,
+    });
+    assert.deepEqual(
+      row?.version,
+      await versionKeyOf(realmVersion!),
+      'the attempt recorded the version the realm records approvals at',
     );
-    assert.strictEqual(
-      row?.version?.callApiCalls,
-      ROOMY_AUTOMATION_CAPS.callApiCalls,
+    assert.deepEqual(
+      row?.versionOperations,
+      read.declaration.operations,
+      'and the operations it read',
     );
     assert.strictEqual(calls.length, 1, 'the script ran');
     assert.deepEqual(await admissionLines(run.id), [

@@ -14,6 +14,7 @@ import {
   getAutomationRun,
   ri,
   rri,
+  SupportedMimeType,
   type AutomationRun,
   type DefinitionLookup,
   type Realm,
@@ -27,6 +28,7 @@ import {
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
 import { recordAutomationRunVersion } from '@cardstack/runtime-common/automation-runs';
+import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
 import {
   appendRunLog,
   type RunLogLine,
@@ -936,8 +938,8 @@ module(basename(import.meta.filename), function (hooks) {
 
     // A run of the automation at `path` acting as `actsAs`, whose attempt
     // read the automation at `version` (`<versionKey>.<callApiCalls>`, as
-    // switch-on answers it) and recorded it. `manual` makes it a Preview's
-    // or a Run now's.
+    // switch-on answers it), and the operations its card declares now, and
+    // recorded them. `manual` makes it a Preview's or a Run now's.
     async function runReading(
       path: string,
       actsAs: string,
@@ -956,12 +958,22 @@ module(basename(import.meta.filename), function (hooks) {
           { bind: [MANUAL_RUN_TRIGGER, run.id] },
         );
       }
+      let read = await readRunDeclaration({
+        dbAdapter,
+        definitionLookup: {} as DefinitionLookup,
+        virtualNetwork,
+        automationId: automationId(path),
+      });
+      if (!read.ok) {
+        throw new Error(`the card doesn't read: ${read.message}`);
+      }
       let [versionKey, callApiCalls] = version.split('.');
       let recorded = await recordAutomationRunVersion(
         dbAdapter,
         run.id,
         run.attempt!,
         { versionKey, callApiCalls: Number(callApiCalls) },
+        read.declaration.operations,
       );
       return { token, run: recorded! };
     }
@@ -1579,6 +1591,63 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
+      test('an operation an edit adds after the attempt’s read isn’t checked at that run’s admission', async function (assert) {
+        await switchOnApproved();
+        let { version } = await keyApprovalsOf(KEYED);
+        let { token } = await runReading(KEYED, OWNER, version);
+        await editCard(KEYED, (attributes) => {
+          attributes.operations = [
+            { targetType: INBOX, operation: 'list' },
+            { targetType: INBOX, operation: 'shared' },
+          ];
+        });
+        assert.deepEqual(await admit(token), {
+          refusal: null,
+          operations: 1,
+        });
+      });
+
+      test('a call refused for a key approval ends the run uncounted, and moves the automation to waiting for key approval', async function (assert) {
+        await switchOnApproved();
+        let { version } = await keyApprovalsOf(KEYED);
+        let { token, run } = await runReading(KEYED, OWNER, version);
+        await dbAdapter.execute(
+          `DELETE FROM automation_key_approvals WHERE automation_id = $1`,
+          { bind: [automationId(KEYED)] },
+        );
+        let response = (await realm.handleAutomation(
+          new Request(`${realm.url}_operations`, {
+            method: 'POST',
+            headers: {
+              Accept: SupportedMimeType.BoxelOperations,
+              'Content-Type': SupportedMimeType.BoxelOperations,
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              'boxel:operations': [
+                {
+                  op: 'invoke',
+                  'boxel:name': 'list',
+                  data: { meta: { adoptsFrom: INBOX } },
+                },
+              ],
+            }),
+          }),
+        ))!;
+        let body = JSON.parse(await response.text());
+        assert.strictEqual(
+          body.errors?.[0]?.code,
+          'key-approval-ended',
+          JSON.stringify(body),
+        );
+        let ended = await getAutomationRun(dbAdapter, run.id);
+        assert.strictEqual(ended?.state, 'error');
+        assert.strictEqual(ended?.errorReason, 'key-approval-ended');
+        let row = await getAutomation(dbAdapter, automationId(KEYED));
+        assert.strictEqual(row?.state, 'waiting-for-key-approval');
+        assert.strictEqual(row?.nextRun, null);
+      });
+
       test('an edit between the attempt’s read and the realm’s check is compared against the attempt’s read', async function (assert) {
         await switchOnApproved();
         let { version } = await keyApprovalsOf(KEYED);
@@ -1646,13 +1715,36 @@ module(basename(import.meta.filename), function (hooks) {
           });
         });
 
-        test('a Preview using a binding approved for interactive use is served', async function (assert) {
+        test('a Preview using a binding approved for interactive use is served, and counts against the share’s budget', async function (assert) {
           await dbAdapter.execute(
             `UPDATE key_bindings SET interactive = true WHERE share_id = $1`,
             { bind: [shareId] },
           );
+          await dbAdapter.execute(
+            `UPDATE key_shares SET daily_budget = 10 WHERE id = $1`,
+            { bind: [shareId] },
+          );
+          let budgetUsed = async () => {
+            let [row] = await dbAdapter.execute(
+              `SELECT count FROM rate_limit_budgets WHERE budget_key = $1 AND period = 'day'`,
+              { bind: [JSON.stringify(['key-limit', 'share', shareId])] },
+            );
+            return row ? Number(row.count) : 0;
+          };
           let { run } = await previewBy(WRITER);
           assert.strictEqual((await fillFor(run, 'shared')).length, 1);
+          assert.strictEqual(
+            await budgetUsed(),
+            1,
+            'a Preview served through interactive use counts as an interactive call',
+          );
+          let { run: owners } = await previewBy(OWNER);
+          await fillFor(owners, 'shared');
+          assert.strictEqual(
+            await budgetUsed(),
+            1,
+            'the key’s owner’s own Preview counts against nothing',
+          );
         });
 
         test('a Preview using an approval that matches the card with its starter as payer is served', async function (assert) {

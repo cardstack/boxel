@@ -16,7 +16,6 @@ import type {
 import { automationRef } from '@cardstack/runtime-common/automation-declaration';
 import {
   createAutomationRun,
-  recordAutomationRunVersion,
   startAutomationRunAttempt,
   type AutomationRun,
 } from '@cardstack/runtime-common/automation-runs';
@@ -4133,11 +4132,17 @@ async function approveRunForRealmBindings(
      ON CONFLICT (automation_id) DO NOTHING`,
     { bind: [run.automationId, run.realm, run.actsAs] },
   );
-  await recordAutomationRunVersion(
-    dbAdapter,
-    run.id,
-    run.attempt!,
-    TEST_RUN_VERSION,
+  // The run records a version but no operations, so its admission checks
+  // the operations its card declares as the realm reads them.
+  await dbAdapter.execute(
+    `UPDATE automation_runs SET version_key = $1, version_call_api_calls = $2 WHERE id = $3`,
+    {
+      bind: [
+        TEST_RUN_VERSION.versionKey,
+        TEST_RUN_VERSION.callApiCalls,
+        run.id,
+      ],
+    },
   );
   await dbAdapter.execute(
     `INSERT INTO automation_key_approvals (automation_id, binding_id, approved_by, version, version_key, call_api_calls)

@@ -13947,6 +13947,8 @@ export class Realm {
         virtualNetwork: this.#virtualNetwork,
         run,
         reportRunChange: (runId) => this.reportRunChange(runId),
+        reportAutomationChange: (automation) =>
+          this.reportAutomationChange(automation),
       });
       this.#callApiRunMeters.set(requestContext, meter);
     }
@@ -15270,7 +15272,8 @@ export class Realm {
   // triggers, or a batch's follow-up of one, needs each binding's approval for
   // this automation, matching the version the run's attempt read and recorded
   // on its row (ADR 039 §1.7), and a Preview or a Run now a key its identity
-  // owns, an interactive binding or such an approval. A refused credential
+  // owns, an interactive binding or such an approval. The operations checked
+  // are those the attempt recorded with that version. A refused credential
   // that ends the run is recorded on its row.
   private async admitRunOperations(
     _request: Request,
@@ -15323,9 +15326,15 @@ export class Realm {
         refusal: { code: 'not-an-automation', detail: limits.message },
       });
     }
+    // The operations the attempt read, with the version it read: an edit
+    // landing after the attempt's read neither adds an operation the run
+    // never read nor drops one it did.
+    let operations =
+      (await getAutomationRun(this.#dbAdapter, call.runId))
+        ?.versionOperations ?? limits.operations;
     let refusal = await this.#declaredOperationRefusal(
       admit,
-      limits.operations,
+      operations,
       call.actsAs,
       call.runId,
       async (refused) => {
@@ -15346,7 +15355,7 @@ export class Realm {
     if (refusal) {
       return answer({ refusal });
     }
-    return answer({ refusal: null, operations: limits.operations.length });
+    return answer({ refusal: null, operations: operations.length });
   }
 
   // Checks each operation the automation declares for the key approvals a

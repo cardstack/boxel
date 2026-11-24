@@ -33,6 +33,7 @@ import {
   jobOfRun,
   msBetween,
 } from './automation-run-telemetry.ts';
+import type { AutomationOperationDeclaration } from './automation-declaration.ts';
 import type { AutomationVersionKey } from './automation-key-approval.ts';
 import type { DBAdapter } from './db.ts';
 import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
@@ -92,6 +93,9 @@ export interface AutomationRun extends AutomationRunCounts {
   // binding's automation approval is compared with, at the run's admission
   // and at each of its calls. Null until that attempt records it.
   version: AutomationVersionKey | null;
+  // The operations the automation declared as that attempt read it, which
+  // the realm's admission checks. Null until that attempt records them.
+  versionOperations: AutomationOperationDeclaration[] | null;
   state: AutomationRunState;
   // For an error, a code such as `script-error`. A run canceled by a pause no
   // person asked for carries that pause's reason here instead.
@@ -386,7 +390,7 @@ export async function startAutomationRunAttempt(
         await clearRunMilestones(txQuery, id);
         if (started.admitted_at != null || started.version_key != null) {
           let [readmitting] = await txQuery([
-            'UPDATE automation_runs SET admitted_at = NULL, version_key = NULL, version_call_api_calls = NULL WHERE id =',
+            'UPDATE automation_runs SET admitted_at = NULL, version_key = NULL, version_call_api_calls = NULL, version_operations = NULL WHERE id =',
             param(id),
             'RETURNING *',
           ]);
@@ -434,20 +438,24 @@ export async function recordAutomationRunScript(
   ]);
 }
 
-// Records the version of its automation `attempt` read, before it asks the
-// realm to admit the run. Refused unless the run is running and `attempt`
-// owns it.
+// Records the version of its automation `attempt` read, and the operations
+// it declared, before it asks the realm to admit the run. Refused unless the
+// run is running and `attempt` owns it.
 export async function recordAutomationRunVersion(
   dbAdapter: DBAdapter,
   id: string,
   attempt: number,
   version: AutomationVersionKey,
+  operations: readonly AutomationOperationDeclaration[],
 ): Promise<AutomationRun | undefined> {
   return await updateOwned(dbAdapter, id, attempt, [
     'version_key =',
     param(version.versionKey),
     ', version_call_api_calls =',
     param(version.callApiCalls),
+    ', version_operations =',
+    param(JSON.stringify(operations)),
+    '::jsonb',
   ]);
 }
 
@@ -1345,6 +1353,9 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
             versionKey: String(row.version_key),
             callApiCalls: Number(row.version_call_api_calls),
           },
+    versionOperations: jsonColumn<AutomationOperationDeclaration[]>(
+      row.version_operations,
+    ),
     state: row.state as AutomationRunState,
     errorReason: (row.error_reason as string | null) ?? null,
     errorMessage: (row.error_message as string | null) ?? null,
@@ -1369,6 +1380,14 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     committedAt: iso(row.committed_at),
     finishedAt: iso(row.finished_at),
   };
+}
+
+// A jsonb column as the driver hands it back: parsed, or as its text.
+function jsonColumn<T>(value: PgPrimitive | undefined): T | null {
+  if (value == null) {
+    return null;
+  }
+  return (typeof value === 'string' ? JSON.parse(value) : value) as T;
 }
 
 function credentialRefusalFromRow(

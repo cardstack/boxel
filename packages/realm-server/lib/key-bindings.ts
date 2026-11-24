@@ -129,7 +129,9 @@ import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declara
 // - **Within the owner's limits.** An interactive call counts against the
 //   limits of the share or key filling each slot, and is refused
 //   `rate-limited`, `over-budget` or `rate-limit-unavailable` before anything
-//   is opened (`key-limits.ts`). An automation's call doesn't count.
+//   is opened (`key-limits.ts`). An automation's call doesn't count, except
+//   a Preview's or a Run now's slot served only through interactive
+//   approval, which counts as the interactive call it stands in for.
 // - **Approved only on the secure origin.** Approving and revoking take a
 //   session signed in on the secure origin, from the secure window or the CLI
 //   (`handle-key-bindings.ts`), never the app page's session, which card code
@@ -1492,14 +1494,14 @@ function checkSlot(
   // for its automation as the run read it. A Preview or a Run now acts as the
   // person who started it: a key they own (a `{{userKey}}` binding is always
   // the caller's own), a binding approved for interactive use, which they
-  // could already invoke from a card, or an approval with them as payer.
+  // could already invoke from a card and which counts against the key's
+  // limits as such a call does (`servedAsInteractive`), or an approval with
+  // them as payer.
   if (lookup.run && !binding.run_approved) {
     if (!lookup.run.manual) {
       return { slot, binding, refused: 'key-approval-ended' };
     }
-    let ownsKey =
-      binding.key_id != null || binding.share_key_owner === lookup.caller;
-    if (!ownsKey && !binding.interactive) {
+    if (!ownsKey(lookup, binding) && !binding.interactive) {
       return { slot, binding, refused: 'interactive-use-not-approved' };
     }
   }
@@ -1524,6 +1526,31 @@ function checkSlot(
   return { slot, binding, probe, keyProbe };
 }
 
+// Whether the caller owns the key a binding sends: a `{{userKey}}` binding
+// is always the caller's own, and a share's key is when they own it.
+function ownsKey(
+  lookup: Pick<BindingLookup, 'caller'>,
+  binding: Pick<CheckedSlotBinding, 'key_id' | 'share_key_owner'>,
+): boolean {
+  return binding.key_id != null || binding.share_key_owner === lookup.caller;
+}
+
+// Whether a Preview's or a Run now's slot is served only because its binding
+// is approved for interactive use: the person who started it doesn't own the
+// key, and no automation approval names them as payer. Such a use counts
+// against the limits of the share or key filling the slot, as a call from a
+// card does.
+function servedAsInteractive(
+  lookup: Pick<BindingLookup, 'caller' | 'run'>,
+  binding: CheckedSlotBinding,
+): boolean {
+  return (
+    Boolean(lookup.run?.manual) &&
+    !binding.run_approved &&
+    !ownsKey(lookup, binding)
+  );
+}
+
 // The binding for each of the request's slots, checked (`checkSlots`). A
 // binding whose request has changed goes to `needs-reapproval` here, and its
 // owner gets one notice, unless the call came from a published realm
@@ -1537,7 +1564,8 @@ function checkSlot(
 // (`claimProbe: true`) that arrived interactively is counted against the
 // limits of the shares and keys filling its slots once every slot has passed
 // its checks, and before any probe is claimed, so a call refused for a limit
-// uses up no probe.
+// uses up no probe; so is a Preview's or a Run now's slot served only
+// through interactive approval (`servedAsInteractive`).
 async function checkedBindings(
   dbAdapter: DBAdapter,
   lookup: CallApiSlotLookup & { run?: RunApproval },
@@ -1712,13 +1740,21 @@ async function checkedBindings(
     }
     checked.push({ slot, binding: check.binding, probe, keyProbe });
   }
-  if (rejection.claimProbe && lookup.mode === 'interactive') {
+  // A Preview's or a Run now's slots served only through interactive
+  // approval count as an interactive call of those shares and keys.
+  let interactiveSubjects =
+    lookup.mode === 'interactive'
+      ? checked.map(({ binding }) => limitSubjectOf(binding))
+      : checked
+          .filter(({ binding }) => servedAsInteractive(lookup, binding))
+          .map(({ binding }) => limitSubjectOf(binding));
+  if (rejection.claimProbe && interactiveSubjects.length > 0) {
     await chargeInteractiveCall(dbAdapter, {
       realmURL: lookup.realmURL,
       operation: lookup.operation,
       caller: lookup.caller,
       ...(lookup.anonymous ? { anonymous: lookup.anonymous } : {}),
-      subjects: checked.map(({ binding }) => limitSubjectOf(binding)),
+      subjects: interactiveSubjects,
     });
   }
   if (rejection.claimProbe && (rejected.size > 0 || rejectedKeys.size > 0)) {
