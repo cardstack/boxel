@@ -36,6 +36,8 @@ module('Acceptance | dashboard state', function (hooks) {
 
     await mockMatrixUtils.setDashboardStateFromAnotherDevice({
       onboardingDismissed: 'yes',
+      onboardingOpen: 'yes',
+      onboardingMinimized: 1,
       agent: 'clippy',
       agentSetup: { claude: 2, clippy: 5, codex: -1, grok: 1.5 },
     });

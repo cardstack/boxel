@@ -195,6 +195,12 @@ const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 // How long logout waits for pending card saves before signing out anyway.
 const LOGOUT_SAVE_FLUSH_TIMEOUT_MS = 5_000;
 
+// Whether Get started's steps are open, and if so minimized.
+type GetStartedSteps = Pick<
+  AppBoxelDashboardContent,
+  'onboardingOpen' | 'onboardingMinimized'
+>;
+
 const realmEventsLogger = logger('realm:events');
 
 // A sign-in is the stretch of app work `settled()` is most likely to resolve in
@@ -288,6 +294,7 @@ export default class MatrixService extends Service {
   @tracked private pendingDashboardAgentPick:
     | { agent: DashboardAgent }
     | undefined;
+  private pendingGetStartedSteps: GetStartedSteps | undefined;
 
   profile = getMatrixProfile(this, () => this.userId);
 
@@ -1351,6 +1358,43 @@ export default class MatrixService extends Service {
   // every picker shows it at once rather than snapping back meanwhile.
   get dashboardAgent(): DashboardAgent | undefined {
     return this.pendingDashboardAgentPick?.agent ?? this.dashboardState.agent;
+  }
+
+  // Get started's steps as the dashboard should restore them: this tab's
+  // latest choice until its save lands, so a dashboard rendered meanwhile
+  // doesn't show the stored state from before the click.
+  get getStartedSteps(): GetStartedSteps {
+    return (
+      this.pendingGetStartedSteps ?? {
+        onboardingOpen: this.dashboardState.onboardingOpen,
+        onboardingMinimized: this.dashboardState.onboardingMinimized,
+      }
+    );
+  }
+
+  // A dismissal already stored when this write reads the stored state wins,
+  // so a choice saved behind it doesn't bring the steps back open after an
+  // undo. Account data has no compare-and-set, so another tab's dismissal
+  // landing between that read and this write can still be overwritten.
+  public async saveGetStartedSteps(steps: GetStartedSteps): Promise<void> {
+    let pick = { ...steps };
+    this.pendingGetStartedSteps = pick;
+    try {
+      await this.updateDashboardState((stored) =>
+        stored.onboardingDismissed
+          ? { onboardingOpen: undefined, onboardingMinimized: undefined }
+          : pick,
+      );
+    } finally {
+      if (this.pendingGetStartedSteps === pick) {
+        this.pendingGetStartedSteps = undefined;
+      }
+    }
+  }
+
+  // Dismissing closes the steps, whatever choice is still saving.
+  public dropPendingGetStartedSteps() {
+    this.pendingGetStartedSteps = undefined;
   }
 
   // Only the latest pick clears the pending one, so an earlier pick's save
@@ -2759,6 +2803,7 @@ export default class MatrixService extends Service {
     this._client = this.#matrixSDK?.createClient({ baseUrl: matrixURL });
     this.dashboardState = {};
     this.pendingDashboardAgentPick = undefined;
+    this.pendingGetStartedSteps = undefined;
     this.dashboardSession++;
     this.dashboardWrites = Promise.resolve();
     this.dashboardEchoesPending = [];

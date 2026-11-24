@@ -116,6 +116,12 @@ export class MockUtils {
     return this.testState.opts?.dashboardState;
   };
 
+  // Replaces the dashboard key on the server without syncing it, as login
+  // then reads it.
+  setStoredDashboardState = (content: Record<string, unknown>) => {
+    this.testState.opts!.dashboardState = content;
+  };
+
   // Makes the server's next reads of the dashboard key fail.
   setDashboardStateReadError = (error: Error) => {
     this.testState.opts!.dashboardStateReadError = error;
