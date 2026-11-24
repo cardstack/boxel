@@ -790,11 +790,11 @@ module(basename(import.meta.filename), function (hooks) {
       let status = attributesOf(
         (await statusOf(ADMIN, ['read', 'write'])).body,
       );
-      // Without a declaration the route reports each trigger the row has
-      // counted. Switch-on records every trigger the card declared, and an
-      // edit that fails to read leaves the row as it was, so all four
-      // triggers report, with only their run counts. The row keeps its
-      // labels in jsonb's key order, so they are compared by label.
+      // Without a declaration the route reports each trigger of the card's
+      // last readable edit. Switch-on records every trigger the card
+      // declared, and an edit that fails to read leaves the row as it was,
+      // so all four triggers report, with only their run counts. The row
+      // keeps its labels in jsonb's key order, so they are compared by label.
       let [row] = await query(dbAdapter, [
         'SELECT trigger_runs FROM automations WHERE automation_id =',
         param(automationURL()),
@@ -818,6 +818,8 @@ module(basename(import.meta.filename), function (hooks) {
       await writeAutomation();
       await switchOn();
       await setRuns('hourly', 7);
+      // Spent, so not live, yet still declared.
+      await setRuns('nightly', 30);
       function cardWith(triggers: Record<string, unknown>[]) {
         return JSON.stringify({
           data: {

@@ -1244,9 +1244,11 @@ async function toKeyApprovalWait(
 // - `recomputed`: the next run, *done* and the trigger cursors follow the
 //   card as indexed, or, for an automation paused with
 //   `invalid-declaration`, its problems follow the card.
-// - `unchanged`: the row stays as it was. It is paused or waiting for key
-//   approval, or the card failed to index or doesn't read as a declaration,
-//   so there is nothing to schedule from until a later index reads it.
+// - `unchanged`: the schedule stays as it was. It is paused or waiting for
+//   key approval, or the card failed to index or doesn't read as a
+//   declaration, so there is nothing to schedule from until a later index
+//   reads it. A card that reads still has the row record which labels it
+//   declares (`withDeclaredLabels`).
 export type AutomationSync =
   | {
       kind: 'removed';
@@ -1650,10 +1652,10 @@ export function recordTriggers(
 // Records which labels the card declares, for a row that keeps its schedule
 // through an edit (paused, or waiting for key approval). A label the row has
 // a run state for keeps its cursor, `timing` and `live`. A label the row
-// lacks gets `{ runs: 0, live: false }`: no cursor, so the schedule reads it
-// as it reads an absent label, and not live, so the edit that starts the
-// schedule again starts it afresh. Returns undefined when the row already
-// records the card's labels.
+// lacks gets `{ runs: 0, live: false, declared: true }`: no cursor, so the
+// schedule reads it as it reads an absent label. Whatever ends the pause or
+// the wait (`startSchedule`, `restartSchedule`) starts it at that moment.
+// Returns undefined when the row already records the card's labels.
 export function withDeclaredLabels(
   triggerRuns: Record<string, AutomationTriggerRuns>,
   triggers: AutomationTriggerDeclaration[],
