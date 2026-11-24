@@ -63,9 +63,9 @@ search routes read a request as a realm-authority principal only when its
 session carries that claim. `x-boxel-during-prerender`, which a render tab
 marks every request with whatever session it holds, never makes one: it changes
 how a search is served (cache-only definitions, no included closure, and a
-named query's unshareable formats served whole), never who is asking, and an
-OAuth caller's request is served as a live one whatever it carries (ADR 021
-§1.6). Such a principal's searches
+named query's unshareable formats served whole), never who is asking. An
+OAuth caller's search is never served a named query's unshareable formats
+whole, whatever it carries (ADR 021 §1.6). Such a principal's searches
 find what the realm ACL grants it and nothing more — no policy scopes them, and
 `policyQueryScope` throws `RealmAuthorityPolicyScopeError` if handed one. The
 claim is read on the search paths only: a single-card read is judged by the
@@ -97,7 +97,8 @@ another server that way. Every other realm-server route refuses it on its signat
 `_realm-auth`, `_server-session` or a key route. Like an access token, it is
 never asked about `isSessionRevoked`: disconnecting the app or revoking the
 user's OAuth grants ends it on its next call. Its tab holds it in memory only,
-on an affinity of its own (`<key>#oauth:...`).
+on an affinity of its own (`<key>#oauth:...`, `isOAuthTabAffinityKey`), and the
+page pool never moves such a tab to another affinity, or gives it another's.
 
 A **run token** is what an automation run's calls carry (ADR 026;
 `packages/runtime-common/run-token.ts` and `packages/realm-server/lib/run-token.ts`).

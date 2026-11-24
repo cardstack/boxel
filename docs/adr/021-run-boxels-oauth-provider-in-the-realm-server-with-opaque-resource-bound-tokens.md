@@ -18,6 +18,9 @@ scope:
   - packages/realm-server/handlers/handle-run-command.ts
   - packages/realm-server/handlers/handle-capture.ts
   - packages/runtime-common/tasks/capture.ts
+  - packages/realm-server/prerender/affinity.ts
+  - packages/realm-server/prerender/page-pool.ts
+  - packages/realm-server/prerender/render-runner.ts
   - packages/postgres/migrations/*oauth-provider*
   - packages/secure-origin/src/shell/pages.js
   - packages/secure-origin/src/shell/authorize/**
@@ -220,8 +223,10 @@ request with no credential lacks. A tab token for work that only reads, such as
 a capture, MUST allow reading only, whatever its grant allows. A realm-server
 route MUST refuse a tab token, except the federated reads a tab makes through
 `multiRealmAuthorization`. The tab MUST hold nothing but its tab tokens,
-and those only in memory, and MUST NOT share a browser context with a render
-that holds the user's sessions.
+and those only in memory, and MUST NOT share a browser context with any other
+render's tab. Its tab, page and browser context MUST NOT pass to another
+render, nor be taken from one, even when the prerender pool has no fresh tab
+to give.
 
 ### 1.6. What an OAuth token never reaches
 
@@ -243,9 +248,8 @@ refused. A policy grant that reads the card it
 guards gives that part of the decision to anyone who can write the card, OAuth
 tokens included.
 
-An OAuth caller's request MUST be served as a live caller's, whatever it says
-about being a render: a named query's unshareable formats MUST be withheld
-from it.
+A named query's unshareable formats MUST be withheld from an OAuth caller's
+search, whatever it says about being a render.
 
 ### 1.7. Consent
 

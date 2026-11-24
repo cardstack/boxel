@@ -183,6 +183,21 @@ export function isRunAffinityKey(affinityKey: string): boolean {
   );
 }
 
+// Whether an affinity key is the tab of a command or capture an OAuth app
+// started, on a realm or a user affinity. Code the app chose runs there, so
+// the pool never moves such a tab, with its page and BrowserContext, to
+// another affinity, nor gives it one of another affinity's (ADR 021 §1.5): a
+// timer the app's code left in the page would read what the next render
+// hands it, and a tab the app's command takes still holds what an earlier
+// render left.
+export function isOAuthTabAffinityKey(affinityKey: string): boolean {
+  return (
+    fromAffinityKey(affinityKey)?.session?.startsWith(
+      OAUTH_TAB_SESSION_PREFIX,
+    ) === true
+  );
+}
+
 export function fromAffinityKey(
   affinityKey: string,
 ): (AffinityArgs & { session?: string }) | undefined {

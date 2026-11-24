@@ -5,6 +5,7 @@ import { PagePool } from '../prerender/page-pool.ts';
 import {
   fromAffinityKey,
   isAffinityOfRealm,
+  isOAuthTabAffinityKey,
   isRealmAuthorityAffinityKey,
   isRunAffinityKey,
   realmAffinityKeyOf,
@@ -309,6 +310,12 @@ module(basename(import.meta.filename), function (hooks) {
         affinityValue: USER_1,
         session: 'oauth:grant-1',
       });
+      assert.true(isOAuthTabAffinityKey(key));
+      assert.true(isOAuthTabAffinityKey(userKey));
+      for (let auth of [realmAuthorityAuth, user1Auth, anonymousAuth]) {
+        assert.false(isOAuthTabAffinityKey(realmKeyFor(auth)));
+      }
+      assert.false(isOAuthTabAffinityKey(realmKeyFor(runAuth(USER_1))));
     });
 
     test('a tab token beside any other session is unreadable', function (assert) {
@@ -345,19 +352,74 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
-  test("a command an OAuth app starts never gets the BrowserContext of the user's own commands", async function (assert) {
-    let pool = makePool({ maxPages: 3, browserManager: makeBrowserStub() });
+  // With no standby left and the pool at its ceiling, a render takes an idle
+  // tab of another affinity (see the steal tests below). An OAuth app's tab is
+  // never on either side of that: its page may hold a timer the app's code
+  // left, and a tab it took would hold what another render left.
+  test("a render never takes an OAuth app's idle tab, even with no standby left", async function (assert) {
+    let pool = makePool({
+      maxPages: 2,
+      browserManager: makeBrowserStub(),
+      disableStandbyRefill: true,
+    });
     await pool.warmStandbys();
-    let contexts = new Set();
-    for (let auth of [user1Auth, oauthTabAuth(USER_1)]) {
-      let lease = await pool.getPage(
-        toAffinityKey({ affinityType: 'user', affinityValue: USER_1, auth }),
-        'command',
+    let oauthKey = realmKeyFor(oauthTabAuth(USER_1));
+    let busy = await pool.getPage('A');
+    let oauthTab = await pool.getPage(oauthKey);
+    oauthTab.release();
+
+    // With only the OAuth app's idle tab to take, the user's render waits
+    // for a tab it may take rather than taking that one.
+    let userTook: string | undefined;
+    let userLease = pool.getPage(realmKeyFor(user1Auth)).then((lease) => {
+      userTook = lease.pageId;
+      return lease;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.strictEqual(userTook, undefined, "the user's render is waiting");
+    assert.true(
+      pool.getWarmAffinities().includes(oauthKey),
+      "the OAuth app's tab is still its own",
+    );
+
+    busy.release();
+    let user = await userLease;
+    assert.strictEqual(
+      user.pageId,
+      busy.pageId,
+      'it takes the idle tab it may take once there is one',
+    );
+    assert.notStrictEqual(user.pageId, oauthTab.pageId);
+    user.release();
+  });
+
+  test("an OAuth app's render never takes another affinity's idle tab, even with no standby left", async function (assert) {
+    let pool = makePool({
+      maxPages: 2,
+      browserManager: makeBrowserStub(),
+      disableStandbyRefill: true,
+    });
+    await pool.warmStandbys();
+    let userKey = realmKeyFor(user1Auth);
+    let busy = await pool.getPage('A');
+    let userTab = await pool.getPage(userKey);
+    userTab.release();
+
+    try {
+      let oauth = await pool.getPage(realmKeyFor(oauthTabAuth(USER_1)));
+      oauth.release();
+      assert.ok(false, `the OAuth app's render took tab ${oauth.pageId}`);
+    } catch (e: any) {
+      assert.true(
+        /No standby page available/.test(e.message),
+        `the OAuth app's render finds no tab it may take: ${e.message}`,
       );
-      contexts.add((lease.page as any).browserContext());
-      lease.release();
     }
-    assert.strictEqual(contexts.size, 2, 'two BrowserContexts');
+    assert.true(
+      pool.getWarmAffinities().includes(userKey),
+      "the user's tab is still the user's",
+    );
+    busy.release();
   });
 
   test("renders of one realm by its own indexing, another realm's owner, two users and an anonymous reader each get a BrowserContext of their own", async function (assert) {

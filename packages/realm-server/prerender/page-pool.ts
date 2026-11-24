@@ -6,7 +6,11 @@ import {
 } from '@cardstack/runtime-common';
 import type { CDPSession, ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
-import { isRunAffinityKey, realmAffinityKeyOf } from './affinity.ts';
+import {
+  isOAuthTabAffinityKey,
+  isRunAffinityKey,
+  realmAffinityKeyOf,
+} from './affinity.ts';
 import { raceNodeTimeout } from './node-race.ts';
 import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
@@ -3325,9 +3329,16 @@ export class PagePool {
   ): Promise<
     { entry: PoolEntry; reused: boolean; releaseTab: () => void } | undefined
   > {
+    // An OAuth app's tab never changes hands either way: see
+    // `isOAuthTabAffinityKey`. Such a render waits for a fresh standby, whose
+    // BrowserContext is new, or fails as any render with no tab does.
+    if (isOAuthTabAffinityKey(affinityKey)) {
+      return undefined;
+    }
     let crossAffinityEntries: PoolEntry[] = [];
     for (let [assignedAffinity, entries] of this.#affinityPages.entries()) {
       if (assignedAffinity === affinityKey) continue;
+      if (isOAuthTabAffinityKey(assignedAffinity)) continue;
       for (let entry of entries) {
         if (entry.closing || entry.transitioning) continue;
         if (entry.queue.pendingCount > maxDonorPending) continue;
@@ -3491,10 +3502,16 @@ export class PagePool {
     if (opts?.standbyOnly) {
       return undefined;
     }
+    // An OAuth app's tab never changes hands either way: see
+    // `isOAuthTabAffinityKey`.
+    if (isOAuthTabAffinityKey(affinityKey)) {
+      return undefined;
+    }
 
     let idleCandidates: PoolEntry[] = [];
     for (let [assignedAffinity, entries] of this.#affinityPages.entries()) {
       if (assignedAffinity === affinityKey) continue;
+      if (isOAuthTabAffinityKey(assignedAffinity)) continue;
       for (let entry of entries) {
         if (entry.closing) continue;
         if (this.#contextHostsAnotherTab(entry)) continue;
