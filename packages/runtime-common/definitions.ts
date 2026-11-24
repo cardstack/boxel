@@ -9,7 +9,11 @@ import {
 } from './index.ts';
 import type { OperationDefinition } from './card-operations/types.ts';
 import type { SerializerName } from './serializers/index.ts';
-import type { FieldSearchOption } from './search-intent.ts';
+import type {
+  CardSearchIntent,
+  FieldSearchOption,
+  IndexFieldDeclarations,
+} from './search-intent.ts';
 import type { FieldType, Searchable } from '@cardstack/base/card-api';
 import type { BaseDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -36,6 +40,9 @@ export interface FieldDefinition {
   // type's `searchDefaults`; omitted when neither says anything. The query
   // engine reads `rank`, `facet` and `patterns` from it.
   search?: FieldSearchOption;
+  // A linked log's line type (`linksTo(JSONLFile, { of })`), for readers
+  // that type a log's lines without loading the card's module.
+  lineOf?: CodeRef;
 }
 
 // Which of the three `BaseDef` families a definition describes. A card has its
@@ -89,6 +96,17 @@ export interface Definition {
   // Omitted when the type declares no operations, which keeps the entry for
   // every other type unchanged.
   operations?: { [operationName: string]: OperationDefinition };
+  // The type's `static searchDefaults`, merged up its ancestry; omitted when
+  // no class in it declares one.
+  search?: CardSearchIntent;
+  // A FieldDef's `static facetValue`: the subfield a compound field declared
+  // `search: { facet: true }` counts by when a facet names the compound
+  // itself (facet-declarations.ts). Omitted when the type names none.
+  facetValue?: string;
+  // A card or file type's `static indexFields` (base's declarations of the
+  // index columns every row has: its type, realm, created and modified
+  // times), with their `search` options. Omitted for a field def.
+  indexFields?: IndexFieldDeclarations;
 }
 
 // Stable JSON serialization for content-keyed interning. Keys sorted at
