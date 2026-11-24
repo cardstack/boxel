@@ -84,6 +84,7 @@ import {
   cancelAutomationRunIn,
   cancelUnfinishedAutomationRuns,
   getAutomationRun,
+  insertOrFindAutomationRun,
   logAutomationRunEnded,
   type AutomationRun,
 } from './automation-runs.ts';
@@ -134,6 +135,10 @@ export type AutomationState =
 // - `webhook-changed`: its card names an incoming webhook the snapshot
 //   doesn't, either a trigger pointed at another webhook or a new webhook
 //   trigger. Deliveries to that webhook would start runs the payer pays for.
+// - `webhook-owner-lost-access`: a delivery arrived at a webhook one of its
+//   triggers names, and the person who made that webhook is no longer a
+//   direct writer of its realm (see `takeWebhookDelivery`). The realm can't
+//   use the webhook, so the delivery starts no run.
 // - `realm-archived`: its realm was archived.
 // - `repeated-failures`: its own runs failed `AUTOMATION_FAILURES_BEFORE_PAUSE`
 //   times in a row (see `pauseAfterRepeatedFailures`).
@@ -148,6 +153,7 @@ export type AutomationPauseReason =
   | 'caps-raised'
   | 'batched-ai-enabled'
   | 'webhook-changed'
+  | 'webhook-owner-lost-access'
   | 'realm-archived'
   | 'repeated-failures'
   | 'invalid-declaration';
@@ -1041,6 +1047,132 @@ export async function pauseAfterRepeatedFailures(
       ),
       paused: true,
     };
+  });
+}
+
+// What a webhook delivery did to one automation (`takeWebhookDelivery`):
+//
+// - `started`: the automation takes the delivery. `runs` holds a run for each
+//   of the triggers named, acting as the payer, with the delivery's id as its
+//   slot. A run is `created` by this call, or found: a redelivery finds the
+//   run the first delivery made, whatever its state.
+// - `paused`: the webhook's owner is no longer a direct writer of the
+//   automation's realm, so the automation paused with
+//   `webhook-owner-lost-access` and the delivery starts no run.
+// - `skipped`: the automation takes no delivery. It isn't switched
+//   on (`not-switched-on`); it is paused, waiting for key approval or *done*
+//   (`not-active`); or its card asks for more than the caps snapshot agreed
+//   to (`agreement-exceeded`), which the card's index hook pauses it for.
+export type WebhookDeliveryTaken =
+  | {
+      kind: 'started';
+      automation: AutomationRow;
+      runs: { run: AutomationRun; created: boolean }[];
+    }
+  | { kind: 'paused'; automation: AutomationRow }
+  | {
+      kind: 'skipped';
+      reason: 'not-switched-on' | 'not-active' | 'agreement-exceeded';
+      automation: AutomationRow | undefined;
+    };
+
+// Takes a delivery to an incoming webhook, which `owner` made, for the
+// automation, whose card names the webhook in the triggers labeled
+// `triggers`. Only an automation that is active or *waiting for credits*,
+// and whose card asks for no more than its caps snapshot agreed to, takes a
+// delivery; the run's admission then decides whether the run goes ahead, as
+// it does for a scheduled run.
+//
+// The webhook must be one the realm can use, which switch-on and resume
+// check (`unusableWebhookProblems`) and which can stop being true while the
+// automation is on: the owner can lose write. So each delivery asks again.
+// An owner who is no longer a direct writer pauses the automation with
+// `webhook-owner-lost-access`, cancelling its unfinished runs as any pause
+// does, and starts nothing. A direct writer resumes it once the trigger names
+// a webhook the realm can use.
+//
+// The owner's permission row is locked before the automation's row, the
+// order every change here takes them in, so an owner who loses write
+// meanwhile waits for this delivery to commit, and the next one pauses.
+export async function takeWebhookDelivery(
+  dbAdapter: DBAdapter,
+  {
+    automationId,
+    owner,
+    declaration,
+    triggers,
+    deliveryId,
+  }: {
+    automationId: RealmResourceIdentifier;
+    // Who made the incoming webhook the delivery came to.
+    owner: string;
+    // The automation's card, as the caller read it.
+    declaration: Pick<AutomationDeclaration, 'caps' | 'batchedAI' | 'triggers'>;
+    triggers: string[];
+    // The delivery's id, each run's slot (`webhookDeliveryId`).
+    deliveryId: string;
+  },
+  options: Omit<AutomationActorOptions, 'now'>,
+): Promise<WebhookDeliveryTaken> {
+  return await withChanges(dbAdapter, options, async (txQuery, changes) => {
+    let seen = await selectAutomation(txQuery, automationId);
+    if (!seen) {
+      return {
+        kind: 'skipped',
+        reason: 'not-switched-on',
+        automation: undefined,
+      };
+    }
+    let { realm } = automationFromRow(seen);
+    let ownerWrites = await isDirectWriterOf(txQuery, realm, owner, options);
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return {
+        kind: 'skipped',
+        reason: 'not-switched-on',
+        automation: undefined,
+      };
+    }
+    let automation = automationFromRow(row);
+    if (
+      automation.state !== 'active' &&
+      automation.state !== 'waiting-for-credits'
+    ) {
+      return { kind: 'skipped', reason: 'not-active', automation };
+    }
+    if (agreementExceededBy(automation.capsSnapshot, declaration)) {
+      return { kind: 'skipped', reason: 'agreement-exceeded', automation };
+    }
+    if (!ownerWrites) {
+      return {
+        kind: 'paused',
+        automation: await pause(
+          txQuery,
+          changes,
+          automationId,
+          'webhook-owner-lost-access',
+        ),
+      };
+    }
+    let runs: { run: AutomationRun; created: boolean }[] = [];
+    for (let trigger of triggers) {
+      runs.push(
+        await insertOrFindAutomationRun(txQuery, {
+          automationId,
+          realm: automation.realm,
+          trigger,
+          slot: deliveryId,
+          actsAs: automation.payer,
+        }),
+      );
+    }
+    if (runs.some(({ created }) => created)) {
+      await txQuery([
+        'UPDATE automations SET last_enqueued_at = now(), updated_at = now() WHERE automation_id =',
+        param(automationId),
+      ]);
+    }
+    return { kind: 'started', automation, runs };
   });
 }
 

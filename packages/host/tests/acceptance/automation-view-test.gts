@@ -310,11 +310,6 @@ module('Acceptance | automation view', function (hooks) {
         'This trigger stops after 30 runs or at the end of Jan 15, 2030, whichever comes first.',
         "the card's own bounds still read",
       );
-    assert
-      .dom('[data-test-automation-webhook-notice]')
-      .doesNotExist(
-        'without the server status, the card says nothing about webhook runs',
-      );
 
     await openFormat('embedded');
     assert.dom('[data-test-automation-embedded-state]').doesNotExist();
@@ -367,11 +362,6 @@ module('Acceptance | automation view', function (hooks) {
     };
     await openIsolated();
     await waitForStatus();
-    assert
-      .dom('[data-test-automation-webhook-notice]')
-      .doesNotExist(
-        'a server that starts runs from webhooks, or says nothing, gets no warning',
-      );
     assert.dom('[data-test-automation-state="Off"]').exists();
     assert.dom('[data-test-automation-header-state="Off"]').exists();
     assert
@@ -383,27 +373,6 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-trigger-progress]').doesNotExist();
   });
 
-  test('each webhook trigger warns that the trigger can’t fire while the server starts no runs from webhooks', async function (assert) {
-    answer = {
-      status: 200,
-      attributes: {
-        switchedOn: false,
-        webhookDeliveriesStartRuns: false,
-        lastRun: null,
-        currentRun: null,
-      },
-    };
-    await openIsolated();
-    await waitFor('[data-test-automation-webhook-notice]', { timeout: 10000 });
-    assert
-      .dom('[data-test-automation-webhook-notice]')
-      .exists({ count: 1 }, 'the webhook trigger, and no other, warns');
-    assert
-      .dom('[data-test-automation-webhook-notice]')
-      .hasText(
-        'This trigger can’t fire, Boxel doesn’t run automations from webhooks.',
-      );
-  });
   test("an active automation shows its payer, next run and each trigger's progress", async function (assert) {
     answer = { status: 200, attributes: ACTIVE };
     await openIsolated();
@@ -2864,7 +2833,6 @@ module('Acceptance | automation view', function (hooks) {
                 triggers: [],
                 uncountedChargeKinds: ['run_indexing', 'storage'],
               },
-              notices: [],
               ...attributes,
             },
           },
@@ -3039,23 +3007,6 @@ module('Acceptance | automation view', function (hooks) {
         );
       assert.deepEqual(posted, [], 'the screen sends nothing');
       assert.strictEqual(await cardCap(), 10, 'the card keeps its limit');
-    });
-
-    test('the screen says when webhook triggers can’t fire', async function (assert) {
-      estimateAnswer = estimate({
-        notices: [
-          {
-            code: 'webhook-triggers-start-no-runs',
-            message: 'webhook triggers start no runs',
-          },
-        ],
-      });
-      await openScreen(OFF);
-      assert
-        .dom('[data-test-automation-switch-on-webhook-notice]')
-        .hasText(
-          'Boxel doesn’t run automations from webhooks, so these triggers can’t fire.',
-        );
     });
 
     test('a limit below the estimate says Boxel may stop starting runs before the month ends', async function (assert) {

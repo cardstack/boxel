@@ -580,6 +580,34 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await queuedRuns()).length, 1, 'no job is added');
   });
 
+  test("a webhook delivery's lost run is ended, not enqueued again without its payload", async function (assert) {
+    card = {
+      ok: true,
+      declaration: declaration({
+        triggers: [
+          HOURLY,
+          { kind: 'webhook', label: 'deliveries', webhookPath: 'whk_lost' },
+        ],
+      }),
+    };
+    await switchOn();
+    let run = await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger: 'deliveries',
+      slot: 'delivery-lost',
+      actsAs: OWNER,
+    });
+    await madeAt(SWITCHED_ON);
+    let [outcome] = (await reconcile(SWITCHED_ON + 10 * 60)).lostRuns;
+    assert.strictEqual(outcome.kind, 'ended');
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, run.id))?.errorReason,
+      JOB_LOST_REASON,
+    );
+    assert.deepEqual(await queuedRuns(), [], 'no job is made again');
+  });
+
   test('a lost run whose trigger is gone from the card is ended', async function (assert) {
     await switchOn();
     await tick(NOON + 30);

@@ -10,10 +10,12 @@
 // secret can never start runs that a realm's payer pays for.
 //
 // Switch-on and resume check every webhook trigger with
-// `unusableWebhookProblems` before they take the payer on. The automation
-// card's editor lists the webhooks a realm can use through the realm's
-// `_automation-webhooks` route (`answerAutomationWebhooks`), so a trigger is
-// picked from that list rather than typed.
+// `unusableWebhookProblems` before they take the payer on, and each delivery
+// checks its webhook's owner again before it starts a run
+// (`takeWebhookDelivery`). The automation card's editor lists the webhooks a
+// realm can use through the realm's `_automation-webhooks` route
+// (`answerAutomationWebhooks`), so a trigger is picked from that list rather
+// than typed.
 
 import type {
   AutomationDeclaration,
@@ -36,40 +38,6 @@ import {
 
 export const AUTOMATION_WEBHOOKS_PATH = '_automation-webhooks';
 export const AUTOMATION_WEBHOOK_TYPE = 'automation-webhook';
-
-// Whether the webhook receiver starts automation runs from deliveries. It
-// matches a delivery only against `webhook_commands`, so a webhook trigger
-// never fires and is never spent. The status route, the webhook list and the
-// switch-on routes report this, and the card warns under each webhook trigger
-// while it is false.
-export const WEBHOOK_DELIVERIES_START_RUNS = false;
-
-// A code for the notice the switch-on routes attach while webhook deliveries
-// start no automation runs.
-export const WEBHOOK_TRIGGERS_START_NO_RUNS = 'webhook-triggers-start-no-runs';
-export const WEBHOOK_TRIGGERS_START_NO_RUNS_MESSAGE =
-  'The webhook triggers can’t fire, Boxel doesn’t run automations from webhooks.';
-
-export interface AutomationNotice {
-  code: typeof WEBHOOK_TRIGGERS_START_NO_RUNS;
-  message: string;
-}
-
-// The notices switching the automation on carries, for a declaration with a
-// webhook trigger.
-export function switchOnNotices(
-  declaration: Pick<AutomationDeclaration, 'triggers'>,
-): AutomationNotice[] {
-  return !WEBHOOK_DELIVERIES_START_RUNS &&
-    declaration.triggers.some((trigger) => trigger.kind === 'webhook')
-    ? [
-        {
-          code: WEBHOOK_TRIGGERS_START_NO_RUNS,
-          message: WEBHOOK_TRIGGERS_START_NO_RUNS_MESSAGE,
-        },
-      ]
-    : [];
-}
 
 // The webhook paths a declaration's webhook triggers name, each once, in
 // order. The caps snapshot keeps them, so a switched-on automation that comes
@@ -151,7 +119,7 @@ export interface AutomationWebhooksDocument {
     id: string;
     attributes: AutomationWebhook;
   }[];
-  meta: { directWriter: true; webhookDeliveriesStartRuns: boolean };
+  meta: { directWriter: true };
 }
 
 // The answer to any other caller the realm admits: it says the caller isn't a
@@ -228,10 +196,7 @@ export async function answerAutomationWebhooks({
           createdAt: new Date(row.created_at).toISOString(),
         },
       })),
-      meta: {
-        directWriter: true,
-        webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
-      },
+      meta: { directWriter: true },
     },
   };
 }

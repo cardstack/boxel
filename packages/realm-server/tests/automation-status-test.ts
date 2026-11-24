@@ -306,7 +306,6 @@ module(basename(import.meta.filename), function (hooks) {
           id: automationURL(),
           attributes: {
             switchedOn: false,
-            webhookDeliveriesStartRuns: false,
             lastRun: null,
             currentRun: null,
             lastRunUsage: null,
@@ -876,10 +875,7 @@ module(basename(import.meta.filename), function (hooks) {
             owner: PAYER,
           },
         ]);
-        assert.deepEqual(response.body.meta, {
-          directWriter: true,
-          webhookDeliveriesStartRuns: false,
-        });
+        assert.deepEqual(response.body.meta, { directWriter: true });
         assert.notOk(
           JSON.stringify(response.body).includes('secret'),
           'no signing secret is listed',
