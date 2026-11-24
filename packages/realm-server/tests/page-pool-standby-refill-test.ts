@@ -120,8 +120,30 @@ async function waitUntil(
 
 module(basename(import.meta.filename), function (hooks) {
   let pools: PagePool[] = [];
+  // The dynamic-pool env vars override `maxPages`, and CI and a dev shell
+  // set them, so each test starts from the fixed-size pool it asks for.
+  let poolEnvKeys = [
+    'PRERENDER_PAGE_POOL_MIN',
+    'PRERENDER_PAGE_POOL_MAX',
+    'PRERENDER_PAGE_POOL_INITIAL',
+  ];
+  let savedPoolEnv: Record<string, string | undefined> = {};
+
+  hooks.beforeEach(() => {
+    for (let key of poolEnvKeys) {
+      savedPoolEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
 
   hooks.afterEach(async () => {
+    for (let key of poolEnvKeys) {
+      if (savedPoolEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedPoolEnv[key];
+      }
+    }
     for (let pool of pools.splice(0)) {
       try {
         await pool.closeAll();
