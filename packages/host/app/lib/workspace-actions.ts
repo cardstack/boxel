@@ -62,7 +62,10 @@ export const WORKSPACE_TILE_TARGET = '[data-workspace-tile] [data-nav-index]';
 // they return belong to that one item, and keeps only its markup.
 //
 // The component's element goes in `captureTile`, the options menu's trigger in
-// `captureMenuTrigger`, and `returnFocusTarget` to each modal.
+// `captureMenuTrigger`, and `returnFocusTarget` to each modal. Every list of
+// these workspaces is marked `data-workspace-list`, since each sits in a list
+// item of its own; the parent element stands in only for a workspace rendered
+// outside any list.
 export class WorkspaceActions {
   @service declare private workspaceDuplication: WorkspaceDuplicationService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -150,7 +153,9 @@ export class WorkspaceActions {
   }
 
   private rememberFocusContext() {
-    let list = this.tileElement?.parentElement;
+    let list =
+      this.tileElement?.closest<HTMLElement>('[data-workspace-list]') ??
+      this.tileElement?.parentElement;
     if (!list) {
       this.focusContext = undefined;
       return;

@@ -5,6 +5,7 @@ import {
   focus,
   settled,
   triggerEvent,
+  waitFor,
   waitUntil,
 } from '@ember/test-helpers';
 
@@ -23,6 +24,7 @@ import {
 } from '../helpers';
 import {
   realmURL,
+  assertList,
   clickScopeOption,
   markHosted,
   markUpdated,
@@ -31,12 +33,12 @@ import {
   sectionOrder,
   railOrder,
   setupDashboardTest,
+  setupDashboardWidth,
   operatorModeState,
+  RECENT_TILES,
 } from '../helpers/dashboard';
 import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 import { stubWindowOpen } from '../helpers/window-open';
-
-const RECENT_TILES = '[data-test-workspace-recent-list] [data-test-workspace]';
 
 const ROWS = '[data-test-workspace-rows] [data-test-workspace]';
 
@@ -83,13 +85,12 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
   let mockMatrixUtils = setupDashboardTest(hooks);
 
   let moreRealmURLs: string[] = [];
-  let testingRoot: HTMLElement | null;
-  let originalWidth = '';
 
   // Adds `count` workspaces beside Workspace A, and narrows the dashboard
   // to `width`, which sets the columns the tiles and rows lay out in. Each
   // workspace is a realm, so a module adds no more than its tests need.
   function setupWorkspaces(hooks: NestedHooks, count: number, width: string) {
+    let setDashboardWidth = setupDashboardWidth(hooks);
     hooks.beforeEach(async function () {
       moreRealmURLs = Array.from(
         { length: count },
@@ -110,13 +111,7 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
         });
       }
       mockMatrixUtils.setActiveRealms([realmURL, ...moreRealmURLs]);
-      testingRoot = document.querySelector<HTMLElement>('#ember-testing');
-      originalWidth = testingRoot?.style.width ?? '';
-      testingRoot?.style.setProperty('width', width);
-    });
-
-    hooks.afterEach(function () {
-      testingRoot?.style.setProperty('width', originalWidth);
+      setDashboardWidth(width);
     });
   }
 
@@ -168,6 +163,95 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
         ...workspaceNames(ROWS),
       ]);
       assert.strictEqual(shown.size, 12, 'no workspace is shown twice');
+    });
+
+    test('each grid of workspaces is a list, with an item for each desk, tile or row it shows', async function (assert) {
+      mockMatrixUtils.setWorkspaceFavorites([urlFor('Workspace 03')]);
+      await visitDashboard(assert, 1);
+
+      assertList(assert, '[data-test-favorites-list]', 1);
+      let recent = assertList(
+        assert,
+        '[data-test-workspace-recent-list]',
+        3,
+        'New Workspace and the two tiles are the items',
+      );
+      assert
+        .dom('[data-test-add-workspace]', recent[0])
+        .exists('New Workspace is an item of its own');
+      assertList(
+        assert,
+        '[data-test-workspace-rows]',
+        10,
+        'the rows shown are the items, and the scrim over them is not one',
+      );
+      // A catalog still loading shows a placeholder in place of its tile.
+      await waitFor(
+        '[data-test-catalog-list] [data-test-workspace], [data-test-catalog-list] [data-test-workspace-loading-indicator]',
+        { timeoutMessage: 'the fixture lists no catalog' },
+      );
+      await waitUntil(
+        () =>
+          !find(
+            '[data-test-catalog-list] [data-test-workspace-loading-indicator]',
+          ),
+        { timeoutMessage: 'a catalog never finished loading' },
+      );
+      let catalogCount = findAll(
+        '[data-test-catalog-list] [data-test-workspace]',
+      ).length;
+      assert.ok(catalogCount > 0, 'the fixture lists a catalog');
+      let catalogs = assertList(
+        assert,
+        '[data-test-catalog-list]',
+        catalogCount,
+      );
+      assert.deepEqual(
+        catalogs.map(
+          (item) => item.querySelectorAll('[data-test-workspace]').length,
+        ),
+        Array(catalogCount).fill(1),
+        'each catalog is an item of its own',
+      );
+    });
+
+    // The focus trap returns focus after a timeout that settled() doesn't
+    // track, so this waits for it.
+    test('deleting a row moves focus to the row that takes its place', async function (assert) {
+      await visitDashboard(assert, 1);
+      // A row still loading shows a placeholder in place of its tile.
+      await waitUntil(
+        () =>
+          !find(
+            '[data-test-workspace-rows] [data-test-workspace-loading-indicator]',
+          ),
+        { timeoutMessage: 'a row never finished loading' },
+      );
+      let rows = findAll(ROWS);
+      let deleted = rows[1]!.getAttribute('data-test-workspace');
+      let next = rows[2]!.getAttribute('data-test-workspace');
+      let menuTrigger = rows[1]!.querySelector<HTMLElement>(
+        '[data-test-workspace-menu-trigger]',
+      )!;
+      let deletedURL = menuTrigger.getAttribute(
+        'data-test-workspace-menu-trigger',
+      );
+
+      await click(menuTrigger);
+      await click('[data-test-boxel-menu-item-text="Delete Workspace"]');
+      await waitFor(`[data-test-delete-modal="${deletedURL}"]`);
+      await click('[data-test-confirm-delete-button]');
+
+      await waitUntil(
+        () => document.activeElement?.closest('[data-test-workspace-list]'),
+        { timeoutMessage: 'focus never returned to a workspace' },
+      );
+      assert
+        .dom(`[data-test-workspace="${deleted}"]`)
+        .doesNotExist('the deleted workspace has left the rows');
+      assert
+        .dom(`[data-test-workspace-button="${next}"]`)
+        .isFocused('focus moves to the row after it, not to the first row');
     });
 
     test('choosing Workspaces in the section rail brings the page back to its top', async function (assert) {

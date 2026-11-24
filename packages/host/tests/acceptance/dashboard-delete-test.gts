@@ -1,4 +1,10 @@
-import { click, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  findAll,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -8,9 +14,15 @@ import { module, test } from 'qunit';
 import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import { createJWT, testRealmSecretSeed, visitOperatorMode } from '../helpers';
-import { setupDashboardTest } from '../helpers/dashboard';
+import {
+  overrideRealmInfo,
+  RECENT_TILES,
+  setupDashboardTest,
+  setupDashboardWidth,
+} from '../helpers/dashboard';
 
 import { assertRecentFileURLs } from '../helpers/recent-files-cards';
+import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 
 const ownedRealmURL = 'http://test-realm/testuser/owned-workspace/';
 const sharedRealmURL = 'http://test-realm/otheruser/shared-workspace/';
@@ -93,6 +105,8 @@ export class Person extends CardDef {}
       },
     ],
   });
+
+  let setDashboardWidth = setupDashboardWidth(hooks);
 
   hooks.afterEach(function () {
     window.localStorage.removeItem(SessionLocalStorageKey);
@@ -231,5 +245,57 @@ export class Person extends CardDef {}
       [`${sharedRealmURL}index.json`],
       'deleting a workspace removes its files from recent files',
     );
+  });
+
+  // The deleted workspace is gone by the time its modal returns focus. The
+  // focus trap returns focus after a timeout that settled() doesn't track,
+  // so this waits for it.
+  test('deleting a workspace moves focus to the workspace that takes its place in its list', async function (assert) {
+    // Two columns hold New Workspace and five tiles, so all four workspaces
+    // are tiles however wide the test runner is.
+    setDashboardWidth('40rem');
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    // The tiles lead with the most recently updated, so this puts the
+    // deleted workspace between two others.
+    let hour = 60 * 60 * 1000;
+    for (let [i, url] of [
+      readOnlyRealmURL,
+      ownedRealmURL,
+      sharedRealmURL,
+      delegatedOwnerRealmURL,
+    ].entries()) {
+      overrideRealmInfo(url, {
+        updatedAt: new Date(TEST_CLOCK_INSTANT - i * hour).toISOString(),
+      });
+    }
+    await settled();
+    assert.deepEqual(
+      findAll(RECENT_TILES).map((el) => el.getAttribute('data-test-workspace')),
+      [
+        'Read-only Workspace',
+        'Owned Workspace',
+        'Shared Workspace',
+        'Delegated Owner Workspace',
+      ],
+      'in two columns, the four workspaces are all tiles, the most recently updated first',
+    );
+
+    await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
+    await click('[data-test-boxel-menu-item-text="Delete Workspace"]');
+    await waitFor(`[data-test-delete-modal="${ownedRealmURL}"]`);
+    await click('[data-test-confirm-delete-button]');
+
+    await waitUntil(
+      () => document.activeElement?.closest('[data-test-workspace-list]'),
+      { timeoutMessage: 'focus never returned to a workspace' },
+    );
+    assert
+      .dom('[data-test-workspace="Owned Workspace"]')
+      .doesNotExist('the deleted workspace has left the list');
+    assert
+      .dom('[data-test-workspace-button="Shared Workspace"]')
+      .isFocused(
+        'focus moves to the workspace after it, not to the first in the list',
+      );
   });
 });

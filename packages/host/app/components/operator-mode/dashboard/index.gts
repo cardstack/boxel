@@ -645,8 +645,13 @@ export default class Dashboard extends Component<Signature> {
                 @count={{this.favoritesCount}}
               >Workspaces you favorited, kept at the top.</SectionHead>
               {{#if this.favoritesCount}}
-                <div
+                {{! The role keeps the list semantics Safari drops from a list
+                    with no markers; the workspace lists below carry the role
+                    too. }}
+                <ul
                   class='desk-list'
+                  role='list'
+                  data-workspace-list
                   {{this.trackFavoriteCounts
                     this.favoriteRealmIdentifiers
                     this.realm.indexCountsRevision
@@ -654,15 +659,17 @@ export default class Dashboard extends Component<Signature> {
                   data-test-favorites-list
                 >
                   {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
-                    <Workspace
-                      @realmIdentifier={{realmIdentifier}}
-                      @variant='desk'
-                      @navIndex={{i}}
-                      @isSelected={{eq this.cursor.currentIndex i}}
-                      @selectionActive={{this.cursor.isRingShown}}
-                    />
+                    <li class='list-item'>
+                      <Workspace
+                        @realmIdentifier={{realmIdentifier}}
+                        @variant='desk'
+                        @navIndex={{i}}
+                        @isSelected={{eq this.cursor.currentIndex i}}
+                        @selectionActive={{this.cursor.isRingShown}}
+                      />
+                    </li>
                   {{/each}}
-                </div>
+                </ul>
               {{else}}
                 <p class='group-empty' data-test-favorites-empty>No matching
                   results</p>
@@ -701,40 +708,50 @@ export default class Dashboard extends Component<Signature> {
                   data-test-workspaces-empty
                 >{{this.userWorkspacesEmptyMessage}}</p>
               {{else}}
-                {{! One list: the rows carry straight on from the tiles. }}
+                {{! The rows carry straight on from the tiles. }}
                 <div class='your-workspaces' data-test-workspace-list>
-                  <div
+                  <ul
                     class='recent-list'
+                    role='list'
+                    data-workspace-list
                     {{this.measureColumns 'recent'}}
                     data-test-workspace-recent-list
                   >
-                    <AddWorkspace
-                      @navIndex={{this.addWorkspaceNavIndex}}
-                      @isSelected={{eq
-                        this.cursor.currentIndex
-                        this.addWorkspaceNavIndex
-                      }}
-                      @selectionActive={{this.cursor.isRingShown}}
-                    />
+                    {{! New Workspace shares the tiles' grid, so it is an
+                        item of their list. }}
+                    <li class='list-item'>
+                      <AddWorkspace
+                        @navIndex={{this.addWorkspaceNavIndex}}
+                        @isSelected={{eq
+                          this.cursor.currentIndex
+                          this.addWorkspaceNavIndex
+                        }}
+                        @selectionActive={{this.cursor.isRingShown}}
+                      />
+                    </li>
                     {{#each this.recentRealmIdentifiers as |realmIdentifier i|}}
                       {{#let (add this.recentNavBase i) as |navIndex|}}
-                        <Workspace
-                          @realmIdentifier={{realmIdentifier}}
-                          @variant='tile'
-                          @navIndex={{navIndex}}
-                          @isSelected={{eq this.cursor.currentIndex navIndex}}
-                          @selectionActive={{this.cursor.isRingShown}}
-                        />
+                        <li class='list-item'>
+                          <Workspace
+                            @realmIdentifier={{realmIdentifier}}
+                            @variant='tile'
+                            @navIndex={{navIndex}}
+                            @isSelected={{eq this.cursor.currentIndex navIndex}}
+                            @selectionActive={{this.cursor.isRingShown}}
+                          />
+                        </li>
                       {{/let}}
                     {{/each}}
-                  </div>
+                  </ul>
                   {{#if this.rowRealmIdentifiers.length}}
-                    <div
+                    <ul
                       id={{this.rowListId}}
                       class={{cn
                         'row-list'
                         is-clipped=(gt this.hiddenRowCount 0)
                       }}
+                      role='list'
+                      data-workspace-list
                       {{this.measureColumns 'rows'}}
                       data-test-workspace-rows
                     >
@@ -743,19 +760,21 @@ export default class Dashboard extends Component<Signature> {
                         as |realmIdentifier i|
                       }}
                         {{#let (add this.rowsNavBase i) as |navIndex|}}
-                          <Workspace
-                            @realmIdentifier={{realmIdentifier}}
-                            @variant='row'
-                            @navIndex={{navIndex}}
-                            @isSelected={{eq this.cursor.currentIndex navIndex}}
-                            @selectionActive={{this.cursor.isRingShown}}
-                          />
+                          <li class='list-item'>
+                            <Workspace
+                              @realmIdentifier={{realmIdentifier}}
+                              @variant='row'
+                              @navIndex={{navIndex}}
+                              @isSelected={{eq
+                                this.cursor.currentIndex
+                                navIndex
+                              }}
+                              @selectionActive={{this.cursor.isRingShown}}
+                            />
+                          </li>
                         {{/let}}
                       {{/each}}
-                      {{#if this.hiddenRowCount}}
-                        <div class='list-scrim' aria-hidden='true'></div>
-                      {{/if}}
-                    </div>
+                    </ul>
                     {{! One button for both, so focus stays on it as the
                         list grows and shrinks. }}
                     {{#if this.isRowListCollapsible}}
@@ -819,11 +838,15 @@ export default class Dashboard extends Component<Signature> {
                         data-test-archived-loading
                       />
                     {{else if this.archivedRealms.length}}
-                      <div class='row-list' data-test-archived-list>
+                      <ul class='row-list' role='list' data-test-archived-list>
                         {{#each this.archivedRealms as |archivedRealm|}}
-                          <ArchivedWorkspace @archivedRealm={{archivedRealm}} />
+                          <li class='list-item'>
+                            <ArchivedWorkspace
+                              @archivedRealm={{archivedRealm}}
+                            />
+                          </li>
                         {{/each}}
-                      </div>
+                      </ul>
                     {{else if this.archivedLoadFailed}}
                       <p
                         class='group-empty'
@@ -1118,7 +1141,9 @@ export default class Dashboard extends Component<Signature> {
           minmax(min(var(--dashboard-desk-min-width), 100%), 1fr)
         );
         gap: var(--dashboard-desk-gap);
+        margin: 0;
         padding: var(--boxel-sp-xs) 0;
+        list-style: none;
       }
       .your-workspaces {
         display: flex;
@@ -1132,7 +1157,9 @@ export default class Dashboard extends Component<Signature> {
           minmax(min(var(--dashboard-tile-min-width), 100%), 1fr)
         );
         gap: var(--boxel-sp-lg) var(--boxel-sp);
+        margin: 0;
         padding: var(--boxel-sp-xs) 0;
+        list-style: none;
       }
       .row-list {
         display: grid;
@@ -1141,13 +1168,24 @@ export default class Dashboard extends Component<Signature> {
           minmax(min(var(--dashboard-row-min-width), 100%), 1fr)
         );
         gap: var(--boxel-sp-sm);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      /* A one-cell grid, so what it holds fills the list's grid cell. */
+      .list-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        min-width: 0;
       }
       /* A clipped list fades out over its last row, where the button to show
-         the rest sits. */
+         the rest sits. The list draws the scrim itself, since a list holds
+         only its items. */
       .row-list.is-clipped {
         position: relative;
       }
-      .list-scrim {
+      .row-list.is-clipped::after {
+        content: '';
         position: absolute;
         right: 0;
         bottom: 0;
