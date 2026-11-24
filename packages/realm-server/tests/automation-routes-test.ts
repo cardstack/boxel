@@ -1184,7 +1184,8 @@ module(basename(import.meta.filename), function (hooks) {
           level: undefined,
           data: { name: 'Fetch' },
         }),
-        line('resolve test/model: 200', {
+        // Written before ADR 049, with the cost in its message as well.
+        line('resolve test/model: 200 (900 ms, $0.002000)', {
           kind: 'resolve',
           data: { model: 'test/model', status: 200, costInUsd: 0.002 },
         }),
@@ -1241,6 +1242,11 @@ module(basename(import.meta.filename), function (hooks) {
         last.lines[0].data,
         { model: 'test/model', status: 200 },
         'a stored AI request’s cost is never served to a writer',
+      );
+      assert.strictEqual(
+        last.lines[0].message,
+        'resolve test/model: 200 (900 ms)',
+        'nor is the cost a stored line’s message names',
       );
       assert.false(last.more, 'the last page says so');
       assert.strictEqual(last.next, 4);
