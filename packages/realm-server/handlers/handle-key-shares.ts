@@ -1,4 +1,8 @@
 import type Koa from 'koa';
+import {
+  automationsWaitingForKeyApproval,
+  followAutomationKeyApprovals,
+} from '../lib/automation-key-approvals.ts';
 import { logger, type VirtualNetwork } from '@cardstack/runtime-common';
 import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { setContextResponse } from '../middleware/index.ts';
@@ -272,7 +276,11 @@ export function handleSuspendKeyShare({
   });
 }
 
-export function handleResumeKeyShare({ dbAdapter }: CreateRoutesArgs): Handler {
+// Resuming a share resumes the automation approvals of its bindings, so
+// every automation of its realm waiting for key approval is checked again,
+// and one whose approvals all match runs again.
+export function handleResumeKeyShare(args: CreateRoutesArgs): Handler {
+  let { dbAdapter } = args;
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     let body = await readJSON(ctxt);
@@ -281,6 +289,12 @@ export function handleResumeKeyShare({ dbAdapter }: CreateRoutesArgs): Handler {
       shareId: ctxt.params.shareId,
       ticket: ticketOf(body),
     });
+    let realmURL = new URL(share.realm);
+    await followAutomationKeyApprovals(
+      args,
+      realmURL,
+      await automationsWaitingForKeyApproval(dbAdapter, realmURL, args),
+    );
     await sendJSON(ctxt, 200, { data: serialize(share) });
   });
 }
@@ -311,6 +325,15 @@ export function handleSwapKeyIntoShare(args: CreateRoutesArgs): Handler {
         via,
         opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       },
+    );
+    // The swap ended the approvals of the share's bindings and moved their
+    // automations to waiting. One whose ended approval was for an operation
+    // its card no longer declares has nothing missing, and runs again.
+    let realmURL = new URL(share.realm);
+    await followAutomationKeyApprovals(
+      args,
+      realmURL,
+      await automationsWaitingForKeyApproval(dbAdapter, realmURL, args),
     );
     await sendJSON(ctxt, 200, {
       data: serialize(share),

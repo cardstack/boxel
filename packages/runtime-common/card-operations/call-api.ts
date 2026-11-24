@@ -22,6 +22,7 @@ export { destinationCovers };
 import type { KeyReadiness } from './capability-wire.ts';
 import type { OperationCore } from './dispatch.ts';
 import type { ResolvedCodeRef } from '../code-ref.ts';
+import type { CheckAutomationKeyApprovals } from '../automation-key-approval.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
@@ -1093,6 +1094,11 @@ export interface CallApiUse {
 // or key that refused it (`refusedFrom`), or `undefined` when it would be
 // served. A sender that can't tell leaves it out, and a run's
 // admission then refuses the run.
+//
+// `checkAutomationKeyApprovals` checks each operation an automation declares
+// for the key approvals a run of its triggers needs, against the automation
+// as its card and script read now (`automation-key-approval.ts`). A sender
+// that can't tell leaves it out, and the automation is taken to need none.
 export interface CallApiSender {
   fill(lookup: CallApiSlotLookup): Promise<CallApiFilledSlot[]>;
   recordUse?(use: CallApiUse): Promise<void>;
@@ -1107,6 +1113,15 @@ export interface CallApiSender {
     operation: string;
     payer: string;
   }): Promise<OperationFailure | undefined>;
+  checkAutomationKeyApprovals?(
+    args: Parameters<CheckAutomationKeyApprovals>[0] & {
+      core: Pick<
+        OperationCore,
+        'resolveCodeRef' | 'definitionLookup' | 'readsRealmOf'
+      >;
+      realmURL: URL;
+    },
+  ): ReturnType<CheckAutomationKeyApprovals>;
   send(
     request: CallApiRequest,
     credentials: CallApiCredential[],

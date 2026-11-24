@@ -27,7 +27,7 @@
 //   pauses if its own runs have failed too many times in a row
 //   (`pauseAfterRepeatedFailures`). A pending run
 //   whose extra job was lost too is ended the same way, as is a scheduled run
-//   whose automation is paused or no longer switched on, or whose trigger is
+//   whose automation is paused, waiting for key approval or no longer switched on, or whose trigger is
 //   gone from its card.
 // - **A due time that passed with nothing enqueued.** An automation whose
 //   next run is `graceSeconds` or more behind is one the minute tick missed
@@ -315,12 +315,19 @@ async function reconcileLostRun(
       );
     }
     let scheduled = run.trigger !== MANUAL_RUN_TRIGGER;
-    if (scheduled && (!automation || automation.state === 'paused')) {
+    if (
+      scheduled &&
+      (!automation ||
+        automation.state === 'paused' ||
+        automation.state === 'waiting-for-key-approval')
+    ) {
       return await end(
         run,
-        automation
-          ? 'its automation is paused'
-          : 'its automation is no longer switched on',
+        !automation
+          ? 'its automation is no longer switched on'
+          : automation.state === 'paused'
+            ? 'its automation is paused'
+            : 'its automation is waiting for key approval',
       );
     }
     // A card that can't be read still gets its run enqueued: the run's

@@ -2221,8 +2221,18 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(after?.payer, OWNER, 'the payer stays');
         assert.strictEqual(
           after?.scheduledSince,
-          NOW + 3600,
-          'the schedule restarts at the resume, so no slot from the pause runs',
+          paused?.scheduledSince,
+          'scheduled_since stays the payer’s switch-on, the moment a revocation of their sessions is held against',
+        );
+        assert.true(
+          Object.values(after!.triggerRuns).every(
+            ({ since }) => since === NOW + 3600,
+          ),
+          'each trigger’s cursor moves up to the resume, so no slot from the pause runs',
+        );
+        assert.true(
+          (after?.nextRun ?? 0) > NOW + 3600,
+          'the next run comes after the resume',
         );
       });
 
