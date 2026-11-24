@@ -1776,8 +1776,9 @@ export class IndexRunner {
       // in another realm is read only when a visitor who isn't signed in
       // could read it too, as the shared base and catalog types can.
       if (
-        context.realmURL !== this.#realmURL.href &&
-        context.cacheScope !== 'public'
+        context === 'not-public' ||
+        (context.realmURL !== this.#realmURL.href &&
+          context.cacheScope !== 'public')
       ) {
         this.#log.warn(
           `${jobIdentity(this.#jobInfo)} did not read the definition of ${ref.name} from ${ref.module} for a host route of ${this.#realmURL.href}: its realm is not public`,
@@ -1822,12 +1823,14 @@ export class IndexRunner {
   // The cache context a module's definition is read under: this realm's, or,
   // for a module of another realm, that realm's, which the module's own
   // response names. `'not-found'` when the other realm answers that the
-  // module isn't there. `contexts` holds the contexts this read has asked
-  // for, by realm, and the realm each module named.
+  // module isn't there, and `'not-public'` when it refuses the read: a realm
+  // that a visitor who isn't signed in can read answers every reader.
+  // `contexts` holds the contexts this read has asked for, by realm, and the
+  // realm each module named.
   async #moduleCacheContextFor(
     moduleURL: string,
     contexts: Map<string, Promise<ModuleCacheContext>>,
-  ): Promise<ModuleCacheContext | 'not-found'> {
+  ): Promise<ModuleCacheContext | 'not-found' | 'not-public'> {
     let realmURL = this.#realmURL;
     // `moduleURL` is canonical, so a module of a realm served under a prefix
     // (`@cardstack/base/…`) is in its prefix form, which isn't a URL.
@@ -1837,6 +1840,9 @@ export class IndexRunner {
       let header = response.headers.get('x-boxel-realm-url');
       if (response.status >= 500) {
         throw new Error(`${moduleURL} answered ${response.status}`);
+      }
+      if (response.status === 401 || response.status === 403) {
+        return 'not-public';
       }
       if (!response.ok || !header) {
         return 'not-found';

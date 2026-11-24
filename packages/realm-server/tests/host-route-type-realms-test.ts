@@ -20,13 +20,16 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 
-// A site whose field-match routes name types in three places: its own realm,
-// a realm anyone may read, and a realm only the site's owner may read. All
-// three are on one realm server, so the site's index reaches the other two.
+// A site whose field-match routes name types in four places: its own realm,
+// a realm anyone may read, a realm only the site's owner may read, and a
+// realm the site's owner can't read. All four are on one realm server, so
+// the site's index reaches the other three.
 const SITE = 'http://127.0.0.1:4444/site/';
 const SHARED = 'http://127.0.0.1:4444/shared/';
 const PRIVATE = 'http://127.0.0.1:4444/private/';
+const STRANGER = 'http://127.0.0.1:4444/stranger/';
 const OWNER = '@owner:localhost';
+const OTHER_USER = '@other-user:localhost';
 
 function postModule(name: string) {
   return `
@@ -56,6 +59,7 @@ function siteFiles() {
             // Reaches the shared realm by a relative path.
             route('/escape/:slug', '../shared/post', 'Post'),
             route('/private/:slug', `${PRIVATE}secret`, 'Secret'),
+            route('/stranger/:slug', `${STRANGER}secret`, 'Secret'),
             route('/shared/:slug', `${SHARED}post`, 'Post'),
           ],
         },
@@ -74,6 +78,7 @@ module(basename(import.meta.filename), function (hooks) {
   let server: Server;
   let site: Realm;
   let realms: Realm[] = [];
+  let db: PgAdapter;
 
   async function start({
     dbAdapter,
@@ -101,6 +106,11 @@ module(basename(import.meta.filename), function (hooks) {
           permissions: { [OWNER]: ['read', 'write', 'realm-owner'] },
         },
         {
+          realmURL: new URL(STRANGER),
+          fileSystem: { 'secret.gts': postModule('Secret') },
+          permissions: { [OTHER_USER]: ['read', 'write', 'realm-owner'] },
+        },
+        {
           realmURL: new URL(SITE),
           fileSystem: siteFiles(),
           permissions: { [OWNER]: ['read', 'write', 'realm-owner'] },
@@ -111,6 +121,7 @@ module(basename(import.meta.filename), function (hooks) {
       runner,
       matrixURL,
     });
+    db = dbAdapter;
     server = result.testRealmHttpServer;
     realms = result.realms;
     site = realms.find((realm) => realm.url === SITE)!;
@@ -179,6 +190,72 @@ module(basename(import.meta.filename), function (hooks) {
     let warning = warningFor(warnings, '/private/:slug');
     assert.strictEqual(warning?.code, 'non-public-type');
     assert.true(warning?.dropped);
+  });
+
+  test("a type in a realm that the site's owner can't read drops its route as not public", async function (assert) {
+    let { routes, warnings } = await site.getHostRoutes();
+    assert.notOk(routes.some((r) => r.fullPath === '/stranger/:slug'));
+    let warning = warningFor(warnings, '/stranger/:slug');
+    assert.strictEqual(
+      warning?.code,
+      'non-public-type',
+      'not type-unavailable, so its paths answer 404, not 503',
+    );
+    assert.true(warning?.dropped);
+  });
+
+  test('a tree stored before types were held to public realms is validated again by an index of realm.json', async function (assert) {
+    // A tree as an index without the rule stored it: no mark, and a route
+    // on the private realm's type.
+    let [row] = (await db.execute(
+      `SELECT rm.value FROM realm_meta rm
+       JOIN realm_generations rg
+         ON rg.realm_url = rm.realm_url
+        AND rg.current_generation = rm.generation
+       WHERE rm.realm_url = $1`,
+      { bind: [SITE] },
+    )) as { value: unknown }[];
+    let value = (
+      typeof row?.value === 'string' ? JSON.parse(row.value) : row?.value
+    ) as { hostRoutes: Record<string, any> };
+    let { typeRealmsChecked, ...hostRoutes } = value.hostRoutes;
+    assert.true(typeRealmsChecked, 'the index marks the trees it validates');
+    let shared = hostRoutes.routes.find(
+      (r: { fullPath: string }) => r.fullPath === '/shared/:slug',
+    );
+    hostRoutes.routes = [
+      ...hostRoutes.routes,
+      {
+        ...shared,
+        path: '/private/:slug',
+        fullPath: '/private/:slug',
+        type: { module: `${PRIVATE}secret`, name: 'Secret' },
+      },
+    ];
+    hostRoutes.warnings = hostRoutes.warnings.filter(
+      (w: { path: string }) => w.path !== '/private/:slug',
+    );
+    await db.execute(
+      `UPDATE realm_meta SET value = jsonb_set(value, '{hostRoutes}', $2::jsonb) WHERE realm_url = $1`,
+      { bind: [SITE, JSON.stringify(hostRoutes)] },
+    );
+    site.clearRealmIndexCaches();
+    site.__testOnlyAllowHostRoutesIndexNow();
+
+    // The read serves the stored tree and starts an index of realm.json.
+    assert.true(
+      (await site.getHostRoutes()).routes.some(
+        (r) => r.fullPath === '/private/:slug',
+      ),
+    );
+    await site.incrementalIndexing();
+
+    let { routes, warnings } = await site.getHostRoutes();
+    assert.notOk(routes.some((r) => r.fullPath === '/private/:slug'));
+    assert.strictEqual(
+      warningFor(warnings, '/private/:slug')?.code,
+      'non-public-type',
+    );
   });
 
   test('a type in a realm anyone may read, named by its full URL, is kept', async function (assert) {

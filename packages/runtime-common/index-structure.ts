@@ -262,6 +262,13 @@ export interface StoredHostRoutes extends HostRoutesValidation {
   // definition stood in for it, so its route was dropped. A read of the
   // routes then starts an index of realm.json, which reads the type again.
   retryTypeReads?: true;
+  // Set on a tree validated with a route's type held to the routing realm
+  // or a realm that a visitor who isn't signed in can read, and with a
+  // relative type module that leaves the realm kept as written. A tree
+  // without it may route on a type outside the realm that this rule drops,
+  // so a read of the routes starts an index of realm.json, and its `types`
+  // don't stand in for a read that may pass.
+  typeRealmsChecked?: true;
 }
 
 export interface RealmMetaTable {
@@ -322,7 +329,7 @@ export function storedHostRoutes(raw: unknown): StoredHostRoutes | undefined {
   ) {
     return undefined;
   }
-  let { types, retryTypeReads } = hostRoutes;
+  let { types, retryTypeReads, typeRealmsChecked } = hostRoutes;
   return {
     routes: hostRoutes.routes,
     warnings: hostRoutes.warnings,
@@ -330,6 +337,7 @@ export function storedHostRoutes(raw: unknown): StoredHostRoutes | undefined {
       ? { types }
       : {}),
     ...(retryTypeReads === true ? { retryTypeReads } : {}),
+    ...(typeRealmsChecked === true ? { typeRealmsChecked } : {}),
   };
 }
 

@@ -172,6 +172,7 @@ import {
   validateHostRoutes,
   HOST_ROUTES_RETRY_AFTER_SECONDS,
   HostRoutesReadError,
+  type HostRoute,
   type HostRoutesValidation,
   type RawHostRoutingRule,
 } from './host-routes.ts';
@@ -22648,6 +22649,14 @@ export class Realm {
         // indexed, and its route was dropped. Nothing else may index this
         // realm for a long time, so an index of realm.json reads it again.
         this.#indexRealmConfigForHostRoutes();
+      } else if (
+        !stored.typeRealmsChecked &&
+        this.#routesOnTypeOutsideRealm(stored.routes)
+      ) {
+        // A tree validated before a route's type was held to this realm or
+        // a public one may route on a type that rule drops. An index of
+        // realm.json validates it again.
+        this.#indexRealmConfigForHostRoutes();
       }
       return { routes: stored.routes, warnings: stored.warnings };
     }
@@ -22663,6 +22672,15 @@ export class Realm {
       realmURL: new URL(this.url),
       lookupType: () => 'unavailable',
     });
+  }
+
+  #routesOnTypeOutsideRealm(routes: readonly HostRoute[]): boolean {
+    return routes.some(
+      (route) =>
+        (route.kind === 'field-match' &&
+          !route.type.module.startsWith(this.url)) ||
+        this.#routesOnTypeOutsideRealm(route.routes),
+    );
   }
 
   // Starts an index of realm.json, which stores the host routes with the

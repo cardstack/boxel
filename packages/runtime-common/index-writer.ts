@@ -3697,7 +3697,9 @@ export class Batch {
     let retryTypeReads = false;
     for (let [key, read] of reads) {
       if (read === 'transient') {
-        let earlier = stored?.types?.[key];
+        let earlier = stored?.typeRealmsChecked
+          ? stored.types?.[key]
+          : undefined;
         if (earlier !== undefined) {
           types[key] = earlier;
         } else {
@@ -3729,6 +3731,7 @@ export class Batch {
       ...validation,
       types,
       ...(retryTypeReads ? { retryTypeReads: true as const } : {}),
+      typeRealmsChecked: true,
     };
   }
 
