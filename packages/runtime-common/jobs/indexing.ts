@@ -651,8 +651,14 @@ function parseCoalescedCallers(value: unknown[]): CoalescedCaller[] {
     if (!isObjectLike(caller)) {
       continue;
     }
-    let { waiterId, clientRequestId, urls, clientAuthored, announcesPass } =
-      caller as Record<string, unknown>;
+    let {
+      waiterId,
+      clientRequestId,
+      urls,
+      clientAuthored,
+      announcesPass,
+      followsKeyApprovals,
+    } = caller as Record<string, unknown>;
     if (
       typeof waiterId !== 'string' ||
       (clientRequestId !== null && typeof clientRequestId !== 'string')
@@ -665,6 +671,7 @@ function parseCoalescedCallers(value: unknown[]): CoalescedCaller[] {
       urls: isStringArray(urls) ? urls : null,
       clientAuthored: isStringArray(clientAuthored) ? clientAuthored : null,
       announcesPass: announcesPass === true,
+      followsKeyApprovals: followsKeyApprovals === true,
     });
   }
   return callers;
@@ -771,6 +778,7 @@ export function makeIncrementalArgsWithCallerMetadata(
     // See CoalescedCaller.
     clientAuthored?: string[] | null;
     announcesPass?: boolean;
+    followsKeyApprovals?: boolean;
     // See IncrementalArgs.realmEvents. Absent, the pass announces.
     realmEvents?: boolean;
   },
@@ -783,6 +791,7 @@ export function makeIncrementalArgsWithCallerMetadata(
       urls: args.changes.map(({ url }) => url.replace(/\.json$/, '')),
       clientAuthored: caller?.clientAuthored ?? null,
       announcesPass: caller?.announcesPass === true,
+      followsKeyApprovals: caller?.followsKeyApprovals === true,
     },
   ];
   return {

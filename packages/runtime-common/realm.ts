@@ -1994,6 +1994,68 @@ export async function notifyRealmAutomationsReindexed(
   }
 }
 
+// Postgres NOTIFY channel announcing the automations an incremental index
+// pass touched when no realm awaiting the pass checks their key approvals
+// (`CoalescedCaller.followsKeyApprovals`): a pass the worker enqueues on its
+// own, such as the prerender reconcile's retry or a commit's follow-up. The
+// payload is JSON (`RealmAutomationsTouched`). Each realm server serving the
+// realm then checks those automations' key approvals in full
+// (`Realm.followAutomationKeyApprovalsAfterWorkerPass`), which the worker
+// can't do, as it reads no operation definitions. Best-effort like the other
+// realm channels: a missed NOTIFY leaves an automation as the worker's index
+// hook left it, until an approval lands or its next run's admission.
+export const REALM_AUTOMATIONS_TOUCHED_CHANNEL = 'realm_automations_touched';
+
+export interface RealmAutomationsTouched {
+  realmURL: string;
+  automationIds: string[];
+  // False when the writes behind the pass asked for no realm events: the
+  // check still moves the rows, and reports nothing.
+  reportChanges: boolean;
+}
+
+// Postgres caps a NOTIFY payload at 8000 bytes; a pass that touched more
+// automations than fit in one is announced over several.
+const MAX_AUTOMATIONS_TOUCHED_PAYLOAD_BYTES = 7000;
+
+export async function notifyRealmAutomationsTouched(
+  dbAdapter: DBAdapter,
+  { realmURL, automationIds, reportChanges }: RealmAutomationsTouched,
+): Promise<void> {
+  let bytes = (text: string) => new TextEncoder().encode(text).byteLength;
+  let payloadOf = (ids: string[]) =>
+    JSON.stringify({ realmURL, automationIds: ids, reportChanges });
+  let payloads: string[] = [];
+  let chunk: string[] = [];
+  let chunkBytes = bytes(payloadOf([]));
+  for (let automationId of automationIds) {
+    // The id as the array spells it, with the comma before it.
+    let idBytes = bytes(JSON.stringify(automationId)) + 1;
+    if (
+      chunk.length > 0 &&
+      chunkBytes + idBytes > MAX_AUTOMATIONS_TOUCHED_PAYLOAD_BYTES
+    ) {
+      payloads.push(payloadOf(chunk));
+      chunk = [];
+      chunkBytes = bytes(payloadOf([]));
+    }
+    chunk.push(automationId);
+    chunkBytes += idBytes;
+  }
+  if (chunk.length > 0) {
+    payloads.push(payloadOf(chunk));
+  }
+  for (let payload of payloads) {
+    try {
+      await dbAdapter.notify(REALM_AUTOMATIONS_TOUCHED_CHANNEL, payload);
+    } catch (err: unknown) {
+      logger('realm').warn(
+        `notify ${REALM_AUTOMATIONS_TOUCHED_CHANNEL} failed for ${realmURL}: ${String(err)}`,
+      );
+    }
+  }
+}
+
 // Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
 // peer realm-server replicas drop every cached path for this realm. Use
 // directly when the caller has a DBAdapter + realm URL but isn't keeping
@@ -4925,6 +4987,8 @@ export class Realm {
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
       announcesPass:
         opts?.announcesPass !== false && opts?.broadcastRealmEvents !== false,
+      // `#followAutomationKeyApprovalsAfterPass` below.
+      followsKeyApprovals: true,
       realmEvents: opts?.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
@@ -5034,6 +5098,8 @@ export class Realm {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
       announcesPass: opts.broadcastRealmEvents !== false,
+      // `#followAutomationKeyApprovalsAfterPass` below.
+      followsKeyApprovals: true,
       realmEvents: opts.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.carriedPrerenderHtmlChanges?.length
@@ -15640,6 +15706,63 @@ export class Realm {
       this.#log.warn(
         `couldn't follow the key approvals of the automations in ${this.url} after a from-scratch index pass: ${e?.message ?? e}`,
       );
+    }
+  }
+
+  // Once an incremental pass no realm followed has landed (one the worker
+  // enqueued on its own, such as the prerender reconcile's retry or a
+  // commit's follow-up), follows the key approvals of the automations it
+  // touched that are in this realm and aren't paused, as the realm does after
+  // a pass it awaits. Such a pass can be the first to index an edit made
+  // while no realm server watched the files. The worker announces the
+  // automations (`REALM_AUTOMATIONS_TOUCHED_CHANNEL`), and each realm server
+  // serving the realm answers here; each automation's follow locks its row,
+  // so the servers take turns and the later ones find it already in step.
+  //
+  // `reportChanges` is false when the writes behind the pass asked for no
+  // realm events. The follow is held in `#automationFollowsAfterPass`, so
+  // `incrementalIndexing()` waits for it. Never rejects: a failure is logged.
+  async followAutomationKeyApprovalsAfterWorkerPass(
+    automationIds: readonly string[],
+    { reportChanges }: { reportChanges: boolean },
+  ): Promise<void> {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !this.#callApi?.checkAutomationKeyApprovals ||
+      automationIds.length === 0
+    ) {
+      return;
+    }
+    let tracked = (async () => {
+      try {
+        let touched = new Set(automationIds);
+        let automations = (
+          await automationsInRealm(
+            this.#dbAdapter,
+            ri(this.#virtualNetwork.unresolveURL(this.url)),
+          )
+        ).filter(
+          ({ automationId, state }) =>
+            state !== 'paused' && touched.has(automationId),
+        );
+        if (automations.length === 0) {
+          return;
+        }
+        await this.followAutomationKeyApprovals(
+          automations.map(({ automationId }) => automationId),
+          { reportChanges },
+        );
+      } catch (e: any) {
+        this.#log.warn(
+          `couldn't follow the key approvals of the automations a worker's index pass touched in ${this.url}: ${e?.message ?? e}`,
+        );
+      }
+    })();
+    this.#automationFollowsAfterPass.add(tracked);
+    try {
+      await tracked;
+    } finally {
+      this.#automationFollowsAfterPass.delete(tracked);
     }
   }
 

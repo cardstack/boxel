@@ -15,8 +15,10 @@ import {
   getAutomationRun,
   ri,
   rri,
+  REALM_AUTOMATIONS_TOUCHED_CHANNEL,
   type AutomationRun,
   type DefinitionLookup,
+  type QueuePublisher,
   type Realm,
   type SpendCharge,
   type VirtualNetwork,
@@ -27,6 +29,12 @@ import {
 } from '@cardstack/runtime-common/automations';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
 import { RealmAutomationsReindexedListener } from '../lib/realm-automations-reindexed-listener.ts';
+import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  indexingConcurrencyGroup,
+  makeIncrementalArgsWithCallerMetadata,
+  systemInitiatedIndexPriority,
+} from '@cardstack/runtime-common/jobs/indexing';
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
 import {
   appendRunLog,
@@ -148,6 +156,7 @@ module(basename(import.meta.filename), function (hooks) {
   let request: SuperTest<Test>;
   let virtualNetwork: VirtualNetwork;
   let testRealmPath: string;
+  let publisher: QueuePublisher;
 
   setupProcessPricing(hooks, 'automation-routes-test');
 
@@ -286,6 +295,7 @@ module(basename(import.meta.filename), function (hooks) {
       request = args.request;
       virtualNetwork = args.virtualNetwork;
       testRealmPath = args.testRealmPath;
+      publisher = args.publisher;
     },
   });
 
@@ -1725,6 +1735,172 @@ module(basename(import.meta.filename), function (hooks) {
         (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
         'paused',
       );
+    });
+
+    // Runs an incremental pass over `paths` that no realm awaits, enqueued
+    // the way the prerender reconcile retries a transient failure, with this
+    // realm server listening for the worker's announcement of the
+    // automations it touched, as a deployed realm server does. Answers the
+    // automation ids each announcement named, once the follows they started
+    // have settled.
+    async function workerPassHeard(paths: string[]) {
+      let announced: string[][] = [];
+      let follows: Promise<void>[] = [];
+      let original = realm.followAutomationKeyApprovalsAfterWorkerPass;
+      realm.followAutomationKeyApprovalsAfterWorkerPass = function (
+        automationIds,
+        opts,
+      ) {
+        announced.push([...automationIds]);
+        let follow = original.call(realm, automationIds, opts);
+        follows.push(follow);
+        return follow;
+      };
+      let listener = new RealmAutomationsReindexedListener({
+        dbAdapter,
+        lookupMountedRealm: (url) => (url === realm.url ? realm : undefined),
+      });
+      await listener.start();
+      try {
+        let job = await publisher.publish({
+          jobType: 'incremental-index',
+          concurrencyGroup: indexingConcurrencyGroup(realm.url),
+          timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+          priority: systemInitiatedIndexPriority(realm.url),
+          args: makeIncrementalArgsWithCallerMetadata(
+            {
+              realmURL: realm.url,
+              realmUsername: await realm.getRealmOwnerUsername(),
+              changes: paths.map((path) => ({
+                url: `${realm.url}${path}`,
+                operation: 'update' as const,
+              })),
+              ignoreData: {},
+            },
+            null,
+          ),
+        });
+        await job.done;
+        // The announcement and the job settling reach this server over
+        // separate notifications, in either order.
+        let deadline = Date.now() + 30_000;
+        while (follows.length === 0) {
+          if (Date.now() > deadline) {
+            throw new Error("no worker's incremental pass was announced");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        await Promise.all(follows);
+        return announced;
+      } finally {
+        await listener.shutDown();
+        realm.followAutomationKeyApprovalsAfterWorkerPass = original;
+      }
+    }
+
+    test("a revert a worker's incremental pass is the first to index runs a waiting automation again, with nobody asked to approve it again", async function (assert) {
+      await switchOnApproved();
+      let approvals = await approvalRowsOf(KEYED);
+      await realm.write(`${KEYED}-script.js`, `return 'changed';`);
+      await reachesState(KEYED, 'waiting-for-key-approval');
+      // The realm's own check after that pass reads the script as the realm
+      // holds it, so it settles before the file changes under it.
+      await realm.incrementalIndexing();
+      editUnwatched(`${KEYED}-script.js`, `return 'ok';`);
+
+      let announced = await workerPassHeard([`${KEYED}-script.js`]);
+      assert.deepEqual(
+        announced,
+        [[automationId(KEYED)]],
+        'the worker names the automation whose script the pass touched',
+      );
+      let row = await reachesState(KEYED, 'active');
+      assert.notStrictEqual(row.nextRun, null, 'its schedule starts again');
+      assert.deepEqual(
+        await approvalRowsOf(KEYED),
+        approvals,
+        'the approval its key owner gave matches again, unchanged',
+      );
+    });
+
+    test("an edit a worker's incremental pass is the first to index, adding an operation needing a key to an automation with no approval, moves it to waiting for key approval", async function (assert) {
+      let switchedOn = await switchOn(OWNER, DAILY);
+      assert.strictEqual(switchedOn.body.data.attributes.state, 'active');
+      editUnwatched(
+        `${DAILY}.json`,
+        automationFixture({
+          operations: [{ type: INBOX, names: ['list'] }],
+          path: DAILY,
+          triggers: [
+            {
+              kind: 'cron',
+              label: 'daily',
+              expression: '0 9 * * *',
+              timeZone: 'UTC',
+            },
+          ],
+        })[`${DAILY}.json`],
+      );
+
+      await workerPassHeard([`${DAILY}.json`]);
+      let row = await reachesState(DAILY, 'waiting-for-key-approval');
+      assert.strictEqual(row.nextRun, null);
+      assert.deepEqual(operationStates(await keyApprovalsOf(DAILY)), [
+        {
+          operation: 'list',
+          state: 'missing',
+          missing: [{ slot: 'userKey', canApprove: 'payer' }],
+        },
+      ]);
+    });
+
+    test("a worker's incremental pass announces no paused automation", async function (assert) {
+      await switchOnApproved();
+      await switchOn(OWNER, DAILY);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(KEYED) }))
+          .status,
+        200,
+      );
+
+      let announced = await workerPassHeard([
+        `${KEYED}-script.js`,
+        `${DAILY}.json`,
+      ]);
+      assert.deepEqual(announced, [[automationId(DAILY)]]);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'paused',
+      );
+    });
+
+    test('an incremental pass the realm awaits is checked by the realm, and the worker announces none of its automations', async function (assert) {
+      await switchOnApproved();
+      let notified: string[] = [];
+      let notify = dbAdapter.notify;
+      dbAdapter.notify = async function (channel, payload) {
+        notified.push(channel);
+        return await notify.call(dbAdapter, channel, payload);
+      };
+      try {
+        await realm.write(`${KEYED}-script.js`, `return 'changed';`);
+        await reachesState(KEYED, 'waiting-for-key-approval');
+        await realm.write(`${KEYED}-script.js`, `return 'ok';`);
+        await reachesState(KEYED, 'active');
+        await realm.incrementalIndexing();
+        assert.false(
+          notified.includes(REALM_AUTOMATIONS_TOUCHED_CHANNEL),
+          "the realm's passes announce no automation",
+        );
+
+        await workerPassHeard([`${KEYED}-script.js`]);
+        assert.true(
+          notified.includes(REALM_AUTOMATIONS_TOUCHED_CHANNEL),
+          "a worker's pass over the same file announces it",
+        );
+      } finally {
+        dbAdapter.notify = notify;
+      }
     });
 
     test('approving a slot again with another key sends an automation event for the automation whose approval it ended', async function (assert) {

@@ -1,7 +1,8 @@
-import type { Realm } from '@cardstack/runtime-common';
+import type { Realm, RealmAutomationsTouched } from '@cardstack/runtime-common';
 import {
   logger,
   REALM_AUTOMATIONS_REINDEXED_CHANNEL,
+  REALM_AUTOMATIONS_TOUCHED_CHANNEL,
 } from '@cardstack/runtime-common';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 
@@ -17,6 +18,13 @@ const log = logger('realm-server:automations-reindexed-listener');
 // again, and one whose edit adds an operation needing a key no approval
 // covers waits for key approval.
 //
+// An incremental pass no realm follows (one the worker enqueues on its own,
+// such as the prerender reconcile's retry) is announced the same way, on
+// `realm_automations_touched`, naming the automations it touched: the realm
+// server checks those (`Realm.followAutomationKeyApprovalsAfterWorkerPass`).
+// An incremental pass a realm awaits is checked by that realm, and isn't
+// announced.
+//
 // A realm not mounted here is left to the servers that mount it. A
 // notification lost while the connection was down is not caught up: the
 // automation stays as the hook left it until an approval lands or its next
@@ -30,6 +38,7 @@ export interface RealmAutomationsReindexedListenerDeps {
 export class RealmAutomationsReindexedListener {
   #deps: RealmAutomationsReindexedListenerDeps;
   #subscription?: NotificationSubscription;
+  #touchedSubscription?: NotificationSubscription;
   #starting?: Promise<void>;
 
   constructor(deps: RealmAutomationsReindexedListenerDeps) {
@@ -46,6 +55,12 @@ export class RealmAutomationsReindexedListener {
         REALM_AUTOMATIONS_REINDEXED_CHANNEL,
         (notification) => {
           void this.handleNotification(notification.payload);
+        },
+      );
+      this.#touchedSubscription = await this.#deps.dbAdapter.subscribe(
+        REALM_AUTOMATIONS_TOUCHED_CHANNEL,
+        (notification) => {
+          void this.handleTouchedNotification(notification.payload);
         },
       );
     })();
@@ -65,9 +80,10 @@ export class RealmAutomationsReindexedListener {
     } catch {
       // ignore
     }
-    const sub = this.#subscription;
+    const subs = [this.#subscription, this.#touchedSubscription];
     this.#subscription = undefined;
-    await sub?.unsubscribe();
+    this.#touchedSubscription = undefined;
+    await Promise.all(subs.map((sub) => sub?.unsubscribe()));
   }
 
   // Invoked by the LISTEN handler, and by tests. Settles once the realm's
@@ -87,4 +103,60 @@ export class RealmAutomationsReindexedListener {
     }
     await realm?.followAutomationKeyApprovalsAfterFromScratchPass();
   }
+
+  // Invoked by the LISTEN handler for `realm_automations_touched`, and by
+  // tests. Settles once the realm's follow has, and never rejects.
+  async handleTouchedNotification(payload: string | undefined): Promise<void> {
+    let touched = parseTouched(payload);
+    if (!touched) {
+      log.warn(
+        `ignoring malformed ${REALM_AUTOMATIONS_TOUCHED_CHANNEL} payload: ${payload}`,
+      );
+      return;
+    }
+    let realm: Realm | undefined;
+    try {
+      realm = this.#deps.lookupMountedRealm(touched.realmURL);
+    } catch (err: unknown) {
+      log.warn(`looking up realm ${touched.realmURL} failed: ${String(err)}`);
+      return;
+    }
+    await realm?.followAutomationKeyApprovalsAfterWorkerPass(
+      touched.automationIds,
+      { reportChanges: touched.reportChanges },
+    );
+  }
+}
+
+function parseTouched(
+  payload: string | undefined,
+): RealmAutomationsTouched | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload ?? '');
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return undefined;
+  }
+  let { realmURL, automationIds, reportChanges } = parsed as Record<
+    string,
+    unknown
+  >;
+  if (
+    typeof realmURL !== 'string' ||
+    !realmURL ||
+    !Array.isArray(automationIds) ||
+    !automationIds.every((id) => typeof id === 'string')
+  ) {
+    return undefined;
+  }
+  return {
+    realmURL,
+    automationIds,
+    // Absent, the check reports what it moved, as a pass announces by
+    // default.
+    reportChanges: reportChanges !== false,
+  };
 }

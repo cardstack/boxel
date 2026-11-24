@@ -1302,7 +1302,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   await indexUpdatedListener.start();
 
   // Checks the key approvals of a realm's automations in full once a
-  // from-scratch index pass over the realm lands, whoever started the pass.
+  // from-scratch index pass over the realm lands, whoever started the pass,
+  // and of the automations an incremental pass touched once one that no
+  // realm awaits lands.
   automationsReindexedListener = new RealmAutomationsReindexedListener({
     dbAdapter,
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),

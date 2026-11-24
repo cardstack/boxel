@@ -5,6 +5,7 @@ import {
   notifyAllFileChanges,
   notifyRealmIndexUpdated,
   notifyRealmAutomationsReindexed,
+  notifyRealmAutomationsTouched,
   incrementalCompletionThatFits,
   userIdFromUsername,
   fetchUserPermissions,
@@ -92,6 +93,13 @@ export interface CoalescedCaller extends JSONTypes.Object {
   // pass has run, or never, if that pass fails. The first caller for which
   // this is true announces the pass for everyone; see `SharedIndexPass`.
   announcesPass: boolean;
+  // Whether this caller's realm checks the key approvals of the automations
+  // the pass touched once the pass lands (`Realm.followAutomationKeyApprovals`).
+  // When no caller does (a pass the worker enqueues on its own, such as the
+  // prerender reconcile's retry or a commit's follow-up), the pass announces
+  // the automations it touched on `REALM_AUTOMATIONS_TOUCHED_CHANNEL` so a
+  // realm server serving the realm checks them.
+  followsKeyApprovals: boolean;
 }
 
 export interface IncrementalArgs extends WorkerArgs {
@@ -1083,7 +1091,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
     }
     // A deleted card's row is gone from the index, so the pass's changes are
     // named alongside what it visited.
-    await syncAutomationsAfterPass(log, jobInfo, {
+    let synced = await syncAutomationsAfterPass(log, jobInfo, {
       dbAdapter,
       definitionLookup,
       virtualNetwork,
@@ -1102,6 +1110,28 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         log,
       }),
     });
+    // The hook can't check the automations' key approvals in full, as the
+    // worker reads no operation definitions. A realm that awaits the pass
+    // checks the automations it touched once it lands; when none does, a
+    // realm server serving the realm hears of them from here. A paused
+    // automation, or one the pass removed, has nothing to check.
+    if (!coalescedCallers.some((caller) => caller.followsKeyApprovals)) {
+      let automationIds = [...synced]
+        .filter(
+          ([, outcome]) =>
+            outcome.kind === 'failed' ||
+            (outcome.kind !== 'removed' &&
+              outcome.automation.state !== 'paused'),
+        )
+        .map(([automationId]) => automationId);
+      if (automationIds.length > 0) {
+        await notifyRealmAutomationsTouched(dbAdapter, {
+          realmURL,
+          automationIds,
+          reportChanges: args.realmEvents !== false,
+        });
+      }
+    }
     let chargedRunIndexing: RunIndexing | undefined;
     if (runIndexing) {
       // The run's indexing so far, with this pass's: the worker process was

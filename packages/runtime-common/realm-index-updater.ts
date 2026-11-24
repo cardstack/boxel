@@ -87,6 +87,9 @@ export interface IncrementalIndexOptions {
   // Whether the caller announces the pass the moment it lands, rather than
   // after later passes of the same write. See CoalescedCaller.
   announcesPass?: boolean;
+  // Whether the caller checks the key approvals of the automations the pass
+  // touched once it lands. See `CoalescedCaller.followsKeyApprovals`.
+  followsKeyApprovals?: boolean;
   // False when the write asked for no realm events, so neither the pass's
   // render job nor a follow-up pass announces anything on its behalf. See
   // `IncrementalArgs.realmEvents`.
@@ -646,6 +649,7 @@ export class RealmIndexUpdater {
         {
           clientAuthored: opts?.clientAuthored ?? null,
           announcesPass: opts?.announcesPass === true,
+          followsKeyApprovals: opts?.followsKeyApprovals === true,
           realmEvents: opts?.realmEvents !== false,
         },
       );
@@ -763,6 +767,7 @@ export class RealmIndexUpdater {
       | 'clientRequestId'
       | 'clientAuthored'
       | 'announcesPass'
+      | 'followsKeyApprovals'
       | 'realmEvents'
       | 'initiatedBy'
       | 'deferPrerenderHtml'
