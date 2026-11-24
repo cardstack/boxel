@@ -1974,18 +1974,19 @@ export async function notifyRealmIndexUpdated(
 // landed and its index hook has synced the realm's automations, to check
 // their key approvals in full, which the worker can't do, as it reads no
 // operation definitions. After a from-scratch pass it is a `POST` with no
-// body, and the realm checks every automation in it
-// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`). After an
-// incremental pass no realm awaits, the body names the automations the pass
-// touched (`FollowAutomationKeyApprovalsRequest`), and the realm checks those
-// (`Realm.followAutomationKeyApprovalsAfterWorkerPass`). Answered 204 once
-// the check has run; like every `POST`, it takes a direct writer of the
-// realm.
+// body: the realm checks every automation in it
+// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`) and answers 204
+// once the check has run. After an incremental pass the body names the
+// automations the pass touched (`FollowAutomationKeyApprovalsRequest`): the
+// realm starts checking those (`Realm.followAutomationKeyApprovalsAfterWorkerPass`)
+// and answers 202 at once, so the pass's job, which holds the realm's index
+// lane, doesn't wait on the check. Like every `POST`, it takes a direct writer
+// of the realm.
 export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
   '/_follow-automation-key-approvals';
 
 // The body of `FOLLOW_AUTOMATION_KEY_APPROVALS_PATH` after an incremental
-// pass no realm awaits.
+// pass.
 export interface FollowAutomationKeyApprovalsRequest {
   // The automations the pass touched, by id.
   automationIds: string[];
@@ -4182,9 +4183,9 @@ export class Realm {
         this.runState.bind(this),
         ACL_ONLY,
       )
-      // The worker's request, after a from-scratch pass over this realm, to
-      // check its automations' key approvals in full. Answered on the realm
-      // ACL alone: it runs only what the realm's own follow would.
+      // The worker's request, after an index pass over this realm, to check
+      // its automations' key approvals in full. Answered on the realm ACL
+      // alone: it runs only what the realm's own follow would.
       .post(
         FOLLOW_AUTOMATION_KEY_APPROVALS_PATH,
         SupportedMimeType.JSONAPI,
@@ -4961,8 +4962,6 @@ export class Realm {
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
       announcesPass:
         opts?.announcesPass !== false && opts?.broadcastRealmEvents !== false,
-      // `#followAutomationKeyApprovalsAfterPass` below.
-      followsKeyApprovals: true,
       realmEvents: opts?.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
@@ -5072,8 +5071,6 @@ export class Realm {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
       announcesPass: opts.broadcastRealmEvents !== false,
-      // `#followAutomationKeyApprovalsAfterPass` below.
-      followsKeyApprovals: true,
       realmEvents: opts.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.carriedPrerenderHtmlChanges?.length
@@ -15684,16 +15681,19 @@ export class Realm {
     }
   }
 
-  // Once an incremental pass no realm followed has landed (one the worker
-  // enqueued on its own, such as the prerender reconcile's retry or a
-  // commit's follow-up), follows the key approvals of the automations it
-  // touched that are in this realm and aren't paused, as the realm does after
-  // a pass it awaits. Such a pass can be the first to index an edit made
-  // while no realm server watched the files. The worker asks for this
-  // (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`, naming the automations), and the
-  // request mounts the realm on whichever realm server it reaches. Each
-  // automation's follow locks its row, so a follow racing another one of the
-  // same automation takes its turn and finds the row in step.
+  // Once an incremental pass has landed, follows the key approvals of the
+  // automations it touched that are in this realm and aren't paused. The
+  // worker that ran the pass asks for this after every pass whose hook synced
+  // an automation (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`, naming them), and
+  // the request mounts the realm on whichever realm server it reaches. That
+  // covers a pass no realm awaits (one the worker enqueues on its own, such
+  // as the prerender reconcile's retry or a commit's follow-up), which can be
+  // the first to index an edit made while no realm server watched the files,
+  // and a pass whose realm server stopped before it landed. A pass this realm
+  // awaits is also followed by the realm itself
+  // (`#followAutomationKeyApprovalsAfterPass`); each automation's follow
+  // locks its row, so the second takes its turn, finds the row in step, and
+  // moves and reports nothing.
   //
   // `reportChanges` is false when the writes behind the pass asked for no
   // realm events. The follow is held in `#automationFollowsAfterPass`, so
@@ -15755,13 +15755,19 @@ export class Realm {
           requestContext,
         });
       }
-      await this.followAutomationKeyApprovalsAfterWorkerPass(
+      // Held in `#automationFollowsAfterPass` from here, so
+      // `incrementalIndexing()` waits for it; it never rejects.
+      void this.followAutomationKeyApprovalsAfterWorkerPass(
         touched.automationIds,
         { reportChanges: touched.reportChanges !== false },
       );
-    } else {
-      await this.followAutomationKeyApprovalsAfterFromScratchPass();
+      return createResponse({
+        body: null,
+        init: { status: 202 },
+        requestContext,
+      });
     }
+    await this.followAutomationKeyApprovalsAfterFromScratchPass();
     return createResponse({
       body: null,
       init: { status: 204 },

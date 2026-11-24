@@ -93,12 +93,6 @@ export interface CoalescedCaller extends JSONTypes.Object {
   // pass has run, or never, if that pass fails. The first caller for which
   // this is true announces the pass for everyone; see `SharedIndexPass`.
   announcesPass: boolean;
-  // Whether this caller's realm checks the key approvals of the automations
-  // the pass touched once the pass lands (`Realm.followAutomationKeyApprovals`).
-  // When no caller does (a pass the worker enqueues on its own, such as the
-  // prerender reconcile's retry or a commit's follow-up), the pass asks the
-  // realm to check them (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`).
-  followsKeyApprovals: boolean;
 }
 
 export interface IncrementalArgs extends WorkerArgs {
@@ -1110,31 +1104,30 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       }),
     });
     // The hook can't check the automations' key approvals in full, as the
-    // worker reads no operation definitions. A realm that awaits the pass
-    // checks the automations it touched once it lands; when none does, the
-    // pass asks the realm to. A paused automation, or one the pass removed,
-    // has nothing to check.
-    if (!coalescedCallers.some((caller) => caller.followsKeyApprovals)) {
-      let automationIds = [...synced]
-        .filter(
-          ([, outcome]) =>
-            outcome.kind === 'failed' ||
-            (outcome.kind !== 'removed' &&
-              outcome.automation.state !== 'paused'),
-        )
-        .map(([automationId]) => automationId);
-      if (automationIds.length > 0) {
-        await followAutomationKeyApprovalsInRealm(
-          log,
-          jobInfo,
-          _fetch,
-          realmURL,
-          {
-            automationIds,
-            reportChanges: args.realmEvents !== false,
-          },
-        );
-      }
+    // worker reads no operation definitions, so the pass asks the realm to,
+    // whoever started it: a pass no realm awaits (the prerender reconcile's
+    // retry, a commit's follow-up) has nobody else to check it, and a realm
+    // awaiting the pass may have stopped before it landed. The realm answers
+    // at once and checks beside the pass. A paused automation, or one the
+    // pass removed, has nothing to check.
+    let touchedAutomations = [...synced]
+      .filter(
+        ([, outcome]) =>
+          outcome.kind === 'failed' ||
+          (outcome.kind !== 'removed' && outcome.automation.state !== 'paused'),
+      )
+      .map(([automationId]) => automationId);
+    if (touchedAutomations.length > 0) {
+      await followAutomationKeyApprovalsInRealm(
+        log,
+        jobInfo,
+        _fetch,
+        realmURL,
+        {
+          automationIds: touchedAutomations,
+          reportChanges: args.realmEvents !== false,
+        },
+      );
     }
     let chargedRunIndexing: RunIndexing | undefined;
     if (runIndexing) {
@@ -1263,9 +1256,10 @@ async function syncAutomationsAfterPass(
   }
 }
 
-// How long the from-scratch task waits for the realm's check of its
-// automations' key approvals before it lets its job finish without the
-// answer. The check runs on in the realm either way.
+// How long a pass waits for the realm's answer to its request to check the
+// automations' key approvals before it lets its job finish without it: the
+// whole check after a from-scratch pass, the check's start after an
+// incremental pass. The check runs on in the realm either way.
 const FOLLOW_AUTOMATION_KEY_APPROVALS_TIMEOUT_MS = 60_000;
 
 // Asks the realm to check the key approvals of its automations in full

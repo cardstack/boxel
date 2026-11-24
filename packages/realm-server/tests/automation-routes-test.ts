@@ -1748,9 +1748,10 @@ module(basename(import.meta.filename), function (hooks) {
     // Runs an incremental pass over `paths` that no realm awaits, enqueued
     // the way the prerender reconcile retries a transient failure, whose
     // worker asks the realm to check the key approvals of the automations
-    // the pass touched. Answers the automation ids of each request the realm
-    // got. With `realmChecks` false the realm answers without checking, which
-    // leaves the automations as the hook alone moves them.
+    // the pass touched, and waits for the check the request started. Answers
+    // the automation ids of each request the realm got. With `realmChecks`
+    // false the realm answers without checking, which leaves the automations
+    // as the hook alone moves them.
     async function workerPass(paths: string[], { realmChecks = true } = {}) {
       let asked: string[][] = [];
       let original = realm.followAutomationKeyApprovalsAfterWorkerPass;
@@ -1782,8 +1783,10 @@ module(basename(import.meta.filename), function (hooks) {
             null,
           ),
         });
-        // The worker waits for the realm's answer before it settles the job.
+        // The worker waits for the realm's answer before it settles the job,
+        // and the check the answer started is among the realm's indexing.
         await job.done;
+        await realm.incrementalIndexing();
       } finally {
         realm.followAutomationKeyApprovalsAfterWorkerPass = original;
       }
@@ -1871,30 +1874,47 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test("an incremental pass the realm awaits is checked by the realm, and its worker doesn't ask the realm again", async function (assert) {
+    test("an incremental pass the realm awaits is checked by the realm and at its worker's request, and the second check moves and reports nothing", async function (assert) {
       await switchOnApproved();
-      let asked = 0;
+      await realm.write(`${KEYED}-script.js`, `return 'changed';`);
+      await reachesState(KEYED, 'waiting-for-key-approval');
+      await realm.incrementalIndexing();
+
+      let asked: string[][] = [];
       let original = realm.followAutomationKeyApprovalsAfterWorkerPass;
-      realm.followAutomationKeyApprovalsAfterWorkerPass = async function (
+      realm.followAutomationKeyApprovalsAfterWorkerPass = function (
         automationIds,
         opts,
       ) {
-        asked++;
-        return await original.call(realm, automationIds, opts);
+        asked.push([...automationIds]);
+        return original.call(realm, automationIds, opts);
       };
+      let sent: string[];
       try {
-        await realm.write(`${KEYED}-script.js`, `return 'changed';`);
-        await reachesState(KEYED, 'waiting-for-key-approval');
-        await realm.write(`${KEYED}-script.js`, `return 'ok';`);
-        await reachesState(KEYED, 'active');
-        await realm.incrementalIndexing();
+        sent = await automationEventsDuring(async () => {
+          await realm.write(`${KEYED}-script.js`, `return 'ok';`);
+          await realm.incrementalIndexing();
+        });
       } finally {
         realm.followAutomationKeyApprovalsAfterWorkerPass = original;
       }
-      assert.strictEqual(asked, 0);
+      assert.deepEqual(
+        asked,
+        [[automationId(KEYED)]],
+        "the realm's own pass asks the realm too",
+      );
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'active',
+      );
+      assert.deepEqual(
+        sent,
+        [automationId(KEYED)],
+        'one automation event, for the one move',
+      );
     });
 
-    test('the request to check the automations’ key approvals checks only the automations its body names, and refuses a body that names none', async function (assert) {
+    test('the request to check the automations’ key approvals starts checking only the automations its body names, and refuses a body that names none', async function (assert) {
       let path = `${new URL(realm.url).pathname}_follow-automation-key-approvals`;
       let auth = `Bearer ${createJWT(realm, WRITER, ['read', 'write'])}`;
       let asked: { automationIds: string[]; reportChanges: boolean }[] = [];
@@ -1924,7 +1944,7 @@ module(basename(import.meta.filename), function (hooks) {
               reportChanges: false,
             }),
           );
-        assert.strictEqual(answered.status, 204, answered.text);
+        assert.strictEqual(answered.status, 202, answered.text);
         for (let body of [
           'not json',
           '{}',
