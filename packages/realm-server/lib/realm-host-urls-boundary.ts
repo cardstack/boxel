@@ -26,12 +26,14 @@ import {
 // its JSON body, so that card ids and code refs in a `_search`, an
 // `_operations` or a `_capabilities` request name the realm's URL. On the way
 // out it translates every response header, and the body of an HTML or JSON
-// response. The realm's URL, its canonical host URL, and each URL its stored
-// HTML was rendered against are translated to the host URL the request came
-// in on, so a page is right whichever of them its stored markup names, also
-// while the realm's HTML is rendered again against a new canonical host URL
-// (ADR 033 §1.8). A page's canonical link and `og:url` name the canonical
-// host URL instead (ADR 033 §1.4).
+// response. The realm's URL and its canonical host URL are translated to the
+// host URL the request came in on. In stored HTML, each URL that HTML was
+// rendered against is translated too, so a page is right whichever of them
+// its markup names, also while the realm's HTML is rendered again against a
+// new canonical host URL (ADR 033 §1.8). Only stored HTML is translated from
+// those URLs: anywhere else, such as in a card's data, a URL that names one
+// of them is data the realm holds. A page's canonical link and `og:url` name
+// the canonical host URL instead (ADR 033 §1.4).
 //
 // A response on the realm's own URL names the realm's URL wherever the stored
 // HTML it serves names a URL that HTML was rendered against, so that the app
@@ -141,11 +143,103 @@ class Replacer {
   }
 }
 
+// The text that a body must contain to name one of `urls`: each URL without
+// its trailing slash, in the forms a `Replacer` finds.
+function needlesFor(urls: readonly string[]): string[] {
+  return urls.flatMap((url) => {
+    let bare = url.replace(/\/$/, '');
+    return [bare, encodeURIComponent(bare)];
+  });
+}
+
+function namesAny(text: string, needles: readonly string[]): boolean {
+  return needles.some((needle) => text.includes(needle));
+}
+
+// Stored HTML with its URLs mapped by `replacer`, and those in its canonical
+// link and `og:url` by `canonical`, or left as they are without one. The host
+// app's config in a page is data, not stored HTML, and is left as it is.
+function mapStoredHTML(
+  html: string,
+  replacer: Replacer,
+  canonical?: Replacer,
+): string {
+  let out = '';
+  let last = 0;
+  for (let match of html.matchAll(LINK_OR_META)) {
+    let tag = match[0];
+    out += replacer.replace(html.slice(last, match.index));
+    if (CONFIG_META.test(tag)) {
+      out += tag;
+    } else if (CANONICAL_TAG.test(tag)) {
+      out += canonical ? canonical.replace(tag) : tag;
+    } else {
+      out += replacer.replace(tag);
+    }
+    last = match.index + tag.length;
+  }
+  return out + replacer.replace(html.slice(last));
+}
+
+// A JSON:API document with the markup of each of its `html` resources mapped
+// by `map`, which gets the URL of the resource's card. The rest of the
+// document is not stored HTML, and is left as it is. A document that isn't
+// JSON, or in which nothing changes, is returned as it is.
+function mapHTMLResources(
+  text: string,
+  map: (html: string, cardURL: string) => string,
+): string {
+  let doc: { data?: unknown; included?: unknown } | null;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return text;
+  }
+  if (!doc || typeof doc !== 'object') {
+    return text;
+  }
+  let resources = [
+    ...(Array.isArray(doc.data) ? doc.data : [doc.data]),
+    ...(Array.isArray(doc.included) ? doc.included : []),
+  ] as ({
+    type?: unknown;
+    id?: unknown;
+    attributes?: { html?: unknown };
+  } | null)[];
+  let changed = false;
+  for (let resource of resources) {
+    if (
+      !resource ||
+      typeof resource !== 'object' ||
+      resource.type !== HtmlResourceType ||
+      typeof resource.id !== 'string' ||
+      typeof resource.attributes?.html !== 'string'
+    ) {
+      continue;
+    }
+    // An `html` resource's id is its card's URL, then `#` and the rendering
+    // it is.
+    let html = map(resource.attributes.html, resource.id.split('#')[0]);
+    if (html !== resource.attributes.html) {
+      resource.attributes.html = html;
+      changed = true;
+    }
+  }
+  return changed ? JSON.stringify(doc) : text;
+}
+
 export class HostURLTranslator {
   readonly match: HostURLMatch;
   #inbound: Replacer;
   #outbound: Replacer;
   #canonical: Replacer;
+  // The URLs stored HTML was rendered against, as the host URL, and in a
+  // canonical link and `og:url` as the canonical host URL. These apply only
+  // to stored HTML: anything else that names such a URL is data the realm
+  // holds, which a client can write back.
+  #fromRenderedAgainst: Replacer;
+  #fromRenderedAgainstCanonical: Replacer;
+  #renderedAgainstNeedles: string[];
   #realmPath: string;
   #hostPath: string;
   #validatorSuffix: string;
@@ -164,16 +258,21 @@ export class HostURLTranslator {
     this.#outbound = new Replacer([
       [realmURL, hostURL],
       [canonicalHostURL, hostURL],
-      ...renderedAgainstURLs.map((url): [string, string] => [url, hostURL]),
     ]);
     this.#canonical = new Replacer([
       [realmURL, canonicalHostURL],
       [hostURL, canonicalHostURL],
-      ...renderedAgainstURLs.map((url): [string, string] => [
+    ]);
+    this.#fromRenderedAgainst = new Replacer(
+      renderedAgainstURLs.map((url): [string, string] => [url, hostURL]),
+    );
+    this.#fromRenderedAgainstCanonical = new Replacer(
+      renderedAgainstURLs.map((url): [string, string] => [
         url,
         canonicalHostURL,
       ]),
-    ]);
+    );
+    this.#renderedAgainstNeedles = needlesFor(renderedAgainstURLs);
     this.#realmPath = new URL(realmURL).pathname;
     this.#hostPath = new URL(hostURL).pathname;
     let hash = createHash('sha256')
@@ -258,14 +357,31 @@ export class HostURLTranslator {
     return out + this.outbound(html.slice(last));
   }
 
+  // A response body. A page is built from stored HTML, and in a JSON
+  // document the markup of each `html` resource is stored HTML, so these are
+  // also translated from the URLs stored HTML was rendered against
+  // (ADR 033 §1.8). The rest of the body is translated from the realm's URL
+  // and its canonical host URL only.
   outboundBody(text: string, type: string): string {
     if (type === 'text/html') {
-      return this.outboundHTML(text);
+      return this.outboundHTML(this.#storedHTML(text));
     }
+    let translated = namesAny(text, this.#renderedAgainstNeedles)
+      ? mapHTMLResources(text, (html) => this.#storedHTML(html))
+      : text;
     if (isMarkupEnvelopeType(type)) {
-      return this.#outboundMarkupEnvelope(text);
+      return this.#outboundMarkupEnvelope(translated);
     }
-    return this.outbound(text);
+    return this.outbound(translated);
+  }
+
+  // Stored HTML, with the URLs it was rendered against as the host URL.
+  #storedHTML(html: string): string {
+    return mapStoredHTML(
+      html,
+      this.#fromRenderedAgainst,
+      this.#fromRenderedAgainstCanonical,
+    );
   }
 
   // Each string in the document is translated as markup, so a `head`
@@ -356,10 +472,9 @@ export class StoredHTMLBackMapper {
   #realms: {
     realmURL: string;
     replacer: Replacer;
-    // Each URL without its trailing slash, as text that must be in a body
-    // for the body to need mapping, in the forms the replacer finds.
-    needles: string[];
   }[];
+  // The text a body must contain for the body to need mapping.
+  #needles: string[];
 
   constructor(renderedAgainstURLs: RenderedAgainstURLs) {
     this.#realms = [...renderedAgainstURLs]
@@ -368,12 +483,9 @@ export class StoredHTMLBackMapper {
         replacer: new Replacer(
           urls.map((url): [string, string] => [url, realmURL]),
         ),
-        needles: urls.flatMap((url) => {
-          let bare = url.replace(/\/$/, '');
-          return [bare, encodeURIComponent(bare)];
-        }),
       }))
       .sort((a, b) => b.realmURL.length - a.realmURL.length);
+    this.#needles = needlesFor([...renderedAgainstURLs.values()].flat());
   }
 
   #realmOf(url: string) {
@@ -390,18 +502,7 @@ export class StoredHTMLBackMapper {
   // Stored HTML of the realm that `url` is in, naming the realm's URL.
   html(html: string, url: string): string {
     let realm = this.#realmOf(url);
-    if (!realm) {
-      return html;
-    }
-    let { replacer } = realm;
-    let out = '';
-    let last = 0;
-    for (let tag of html.matchAll(LINK_OR_META)) {
-      out += replacer.replace(html.slice(last, tag.index));
-      out += CANONICAL_TAG.test(tag[0]) ? tag[0] : replacer.replace(tag[0]);
-      last = tag.index + tag[0].length;
-    }
-    return out + replacer.replace(html.slice(last));
+    return realm ? mapStoredHTML(html, realm.replacer) : html;
   }
 
   // A response body. A page is mapped as the realm's page at `requestURL`. In
@@ -412,51 +513,10 @@ export class StoredHTMLBackMapper {
     if (type === 'text/html') {
       return this.html(text, requestURL);
     }
-    if (
-      !this.#realms.some(({ needles }) =>
-        needles.some((needle) => text.includes(needle)),
-      )
-    ) {
+    if (!namesAny(text, this.#needles)) {
       return text;
     }
-    let doc: { data?: unknown; included?: unknown } | null;
-    try {
-      doc = JSON.parse(text);
-    } catch {
-      return text;
-    }
-    if (!doc || typeof doc !== 'object') {
-      return text;
-    }
-    let resources = [
-      ...(Array.isArray(doc.data) ? doc.data : [doc.data]),
-      ...(Array.isArray(doc.included) ? doc.included : []),
-    ] as ({
-      type?: unknown;
-      id?: unknown;
-      attributes?: { html?: unknown };
-    } | null)[];
-    let changed = false;
-    for (let resource of resources) {
-      if (
-        !resource ||
-        typeof resource !== 'object' ||
-        resource.type !== HtmlResourceType ||
-        typeof resource.id !== 'string' ||
-        typeof resource.attributes?.html !== 'string'
-      ) {
-        continue;
-      }
-      // An `html` resource's id is its card's URL, then `#` and the
-      // rendering it is.
-      let cardURL = resource.id.split('#')[0];
-      let html = this.html(resource.attributes.html, cardURL);
-      if (html !== resource.attributes.html) {
-        resource.attributes.html = html;
-        changed = true;
-      }
-    }
-    return changed ? JSON.stringify(doc) : text;
+    return mapHTMLResources(text, (html, cardURL) => this.html(html, cardURL));
   }
 }
 

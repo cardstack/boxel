@@ -216,15 +216,55 @@ module(basename(import.meta.filename), function () {
         renderedAgainstURLs: ['https://old.example.test/'],
       });
       assert.strictEqual(
-        renderedAgainst.outbound('<a href="https://old.example.test/a">a</a>'),
-        '<a href="https://site.example.test/shop/a">a</a>',
+        renderedAgainst.outboundBody(
+          [
+            '<link rel="canonical" href="https://old.example.test/a" />',
+            '<a href="https://old.example.test/a">a</a>',
+          ].join('\n'),
+          'text/html',
+        ),
+        [
+          '<link rel="canonical" href="https://store.example.test/a" />',
+          '<a href="https://site.example.test/shop/a">a</a>',
+        ].join('\n'),
+        'a page names the host URL, and the canonical host URL in its canonical link',
+      );
+      let doc = JSON.parse(
+        renderedAgainst.outboundBody(
+          JSON.stringify({
+            data: {
+              type: 'card',
+              id: 'https://realms.example.test/owner/store/a',
+              attributes: { website: 'https://old.example.test/' },
+            },
+            included: [
+              {
+                type: 'html',
+                id: 'https://realms.example.test/owner/store/a#fitted',
+                attributes: {
+                  html: '<a href="https://old.example.test/a">a</a>',
+                },
+              },
+            ],
+          }),
+          'application/vnd.card+json',
+        ),
       );
       assert.strictEqual(
-        renderedAgainst.outboundHTML(
-          '<link rel="canonical" href="https://old.example.test/a" />',
-        ),
-        '<link rel="canonical" href="https://store.example.test/a" />',
-        'a canonical link names the canonical host URL',
+        doc.included[0].attributes.html,
+        '<a href="https://site.example.test/shop/a">a</a>',
+        'the markup of an html resource names the host URL',
+      );
+      assert.strictEqual(
+        doc.data.attributes.website,
+        'https://old.example.test/',
+        "a card's data is not translated from it",
+      );
+      assert.strictEqual(doc.data.id, 'https://site.example.test/shop/a');
+      assert.strictEqual(
+        renderedAgainst.outbound('https://old.example.test/a'),
+        'https://old.example.test/a',
+        'nor is any other text',
       );
       assert.strictEqual(
         renderedAgainst.inbound('{"href":"https://old.example.test/a"}'),
@@ -370,6 +410,16 @@ module(basename(import.meta.filename), function () {
             attributes: {
               firstName: 'Ada',
               website: `${CANONICAL_HOST_URL}about`,
+            },
+            meta: { adoptsFrom: { module: rri('./person'), name: 'Person' } },
+          },
+        },
+        'person-2.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Grace',
+              website: `${OLD_HOST_URL}about`,
             },
             meta: { adoptsFrom: { module: rri('./person'), name: 'Person' } },
           },
@@ -805,6 +855,46 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(head.status, 200, head.text);
       assert.false(head.text.includes(OLD_HOST), 'nor does a +html read');
+    });
+
+    test("a card's data on a host URL is not translated from a URL its HTML was rendered against", async function (assert) {
+      await renderAgainst(OLD_HOST_URL);
+
+      let card = await get(
+        `${SPACE_PREFIX}person-2`,
+        SupportedMimeType.CardJson,
+      );
+      assert.strictEqual(card.status, 200, card.text);
+      let doc = JSON.parse(card.text);
+      assert.strictEqual(doc.data.id, `${SPACE_HOST_URL}person-2`);
+      assert.strictEqual(
+        doc.data.attributes.website,
+        `${OLD_HOST_URL}about`,
+        'the attribute is served as the realm holds it',
+      );
+
+      let rendered = await get(
+        `${SPACE_PREFIX}person-2?format=isolated&fields=html,item`,
+        SupportedMimeType.CardHtml,
+      );
+      assert.strictEqual(rendered.status, 200, rendered.text);
+      let envelope = JSON.parse(rendered.text);
+      let html = envelope.included.find(
+        (resource: { type: string }) => resource.type === 'html',
+      ).attributes.html;
+      assert.strictEqual(
+        attr(html, /<a [^>]*data-person-self[^>]*>/, 'href'),
+        `${SPACE_HOST_URL}person-2`,
+        'the stored HTML names the host URL',
+      );
+      let item = envelope.included.find(
+        (resource: { type: string }) => resource.type === 'card',
+      );
+      assert.strictEqual(
+        item?.attributes.website,
+        `${OLD_HOST_URL}about`,
+        "the card's data in the same document is served as the realm holds it",
+      );
     });
 
     test('an ETag on a host URL changes when the URL stored HTML was rendered against changes', async function (assert) {
