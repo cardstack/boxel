@@ -2201,6 +2201,22 @@ again (`job` absent). A click that already started a run for someone else,
 or a run of the other kind, is refused (`click-reused`). Both then move
 through `pending`, `running`, and `complete` or `error`, like any run.
 
+A Preview holds back the realm writes and nothing else. `dryRun` reaches
+the script as `realm.current.automation.dryRun`, and the run uses the flag
+only to check the job against its row and to skip the commit
+(`packages/runtime-common/tasks/run-automation.ts`), so every `callApi` and
+`resolve` call in a Preview goes out and is charged as in any run. A script
+that changes something outside the realm (sends, creates, charges) checks
+the flag before each such call. The boxel-skills `automation-authoring`
+skill, _Outside calls in a Preview_, is what authors and the AI assistant
+follow: the `dryRun` check with a log line of what the call would send,
+the data in the request body rather than a realm URL the service can't read
+before the commit, `cards.get` by key rather than `cards.search` for the
+run's own writes, and an idempotency key on each change, since a commit can
+still fail after the call. When a Preview's outside call did something it
+shouldn't have, read the run's `call-api` log lines (_Comparing a Preview
+with a Run now_) and check the script against that section.
+
 ### The batch a Preview keeps
 
 A Preview that finishes complete copies the files its attempt staged into

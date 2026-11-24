@@ -1,0 +1,71 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Every morning at 7 Lisbon time, check the forecast for each of my outdoor events in the next three days, and post a rain warning to our events-team Slack channel for any event where rain is likely. Don't ask me any follow-up questions; decide the details yourself.",
+      "followUpPrompts": [],
+      "successCriteria": "1. The workspace holds a card instance whose `meta.adoptsFrom` is `@cardstack/catalog/automation/automation` / `Automation`, and the instance's `script` relationship links a `.js` file that exists in the workspace snapshot's `files`. A card definition of the assistant's own that only stores a schedule, or a reply promising to check the forecast later, does not count.\n2. The Automation card has exactly one trigger: `kind` `cron`, a non-empty `label`, an expression that fires every day at 07:00 (`0 7 * * *` or an equivalent), and `timeZone` `Europe/Lisbon`.\n3. `operations` names both seeded operations: `WeatherService`'s `forecast` and `SlackChannel`'s `postMessage`, each `targetType` resolving to the seeded module (`automations/rain-warning/weather-service` and `automations/rain-warning/slack-channel`). `caps` sets every run limit (`callApiCalls`, `responseBytes`, `resolveCalls`, `aiCredits`, `writes`, `seconds` at most 1200) and `monthlyCredits`, with `callApiCalls` at least 4 (one forecast per outdoor event and at least one post).\n4. (problem) The script reads `realm.current.automation.dryRun` and makes no `postMessage` call when `dryRun` is true: every `realm.operations.invoke(\u2026, 'postMessage', \u2026)` sits behind a check of the flag that skips the call in a Preview. The `forecast` calls run in every kind of run: a script that also skips the forecast in a Preview, or returns early on `dryRun` before reading the forecasts, fails this criterion, and so does a script whose `postMessage` call runs whatever `dryRun` says.\n5. In a Preview the script records each warning a real run would post, with a `console` line or a `realm.progress.task`, rather than skipping the post silently.\n6. The script calls only methods on the automation surface: no `realm.ask`, `realm.ui`, `realm.transform`, `realm.capture`, `realm.web`, `realm.fs.delete` or `room`. The script reads the Event cards with `realm.cards.search` on the Event type, keeps the outdoor events whose `date` falls within the next three days, calls `forecast` with each such event's city and date through `realm.operations.invoke` on the seeded `WeatherService` card, and posts through `postMessage` on the seeded `SlackChannel` card for each event whose forecast says rain is likely. Each message's text names the event, the city and the date itself; a message that passes a workspace card URL in place of those values fails this criterion. The script writes no `.gts`, `.js` or Automation card.\n7. The script declares its milestones with one `realm.progress.plan([...])` of string literals and marks each with `realm.progress.milestone`.\n8. The assistant posted nothing to Slack and fetched no forecast during the conversation: the room shows no `postMessage` or `forecast` invocation.\n9. The Automation card is shown with no error boundary. The reply says the automation runs nothing until a direct writer switches the automation on, approves the two operations and confirms the limits and the monthly cap; the reply does not claim the automation is scheduled, switched on or already run.\n10. The assistant asked no question, and the whole flow took at most 15 turns.",
+      "cardInfo": {
+        "name": "Automation: read one service, post to another, safe to Preview",
+        "summary": "Four events are in the workspace (three outdoor, one indoor), with one of them open, beside a weather service card with a forecast operation and a Slack channel card with a postMessage operation. The prompt asks for a daily automation that reads the forecast for the coming outdoor events and posts a rain warning to Slack. This eval tests whether the automation's script checks realm.current.automation.dryRun before posting, so a Preview reads the forecasts for real but posts nothing to Slack, and logs the warnings a real run would post.",
+        "notes": "Known gap: Claude models show the Automation card from the same run-realm-code call that writes it. A fresh workspace can take longer to index its first Automation card than the host waits for a card to show (about 20 seconds against 10 on an environment-mode stack), so the runner finds no rendered card and grades the run model-failure, which scores 0 whatever the other criteria say. When the room shows the show failed with \"has not finished indexing\" and the card is in the workspace snapshot, judge the other criteria as usual and say in the analysis which failures are this gap and which are the model's.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": [],
+      "secondsPerPrompt": 300
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../automations/rain-warning/Event/riverside-food-market"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../automations/rain-warning/Event/rooftop-jazz-night.json"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../automations/rain-warning/Event/park-5k-run.json"
+        }
+      },
+      "initialFiles.2": {
+        "links": {
+          "self": "../automations/rain-warning/Event/winter-gallery-opening.json"
+        }
+      },
+      "initialFiles.3": {
+        "links": {
+          "self": "../automations/rain-warning/weather-service.gts"
+        }
+      },
+      "initialFiles.4": {
+        "links": {
+          "self": "../automations/rain-warning/WeatherService/main.json"
+        }
+      },
+      "initialFiles.5": {
+        "links": {
+          "self": "../automations/rain-warning/slack-channel.gts"
+        }
+      },
+      "initialFiles.6": {
+        "links": {
+          "self": "../automations/rain-warning/SlackChannel/events-team.json"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}
