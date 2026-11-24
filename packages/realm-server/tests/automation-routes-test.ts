@@ -1327,6 +1327,59 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('revoking a binding a former payer approved with their own key leaves the automation running', async function (assert) {
+      await fund(OWNER);
+      await fund(WRITER);
+      await switchOnApproved();
+      let [{ binding_id: formerPayers }] = await dbAdapter.execute(
+        `SELECT binding_id FROM automation_key_approvals WHERE automation_id = $1`,
+        { bind: [automationId(KEYED)] },
+      );
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(KEYED) }))
+          .status,
+        200,
+      );
+      let resumed = await resume(WRITER, KEYED);
+      await approveOwnKey(WRITER, resumed.body.meta.keyApprovals.version);
+      await reachesState(KEYED, 'active');
+      let revoked = await request
+        .delete(`/_key-bindings/${formerPayers}`)
+        .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+        .set('Origin', secureOriginURL.origin);
+      assert.strictEqual(revoked.status, 204, revoked.text);
+      let row = await getAutomation(dbAdapter, automationId(KEYED));
+      assert.strictEqual(row?.state, 'active');
+      assert.notStrictEqual(row?.nextRun, null);
+    });
+
+    test('revoking the binding of an operation the card no longer declares leaves the automation running', async function (assert) {
+      await fund(OWNER);
+      await switchOnApproved();
+      let [{ binding_id }] = await dbAdapter.execute(
+        `SELECT binding_id FROM automation_key_approvals WHERE automation_id = $1`,
+        { bind: [automationId(KEYED)] },
+      );
+      await editCard(KEYED, (attributes) => {
+        attributes.operations = [];
+      });
+      await syncAfterEdit();
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'active',
+      );
+      let revoked = await request
+        .delete(`/_key-bindings/${binding_id}`)
+        .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+        .set('Origin', secureOriginURL.origin);
+      assert.strictEqual(revoked.status, 204, revoked.text);
+      // The revocation moves it to waiting, and the check once it commits
+      // finds nothing missing.
+      let row = await getAutomation(dbAdapter, automationId(KEYED));
+      assert.strictEqual(row?.state, 'active');
+      assert.notStrictEqual(row?.nextRun, null);
+    });
+
     test('revoking the binding an automation uses moves it to waiting for key approval', async function (assert) {
       await switchOnApproved();
       let [{ binding_id }] = await dbAdapter.execute(

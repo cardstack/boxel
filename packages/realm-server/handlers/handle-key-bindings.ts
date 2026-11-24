@@ -2,11 +2,9 @@ import type Koa from 'koa';
 import {
   fetchRealmPermissions,
   param,
-  query,
   rri,
   trimExecutableExtension,
   type RealmIdentifier,
-  type RealmResourceIdentifier,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { realmServerAutomationChangeReporter } from '../lib/run-change-reporter.ts';
@@ -41,7 +39,9 @@ import {
 import { findRealm } from '../lib/realm-routing.ts';
 import {
   automationsWaitingForKeyApproval,
+  automationsServedBy,
   followAutomationKeyApprovals,
+  followServedAutomations,
 } from '../lib/automation-key-approvals.ts';
 import { getAutomation } from '@cardstack/runtime-common/automations';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
@@ -581,20 +581,14 @@ export function handleRevokeKeyBinding(args: CreateRoutesArgs): Handler {
     let via = await secureClientOf(ctxt, args, 'approvals are revoked');
     let bindingId = ctxt.params.bindingId;
     let served = UUID_PATTERN.test(bindingId)
-      ? await query(args.dbAdapter, [
-          'SELECT a.automation_id, au.realm FROM automation_key_approvals a JOIN automations au ON au.automation_id = a.automation_id WHERE a.binding_id =',
-          param(bindingId),
-          '::uuid',
-        ])
+      ? await automationsServedBy(args.dbAdapter, [param(bindingId), '::uuid'])
       : [];
     await revokeBinding(args.dbAdapter, { owner, bindingId, via });
     let report = realmServerAutomationChangeReporter(args);
-    for (let row of served) {
-      await report({
-        automationId: row.automation_id as RealmResourceIdentifier,
-        realm: row.realm as RealmIdentifier,
-      });
+    for (let { automationId, realm } of served) {
+      await report({ automationId, realm: realm as RealmIdentifier });
     }
+    await followServedAutomations(args, served);
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }

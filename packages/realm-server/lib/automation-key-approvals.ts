@@ -4,6 +4,7 @@ import {
   query,
   rri,
   type DBAdapter,
+  type Expression,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
@@ -259,6 +260,53 @@ export async function automationsWaitingForKeyApproval(
     "AND state = 'waiting-for-key-approval' ORDER BY automation_id",
   ]);
   return rows.map((row) => row.automation_id as RealmResourceIdentifier);
+}
+
+// An automation an approval of a binding serves, with its realm.
+export interface ServedAutomation {
+  automationId: RealmResourceIdentifier;
+  realm: string;
+}
+
+// The automations an approval of the bindings `bindings` selects (an
+// expression yielding binding ids) serves, read before the bindings are
+// revoked so `followServedAutomations` can check each again once the
+// revocation commits.
+export async function automationsServedBy(
+  dbAdapter: DBAdapter,
+  bindings: Expression,
+): Promise<ServedAutomation[]> {
+  let rows = await query(dbAdapter, [
+    'SELECT DISTINCT a.automation_id, au.realm FROM automation_key_approvals a JOIN automations au ON au.automation_id = a.automation_id WHERE a.binding_id IN (',
+    ...bindings,
+    ') ORDER BY a.automation_id',
+  ]);
+  return rows.map((row) => ({
+    automationId: row.automation_id as RealmResourceIdentifier,
+    realm: String(row.realm),
+  }));
+}
+
+// Checks each of `served` again once a revocation of its bindings has
+// committed. The revocation moved it to waiting for key approval, but the
+// approval it ended may be one for an operation its card no longer declares:
+// then nothing is missing, and it runs again rather than waiting for an
+// approval no one can give.
+export async function followServedAutomations(
+  args: CreateRoutesArgs,
+  served: ServedAutomation[],
+): Promise<void> {
+  let byRealm = new Map<string, RealmResourceIdentifier[]>();
+  for (let { automationId, realm } of served) {
+    byRealm.set(realm, [...(byRealm.get(realm) ?? []), automationId]);
+  }
+  for (let [realm, automationIds] of byRealm) {
+    await followAutomationKeyApprovals(
+      args,
+      args.virtualNetwork.toURL(realm),
+      automationIds,
+    );
+  }
 }
 
 async function approvalsOf(

@@ -326,6 +326,15 @@ export function handleSwapKeyIntoShare(args: CreateRoutesArgs): Handler {
         opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       },
     );
+    // The swap ended the approvals of the share's bindings and moved their
+    // automations to waiting. One whose ended approval was for an operation
+    // its card no longer declares has nothing missing, and runs again.
+    let realmURL = new URL(share.realm);
+    await followAutomationKeyApprovals(
+      args,
+      realmURL,
+      await automationsWaitingForKeyApproval(dbAdapter, realmURL, args),
+    );
     await sendJSON(ctxt, 200, {
       data: serialize(share),
       meta: { reapprovedBindings },

@@ -72,7 +72,11 @@ export async function endAutomationKeyApprovalsIn(
 // Moves each automation an approval of the bindings `bindings` selects
 // (an expression yielding binding ids) serves to *waiting for key approval*,
 // with no next run, when it is active, *done* or waiting for credits: the
-// approval is about to end. Every such automation's row is locked first,
+// approval is about to end. Only an approval the automation can use counts,
+// as `readApprovedVersions` reads them: a share's binding, or one its payer
+// approved with their own key. An approval a former payer gave with their
+// own key is kept but serves nothing, so ending it moves nothing. The
+// bindings are read as they are before the change that ends the approval. Every such automation's row is locked first,
 // whatever its state and in `automation_id` order, so a re-check of its
 // approvals that holds the row commits before this reads it, and one that
 // comes later reads the approval as gone. A pending run of a moved
@@ -82,9 +86,9 @@ export async function waitForKeyApprovalOfBindingsIn(
   bindings: Expression,
 ): Promise<void> {
   let served: Expression = [
-    'SELECT automation_id FROM automation_key_approvals WHERE binding_id IN (',
+    'SELECT a.automation_id FROM automation_key_approvals a JOIN key_bindings b ON b.id = a.binding_id JOIN automations au ON au.automation_id = a.automation_id WHERE a.binding_id IN (',
     ...bindings,
-    ')',
+    ') AND (b.key_id IS NULL OR b.approved_by = au.payer)',
   ];
   await txQuery([
     'SELECT automation_id FROM automations WHERE automation_id IN (',
