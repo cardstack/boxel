@@ -77,9 +77,12 @@ a new count.
 Each run MUST be a `run-command` job with the `dedupeKey`
 `automation:<id>:<trigger>:<slot>` and the `concurrencyGroup`
 `automation:<id>`. The slot MUST be the scheduled instant for a cron or
-one-time trigger, the delivery's id for a webhook, the batch's id for a
-batched-AI follow-up run, and a new id per click for Preview and Run now. A
-run's job args MUST depend only on the automation, the trigger and the slot.
+one-time trigger, `delivery:` followed by the delivery's id for a webhook, the
+batch's id for a batched-AI follow-up run, and a new id per click for Preview
+and Run now. A run's job args MUST depend only on the automation, the trigger
+and the slot, except that a webhook run's job MUST also carry the delivery's
+body, which nothing else keeps. A webhook run's job MUST NOT start the script
+without that body.
 
 A system cron MUST enqueue a tick job every minute. The tick MUST claim due
 rows with `FOR UPDATE SKIP LOCKED`, and MUST hold a row's claim while it
@@ -93,7 +96,9 @@ A reconcile pass MUST run at startup and periodically. It MUST enqueue a
 make-up run for a trigger whose due time passed with nothing enqueued, or
 whose run never finished with no live job left, and at most one make-up run
 per trigger. It MUST NOT enqueue one for an automation that is paused or
-waiting for key approval.
+waiting for key approval. It MUST end, never enqueue again, a webhook run
+whose job is lost, and it MUST tell a webhook run by its slot, not by what
+the card says when reconcile runs.
 
 ## 2. Rationale
 
@@ -149,6 +154,17 @@ enqueue that arrives while the run is still queued or running, which
 same moment still start two runs, one after the other in the automation's
 concurrency group. A script compares upstream data with its realm, so one
 make-up run catches up on everything it missed.
+
+A webhook run is the exception to job args that the key alone decides: the
+delivery's body is the run's input, and the sender holds it only until it
+gets an answer. Keeping every body in a table of its own would let reconcile
+enqueue a lost webhook run again, but a delivery can be lost before Boxel
+answers too, so a card that must not miss an event needs a schedule that
+catches up anyway. A lost webhook run therefore ends, and a cron trigger on
+the same card is the backstop. The slot's `delivery:` prefix marks the run as
+a delivery's for good, so a card that can't be read, or whose trigger was
+renamed or changed kind, never makes reconcile enqueue the run again without
+its body.
 
 ## 3. Considered options
 
