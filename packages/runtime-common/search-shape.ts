@@ -72,7 +72,7 @@
 import { logger } from './log.ts';
 import type { CodeRef } from './code-ref.ts';
 import type { LinkShapeLevel, LinkShapeRowClass } from './link-shape-policy.ts';
-import type { Filter, Query, RangeOperator, Sort } from './query.ts';
+import type { Filter, Query, RangeOperator, Sort } from './query-v2/query.ts';
 import type { HtmlQuery } from './resource-types.ts';
 import type {
   SearchEntryFieldset,
