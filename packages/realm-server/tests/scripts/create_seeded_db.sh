@@ -19,7 +19,7 @@ cid=$(docker run -d \
   --name "$TEST_PG_SEED_CONTAINER" \
   -p "127.0.0.1:${TEST_PG_SEED_PORT}:5432" \
   -e POSTGRES_HOST_AUTH_METHOD=trust \
-  postgres:16.3-alpine \
+  "$TEST_PG_IMAGE" \
   -c fsync=off \
   -c full_page_writes=off \
   -c synchronous_commit=off)

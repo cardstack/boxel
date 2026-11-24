@@ -20,7 +20,7 @@ start_container() {
     -v "${TEST_PG_SEED_TAR}:/seed/pgdata.tar:ro" \
     -v "${SCRIPT_DIR}/boot_preseeded.sh:/usr/local/bin/pg-seeded-tmpfs-entrypoint.sh:ro" \
     --entrypoint /bin/sh \
-    postgres:16.3-alpine \
+    "$TEST_PG_IMAGE" \
     -c /usr/local/bin/pg-seeded-tmpfs-entrypoint.sh
 }
 
