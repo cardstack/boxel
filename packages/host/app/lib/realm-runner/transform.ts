@@ -31,6 +31,30 @@ export interface TransformWorkerRequest {
   source: string;
   params?: Record<string, unknown>;
   syntax: (typeof SPELLINGS)[Spelling];
+  // The program's time, from when the worker starts it.
+  timeoutMs: number;
+}
+
+// One program's time, and how long past it a program BXL has not stopped
+// runs before its worker ends.
+interface TransformTimeLimits {
+  timeoutMs: number;
+  stallGraceMs: number;
+}
+
+const TRANSFORM_TIME_LIMITS: TransformTimeLimits = {
+  timeoutMs: TRANSFORM_TIMEOUT_MS,
+  stallGraceMs: TRANSFORM_STALL_GRACE_MS,
+};
+
+let timeLimits = TRANSFORM_TIME_LIMITS;
+
+// Test seam: shortens a program's time, so a test can show a program past it
+// stopped without waiting for the real limit. `undefined` restores it.
+export function setTransformTimeLimitsForTests(
+  limits: TransformTimeLimits | undefined,
+): void {
+  timeLimits = limits ?? TRANSFORM_TIME_LIMITS;
 }
 
 export type TransformWorkerResponse =
@@ -41,7 +65,7 @@ export type TransformWorkerResponse =
   | { id: number; error: string; phase?: 'parse' | 'profile' | 'evaluate' };
 
 export interface TransformRequest {
-  message: Omit<TransformWorkerRequest, 'id'>;
+  message: Omit<TransformWorkerRequest, 'id' | 'timeoutMs'>;
   // The input's and params' bytes, counted toward the run's budget.
   bytes: number;
   // The input's top-level shape, for an error the program meets on it.
@@ -202,7 +226,33 @@ interface Waiting {
   reject: (error: Error) => void;
   // Set when the worker starts the program, not when the call is posted.
   timer?: number;
+  startedAt?: number;
   inputShape: string;
+}
+
+// The most programs one run may run and the most bytes they may move in and
+// out together (ADR 031 §1.4). An automation run has no limit on the number
+// of programs, since its time limit bounds it.
+export interface TransformRunLimits {
+  calls: number;
+  bytes: number;
+}
+
+export const INTERACTIVE_TRANSFORM_LIMITS: TransformRunLimits = {
+  calls: MAX_TRANSFORMS_PER_RUN,
+  bytes: MAX_TRANSFORM_BYTES_PER_RUN,
+};
+
+// What one run's realm.transform calls came to: every call the script made,
+// those that failed (a refused call among them), the time their programs ran
+// in the worker, and the bytes of input and params sent and of output
+// answered.
+export interface TransformTally {
+  calls: number;
+  failed: number;
+  ms: number;
+  inBytes: number;
+  outBytes: number;
 }
 
 // The transform worker of one run. It starts on the run's first
@@ -213,26 +263,54 @@ export class RealmTransformer {
   private waiting = new Map<number, Waiting>();
   private nextId = 1;
   private closed = false;
+  // Calls sent to the worker and the bytes they moved, against `limits`.
   private count = 0;
   private bytes = 0;
+  readonly tally: TransformTally = {
+    calls: 0,
+    failed: 0,
+    ms: 0,
+    inBytes: 0,
+    outBytes: 0,
+  };
 
-  run(request: TransformRequest): Promise<unknown> {
+  constructor(
+    private limits: TransformRunLimits = INTERACTIVE_TRANSFORM_LIMITS,
+  ) {}
+
+  // realm.transform(input, source, options): checks the call and runs it.
+  // Every call is tallied, one refused before it reaches the worker too.
+  call(input: unknown, source: unknown, options: unknown): Promise<unknown> {
+    this.tally.calls += 1;
+    let result: Promise<unknown>;
+    try {
+      result = this.run(transformRequest(input, source, options));
+    } catch (error) {
+      result = Promise.reject(error);
+    }
+    return result.catch((error: unknown) => {
+      this.tally.failed += 1;
+      throw error;
+    });
+  }
+
+  private run(request: TransformRequest): Promise<unknown> {
     if (this.closed) {
       return Promise.reject(
         new Error('The run has ended; realm.transform was not run'),
       );
     }
-    if (this.count >= MAX_TRANSFORMS_PER_RUN) {
+    if (this.count >= this.limits.calls) {
       return Promise.reject(
         new Error(
-          `Realm code may call realm.transform at most ${MAX_TRANSFORMS_PER_RUN} times per run`,
+          `Realm code may call realm.transform at most ${this.limits.calls} times per run`,
         ),
       );
     }
-    if (this.bytes + request.bytes > MAX_TRANSFORM_BYTES_PER_RUN) {
+    if (this.bytes + request.bytes > this.limits.bytes) {
       return Promise.reject(
         new RangeError(
-          `realm.transform may move at most ${MAX_TRANSFORM_BYTES_PER_RUN} bytes in and out per run; this call's ${request.bytes} bytes of input were not sent`,
+          `realm.transform may move at most ${this.limits.bytes} bytes in and out per run; this call's ${request.bytes} bytes of input were not sent`,
         ),
       );
     }
@@ -242,6 +320,7 @@ export class RealmTransformer {
       worker.postMessage({
         id,
         ...request.message,
+        timeoutMs: timeLimits.timeoutMs,
       } satisfies TransformWorkerRequest);
     } catch (error) {
       return Promise.reject(
@@ -254,6 +333,7 @@ export class RealmTransformer {
     // costs the run nothing.
     this.count += 1;
     this.bytes += request.bytes;
+    this.tally.inBytes += request.bytes;
     return new Promise((resolve, reject) => {
       this.waiting.set(id, { resolve, reject, inputShape: request.inputShape });
     });
@@ -262,6 +342,15 @@ export class RealmTransformer {
   close() {
     this.closed = true;
     this.stop(new Error('The run has ended; realm.transform was stopped'));
+  }
+
+  // Adds the time a program has run in the worker, from its start, to the
+  // tally. A call that never started took none.
+  private settle(waiting: Waiting) {
+    window.clearTimeout(waiting.timer);
+    if (waiting.startedAt !== undefined) {
+      this.tally.ms += Math.round(performance.now() - waiting.startedAt);
+    }
   }
 
   private start(): Worker {
@@ -289,21 +378,23 @@ export class RealmTransformer {
         return;
       }
       if ('started' in message) {
-        // BXL stops a program at TRANSFORM_TIMEOUT_MS by itself. This timer is
-        // for an evaluator that stalls outside its own metering: such a
-        // program cannot be interrupted inside the worker, so the worker
-        // ends, and every call waiting on it with it.
+        waiting.startedAt = performance.now();
+        // BXL stops a program at its time by itself. This timer is for an
+        // evaluator that stalls outside its own metering: such a program
+        // cannot be interrupted inside the worker, so the worker ends, and
+        // every call waiting on it with it.
+        let { timeoutMs, stallGraceMs } = timeLimits;
         waiting.timer = window.setTimeout(() => {
           this.stop(
             new Error(
-              `realm.transform took longer than ${TRANSFORM_TIMEOUT_MS / 1000} s and was stopped`,
+              `realm.transform took longer than ${timeoutMs / 1000} s and was stopped`,
             ),
           );
-        }, TRANSFORM_TIMEOUT_MS + TRANSFORM_STALL_GRACE_MS);
+        }, timeoutMs + stallGraceMs);
         return;
       }
       this.waiting.delete(message.id);
-      window.clearTimeout(waiting.timer);
+      this.settle(waiting);
       if ('error' in message) {
         waiting.reject(
           transformError(message.error, message.phase, waiting.inputShape),
@@ -319,14 +410,15 @@ export class RealmTransformer {
         return;
       }
       this.bytes += message.bytes;
-      if (this.bytes > MAX_TRANSFORM_BYTES_PER_RUN) {
+      if (this.bytes > this.limits.bytes) {
         waiting.reject(
           new RangeError(
-            `realm.transform may move at most ${MAX_TRANSFORM_BYTES_PER_RUN} bytes in and out per run; this program's ${message.bytes} bytes of output were dropped`,
+            `realm.transform may move at most ${this.limits.bytes} bytes in and out per run; this program's ${message.bytes} bytes of output were dropped`,
           ),
         );
         return;
       }
+      this.tally.outBytes += message.bytes;
       waiting.resolve(JSON.parse(message.value));
     };
     // A reply that cannot be read would leave its call waiting for a timer
@@ -354,7 +446,7 @@ export class RealmTransformer {
     window.clearTimeout(this.startTimer);
     this.startTimer = undefined;
     for (let waiting of this.waiting.values()) {
-      window.clearTimeout(waiting.timer);
+      this.settle(waiting);
       waiting.reject(reason);
     }
     this.waiting.clear();

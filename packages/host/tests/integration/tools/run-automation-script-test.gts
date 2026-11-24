@@ -21,6 +21,8 @@ import {
   MAX_RUN_NOTIFICATIONS,
   NOTIFY_METHODS,
 } from '@cardstack/host/lib/realm-runner/surfaces';
+import { setTransformTimeLimitsForTests } from '@cardstack/host/lib/realm-runner/transform';
+import { MAX_TRANSFORMS_PER_RUN } from '@cardstack/host/lib/realm-runner/transform-limits';
 import type { AutomationRunContext } from '@cardstack/host/lib/realm-runner/types';
 import { watchedScriptOutcome } from '@cardstack/host/tools/run-automation';
 import RunRealmCodeTool, {
@@ -43,7 +45,10 @@ const otherRealmURL = 'http://test-realm/test2/';
 
 // Answers requests for `path` in the test realm with `respond`, ahead of the
 // realm, until the returned function is called.
-function answerWith(path: string, respond: () => Response): () => void {
+function answerWith(
+  path: string,
+  respond: () => Response | Promise<Response>,
+): () => void {
   let network = getService('network');
   let url = `${testRealmURL}${path}`;
   let handler = async (request: Request) =>
@@ -243,7 +248,6 @@ module('Integration | tools | run-automation-script', function (hooks) {
       'realm.index.reindex',
       'realm.plan',
       'realm.ask',
-      'realm.transform',
       'realm.operations.capabilities',
       'room.enableSkills',
     ];
@@ -813,5 +817,166 @@ return 'done';`);
       order.indexOf('flush') > order.indexOf('before'),
       `the sink is flushed after the line before the call: ${order.join(', ')}`,
     );
+  });
+
+  // The transform line, without its time, which varies.
+  function transformLines(assert: Assert, events: RunProgressEvent[]) {
+    return events
+      .filter(
+        (event): event is Extract<RunProgressEvent, { kind: 'transform' }> =>
+          event.kind === 'transform',
+      )
+      .map(({ at, ms, ...rest }) => {
+        assert.strictEqual(typeof at, 'number');
+        assert.true(Number.isInteger(ms) && ms >= 0, `ms is ${ms}`);
+        return rest;
+      });
+  }
+  test('realm.transform reshapes JSON in an automation run', async function (assert) {
+    let { events, done } = run(`
+      const orders = [
+        { id: 1, total: 40, status: 'paid' },
+        { id: 2, total: 15, status: 'refunded' },
+        { id: 3, total: 25, status: 'paid' },
+      ];
+      return await realm.transform(
+        orders,
+        'map(select(.status == params("status"))) | {count: length, total: (map(.total) | add)}',
+        { params: { status: 'paid' } },
+      );
+    `);
+    let result = await done;
+    assert.deepEqual(JSON.parse(result.scriptResult), { count: 2, total: 65 });
+    assert.deepEqual(transformLines(assert, events), [
+      { kind: 'transform', calls: 1, failed: 0, inBytes: 130, outBytes: 22 },
+    ]);
+  });
+
+  test('an automation run has no limit on how many transforms it runs', async function (assert) {
+    let count = MAX_TRANSFORMS_PER_RUN + 20;
+    let { events, done } = run(`
+      let sum = 0;
+      for (let i = 0; i < ${count}; i++) {
+        sum += await realm.transform({ i }, '.i + 1');
+      }
+      return sum;
+    `);
+    let result = await done;
+    assert.strictEqual(
+      JSON.parse(result.scriptResult),
+      (count * (count + 1)) / 2,
+      `all ${count} transforms ran`,
+    );
+    let [line] = transformLines(assert, events);
+    assert.strictEqual(line?.calls, count, 'one line counts every call');
+    assert.strictEqual(line?.failed, 0);
+  });
+
+  test("a transform doesn't wait behind the run's queue of realm calls", async function (assert) {
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    let unmount = answerWith('notes/held.md', async () => {
+      await held;
+      return new Response('# Held\n', { status: 200 });
+    });
+    try {
+      let { done } = run(
+        `
+        const order = [];
+        const read = realm.fs.readText('notes/held.md').then(() => order.push('read'));
+        order.push('transformed ' + (await realm.transform([1, 2, 3], 'length')));
+        console.log('transformed');
+        await read;
+        return order;
+      `,
+        {
+          progress: {
+            record: (event) => {
+              if (event.kind === 'console' && event.message === 'transformed') {
+                release();
+              }
+            },
+          },
+        },
+      );
+      assert.deepEqual(JSON.parse((await done).scriptResult), [
+        'transformed 3',
+        'read',
+      ]);
+    } finally {
+      release();
+      unmount();
+    }
+  });
+
+  test('a program past its time is stopped, and the run goes on to its next transform', async function (assert) {
+    setTransformTimeLimitsForTests({ timeoutMs: 100, stallGraceMs: 30_000 });
+    try {
+      let { events, done } = run(`
+        let stopped;
+        try {
+          await realm.transform(null, '[range(100000000)] | length');
+        } catch (error) {
+          stopped = error.message;
+        }
+        const after = await realm.transform({ a: 1 }, '.a + 1');
+        return { stopped, after };
+      `);
+      let { stopped, after } = JSON.parse((await done).scriptResult);
+      assert.true(
+        /exceeded the \d+ms runtime limit/.test(stopped),
+        `the program was stopped at its time: ${stopped}`,
+      );
+      assert.strictEqual(after, 2, 'the next transform ran');
+      let [line] = transformLines(assert, events);
+      assert.deepEqual(
+        [line?.calls, line?.failed],
+        [2, 1],
+        'the stopped program is a failed call',
+      );
+    } finally {
+      setTransformTimeLimitsForTests(undefined);
+    }
+  });
+
+  test('a succeeding and a failing transform report one transform line, as the run settles', async function (assert) {
+    let { events, done } = run(`
+      console.log('start');
+      await realm.transform([1, 2], 'add');
+      try {
+        await realm.transform({}, '.a |');
+      } catch {}
+      console.log('end');
+      return 'done';
+    `);
+    await done;
+    assert.deepEqual(
+      events.map((event) =>
+        event.kind === 'console' ? event.message : event.kind,
+      ),
+      ['start', 'end', 'transform'],
+      'the line comes after every line the script reported',
+    );
+    assert.deepEqual(transformLines(assert, events), [
+      { kind: 'transform', calls: 2, failed: 1, inBytes: 7, outBytes: 1 },
+    ]);
+  });
+
+  test('a run that fails reports its transforms before its error', async function (assert) {
+    let { events, done } = run(`
+      await realm.transform({ a: 1 }, '.a');
+      throw new Error('gave up');
+    `);
+    await assert.rejects(done, /gave up/);
+    assert.deepEqual(
+      events.map((event) => event.kind),
+      ['transform', 'error'],
+    );
+  });
+
+  test('a run with no transforms reports no transform line', async function (assert) {
+    let { events, done } = run(`console.log('no transforms'); return 1;`);
+    await done;
+    assert.deepEqual(transformLines(assert, events), []);
   });
 });

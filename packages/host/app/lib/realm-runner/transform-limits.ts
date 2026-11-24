@@ -20,7 +20,8 @@ export const TRANSFORM_MAX_STEPS = 50_000_000;
 export const TRANSFORM_MAX_OUTPUTS = 1;
 // The time the worker module may take to load before it can run any program.
 export const TRANSFORM_WORKER_START_TIMEOUT_MS = 30_000;
-// How many programs one run may run, and how many bytes they may move in and
-// out together (ADR 022 §1.6).
+// How many programs one interactive run may run, and how many bytes the
+// programs of any run may move in and out together (ADR 022 §1.6). An
+// automation run's time limit bounds how many programs it runs.
 export const MAX_TRANSFORMS_PER_RUN = 100;
 export const MAX_TRANSFORM_BYTES_PER_RUN = 10_000_000;

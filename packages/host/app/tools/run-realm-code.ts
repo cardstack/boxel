@@ -136,8 +136,9 @@ import {
   offSurfaceMessage,
 } from '../lib/realm-runner/surfaces';
 import {
+  INTERACTIVE_TRANSFORM_LIMITS,
   RealmTransformer,
-  transformRequest,
+  type TransformTally,
 } from '../lib/realm-runner/transform';
 import { STOPPED_BY_USER } from '../lib/realm-runner/types';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
@@ -309,6 +310,9 @@ export interface SessionSurface {
     operations: number;
     resolveCalls: number;
     researchBytes: number;
+    // realm.transform calls, and the bytes they move in and out together
+    transforms: number;
+    transformBytes: number;
     // characters of file content the session holds at once
     heldChars: number;
   };
@@ -328,6 +332,8 @@ export const INTERACTIVE_SURFACE: SessionSurface = {
     operations: MAX_OPERATIONS,
     resolveCalls: MAX_RESOLVE_CALLS,
     researchBytes: MAX_RESEARCH_BYTES_PER_RUN,
+    transforms: INTERACTIVE_TRANSFORM_LIMITS.calls,
+    transformBytes: INTERACTIVE_TRANSFORM_LIMITS.bytes,
     heldChars: Infinity,
   },
   writeTextReplaces: false,
@@ -342,6 +348,9 @@ export const AUTOMATION_SURFACE: SessionSurface = {
     operations: Infinity,
     resolveCalls: Infinity,
     researchBytes: Infinity,
+    // The run's time limit bounds how many transforms it runs.
+    transforms: Infinity,
+    transformBytes: INTERACTIVE_TRANSFORM_LIMITS.bytes,
     heldChars: MAX_AUTOMATION_HELD_CHARS,
   },
   writeTextReplaces: true,
@@ -872,8 +881,9 @@ class RealmFsSession {
   // Aborted when the run ends, so a workspace create or an image request
   // still in flight stops holding up the report.
   private inFlight = new AbortController();
-  // Runs realm.transform programs, in a worker started on the first one.
-  private transformer = new RealmTransformer();
+  // Runs realm.transform programs, in a worker started on the first one,
+  // under the surface's per-run limits.
+  private transformer: RealmTransformer;
   // Set once the run has ended. A call that has not started yet is refused,
   // and a write still in flight is not saved, so nothing lands after the tool
   // has reported.
@@ -918,6 +928,15 @@ class RealmFsSession {
     readonly surface: SessionSurface = INTERACTIVE_SURFACE,
   ) {
     this.captures = new RealmCaptures(captureURL);
+    this.transformer = new RealmTransformer({
+      calls: surface.limits.transforms,
+      bytes: surface.limits.transformBytes,
+    });
+  }
+
+  // What the run's realm.transform calls came to so far.
+  get transformTally(): Readonly<TransformTally> {
+    return this.transformer.tally;
   }
 
   // Calls, saves and captures refused because the run had already ended.
@@ -960,7 +979,7 @@ class RealmFsSession {
       let result =
         method === 'transform'
           ? Promise.resolve().then(() =>
-              this.transformer.run(transformRequest(args[0], args[1], args[2])),
+              this.transformer.call(args[0], args[1], args[2]),
             )
           : this.researchCall(method, args);
       let tracked = result.catch(() => undefined);
@@ -3128,6 +3147,8 @@ function redactEvent(
       return { ...event, message: redactSecrets(event.message, secrets) };
     case 'task':
       return { ...event, text: redactSecrets(event.text, secrets) };
+    case 'transform':
+      return event;
     case 'error':
       return {
         ...event,
@@ -3302,6 +3323,13 @@ export async function runAutomationScript(
       session.idle(),
       new Promise((wake) => setTimeout(wake, STOP_GRACE_MS)),
     ]);
+    // One line for the run's transforms rather than one per call: a script
+    // that transforms in a loop would otherwise push its own console and
+    // milestone lines out of the log.
+    let transforms = session.transformTally;
+    if (transforms.calls > 0) {
+      record({ kind: 'transform', at: Date.now(), ...transforms });
+    }
     let dropped = session.progressDropped;
     if (dropped > 0) {
       record({
