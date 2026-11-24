@@ -170,6 +170,7 @@ import {
   readRawHostRoutingRules,
   realmConfigCardURL,
   validateHostRoutes,
+  HOST_ROUTES_RETRY_AFTER_SECONDS,
   HostRoutesReadError,
   type HostRoutesValidation,
   type RawHostRoutingRule,
@@ -21340,14 +21341,45 @@ export class Realm {
   // The realm's validated host route tree, as `getHostRoutes` gives it and
   // as a host page gets it in `hostDynamicRoutes`, so a reader resolves a
   // path or works out an address without validating anything again. It is
-  // the tree the realm's last index validated and stored, so it is always the
-  // whole tree, and reading it never waits for a type's definition. The
-  // validation's warnings are for the server's log, not for a reader.
+  // the tree the realm's last index validated and stored, and reading it
+  // never waits for a type's definition. That tree can lack routes the next
+  // index restores: an index written before the index stored the tree is
+  // validated with no types, so each field-match route and the routes under
+  // it are dropped, and a stored tree with `retryTypeReads` dropped a route
+  // whose type read may pass. In both cases a read starts an index of
+  // realm.json that stores the whole tree. Nothing runs the HTML visits that
+  // read the smaller tree again when that tree is stored; the ADR 036
+  // remediation file lists this. The validation's warnings are for the
+  // server's log, not for a reader.
+  //
+  // When the index can't be read, this answers 503 with `Retry-After`, as a
+  // page does, never an empty tree: a reader would take that for a realm
+  // with no routes.
   private async hostRoutes(
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let { routes } = await this.getHostRoutes();
+    let routes: HostRoutesValidation['routes'];
+    try {
+      ({ routes } = await this.getHostRoutes());
+    } catch (e) {
+      if (!(e instanceof HostRoutesReadError)) {
+        throw e;
+      }
+      this.#log.warn(`${this.url}_host-routes answers 503: ${e.message}`);
+      return createResponse({
+        body: 'Service Unavailable',
+        init: {
+          status: 503,
+          headers: {
+            'content-type': 'text/plain',
+            'retry-after': HOST_ROUTES_RETRY_AFTER_SECONDS,
+            'cache-control': 'no-store',
+          },
+        },
+        requestContext,
+      });
+    }
     return createResponse({
       body: JSON.stringify({ routes }),
       init: {

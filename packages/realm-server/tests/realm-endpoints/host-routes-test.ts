@@ -3,11 +3,11 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   DEFAULT_PERMISSIONS,
+  HostRoutesReadError,
   SupportedMimeType,
   rri,
 } from '@cardstack/runtime-common';
 import type {
-  CachingDefinitionLookup,
   LooseSingleCardDocument,
   Realm,
   RealmPermissions,
@@ -104,24 +104,11 @@ function makeRoutedFixture(): Record<string, string | LooseSingleCardDocument> {
   };
 }
 
-// The definition lookup the test realm server and its realm read through,
-// which the server keeps private.
-function serverDefinitionLookup(testRealmServer: {
-  testRealmServer: unknown;
-}): CachingDefinitionLookup {
-  return (
-    testRealmServer.testRealmServer as {
-      definitionLookup: CachingDefinitionLookup;
-    }
-  ).definitionLookup;
-}
-
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('a private realm with host routes', function (hooks) {
     let realmURL = testRealmURLFor('host-routes/');
     let request: RealmRequest;
     let testRealm: Realm;
-    let definitionLookup: CachingDefinitionLookup;
 
     setupPermissionedRealmCached(hooks, {
       realmURL,
@@ -132,20 +119,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       onRealmSetup(args) {
         testRealm = args.testRealm;
         request = withRealmPath(args.request, realmURL);
-        definitionLookup = serverDefinitionLookup(args.testRealmServer);
       },
     });
 
     hooks.beforeEach(async function () {
       await testRealm.indexing();
-      // The realm validates a field-match route against its type's
-      // definition, so make both definitions available first.
-      for (let name of ['Category', 'Post']) {
-        await definitionLookup.forRealm(testRealm).lookupDefinition({
-          module: rri(`${realmURL.href}site`),
-          name,
-        });
-      }
     });
 
     function hostRoutes(
@@ -208,6 +186,32 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         [['field-match', '/c/:category/:post']],
         'with its child routes',
       );
+    });
+
+    test('answers 503 with Retry-After, and no routes, when the index can not be read', async function (assert) {
+      let getHostRoutes = testRealm.getHostRoutes;
+      testRealm.getHostRoutes = async () => {
+        throw new HostRoutesReadError('the index can not be read');
+      };
+      try {
+        let response = await hostRoutes(ownerUserId);
+        assert.strictEqual(response.status, 503, 'HTTP 503 status');
+        assert.strictEqual(
+          response.headers['retry-after'],
+          '30',
+          'the caller is asked to try again',
+        );
+        assert.strictEqual(
+          response.headers['cache-control'],
+          'no-store',
+          'the answer is not stored',
+        );
+        assert.strictEqual(response.body.routes, undefined, 'no routes');
+      } finally {
+        testRealm.getHostRoutes = getHostRoutes;
+      }
+      let again = await hostRoutes(ownerUserId);
+      assert.strictEqual(again.status, 200, 'the next read gets the tree');
     });
 
     test('refuses a caller who cannot read the realm', async function (assert) {

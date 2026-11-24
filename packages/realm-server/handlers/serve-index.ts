@@ -22,6 +22,7 @@ import {
   hasExtension,
   hasUnavailableRoutes,
   hostRouteCanonicalAddress,
+  HOST_ROUTES_RETRY_AFTER_SECONDS,
   HostRoutesReadError,
   isCaptureServingPath,
   isHashedScopedCSSRequest,
@@ -68,10 +69,6 @@ import {
   prefixRealmURLsOf,
   type PrefixRealmSource,
 } from '@cardstack/runtime-common/prefix-realm-network';
-
-// How long a page that answers 503 because a realm's host routes can't be
-// served yet asks the client to wait, in seconds.
-const HOST_ROUTES_RETRY_AFTER_SECONDS = '30';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
