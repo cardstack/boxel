@@ -332,22 +332,33 @@ module('Acceptance | realm config | Automations', function (hooks) {
         .exists('the click opens the card in its isolated view');
     });
 
-    test("Show in Automations on an automation's card opens the config card with the automation's row in view, focused and marked", async function (assert) {
+    test("Show in Automations on an automation's card brings the config card back on top, with only that console marking the automation's row", async function (assert) {
       answer = {
         status: 200,
         data: [ACTIVE, summary(DIGEST, { title: 'Issue digest' })],
       };
       statusForWriter = true;
+      // One config card open on the left, and the automation opened on top
+      // of another config card on the right, which is what opening an
+      // automation from the console and then the console again leaves.
       await visitOperatorMode({
-        stacks: [[{ id: DIGEST, format: 'isolated' }]],
+        stacks: [
+          [{ id: `${testRealmURL}realm`, format: 'isolated' }],
+          [
+            { id: `${testRealmURL}realm`, format: 'isolated' },
+            { id: DIGEST, format: 'isolated' },
+          ],
+        ],
       });
-      let action =
-        '[data-test-automation] header [data-test-automation-show-in-console]';
+      let action = `[data-test-stack-card="${DIGEST}"] [data-test-automation] header [data-test-automation-show-in-console]`;
       await waitFor(action, { timeout: 10000 });
       await click(action);
 
-      await waitFor('[data-test-realm-config-isolated]');
-      let slot = `[data-test-automation-slot="${DIGEST}"]`;
+      let right = '[data-test-operator-mode-stack="1"]';
+      await waitFor(`${right} [data-test-stack-card="${DIGEST}"]`, {
+        count: 0,
+      });
+      let slot = `${right} [data-test-automation-slot="${DIGEST}"]`;
       await waitFor(`${slot}[data-test-automation-slot-focused="true"]`, {
         timeout: 10000,
       });
@@ -355,7 +366,17 @@ module('Acceptance | realm config | Automations', function (hooks) {
         timeout: 10000,
       });
       assert
-        .dom(`[data-test-automation-slot="${NIGHTLY}"]`)
+        .dom(`${right} [data-test-stack-card-index="1"]`)
+        .doesNotExist(
+          'the cards above the config card close, and the config card is on top',
+        );
+      assert
+        .dom(
+          `[data-test-operator-mode-stack="0"] [data-test-automation-slot-focused]`,
+        )
+        .doesNotExist('the console already open on the left marks nothing');
+      assert
+        .dom(`${right} [data-test-automation-slot="${NIGHTLY}"]`)
         .doesNotHaveAttribute(
           'data-test-automation-slot-focused',
           'only the automation the card came from is marked',
@@ -371,7 +392,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
           'an automation the console lists offers no way into the console',
         );
 
-      await click(`[data-test-realm-automation="${NIGHTLY}"]`);
+      await click(`${right} [data-test-realm-automation="${NIGHTLY}"]`);
       assert
         .dom(`${slot}[data-test-automation-slot-focused="true"]`)
         .doesNotExist('opening another automation clears the mark');

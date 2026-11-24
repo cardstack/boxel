@@ -1475,9 +1475,6 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-fitted-next]').doesNotExist();
   });
 
-  // The Runs section, read from the realm's `_automation-runs` route, which
-  // an in-browser test realm can't answer: each test says what the route
-  // lists.
   test('a direct writer gets a way into the Automations console from the isolated, embedded and fitted views', async function (assert) {
     answer = { status: 200, attributes: ACTIVE };
     await openIsolated();
@@ -1530,6 +1527,9 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-show-in-console]').doesNotExist();
   });
 
+  // The Runs section, read from the realm's `_automation-runs` route, which
+  // an in-browser test realm can't answer: each test says what the route
+  // lists.
   module('runs', function (hooks) {
     // What the route lists on each page, by page number, and how many runs
     // there are in all.

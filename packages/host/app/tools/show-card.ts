@@ -56,6 +56,20 @@ export default class ShowCardTool extends HostBaseTool<
         newStackIndex,
         (input.format as 'isolated' | 'edit') || 'isolated',
       );
+      // A card already in that stack is shown again on top: the cards above
+      // it close, and the card opens fresh in their place. Adding it as it is
+      // would leave the card where it was, under whatever covers it.
+      let existing = operatorModeStateService.state?.stacks[
+        newStackIndex
+      ]?.find((item) => item.id === newStackItem.id);
+      if (existing) {
+        operatorModeStateService.trimItemsFromStack(existing);
+        newStackItem = await operatorModeStateService.createStackItem(
+          input.cardId,
+          Math.min(operatorModeStateService.numberOfStacks(), newStackIndex),
+          (input.format as 'isolated' | 'edit') || 'isolated',
+        );
+      }
       operatorModeStateService.addItemToStack(newStackItem);
       return await this.loadCard(input.cardId);
     } else if (operatorModeStateService.state?.submode === 'code') {
