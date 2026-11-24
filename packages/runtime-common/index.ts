@@ -1970,6 +1970,7 @@ export * from './index-query-engine.ts';
 export { IndexQueryEngine } from './query-engine/index-query-engine.ts';
 export { IndexQueryEngine as LegacyIndexQueryEngine } from './index-query-engine.ts';
 export * from './value-store.ts';
+export * from './value-store-check.ts';
 export * from './index-writer.ts';
 export * from './vector-space.ts';
 export * from './vector-sidecar.ts';

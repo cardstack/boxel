@@ -74,12 +74,74 @@ import {
   systemInitiatedIndexPriority,
 } from './jobs/indexing.ts';
 import { queueClaimOf, withoutQueueClaim } from './jobs/queue-claim.ts';
+import {
+  removeOrphanValueRows,
+  syncValueStore,
+  syncValueStoreLiveness,
+} from './value-store.ts';
 
 // One element of a Postgres array literal (`{"a","b"}`), quoted so a comma,
 // brace, space or quote in a URL stays inside its element.
 function textArrayElement(value: string): string {
   return `"${value.replace(/["\\]/g, (c) => `\\${c}`)}"`;
 }
+
+// The columns of `boxel_index` Postgres generates from `search_doc`
+// (add-boxel-index-title-sort). No statement may write them, and
+// `boxel_index_pending` has none of them, so a row read from `boxel_index` to
+// stage again leaves them out. A test holds this list to the table's
+// generated columns. `search_keys` is not one: it is an ordinary column on
+// both tables, filled when a row is staged and copied by promotion
+// (add-boxel-index-search-keys).
+export const GENERATED_INDEX_COLUMNS: readonly string[] = ['title_sort'];
+
+// Every column of `boxel_index`, by what a promotion does with it. A row
+// whose content columns all equal its staged row's is promoted by writing its
+// bookkeeping columns alone (`#promoteBookkeepingOnly`); any other row is
+// written whole. A test holds this map to the table's columns, so a column
+// added later fails it until someone classifies it; until then the
+// promotion treats it as content, which is never wrong, only slower.
+// - key: the conflict key;
+// - bookkeeping: changes on every pass of a card (the commit's generation,
+//   when it was indexed, the pass's diagnostics);
+// - content: what the card's row holds; equal means the row is unchanged;
+// - generated / derived: computed from content columns, so equal whenever
+//   they are.
+export const INDEX_COLUMN_CLASSES: Readonly<
+  Record<string, 'key' | 'bookkeeping' | 'content' | 'generated' | 'derived'>
+> = {
+  url: 'key',
+  realm_url: 'key',
+  type: 'key',
+  generation: 'bookkeeping',
+  indexed_at: 'bookkeeping',
+  diagnostics: 'bookkeeping',
+  file_alias: 'content',
+  pristine_doc: 'content',
+  search_doc: 'content',
+  search_keys: 'content',
+  error_doc: 'content',
+  deps: 'content',
+  types: 'content',
+  is_deleted: 'content',
+  last_modified: 'content',
+  display_names: 'content',
+  resource_created_at: 'content',
+  icon_html: 'content',
+  has_error: 'content',
+  last_known_good_deps: 'content',
+  host_shell_generation: 'content',
+  source_content_hash: 'content',
+  relationship_deps: 'content',
+  title_sort: 'generated',
+  // The search text's fingerprint (add-search-text-fingerprint), from the
+  // staged search doc; promotion writes it in the text-search row.
+  search_text_fp: 'derived',
+  search_tsv: 'derived',
+  rank_tsv: 'derived',
+  search_title: 'derived',
+  pattern_text: 'derived',
+};
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -2664,6 +2726,12 @@ export class Batch {
         await this.promotePrerenderedHtmlPending(columns.prerenderedHtml, {
           monotonicGuard: true,
         });
+        // Published html can change a card's liveness, so its value rows.
+        await syncValueStoreLiveness(
+          { dbAdapter: this.#dbAdapter, query: (e) => this.#query(e) },
+          this.realmURL.href,
+          [...this.#invalidations],
+        );
         await this.stampTypeGenerations({
           // `prerendered_html` carries no adoption chain of its own, so the
           // types this swap published are read from the `boxel_index` rows
@@ -3411,6 +3479,15 @@ export class Batch {
         attemptStart = now;
         this.#txQuerier = txQuerier;
         try {
+          if (this.#dbAdapter.kind === 'pg') {
+            // The swap is many short statements, one per chunk of a pass.
+            // On the inflated row estimates of a realm's first pass every one
+            // of them crossed the JIT thresholds, and compiling took longer
+            // than running (about 360 ms a chunk, 30 s of a 36,000-card
+            // pass). index-writer-no-statistics-test checks no swap
+            // statement is compiled.
+            await this.#query(['SET LOCAL jit = off']);
+          }
           await this.assertAttemptHoldsJob();
           await body();
         } finally {
@@ -3419,6 +3496,7 @@ export class Batch {
       },
       { label: `the index swap of ${this.realmURL.href}` },
     );
+    await this.#removeOrphansAfterFullRealm();
     return { swapAttempts, swapRetryMs };
   }
 
@@ -3939,6 +4017,9 @@ export class Batch {
     if (this.#invalidations.size > 0) {
       let columnExpressions = columns.boxelIndex.map((c) => [c]);
       let names = columns.boxelIndex;
+      // A row whose content is unchanged gets its bookkeeping columns alone;
+      // the rest are written whole, below.
+      let unchanged = await this.#promoteBookkeepingOnly(names);
       await this.#query([
         'INSERT INTO boxel_index',
         ...addExplicitParens(separatedByCommas(columnExpressions)),
@@ -3953,6 +4034,20 @@ export class Batch {
           ['staging_id =', param(this.#stagingId)],
           any([['is_deleted = false'], ['is_deleted IS NULL']]),
           this.#urlIn('url', [...this.#invalidations]),
+          // Leaves out the rows promoted by their bookkeeping by key, not by
+          // comparing again: a comparison against `boxel_index` here reads
+          // the table this statement fills, and planned from the row counts
+          // of an index's first pass it re-read every page written so far
+          // for each staged row (204 s for 72,000 rows).
+          ...(unchanged.length > 0
+            ? [
+                [
+                  "NOT ((url || ' ' || type) = ANY(",
+                  param(`{${unchanged.map(textArrayElement).join(',')}}`),
+                  '::text[]))',
+                ],
+              ]
+            : []),
         ]),
         'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
@@ -3976,15 +4071,120 @@ export class Batch {
         await this.promotePrerenderedHtmlPending(columns.prerenderedHtml);
         this.#publishedPrerenderedHtml = true;
       }
+      // Last: a card's value rows follow its promoted row and, when this
+      // pass published it, its prerendered html (liveness).
+      await this.#syncValueStore();
     }
 
     await this.stampRenderOnlyEntries();
+  }
+
+  // Replaces the value rows (value-store.ts) of every URL this pass
+  // promoted, from the promoted rows, inside the swap transaction.
+  async #syncValueStore() {
+    let host = {
+      dbAdapter: this.#dbAdapter,
+      query: (e: Expression) => this.#query(e),
+    };
+    await syncValueStore(host, this.realmURL.href, [...this.#invalidations]);
+  }
+
+  // After a pass that rebuilt the whole realm has committed: the realm's
+  // value rows whose card the index no longer holds live go
+  // (`removeOrphanValueRows`), in a transaction of their own, outside the
+  // commit lock. The store is UNLOGGED, as `boxel_index` is, so a crash can
+  // no longer leave orphans behind; this is defense in depth against any
+  // other drift, and it reads the realm's whole index, so it must not cost
+  // lock time. A failure is logged and never fails the pass: the next
+  // rebuild of the realm tries again.
+  async #removeOrphansAfterFullRealm() {
+    if (!this.#fullRealm) {
+      return;
+    }
+    try {
+      await this.#dbAdapter.withTransaction(
+        async (q) => {
+          await removeOrphanValueRows(
+            { dbAdapter: this.#dbAdapter, query: (e: Expression) => q(e) },
+            this.realmURL.href,
+          );
+        },
+        { label: `the orphan cleanup of ${this.realmURL.href}` },
+      );
+    } catch (e) {
+      this.#log.warn(
+        `could not remove the value rows of cards ${this.realmURL.href} no longer holds (the next rebuild of the realm tries again): ${e}`,
+      );
+    }
   }
 
   // The swap's SELECT list: every column as staged, except `generation`,
   // which takes this commit's. The pending rows carry the provisional
   // generation the pass anticipated at setup, which a peer that committed
   // first may have taken.
+  // That every content column of `boxel_index` row `prod` equals the staged
+  // row `staged`'s: a column the pending table lacks is promoted as NULL, so
+  // it is equal while the production row's is NULL. A column the class map
+  // does not know counts as content.
+  #contentEqual(columns: string[], prod: string, staged: string): string {
+    let content = columns.filter((c) => {
+      let kind = INDEX_COLUMN_CLASSES[c] ?? 'content';
+      return kind === 'content';
+    });
+    return content
+      .map((c) =>
+        this.#unstagedColumns.has(`boxel_index.${c}`)
+          ? `${prod}.${c} IS NULL`
+          : `${prod}.${c} IS NOT DISTINCT FROM ${staged}.${c}`,
+      )
+      .join(' AND ');
+  }
+
+  // The pass's staged rows whose content equals their production row's are
+  // promoted by writing their bookkeeping columns alone: the commit's
+  // generation, and their staged `indexed_at` and diagnostics. Their content
+  // columns, and the indexes over them, are left as they are.
+  // Returns the keys (`url type`) of the rows it promoted.
+  async #promoteBookkeepingOnly(columns: string[]): Promise<string[]> {
+    // Postgres only: the commit lock is a Postgres cost, and SQLite (the
+    // browser's index) writes every row as it always has.
+    if (this.#dbAdapter.kind !== 'pg') {
+      return [];
+    }
+    let bookkeeping = columns.filter(
+      (c) => INDEX_COLUMN_CLASSES[c] === 'bookkeeping',
+    );
+    if (bookkeeping.length === 0) {
+      return [];
+    }
+    let sets: Expression[] = bookkeeping.map((c) =>
+      this.#unstagedColumns.has(`boxel_index.${c}`)
+        ? [`${c} = NULL`]
+        : c === 'generation'
+          ? ([
+              'generation = CAST(',
+              param(this.commitGeneration),
+              'AS INTEGER)',
+            ] as Expression)
+          : [`${c} = p.${c}`],
+    );
+    let rows = (await this.#query([
+      'UPDATE boxel_index AS b SET',
+      ...separatedByCommas(sets),
+      'FROM boxel_index_pending AS p WHERE',
+      ...every([
+        ['p.realm_url =', param(this.realmURL.href)],
+        ['p.staging_id =', param(this.#stagingId)],
+        any([['p.is_deleted = false'], ['p.is_deleted IS NULL']]),
+        this.#urlIn('p.url', [...this.#invalidations]),
+        ['b.url = p.url AND b.realm_url = p.realm_url AND b.type = p.type'],
+        [this.#contentEqual(columns, 'b', 'p')],
+      ]),
+      "RETURNING b.url || ' ' || b.type AS key",
+    ] as Expression)) as { key: string }[];
+    return rows.map((r) => r.key);
+  }
+
   #restampedColumns(
     columns: string[],
     table: 'boxel_index' | 'prerendered_html',
@@ -4041,6 +4241,13 @@ export class Batch {
         ]),
       ] as Expression);
     }
+    // A newer generation can make a card live again (a prerendered error
+    // from an older generation no longer counts), so its value rows follow.
+    await syncValueStoreLiveness(
+      { dbAdapter: this.#dbAdapter, query: (e) => this.#query(e) },
+      this.realmURL.href,
+      urls,
+    );
   }
 
   // Whether `#touchedTypes` is a complete account of what this pass moved.
