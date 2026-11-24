@@ -107,14 +107,18 @@ import {
   type RenderingCandidate,
   type SearchEntryFieldset,
 } from './search-entry.ts';
-// Either grammar's entry query: a realm's own `_search` parses with main's,
-// a federated search with Query V2's (`engine-choice.ts`, 'federated'). Its
+// Either grammar's entry query: both search routes parse with Query V2's
+// unless `BOXEL_QUERY_ENGINE=legacy` (`engine-choice.ts`). Its
 // entries carry the per-row values the newer grammar asks for (a merge's
 // sort values, a near similarity, a collapse size, an explanation).
 import {
   buildEntryResource,
+  type SearchColumnsDocument,
   type SearchEntryQuery,
 } from './query-v2/search-entry.ts';
+import { IndexQueryEngine } from './query-engine/index-query-engine.ts';
+import type { Query as V2Query } from './query-v2/query.ts';
+import { refuse } from './query-v2/query-refusals.ts';
 import type { FieldDefinition } from './definitions.ts';
 import { urlNamesFile } from './file-def-code-ref.ts';
 import {
@@ -440,6 +444,63 @@ export class RealmIndexQueryEngine {
 
   private get realmURL() {
     return (this.#realmURL ??= new URL(this.#realm.url));
+  }
+
+  // A `select` search: the query's rows as a table of values read off the
+  // search doc, `id` first. See `IndexQueryEngine.planColumns`. Query V2's
+  // engine alone answers it: only Query V2's grammar parses a `select`.
+  async searchColumns(
+    searchEntryQuery: SearchEntryQuery,
+    opts?: Options,
+  ): Promise<SearchColumnsDocument> {
+    let {
+      itemQuery: query,
+      columns,
+      typeAnchors,
+      cardUrls,
+      anonymizeStatistics,
+      labelFilter,
+      grantFilter,
+      grantsForType,
+      logAccess,
+    } = searchEntryQuery;
+    if (!columns) {
+      throw new Error('searchColumns needs columns');
+    }
+    let engine = this.#indexQueryEngine;
+    if (!(engine instanceof IndexQueryEngine)) {
+      throw new Error("searchColumns needs Query V2's engine");
+    }
+    let type = typeAnchors?.length === 1 ? typeAnchors[0] : undefined;
+    if (!type) {
+      throw refuse('select-query-needs-one');
+    }
+    let engineOpts: Options = {
+      ...opts,
+      ...(cardUrls && cardUrls.length > 0 ? { cardUrls } : {}),
+      ...(anonymizeStatistics ? { anonymizeStatistics } : {}),
+      ...(labelFilter ? { labelFilter } : {}),
+      ...(grantFilter ? { grantFilter } : {}),
+      ...(grantsForType ? { grantsForType } : {}),
+      readLogFile: this.#realm.readLogFileForQuery,
+      ...(logAccess ? { logAccess } : {}),
+    };
+    let plans = await engine.planColumns(type, columns);
+    let run = () =>
+      engine.searchColumns(
+        new URL(this.#realm.url),
+        query as V2Query,
+        engineOpts,
+        plans,
+      );
+    let { meta, rows } = opts?.timings
+      ? await opts.timings.time('sql', run)
+      : await run();
+    return {
+      columns: ['id', ...columns.map((c) => c.name)],
+      rows,
+      meta: meta as SearchColumnsDocument['meta'],
+    };
   }
 
   // The entry engine. Runs the parsed entry query — the

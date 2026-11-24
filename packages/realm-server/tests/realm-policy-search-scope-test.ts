@@ -278,6 +278,60 @@ module(basename(import.meta.filename), function (hooks) {
     };
   }
 
+  // A `select` search as `caller`: the status and the body, parsed as a
+  // table or, for a line type, as its lines.
+  async function table(
+    body: Record<string, unknown>,
+    caller = MEMBER,
+    accept: string = SupportedMimeType.CardJson,
+    route: 'realm' | 'federated' = 'realm',
+  ) {
+    let response = await request
+      .post(
+        route === 'realm'
+          ? `${new URL(NEWSROOM).pathname}_search`
+          : '/_federated-search',
+      )
+      .set('Accept', accept)
+      .set('Content-Type', 'application/json')
+      .set('X-HTTP-Method-Override', 'QUERY')
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(newsroom, caller, caller === EDITOR ? ['read', 'write', 'realm-owner'] : [])}`,
+      )
+      .buffer(true)
+      .parse((res, cb) => {
+        let text = '';
+        res.on('data', (c: Buffer) => (text += c.toString()));
+        res.on('end', () => cb(null, text));
+      })
+      .send(route === 'realm' ? body : { ...body, realms: [NEWSROOM] });
+    let text = response.body as string;
+    let strip = (id: unknown) =>
+      typeof id === 'string' ? id.replace(NEWSROOM, '') : id;
+    if (response.status !== 200) {
+      return { status: response.status, error: JSON.parse(text).errors?.[0] };
+    }
+    if (accept !== SupportedMimeType.CardJson) {
+      return {
+        status: 200,
+        type: response.headers['content-type'],
+        lines: text
+          .trim()
+          .split('\n')
+          .map((l) => JSON.parse(l))
+          .map((o) => ('id' in o ? { ...o, id: strip(o.id) } : o)),
+      };
+    }
+    let doc = JSON.parse(text);
+    return {
+      status: 200,
+      columns: doc.columns,
+      rows: doc.rows.map((r: unknown[]) => [strip(r[0]), ...r.slice(1)]),
+      total: doc.meta?.page?.total,
+    };
+  }
+
   // A hidden row: a draft, in a section no published article is in, with far
   // more views than any other, so it would move every count, label and score
   // it reached.
@@ -461,6 +515,145 @@ module(basename(import.meta.filename), function (hooks) {
       await search(body),
       before,
       'and a hidden row changes nothing',
+    );
+  });
+
+  test('select answers a table of indexed values, under the grants', async function (assert) {
+    let body = {
+      filter: { 'item.on': Article },
+      sort: [{ by: 'item.views', 'item.on': Article, direction: 'desc' }],
+      select: ['headline', 'views', { section: 'section.name' }],
+    };
+    let member = await table(body);
+    assert.deepEqual(
+      member,
+      {
+        status: 200,
+        columns: ['id', 'headline', 'views', 'section'],
+        rows: [
+          ['articles/b', 'B', 30, 'World'],
+          ['articles/c', 'C', 20, 'Sport'],
+          ['articles/a', 'A', 10, 'World'],
+        ],
+        total: 3,
+      },
+      'the published articles; the draft the grant hides is not a row',
+    );
+    let other = await table(body, OTHER);
+    assert.deepEqual(
+      other.rows,
+      [
+        ['articles/b', 'B', 30, null],
+        ['articles/c', 'C', 20, null],
+        ['articles/a', 'A', 10, null],
+      ],
+      "a caller the Section grant does not admit reads no section's name",
+    );
+    await addHiddenRow();
+    assert.deepEqual(await table(body), member, 'a hidden row changes nothing');
+  });
+
+  test('a list column through links keeps only the linked cards the caller may read', async function (assert) {
+    let { rows } = (await table({
+      filter: { 'item.on': Article, eq: { 'item.headline': 'A' } },
+      select: ['related.headline'],
+    })) as { rows: unknown[][] };
+    assert.deepEqual(
+      rows,
+      [['articles/a', ['C']]],
+      "a's related articles are c and the draft d; only c's headline shows",
+    );
+    let owner = (await table(
+      {
+        filter: { 'item.on': Article, eq: { 'item.headline': 'A' } },
+        select: ['related.headline'],
+      },
+      EDITOR,
+    )) as { rows: unknown[][] };
+    assert.deepEqual(
+      owner.rows,
+      [['articles/a', ['C', 'D']]],
+      'the realm owner reads both',
+    );
+  });
+
+  test('select answers as NDJSON or JSONL, one row a line', async function (assert) {
+    let body = {
+      filter: { 'item.on': Article },
+      sort: [{ by: 'item.views', 'item.on': Article, direction: 'desc' }],
+      select: ['headline', 'views'],
+      page: { size: 2 },
+    };
+    for (let type of ['application/x-ndjson', 'application/jsonl']) {
+      let answer = (await table(body, MEMBER, type)) as any;
+      assert.strictEqual(answer.type, type, `answered as ${type}`);
+      assert.deepEqual(answer.lines, [
+        { id: 'articles/b', headline: 'B', views: 30 },
+        { id: 'articles/c', headline: 'C', views: 20 },
+        // the last line is the JSON answer's meta: 2 of 3 rows, more follow
+        { meta: { page: { total: 3, hasMore: true } } },
+      ]);
+    }
+  });
+
+  test('a select path the index does not hold is refused, by code', async function (assert) {
+    let codes: Record<string, unknown> = {};
+    for (let [why, columns, extra] of [
+      ['no such field', ['subtitle'], {}],
+      ['a linked field the link does not carry', ['related.section.name'], {}],
+      ['beside fields', ['headline'], { fields: { entry: ['item.headline'] } }],
+      ['named id', [{ id: 'headline' }], {}],
+    ] as const) {
+      let answer = (await table({
+        filter: { 'item.on': Article },
+        select: columns,
+        ...extra,
+      })) as any;
+      codes[why] = [answer.status, answer.error?.code];
+    }
+    assert.deepEqual(codes, {
+      'no such field': [400, 'unknown-field'],
+      'a linked field the link does not carry': [400, 'not-selectable'],
+      'beside fields': [400, 'select-excludes-fields'],
+      'named id': [400, 'conflicting-members'],
+    });
+  });
+
+  test('a federated search naming the realm alone answers select as the realm does', async function (assert) {
+    let bodies = [
+      {
+        filter: { 'item.on': Article },
+        sort: [{ by: 'item.views', 'item.on': Article, direction: 'desc' }],
+        select: ['headline', 'views', { section: 'section.name' }],
+      },
+      {
+        filter: { 'item.on': Article, eq: { 'item.headline': 'A' } },
+        select: ['related.headline'],
+      },
+    ];
+    for (let body of bodies) {
+      for (let caller of [EDITOR, MEMBER, OTHER]) {
+        let own = await table(body, caller);
+        assert.strictEqual(own.status, 200, caller);
+        assert.deepEqual(
+          await table(body, caller, SupportedMimeType.CardJson, 'federated'),
+          own,
+          `${caller} reads the same table on both endpoints`,
+        );
+      }
+    }
+    let across = await request
+      .post('/_federated-search')
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('Content-Type', 'application/json')
+      .set('X-HTTP-Method-Override', 'QUERY')
+      .set('Authorization', `Bearer ${createJWT(newsroom, MEMBER, [])}`)
+      .send({ ...bodies[0], realms: [NEWSROOM, ORG] });
+    assert.strictEqual(across.status, 400, across.text);
+    assert.strictEqual(
+      across.body.errors[0].code,
+      'conflicting-members',
+      'a table across realms is refused',
     );
   });
 

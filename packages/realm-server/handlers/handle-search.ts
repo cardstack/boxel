@@ -4,7 +4,6 @@ import {
   type LogAccess,
 } from '@cardstack/runtime-common/log-query';
 import { queryEngineFor } from '@cardstack/runtime-common/query-engine/engine-choice';
-import { deferredSelectRefusal } from '@cardstack/runtime-common/query-engine/deferred-select';
 import { isLogBinding } from '@cardstack/runtime-common/query-v2/query-values';
 import { applyServerSearchPageBound as applyV2ServerSearchPageBound } from '@cardstack/runtime-common/query-v2/search-bounds';
 import {
@@ -13,8 +12,11 @@ import {
   parseSearchEntryQueryFromPayload as parseV2SearchEntryQuery,
   policyScopedQuery as v2PolicyScopedQuery,
   searchEntryRealms as v2SearchEntryRealms,
+  type SearchColumnsDocument,
   type SearchEntryQuery,
 } from '@cardstack/runtime-common/query-v2/search-entry';
+import { InvalidQueryError } from '@cardstack/runtime-common/invalid-query-error';
+import { mergeAbortSignals } from '@cardstack/runtime-common/virtual-network';
 import {
   searchEntryUnion,
   unionPathRefusal,
@@ -176,16 +178,13 @@ function federatedEntryGrammar(): FederatedEntryGrammar {
     : LEGACY_ENTRY_GRAMMAR;
 }
 
-// A request's entry query, read with `grammar`. A card query's `select` is
-// refused on either engine until its own row (`deferred-select.ts`).
+// A request's entry query, read with `grammar`. Main's grammar refuses a
+// card query's `select` outright; Query V2's answers it for a search naming
+// one realm (`respondWithTable`).
 function parseFederatedEntryQuery(
   grammar: FederatedEntryGrammar,
   payload: unknown,
 ): SearchEntryQuery {
-  let refused = deferredSelectRefusal(payload);
-  if (refused) {
-    throw refused;
-  }
   return grammar.parse(payload);
 }
 
@@ -861,6 +860,22 @@ export default function handleSearch(opts: {
     // it pages over the composed filter rather than over the caller's and then
     // discarding, which is what keeps a policy-filtered page full rather than
     // sparse. Every other realm runs `parsed` untouched.
+    // A card query's `select` (a table of values) is answered for a search
+    // naming one realm, as that realm's own `_search` answers it: the grants
+    // decide, not the endpoint. Rows from several realms would need one order
+    // across them, which entries only approximate, so a table across realms
+    // is refused.
+    if (parsed.columns && realmList.length !== 1) {
+      await respondToInvalidSearch(
+        ctxt,
+        new SearchRequestError(
+          'invalid-query',
+          'Invalid query: select reads one realm: name one realm, or ask for entries',
+          'conflicting-members',
+        ),
+      );
+      return;
+    }
     let scopedQueries = new Map<string, SearchEntryQuery>();
     for (let [realm, filters] of access.scoped) {
       // Query V2's grammar reads linked cards (`linkedFrom`, a link facet's
@@ -896,6 +911,17 @@ export default function handleSearch(opts: {
     // Where none is, the search is the one it would be with no policy
     // anywhere: nothing composed and nothing stood in, and nothing folded into
     // its cache key beyond the mark a declared query carries.
+    if (parsed.columns) {
+      await respondWithTable(ctxt, {
+        realm: realmList[0],
+        query: scopedQueries.get(realmList[0]) ?? parsed,
+        access,
+        mountRealms,
+        cacheOnlyDefinitions,
+        signal: request.signal,
+      });
+      return;
+    }
     let unread = realmList.filter((realm) => !access.readable.has(realm));
     // The realms the result marks policy-scoped, so a client reconciling it
     // against cards it holds adds none of theirs the server did not return.
@@ -1685,6 +1711,87 @@ async function respondThroughSearchCaches(
 // `invalid-render` are client request-shape errors, answered with the JSON:API
 // search-error body; anything else (bad method / JSON) is a plain bad request,
 // the same split as the other search handlers.
+// The table a federated search naming one realm answers a `select` with:
+// what that realm's own `_search` answers the same caller. A realm the caller
+// reads answers the query as asked, one their policy reaches answers it
+// scoped (its rows, and a linked column only where the linked card's own
+// grants admit them), and one that grants them nothing answers no rows. A
+// realm whose policy could not be judged answers no rows, marked incomplete,
+// as the federated route reports a realm that did not answer. The page bound
+// and time budget are the realm route's. Never cached: the table is
+// answered fresh, as the realm's own `_search` answers it.
+async function respondWithTable(
+  ctxt: Koa.Context,
+  {
+    realm,
+    query,
+    access,
+    mountRealms,
+    cacheOnlyDefinitions,
+    signal,
+  }: {
+    realm: string;
+    query: SearchEntryQuery;
+    access: RealmAccess;
+    mountRealms: MountRealms;
+    cacheOnlyDefinitions: boolean;
+    signal: AbortSignal;
+  },
+): Promise<void> {
+  let columns = ['id', ...query.columns!.map((c) => c.name)];
+  let answer = async (doc: SearchColumnsDocument) =>
+    await setContextResponse(
+      ctxt,
+      new Response(JSON.stringify(doc), {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      }),
+    );
+  let reads = access.readable.has(realm) || access.scoped.has(realm);
+  let mounted = reads
+    ? (access.realms.get(realm) ?? (await mountRealms([realm]))[0])
+    : undefined;
+  if (!mounted) {
+    await answer({
+      columns,
+      rows: [],
+      meta: {
+        page: { total: 0 },
+        ...(access.failed.has(realm) || reads ? { incomplete: true } : {}),
+      },
+    });
+    return;
+  }
+  let bounded: SearchEntryQuery = {
+    ...query,
+    itemQuery: applyV2ServerSearchPageBound(query.itemQuery),
+  };
+  let run = (budgetSignal?: AbortSignal) => {
+    let merged = mergeAbortSignals(budgetSignal, signal);
+    return mounted.searchColumns(bounded, {
+      cacheOnlyDefinitions,
+      ...(merged ? { signal: merged } : {}),
+    });
+  };
+  try {
+    await answer(
+      cacheOnlyDefinitions ? await run() : await runWithSearchTimeBudget(run),
+    );
+  } catch (e) {
+    if (e instanceof InvalidQueryError) {
+      await respondToInvalidSearch(
+        ctxt,
+        new SearchRequestError(
+          'invalid-query',
+          `Invalid query: ${e.message}`,
+          e.code,
+        ),
+      );
+      return;
+    }
+    throw e;
+  }
+}
+
 async function respondToInvalidSearch(
   ctxt: Koa.Context,
   e: SearchRequestError,
