@@ -974,8 +974,9 @@ export type RealmInfo = {
   // The lever is primarily set by the publish handler on the
   // published realm snapshot so anonymous-visitor SSR injection has
   // real content; unpublished realms typically have nothing reading
-  // the index's isolated HTML. Optional to avoid forcing every
-  // RealmInfo fixture to update.
+  // the index's isolated HTML. A realm with a host URL gets the full render
+  // without this, through `RenderRouteOptions.prerenderDefaultIndex`.
+  // Optional to avoid forcing every RealmInfo fixture to update.
   includePrerenderedDefaultRealmIndex?: boolean | null;
 };
 
