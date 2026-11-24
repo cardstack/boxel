@@ -157,6 +157,39 @@ describe('boxel keys on a profile signed in with OAuth', () => {
     expect(openBrowserFn).toHaveBeenCalledTimes(1);
   });
 
+  it('ends the held session when the command is interrupted, then exits as interrupted', async () => {
+    let requests = realmServer();
+    let listenersBefore = process.listenerCount('SIGINT');
+    let exit = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never);
+    let ctx = context(false, {
+      profileManager: manager,
+      openBrowserFn: browser(),
+    });
+    await ordinaryToken(ctx);
+    expect(process.listenerCount('SIGINT')).toBe(listenersBefore + 1);
+
+    process.emit('SIGINT', 'SIGINT');
+
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(130));
+    expect(requests.map((r) => `${r.method} ${r.path}`)).toContain(
+      'DELETE /_secure-session',
+    );
+    expect(process.listenerCount('SIGINT')).toBe(listenersBefore);
+  });
+
+  it('stops listening for an interrupt once the command has ended its session', async () => {
+    realmServer();
+    let listenersBefore = process.listenerCount('SIGINT');
+
+    await runKeysCommand(false, () =>
+      keysList({ profileManager: manager, openBrowserFn: browser() }),
+    );
+
+    expect(process.listenerCount('SIGINT')).toBe(listenersBefore);
+  });
+
   it('refuses without a terminal, before asking the server anything', async () => {
     let requests = realmServer();
     let openBrowserFn = vi.fn();

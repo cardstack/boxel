@@ -10,7 +10,10 @@ import { runCommand } from '../../src/commands/run-command.ts';
 import { BoxelCLIClient } from '../../src/lib/boxel-cli-client.ts';
 import { OAUTH_REFUSALS } from '../../src/lib/oauth-refusals.ts';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
-import { describeOAuthPolicyRefusal } from '../../src/lib/realm-sync-base.ts';
+import {
+  RealmSyncBase,
+  describeOAuthPolicyRefusal,
+} from '../../src/lib/realm-sync-base.ts';
 
 const REALM_SERVER_URL = 'https://realms.example.test/';
 const REALM_URL = `${REALM_SERVER_URL}example-user/example-realm/`;
@@ -121,31 +124,70 @@ describe('commands an OAuth profile refuses', () => {
   });
 });
 
-describe('describeOAuthPolicyRefusal', () => {
-  it("explains a realm's refusal of an OAuth write to its policy", () => {
-    let body = JSON.stringify({
-      errors: [
-        {
-          status: 403,
-          title: 'Forbidden',
-          detail:
-            "An app connected with OAuth may not change realm.json's policy or config",
-        },
-      ],
-    });
+// What the realm sends when it refuses an OAuth caller's write to its policy:
+// a serialized CardError, with the reason in a top-level `message`.
+function policyRefusal(change: string): Response {
+  return new Response(
+    JSON.stringify({
+      message: `An app connected with OAuth may not change ${change}`,
+      status: 403,
+      title: 'Forbidden',
+      additionalErrors: null,
+      realm: REALM_URL,
+    }),
+    { status: 403, statusText: 'Forbidden' },
+  );
+}
 
-    expect(describeOAuthPolicyRefusal(body)).toBe(
-      "An app connected with OAuth may not change realm.json's policy or config. " +
-        "This profile is signed in with OAuth, which can't change who a realm admits: make this change in the app, or with a profile signed in with Matrix.",
-    );
+class Uploader extends RealmSyncBase {
+  async sync(): Promise<void> {}
+  upload(files: Map<string, string>) {
+    return this.uploadFilesAtomic(files, new Set());
+  }
+}
+
+describe("a realm's refusal of an OAuth write to its policy", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-oauth-policy-'));
+    fs.writeFileSync(path.join(dir, 'realm.json'), '{}');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
-  it('names a policy card the same way', () => {
-    expect(
-      describeOAuthPolicyRefusal(
-        'An app connected with OAuth may not change a policy card',
-      ),
-    ).toMatch(/^An app connected with OAuth may not change a policy card\./);
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('is explained when push or sync uploads a batch', async () => {
+    let uploader = new Uploader(
+      { realmUrl: REALM_URL, localDir: dir },
+      {
+        authedRealmFetch: async () =>
+          policyRefusal("realm.json's policy or config"),
+      },
+    );
+
+    let result = await uploader.upload(
+      new Map([['realm.json', path.join(dir, 'realm.json')]]),
+    );
+
+    expect(result.error).toEqual({
+      status: 403,
+      perFile: [],
+      message:
+        "Atomic upload failed: 403 Forbidden. An app connected with OAuth may not change realm.json's policy or config. " +
+        "This profile is signed in with OAuth, which can't change who a realm admits: make this change in the app, or with a profile signed in with Matrix. " +
+        '(0 of 1 text file(s) written, 1 rejected, 0 not sent)',
+    });
+  });
+
+  it('names a policy card the same way', async () => {
+    let body = await policyRefusal('a policy card').text();
+    expect(describeOAuthPolicyRefusal(body)).toMatch(
+      /^An app connected with OAuth may not change a policy card\./,
+    );
   });
 
   it('leaves any other failure alone', () => {

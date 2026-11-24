@@ -835,15 +835,16 @@ export abstract class RealmSyncBase {
     let errorBody: {
       errors?: Array<{ title?: string; detail?: string; status?: number }>;
     } = {};
+    const errorText = await response.text().catch(() => '');
     try {
-      errorBody = (await response.json()) as typeof errorBody;
+      errorBody = JSON.parse(errorText) as typeof errorBody;
     } catch {
       // ignore JSON parse failures — fall through to the generic message
     }
 
-    const refusal = (errorBody.errors ?? [])
-      .map((e) => describeOAuthPolicyRefusal(e.detail ?? ''))
-      .find((r) => r !== undefined);
+    // Matched in the body as sent: the realm answers this refusal with a
+    // top-level `message`, not a JSON:API `errors` list.
+    const refusal = describeOAuthPolicyRefusal(errorText);
     if (refusal) {
       // The whole batch was refused for this one reason; no file failed on
       // its own.

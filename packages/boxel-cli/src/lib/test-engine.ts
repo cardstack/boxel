@@ -11,6 +11,7 @@ import {
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from './profile-manager.ts';
+import { OAuthConnectionEndedError } from './oauth-login.ts';
 import { resolveRealmIdentifier } from './resolve-realm-identifier.ts';
 import { findBoxelCliRoot } from './find-package-root.ts';
 import { listFiles } from '../commands/file/list.ts';
@@ -294,12 +295,15 @@ interface RealmResponse {
 
 // How a run on an OAuth profile authorizes the page's requests to the realm's
 // origin. An OAuth access token lasts minutes, less than a run can take, so
-// it is read on each request, renewed as it nears its end. A request whose
-// token can't be had is aborted, and the reason handed to
-// `onAuthorizationError`. Responses refused with a 401 are collected in
-// `refused` as `METHOD /path`.
+// it is read on each request, renewed as it nears its end. When the
+// connection has ended, the request is aborted and the reason handed to
+// `onAuthorizationError`: nothing the suite does next can succeed. A renewal
+// that fails for a passing reason (the token endpoint's limit, an outage, a
+// timeout, the profiles lock) leaves the token held, which is sent while it
+// is still valid; past that, only the one request fails. Responses refused
+// with a 401 are collected in `refused` as `METHOD /path`.
 export function oauthRealmRequestHandlers(
-  pm: Pick<ProfileManager, 'getOAuthAccessToken'>,
+  pm: Pick<ProfileManager, 'getOAuthAccessToken' | 'getActiveProfile'>,
   realmOrigin: string,
   { onAuthorizationError }: { onAuthorizationError: (e: unknown) => void },
 ) {
@@ -311,9 +315,20 @@ export function oauthRealmRequestHandlers(
       try {
         token = await pm.getOAuthAccessToken();
       } catch (e) {
-        await route.abort('failed').catch(() => {});
-        onAuthorizationError(e);
-        return;
+        let held = pm.getActiveProfile()?.profile.oauth;
+        if (
+          !(e instanceof OAuthConnectionEndedError) &&
+          held &&
+          Date.parse(held.accessExpiresAt) > Date.now()
+        ) {
+          token = held.accessToken;
+        } else {
+          await route.abort('failed').catch(() => {});
+          if (e instanceof OAuthConnectionEndedError) {
+            onAuthorizationError(e);
+          }
+          return;
+        }
       }
       await route.continue({
         headers: {
@@ -637,7 +652,7 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
       if (oauth) {
         let handlers = oauthRealmRequestHandlers(options.pm, realmOrigin, {
           onAuthorizationError: (e) => {
-            // Nothing the suite does next can succeed: stop the run.
+            // The connection has ended: stop the run.
             authorizationError ??= e;
             void page.close().catch(() => {});
           },
@@ -690,11 +705,21 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
       throw err;
     }
 
-    let qunitResults = (await page.evaluate(
-      () =>
-        (window as unknown as { __qunitResults: QunitResults }).__qunitResults,
-    )) as QunitResults;
-
+    // The page may have been closed for an ended connection between the
+    // run-end wait and here; that, not the closed page, is the reason.
+    let qunitResults: QunitResults;
+    try {
+      if (authorizationError) {
+        throw authorizationError;
+      }
+      qunitResults = (await page.evaluate(
+        () =>
+          (window as unknown as { __qunitResults: QunitResults })
+            .__qunitResults,
+      )) as QunitResults;
+    } catch (e) {
+      throw authorizationError ?? e;
+    }
     if (authorizationError) {
       throw authorizationError;
     }

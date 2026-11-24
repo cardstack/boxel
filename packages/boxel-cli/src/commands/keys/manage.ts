@@ -200,9 +200,29 @@ let heldSessions = new Map<
   { realmServerUrl: string; token: string; expiresAt: string }
 >();
 
+// Ends the held sessions when the command is interrupted (Ctrl+C, at a
+// prompt or anywhere else), which skips `runKeysCommand`'s own ending of
+// them, then exits as an interrupted command. Installed while one is held.
+let onInterrupt: (() => void) | undefined;
+
+function endHeldSessionsOnInterrupt(): void {
+  if (onInterrupt) {
+    return;
+  }
+  onInterrupt = () => {
+    onInterrupt = undefined;
+    void endHeldSecureSessions().finally(() => process.exit(130));
+  };
+  process.once('SIGINT', onInterrupt);
+}
+
 // Ends the secure sessions this process holds for OAuth profiles. A session
 // that can't be ended is named, since it lasts until it expires.
 export async function endHeldSecureSessions(): Promise<void> {
+  if (onInterrupt) {
+    process.removeListener('SIGINT', onInterrupt);
+    onInterrupt = undefined;
+  }
   let sessions = [...heldSessions.values()];
   heldSessions.clear();
   await Promise.all(
@@ -247,6 +267,7 @@ async function oauthSecureToken(ctx: Context): Promise<string> {
     token: session.token,
     expiresAt: session.expiresAt,
   });
+  endHeldSessionsOnInterrupt();
   return session.token;
 }
 
