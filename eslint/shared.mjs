@@ -295,3 +295,44 @@ export const QUNIT_DOM_RECOMMENDED = {
   plugins: { 'qunit-dom': fixupPluginRules(qunitDom) },
   rules: qunitDom.configs.recommended.rules,
 };
+
+// eslint-plugin-import-x's presets name rules `import-x/...`. The configs here
+// register the plugin as `import`, so the presets' rules are renamed to match.
+const asImportRules = (rules = {}) =>
+  Object.fromEntries(
+    Object.entries(rules).map(([name, value]) => [
+      name.replace(/^import-x\//, 'import/'),
+      value,
+    ]),
+  );
+
+// `plugin:import/recommended`, with eslint-plugin-import-x.
+export const IMPORT_RECOMMENDED = {
+  plugins: { import: importX },
+  rules: asImportRules(importX.flatConfigs.recommended.rules),
+};
+
+// `plugin:import/typescript`, with eslint-plugin-import-x. import-x's own
+// preset resolves with eslint-import-resolver-typescript; eslint-plugin-import's
+// resolved with Node's algorithm over these extensions, so this keeps that.
+const TS_AND_JS_EXTENSIONS = [
+  '.ts',
+  '.cts',
+  '.mts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+];
+export const IMPORT_TYPESCRIPT = {
+  settings: {
+    ...importX.flatConfigs.typescript.settings,
+    'import-x/extensions': TS_AND_JS_EXTENSIONS,
+    'import-x/resolver': undefined,
+    'import-x/resolver-next': [
+      importX.createNodeResolver({ extensions: TS_AND_JS_EXTENSIONS }),
+    ],
+  },
+  rules: asImportRules(importX.flatConfigs.typescript.rules),
+};

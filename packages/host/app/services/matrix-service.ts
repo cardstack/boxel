@@ -129,6 +129,7 @@ import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
 
+import type { RoomResource } from '../resources/room';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type LocalPersistenceService from './local-persistence-service';
@@ -147,7 +148,6 @@ import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type StoreService from './store';
 import type ToolService from './tool-service';
-import type { RoomResource } from '../resources/room';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { BaseDef, CardDef } from '@cardstack/base/card-api';
 import type {
