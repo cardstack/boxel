@@ -515,8 +515,8 @@ export async function openGrantForSending(
 // under it, in every realm. They are revoked with it, each with a revocation
 // recorded in its history, so a later call through one is refused
 // `binding-not-approved`. Another user's grant answers as one that doesn't
-// exist. Also answers the automations the revocation moved to waiting for key
-// approval (`waiting`).
+// exist. Also answers the automations the revoked bindings' ended approvals
+// served (`affected`).
 export async function removeGrant(
   dbAdapter: DBAdapter,
   {
@@ -524,7 +524,7 @@ export async function removeGrant(
     grantId,
     via,
   }: { owner: string; grantId: string; via: SecureSessionClient },
-): Promise<{ revokedBindings: string[]; waiting: ChangedAutomation[] }> {
+): Promise<{ revokedBindings: string[]; affected: ChangedAutomation[] }> {
   if (!UUID.test(grantId)) {
     throw new UserKeyError(404, 'no such grant');
   }
@@ -539,12 +539,12 @@ export async function removeGrant(
     if (!grant) {
       throw new UserKeyError(404, 'no such grant');
     }
-    let { revoked, waiting } = await revokeBindingsIn(txQuery, {
+    let { revoked, affected } = await revokeBindingsIn(txQuery, {
       where: [`grant_id = `, param(grantId)],
       actor: owner,
       via,
     });
     await txQuery([`DELETE FROM user_key_grants WHERE id = `, param(grantId)]);
-    return { revokedBindings: revoked, waiting };
+    return { revokedBindings: revoked, affected };
   });
 }

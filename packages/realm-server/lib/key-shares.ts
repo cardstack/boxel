@@ -570,9 +570,9 @@ export async function swapKeyIntoShare(
 ): Promise<{
   share: KeyShare;
   reapprovedBindings: string[];
-  // The automations that moved to waiting for key approval because the
-  // approvals they had of the share's bindings ended with the swap.
-  waiting: ChangedAutomation[];
+  // The automations whose approvals of the share's bindings ended with the
+  // swap.
+  affected: ChangedAutomation[];
 }> {
   if (keyId === undefined || keyId === null) {
     throw new UserKeyError(400, 'a swap names the key it puts in');
@@ -639,7 +639,7 @@ export async function swapKeyIntoShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    let { moved, waiting } = await moveShareBindingsIn(txQuery, keyring, {
+    let { moved, affected } = await moveShareBindingsIn(txQuery, keyring, {
       shareId,
       keyId,
       owner: user,
@@ -648,7 +648,7 @@ export async function swapKeyIntoShare(
     return {
       share: toShare(updated, { withKey: true }),
       reapprovedBindings: moved,
-      waiting,
+      affected,
     };
   });
 }

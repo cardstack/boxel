@@ -1004,8 +1004,8 @@ export async function resealGrantMarkersIn(
 // share holding it is suspended in the same statement,
 // by a trigger on `user_keys`, and keeps its place in its realm for a direct
 // writer to swap another key into; `listOwnShares` with the key's id lists
-// the shares a delete would suspend. Answers the automations that moved to
-// waiting for key approval because the key's own bindings were revoked.
+// the shares a delete would suspend. Answers the automations the ended
+// approvals of the key's own bindings served.
 export async function deleteUserKey(
   dbAdapter: DBAdapter,
   { owner, id, ticket }: { owner: string; id: string; ticket: unknown },
@@ -1031,12 +1031,12 @@ export async function deleteUserKey(
     // The key's own bindings are revoked with it, each recorded in its
     // history. A share's bindings stay: the share is suspended, and a key
     // swapped into it takes them over.
-    let { waiting } = await revokeBindingsIn(txQuery, {
+    let { affected } = await revokeBindingsIn(txQuery, {
       where: [`key_id = `, param(id)],
       actor: owner,
       via: null,
     });
     await txQuery([`DELETE FROM user_keys WHERE id = `, param(id)]);
-    return waiting;
+    return affected;
   });
 }

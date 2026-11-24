@@ -319,7 +319,7 @@ export function handleSwapKeyIntoShare(args: CreateRoutesArgs): Handler {
           ctxt.state.token as RealmServerTokenClaim | undefined,
         )
       : undefined;
-    let { share, reapprovedBindings, waiting } = await swapKeyIntoShare(
+    let { share, reapprovedBindings, affected } = await swapKeyIntoShare(
       dbAdapter,
       secretsKeyring(),
       {
@@ -337,7 +337,7 @@ export function handleSwapKeyIntoShare(args: CreateRoutesArgs): Handler {
     // declares has nothing missing, and runs again.
     await reportAutomationChanges(
       realmServerAutomationChangeReporter(args),
-      waiting,
+      affected,
     );
     let realmURL = new URL(share.realm);
     await followAutomationKeyApprovals(

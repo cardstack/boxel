@@ -56,7 +56,7 @@ export async function writeAutomationKeyApprovalsIn(
 // Ends every automation approval of the bindings `bindingIds`: each binding
 // came to send another share or key than the one its approvals were given
 // for (`waitForKeyApprovalOfBindingsIn` moves their automations first).
-// Returns the automations it moved to waiting for key approval.
+// Returns the automations the ended approvals served.
 export async function endAutomationKeyApprovalsIn(
   txQuery: Querier,
   bindingIds: string[],
@@ -65,13 +65,13 @@ export async function endAutomationKeyApprovalsIn(
     return [];
   }
   let selected = bindingIdList(bindingIds);
-  let waiting = await waitForKeyApprovalOfBindingsIn(txQuery, selected);
+  let affected = await waitForKeyApprovalOfBindingsIn(txQuery, selected);
   await txQuery([
     'DELETE FROM automation_key_approvals WHERE binding_id IN (',
     ...selected,
     ')',
   ]);
-  return waiting;
+  return affected;
 }
 
 // Moves each automation an approval of the bindings `bindings` selects
@@ -81,14 +81,18 @@ export async function endAutomationKeyApprovalsIn(
 // as `readApprovedVersions` reads them: a share's binding, or one its payer
 // approved with their own key. An approval a former payer gave with their
 // own key is kept but serves nothing, so ending it moves nothing. The
-// bindings are read as they are before the change that ends the approval. Every such automation's row is locked first,
+// bindings are read as they are before the change that ends the approval.
+// Every such automation's row is locked first,
 // whatever its state and in `automation_id` order, so a re-check of its
 // approvals that holds the row commits before this reads it, and one that
 // comes later reads the approval as gone. A pending run of a moved
 // automation is refused at admission (`waiting-for-key-approval`).
 //
-// Returns the automations it moved, in `automation_id` order, for the caller
-// to report to their realms' direct writers once its transaction commits.
+// Returns every automation an ending approval served, in `automation_id`
+// order, whether it moved or not: a paused one keeps its pause and one
+// already waiting stays, but the approvals each has changed all the same. The
+// caller reports each to its realm's direct writers once its transaction
+// commits.
 export async function waitForKeyApprovalOfBindingsIn(
   txQuery: Querier,
   bindings: Expression,
@@ -98,22 +102,20 @@ export async function waitForKeyApprovalOfBindingsIn(
     ...bindings,
     ') AND (b.key_id IS NULL OR b.approved_by = au.payer)',
   ];
-  await txQuery([
-    'SELECT automation_id FROM automations WHERE automation_id IN (',
+  let locked = await txQuery([
+    'SELECT automation_id, realm FROM automations WHERE automation_id IN (',
     ...served,
     ') ORDER BY automation_id FOR UPDATE',
   ]);
-  let moved = await txQuery([
+  await txQuery([
     "UPDATE automations SET state = 'waiting-for-key-approval', next_run = NULL, updated_at = now() WHERE state IN ('active', 'done', 'waiting-for-credits') AND automation_id IN (",
     ...served,
-    ') RETURNING automation_id, realm',
+    ')',
   ]);
-  return moved
-    .map((row) => ({
-      automationId: row.automation_id as RealmResourceIdentifier,
-      realm: row.realm as RealmIdentifier,
-    }))
-    .sort((a, b) => a.automationId.localeCompare(b.automationId));
+  return locked.map((row) => ({
+    automationId: row.automation_id as RealmResourceIdentifier,
+    realm: row.realm as RealmIdentifier,
+  }));
 }
 
 function bindingIdList(bindingIds: string[]): Expression {

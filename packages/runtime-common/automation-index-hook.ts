@@ -157,8 +157,8 @@ export async function syncAutomationsAfterIndex({
 
 // Answers whether an index pass that visited or deleted the file URLs
 // `touched` touched an automation: its card (whose file is its id plus
-// `.json`; both spellings count), or the script its card names as the card
-// is indexed now.
+// `.json`; both spellings count), or the script its card names, as the card
+// is indexed.
 export function automationTouchedBy({
   dbAdapter,
   definitionLookup,

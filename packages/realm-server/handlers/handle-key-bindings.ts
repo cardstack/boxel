@@ -248,7 +248,7 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
     let automation = named
       ? await approvedAutomation(args, target, realmURL, named)
       : undefined;
-    let { batchId, approved, waiting } = await approveBindings(
+    let { batchId, approved, affected } = await approveBindings(
       args.dbAdapter,
       secretsKeyring(),
       {
@@ -268,7 +268,7 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
     // told, and each waiting automation of the realm is checked again.
     await reportAutomationChanges(
       realmServerAutomationChangeReporter(args),
-      waiting,
+      affected,
     );
     await followAutomationKeyApprovals(
       args,
@@ -584,12 +584,12 @@ export function handleRevokeKeyBinding(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let via = await secureClientOf(ctxt, args, 'approvals are revoked');
-    let waiting = await revokeBinding(args.dbAdapter, {
+    let affected = await revokeBinding(args.dbAdapter, {
       owner,
       bindingId: ctxt.params.bindingId,
       via,
     });
-    await followEndedKeyApprovals(args, waiting);
+    await followEndedKeyApprovals(args, affected);
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }

@@ -15486,8 +15486,8 @@ export class Realm {
 
   // Once an index pass this realm started has landed, follows the key
   // approvals of each automation whose card or script the pass touched
-  // (`touched`, the file URLs it visited, deleted or invalidated), as the
-  // card and script are indexed now. The worker's index hook has already
+  // (`touched`, the file URLs it visited, deleted or invalidated), with the
+  // card and script as the pass indexed them. The worker's index hook has
   // brought the row in step with the card; this is the check the worker
   // can't make, as it reads no operation definitions. A paused automation is
   // left alone.

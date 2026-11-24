@@ -12,15 +12,15 @@ import { waitForKeyApprovalOfBindingsIn } from './automation-key-approval-record
 // a `revoked` row carrying the request as it was last approved, so the owner
 // can still read what was revoked once the binding itself is gone. Every row
 // one call writes shares a batch. Answers with the revoked bindings' ids,
-// and the automations the revocation moved to waiting for key approval.
+// and the automations their ended approvals served (`affected`).
 //
 // Removing a binding removes its automation approvals (ADR 039 §1.2), so
 // each automation one of them served that is active, *done* or waiting for
 // credits moves to *waiting for key approval* in the same transaction, with
 // no next run. A run of it already enqueued is refused at admission
 // (`waiting-for-key-approval`), and the automation runs again once its key's
-// owner approves it again. The caller reports each moved automation to its
-// realm's direct writers once the transaction commits.
+// owner approves it again. The caller reports each automation in `affected`
+// to its realm's direct writers once the transaction commits.
 //
 // Kept apart from the bindings module because removing a grant and deleting a
 // key revoke bindings too, and the bindings module reads grants.
@@ -37,8 +37,8 @@ export async function revokeBindingsIn(
     // realm server revoked them because the key behind them was deleted.
     via: SecureSessionClient | null;
   },
-): Promise<{ revoked: string[]; waiting: ChangedAutomation[] }> {
-  let waiting = await waitForKeyApprovalOfBindingsIn(txQuery, [
+): Promise<{ revoked: string[]; affected: ChangedAutomation[] }> {
+  let affected = await waitForKeyApprovalOfBindingsIn(txQuery, [
     'SELECT id FROM key_bindings WHERE ',
     ...where,
   ]);
@@ -58,6 +58,6 @@ export async function revokeBindingsIn(
   ]);
   return {
     revoked: rows.map((row) => row.binding_id as string).sort(),
-    waiting,
+    affected,
   };
 }

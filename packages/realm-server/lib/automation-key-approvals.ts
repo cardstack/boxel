@@ -213,21 +213,22 @@ export async function automationsWaitingForKeyApproval(
 }
 
 // Once a change that ended key approvals has committed, tells the direct
-// writers of each automation's realm that the automations in `waiting` moved
-// to waiting for key approval (the change answers which it moved), then
-// checks each again: when the approval that ended was for an operation its
-// card no longer declares, nothing is missing, and it runs again rather than
-// waiting for an approval no one can give.
+// writers of each automation's realm that the approvals of the automations in
+// `affected` (the ones the ended approvals served, as the change answers
+// them) changed, then checks each again. The change moved each that was
+// running to waiting for key approval; when the approval that ended was for
+// an operation its card no longer declares, nothing is missing, and it runs
+// again rather than waiting for an approval no one can give.
 export async function followEndedKeyApprovals(
   args: CreateRoutesArgs,
-  waiting: readonly ChangedAutomation[],
+  affected: readonly ChangedAutomation[],
 ): Promise<void> {
   await reportAutomationChanges(
     realmServerAutomationChangeReporter(args),
-    waiting,
+    affected,
   );
   let byRealm = new Map<string, RealmResourceIdentifier[]>();
-  for (let { automationId, realm } of waiting) {
+  for (let { automationId, realm } of affected) {
     byRealm.set(realm, [...(byRealm.get(realm) ?? []), automationId]);
   }
   for (let [realm, automationIds] of byRealm) {

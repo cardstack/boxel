@@ -464,12 +464,12 @@ export function handleDeleteUserKey(args: CreateRoutesArgs): Handler {
     let owner = ownerOf(ctxt);
     let body = await readJSON(ctxt);
     // The key's own bindings are revoked with it.
-    let waiting = await deleteUserKey(dbAdapter, {
+    let affected = await deleteUserKey(dbAdapter, {
       owner,
       id: ctxt.params.keyId,
       ticket: ticketOf(body),
     });
-    await followEndedKeyApprovals(args, waiting);
+    await followEndedKeyApprovals(args, affected);
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }

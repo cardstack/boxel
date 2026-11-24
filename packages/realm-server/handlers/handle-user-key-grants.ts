@@ -173,12 +173,12 @@ export function handleRemoveUserKeyGrant(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let via = await secureClientOf(ctxt, args);
-    let { revokedBindings, waiting } = await removeGrant(args.dbAdapter, {
+    let { revokedBindings, affected } = await removeGrant(args.dbAdapter, {
       owner,
       grantId: ctxt.params.grantId,
       via,
     });
-    await followEndedKeyApprovals(args, waiting);
+    await followEndedKeyApprovals(args, affected);
     await sendJSON(ctxt, 200, { meta: { revokedBindings } });
   });
 }
