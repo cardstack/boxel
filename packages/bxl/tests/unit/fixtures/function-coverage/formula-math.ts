@@ -202,6 +202,26 @@ export const formulaMathCases: CoverageCase[] = [
   },
   // Array aggregates.
   { covers: 'SUM/1', source: 'SUM([1, 2, 3, 4.5])', expected: 10.5 },
+  // Text adds to a sum only when the whole string is a number, since JSON
+  // often holds a number as text; a partial number such as "12abc", an empty
+  // string and other text add nothing. Booleans and nulls in a list add
+  // nothing, and nested lists are flattened.
+  { covers: 'SUM/1', source: 'SUM(["12", 3])', expected: 15 },
+  { covers: 'SUM/1', source: 'SUM([" 1.5e1 ", "-2"])', expected: 13 },
+  { covers: 'SUM/1', source: 'SUM(["12abc", 3])', expected: 3 },
+  { covers: 'SUM/1', source: 'SUM(["", "abc", 3])', expected: 3 },
+  { covers: 'SUM/1', source: 'SUM([true, false, null, 2])', expected: 2 },
+  {
+    covers: 'SUM/1',
+    source: 'SUM([[1, "2"], [[3, "4x"]], "5"])',
+    expected: 11,
+  },
+  {
+    covers: 'SUM/1',
+    source: 'SUM(.amounts)',
+    input: { amounts: ['12', '12abc', '', 'abc', true, [1, '2']] },
+    expected: 15,
+  },
   { covers: 'PRODUCT/1', source: 'PRODUCT([1.5, 4, 5])', expected: 30 },
   { covers: 'SUMSQ/1', source: 'SUMSQ([3, 4, 12])', expected: 169 },
   {

@@ -10,6 +10,7 @@
 | `realm-composition.md`                                                     | Threading inputs into a child FieldDef via `{ as: ... }` materialization                           |
 | `query-then-process.md`                                                    | Retrieval first, BXL post-query processing                                                         |
 | `predicate-sql.md`                                                         | Predicate-profile SQL compiler contract                                                            |
+| `score-sql.md`                                                             | Score compiler: a search query's expression (`query` profile) in SQL                               |
 | `browser-runtime.md`                                                       | Browser runtime patterns, worker usage, errors                                                     |
 | `mutation-profile.md`                                                      | Card-native DML planner: streaming, atomic, structural, and relationship edits                     |
 | `mutation-language-guide.md`                                               | Guide to handwriting mutation BXL against loaded Cards and Fields                                  |

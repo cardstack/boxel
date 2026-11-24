@@ -5,7 +5,7 @@ The `predicate` profile is the BXL subset intended for query-time boolean filter
 Predicate pushdown is a convenience bridge for query authors. The normal server-scale pattern is still: retrieve with the host query language, then process the bounded JSON result with BXL. See [`query-then-process.md`](./query-then-process.md).
 
 ```ts
-import { compileBxlPredicateToSql } from '@cardstack/bxl/compiler';
+import { compileBxlPredicateToSql } from '@cardstack/bxl/sql';
 
 const result = compileBxlPredicateToSql(
   'Status = "Active" and Department IN @User.Departments',

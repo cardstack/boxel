@@ -65,6 +65,35 @@ versions may change syntax behavior until `1.0.0`.
 
 ### Changed
 
+- **SQL push-down moved to `@cardstack/bxl/sql`.** The predicate compiler
+  (`compileBxlPredicateToSql`, `compileBxlPredicateAstToSql`,
+  `SQL_PREDICATE_MODULE`, `BxlPredicateSqlError` and its types), the score
+  compiler (`compileBxlScoreToSql`, `BXL_SCORE_FUNCTIONS`) and the
+  spreadsheet interpreter (`prepareSpreadsheetFormula`) are exported from the
+  new sub-entry only, no longer from `@cardstack/bxl` or
+  `@cardstack/bxl/compiler`, so a browser bundle leaves them out.
+  `unknownBxlFunctions` stays on `/compiler`. The package declares
+  `sideEffects`, naming the formatter module, which registers itself with
+  the compiler when it loads.
+
+- **`queryExpressionIssues` is a light check.** It reads an expression's
+  shape as the spreadsheet interpreter would, without loading the
+  interpreter or the score compiler, so neither `@cardstack/bxl` nor
+  `/compiler` reaches `@cardstack/bxl/sql` and a browser can run it. Its
+  answers are unchanged (a test holds it to the interpreter's). Whether an
+  expression compiles to SQL is checked where it is compiled.
+
+- **Aggregates read numeric text.** `MIN`, `MAX`, `AVERAGE`, `COUNT` and
+  `MEDIAN` read a range as `SUM` does: every number, nested lists
+  flattened, and text when the whole string is a number (`"12"` is 12;
+  `"12abc"`, `""` and `"abc"` are skipped), skipping booleans, nulls and
+  other text. `MIN` and `MAX` of no numbers are 0, `AVERAGE` of none is
+  `#DIV/0!`. They used to read only numbers (`MIN` and `MAX` coerced
+  every element, so `null` was 0 and text raised `#VALUE!`). The score
+  profile's SQL and the spreadsheet interpreter read a field the same way;
+  `COUNTIF` and `PERCENTRANK_INC` still read only its numbers.
+  `EXCEL_NUMERIC_TEXT` and `EXCEL_NUMERIC_TEXT_SQL` are exported.
+
 - **jq 1.7.1 conformance.** Lookups, `has`, `getpath`, `setpath`, `del` and
   object construction use own-property semantics: `.["toString"]` is `null`,
   `has("toString")` is false, and `setpath(["__proto__", …])` no longer
@@ -89,6 +118,10 @@ versions may change syntax behavior until `1.0.0`.
 
 ### Fixed
 
+- `SUM`, `SUMIFS_BY` and one-list `SUMPRODUCT` count text only when the
+  whole string is a number: `"12"` is 12, while `"12abc"`, `""` and `"abc"`
+  add nothing. A string that only began with digits used to add its leading
+  number.
 - An overlay marked unavailable under a path no longer refuses a read the
   stored document can answer itself, such as a link edge under a linked
   card's unavailable fields; an `assert` over one stays a hard check.
