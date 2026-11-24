@@ -66,8 +66,11 @@ const ANSWERS: [string, boolean, string[], string[]?][] = [
   ['eq on a date with a date-time', true, ['green'], ['green', 'red']],
   ['range on a date', false, ['green']],
   ['range on a date', true, ['red']],
-  ['eq on a date-time', false, []],
-  ['eq on a date-time', true, ['green', 'red']],
+  // A date-time's queryable value is its UTC wall time (row 00). At 25c it was
+  // the machine's local wall time, so this answer depended on the time zone
+  // the suite ran in: none matched an exact UTC instant off UTC.
+  ['eq on a date-time', false, ['red']],
+  ['eq on a date-time', true, ['green']],
   ['range on a date-time', false, ['green']],
   ['range on a date-time', true, ['red']],
 ];
