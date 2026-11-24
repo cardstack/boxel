@@ -9,13 +9,23 @@ import { createRequire } from 'node:module';
 import js from '@eslint/js';
 import { globalIgnores } from 'eslint/config';
 import ember from 'eslint-plugin-ember/recommended';
+import importX from 'eslint-plugin-import-x';
 import n from 'eslint-plugin-n';
 import prettierRecommended from 'eslint-plugin-prettier/recommended';
 import qunitRecommended from 'eslint-plugin-qunit/configs/recommended';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 
-export { ember, globals, js, n, prettierRecommended, qunitRecommended, ts };
+export {
+  ember,
+  globals,
+  importX,
+  js,
+  n,
+  prettierRecommended,
+  qunitRecommended,
+  ts,
+};
 
 const require = createRequire(import.meta.url);
 
@@ -207,3 +217,42 @@ export const NODE_GLOBALS = {
   name: 'node globals',
   languageOptions: { globals: globals.node },
 };
+
+// For a realm whose source ESLint checks for one thing: a base-realm module is
+// imported by its `@cardstack/base/` prefix, never the
+// `https://cardstack.com/base/` alias. The repository's style rules stay out
+// of a realm that has never been formatted to them. The `@typescript-eslint`
+// and `import` plugins are registered, with no rules of theirs turned on, so
+// inline disables that name their rules still resolve.
+export function baseImportsOnlyConfig({ ignores = [] } = {}) {
+  return [
+    // Only `.ts` and `.gts` are realm source here, as `--ext .ts,.gts` had it.
+    globalIgnores(['**/*.{js,mjs,cjs}', ...ignores]),
+    {
+      // The same files are linted with the rules these directives name
+      // elsewhere (the realm lint engine), so they are not unused there.
+      linterOptions: { reportUnusedDisableDirectives: 'off' },
+      plugins: {
+        '@cardstack/boxel': boxel,
+        '@typescript-eslint': ts.plugin,
+        import: importX,
+      },
+    },
+    {
+      files: ['**/*.ts'],
+      languageOptions: {
+        parser: ts.parser,
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    {
+      files: ['**/*.gts'],
+      languageOptions: GTS_LANGUAGE_OPTIONS,
+    },
+    {
+      files: ['**/*.ts', '**/*.gts'],
+      rules: { '@cardstack/boxel/no-url-form-base-imports': 'error' },
+    },
+  ];
+}
