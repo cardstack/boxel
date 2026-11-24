@@ -62,6 +62,7 @@ import { mountableRealmDiskPath } from './lib/realm-disk-path.ts';
 import { findRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
+import { RealmAutomationsReindexedListener } from './lib/realm-automations-reindexed-listener.ts';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener.ts';
 import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
@@ -734,6 +735,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
+  let automationsReindexedListener:
+    | RealmAutomationsReindexedListener
+    | undefined;
   let jobsFinishedListener: JobsFinishedListener | undefined;
   let moduleCacheInvalidationListener:
     | ModuleCacheInvalidationListener
@@ -1147,6 +1151,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
           indexUpdatedListener?.shutDown(),
+          automationsReindexedListener?.shutDown(),
           jobsFinishedListener?.shutDown(),
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
@@ -1295,6 +1300,14 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     listMountedRealms: () => realms,
   });
   await indexUpdatedListener.start();
+
+  // Checks the key approvals of a realm's automations in full once a
+  // from-scratch index pass over the realm lands, whoever started the pass.
+  automationsReindexedListener = new RealmAutomationsReindexedListener({
+    dbAdapter,
+    lookupMountedRealm: (url) => realms.find((r) => r.url === url),
+  });
+  await automationsReindexedListener.start();
 
   // CS-11179: NOTIFY-driven eviction for the DB-backed JobScopedSearchCache.
   // On `jobs_finished` it drops the finished job's cache rows immediately

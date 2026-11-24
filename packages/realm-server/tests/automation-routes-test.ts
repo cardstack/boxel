@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { basename, join } from 'path';
+import { writeFileSync } from 'fs';
 import { randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -25,6 +26,7 @@ import {
   waitForKeyApproval,
 } from '@cardstack/runtime-common/automations';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
+import { RealmAutomationsReindexedListener } from '../lib/realm-automations-reindexed-listener.ts';
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
 import {
   appendRunLog,
@@ -145,6 +147,7 @@ module(basename(import.meta.filename), function (hooks) {
   let dbAdapter: PgAdapter;
   let request: SuperTest<Test>;
   let virtualNetwork: VirtualNetwork;
+  let testRealmPath: string;
 
   setupProcessPricing(hooks, 'automation-routes-test');
 
@@ -282,6 +285,7 @@ module(basename(import.meta.filename), function (hooks) {
       dbAdapter = args.dbAdapter;
       request = args.request;
       virtualNetwork = args.virtualNetwork;
+      testRealmPath = args.testRealmPath;
     },
   });
 
@@ -1590,6 +1594,122 @@ module(basename(import.meta.filename), function (hooks) {
         [automationId(KEYED)],
         'its approvals changed, so an open console reads it again',
       );
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'paused',
+      );
+    });
+
+    // Changes a file of the realm on disk, as an edit made while no realm
+    // server watched the files does: no incremental pass indexes it, and the
+    // realm holds none of its earlier bytes, so a from-scratch pass is the
+    // first to index it.
+    function editUnwatched(path: string, content: string) {
+      writeFileSync(join(testRealmPath, path), content);
+      realm.clearLocalSourceCaches();
+    }
+
+    // Runs a from-scratch pass over the realm with this realm server
+    // listening for the worker's announcement of it, as a deployed realm
+    // server does, and waits for the follow the announcement starts.
+    async function fromScratchPassHeard() {
+      let follows: Promise<void>[] = [];
+      let original = realm.followAutomationKeyApprovalsAfterFromScratchPass;
+      realm.followAutomationKeyApprovalsAfterFromScratchPass = function () {
+        let follow = original.call(realm);
+        follows.push(follow);
+        return follow;
+      };
+      let listener = new RealmAutomationsReindexedListener({
+        dbAdapter,
+        lookupMountedRealm: (url) => (url === realm.url ? realm : undefined),
+      });
+      await listener.start();
+      try {
+        await realm.reindex();
+        // The announcement and the pass's job settling reach this server
+        // over separate notifications, in either order.
+        let deadline = Date.now() + 30_000;
+        while (follows.length === 0) {
+          if (Date.now() > deadline) {
+            throw new Error('no from-scratch pass was announced');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        await Promise.all(follows);
+      } finally {
+        await listener.shutDown();
+        realm.followAutomationKeyApprovalsAfterFromScratchPass = original;
+      }
+    }
+
+    test('a revert a from-scratch pass is the first to index runs a waiting automation again, with nobody asked to approve it again', async function (assert) {
+      await switchOnApproved();
+      let approvals = await approvalRowsOf(KEYED);
+      await realm.write(`${KEYED}-script.js`, `return 'changed';`);
+      await reachesState(KEYED, 'waiting-for-key-approval');
+      editUnwatched(`${KEYED}-script.js`, `return 'ok';`);
+
+      await realm.reindex();
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'waiting-for-key-approval',
+        "the worker's index hook alone leaves it waiting",
+      );
+
+      await fromScratchPassHeard();
+      let row = await reachesState(KEYED, 'active');
+      assert.notStrictEqual(row.nextRun, null, 'its schedule starts again');
+      assert.deepEqual(
+        await approvalRowsOf(KEYED),
+        approvals,
+        'the approval its key owner gave matches again, unchanged',
+      );
+    });
+
+    test('an edit a from-scratch pass is the first to index, adding an operation needing a key to an automation with no approval, moves it to waiting for key approval', async function (assert) {
+      let switchedOn = await switchOn(OWNER, DAILY);
+      assert.strictEqual(switchedOn.body.data.attributes.state, 'active');
+      editUnwatched(
+        `${DAILY}.json`,
+        automationFixture({
+          operations: [{ type: INBOX, names: ['list'] }],
+          path: DAILY,
+          triggers: [
+            {
+              kind: 'cron',
+              label: 'daily',
+              expression: '0 9 * * *',
+              timeZone: 'UTC',
+            },
+          ],
+        })[`${DAILY}.json`],
+      );
+
+      await fromScratchPassHeard();
+      let row = await reachesState(DAILY, 'waiting-for-key-approval');
+      assert.strictEqual(row.nextRun, null);
+      assert.deepEqual(operationStates(await keyApprovalsOf(DAILY)), [
+        {
+          operation: 'list',
+          state: 'missing',
+          missing: [{ slot: 'userKey', canApprove: 'payer' }],
+        },
+      ]);
+    });
+
+    test('a from-scratch pass leaves a paused automation paused', async function (assert) {
+      await switchOnApproved();
+      await realm.write(`${KEYED}-script.js`, `return 'changed';`);
+      await reachesState(KEYED, 'waiting-for-key-approval');
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(KEYED) }))
+          .status,
+        200,
+      );
+      editUnwatched(`${KEYED}-script.js`, `return 'ok';`);
+
+      await fromScratchPassHeard();
       assert.strictEqual(
         (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
         'paused',

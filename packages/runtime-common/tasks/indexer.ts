@@ -4,6 +4,7 @@ import {
   jobIdentity,
   notifyAllFileChanges,
   notifyRealmIndexUpdated,
+  notifyRealmAutomationsReindexed,
   incrementalCompletionThatFits,
   userIdFromUsername,
   fetchUserPermissions,
@@ -40,7 +41,10 @@ import {
   withRunIndexingRetries,
   type RunIndexing,
 } from '../run-indexing.ts';
-import { syncAutomationsAfterIndex } from '../automation-index-hook.ts';
+import {
+  syncAutomationsAfterIndex,
+  type AutomationSyncOutcome,
+} from '../automation-index-hook.ts';
 import { taskAutomationChangeReporter } from '../automation-change-events.ts';
 import { taskRunChangeReporter } from '../automation-run-events.ts';
 
@@ -829,7 +833,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     await notifyRealmIndexUpdated(dbAdapter, args.realmURL);
     // The pass rebuilt the whole realm, so every automation in it follows
     // its card.
-    await syncAutomationsAfterPass(log, jobInfo, {
+    let synced = await syncAutomationsAfterPass(log, jobInfo, {
       dbAdapter,
       definitionLookup,
       virtualNetwork,
@@ -847,6 +851,13 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
         log,
       }),
     });
+    // The realm servers serving the realm check the automations' key
+    // approvals in full, which the hook can't, as the worker reads no
+    // operation definitions. They hear of it from here whoever started the
+    // pass, a reindex no realm awaits included.
+    if (synced.size > 0) {
+      await notifyRealmAutomationsReindexed(dbAdapter, args.realmURL);
+    }
     reportStatus(args.jobInfo, 'finish');
     let queueClaim = queueClaimOf(jobInfo);
     return {
@@ -1187,12 +1198,13 @@ function realmFileReader(
 // The automation card's index hook, run once the pass has committed. The index
 // is already committed, so a failure here is logged, naming the automation
 // when one automation's sync failed, and leaves the job a success: the next
-// pass over the card syncs its automation again.
+// pass over the card syncs its automation again. Returns what it did to each
+// automation it synced: nothing when the whole sync failed.
 async function syncAutomationsAfterPass(
   log: TaskArgs['log'],
   jobInfo: JobInfo | undefined,
   args: Parameters<typeof syncAutomationsAfterIndex>[0],
-): Promise<void> {
+): Promise<Map<string, AutomationSyncOutcome>> {
   try {
     let synced = await syncAutomationsAfterIndex(args);
     for (let [automationId, result] of synced) {
@@ -1208,10 +1220,12 @@ async function syncAutomationsAfterPass(
         );
       }
     }
+    return synced;
   } catch (e) {
     log.warn(
       `${jobIdentity(jobInfo)} failed to sync automations with their cards in ${args.realmURL}: ${(e as Error)?.message}`,
     );
+    return new Map();
   }
 }
 

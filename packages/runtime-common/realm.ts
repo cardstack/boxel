@@ -1970,6 +1970,30 @@ export async function notifyRealmIndexUpdated(
   }
 }
 
+// Postgres NOTIFY channel announcing that a from-scratch index pass over a
+// realm with automations has landed and the worker's index hook has synced
+// them with their cards. Payload is the realm URL. Each realm server serving
+// the realm then checks the key approvals of its automations in full
+// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`), which the
+// worker can't do, as it reads no operation definitions. Best-effort like
+// the other realm channels: a missed NOTIFY leaves an automation as the
+// hook left it, until an approval lands or its next run's admission.
+export const REALM_AUTOMATIONS_REINDEXED_CHANNEL =
+  'realm_automations_reindexed';
+
+export async function notifyRealmAutomationsReindexed(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<void> {
+  try {
+    await dbAdapter.notify(REALM_AUTOMATIONS_REINDEXED_CHANNEL, realmURL);
+  } catch (err: unknown) {
+    logger('realm').warn(
+      `notify ${REALM_AUTOMATIONS_REINDEXED_CHANNEL} failed for ${realmURL}: ${String(err)}`,
+    );
+  }
+}
+
 // Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
 // peer realm-server replicas drop every cached path for this realm. Use
 // directly when the caller has a DBAdapter + realm URL but isn't keeping
@@ -15535,6 +15559,47 @@ export class Realm {
     } catch (e: any) {
       this.#log.warn(
         `couldn't follow the key approvals of the automations an index pass touched in ${this.url}: ${e?.message ?? e}`,
+      );
+    }
+  }
+
+  // Once a from-scratch pass over this realm has landed, follows the key
+  // approvals of every automation in the realm that isn't paused, as an
+  // incremental pass does for the automations it touched. A from-scratch pass
+  // rebuilds the whole realm, so it can be the first to index an edit made
+  // while no realm server watched the files. The worker that ran the pass
+  // announces it (`REALM_AUTOMATIONS_REINDEXED_CHANNEL`) whoever started it,
+  // a reindex no realm awaits included, and each realm server serving the
+  // realm answers here. Each automation's follow locks its row, so the
+  // servers' follows of one automation take turns and the later ones find it
+  // already in step.
+  //
+  // The gates a read waits on cover only incremental passes, so the check
+  // reads the operations' modules as the payer even while this realm still
+  // awaits the pass's job. Never rejects: a failure is logged.
+  async followAutomationKeyApprovalsAfterFromScratchPass(): Promise<void> {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !this.#callApi?.checkAutomationKeyApprovals
+    ) {
+      return;
+    }
+    try {
+      let automations = (
+        await automationsInRealm(
+          this.#dbAdapter,
+          ri(this.#virtualNetwork.unresolveURL(this.url)),
+        )
+      ).filter(({ state }) => state !== 'paused');
+      if (automations.length === 0) {
+        return;
+      }
+      await this.followAutomationKeyApprovals(
+        automations.map(({ automationId }) => automationId),
+      );
+    } catch (e: any) {
+      this.#log.warn(
+        `couldn't follow the key approvals of the automations in ${this.url} after a from-scratch index pass: ${e?.message ?? e}`,
       );
     }
   }
