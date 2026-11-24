@@ -254,7 +254,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
       assert
         .dom(`${weekly} [data-test-realm-automation-glance]`)
         .hasText(
-          'Boxel paused the automation because the payer can no longer edit this workspace.',
+          'Boxel paused the automation because the payer is no longer a realm administrator.',
         );
     });
 
