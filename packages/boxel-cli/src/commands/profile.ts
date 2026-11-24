@@ -1,14 +1,21 @@
-import type { ProfileManager } from '../lib/profile-manager.ts';
+import type { Profile, ProfileManager } from '../lib/profile-manager.ts';
 import {
   getProfileManager,
   formatProfileBadge,
   getDomainFromMatrixId,
   getEnvironmentFromMatrixId,
   getUsernameFromMatrixId,
+  signInKind,
 } from '../lib/profile-manager.ts';
 import { ensurePersonalRealm } from '../lib/personal-realm.ts';
 import { prompt, promptPassword } from '../lib/prompt.ts';
 import { SsoTimeoutError, browserLogin } from '../lib/sso-login.ts';
+import {
+  oauthLogin,
+  revokeConnection,
+  type OAuthLoginOptions,
+  type OAuthLoginResult,
+} from '../lib/oauth-login.ts';
 import {
   secureOriginForProfiles,
   secureSignOut,
@@ -33,6 +40,8 @@ export interface ProfileCommandOptions {
   // Commander sets this to false for `--no-browser`. Undefined means the
   // default: sign in through the browser.
   browser?: boolean;
+  // `--oauth`: sign in with OAuth instead of Matrix.
+  oauth?: boolean;
   hostUrl?: string;
   staging?: boolean;
   production?: boolean;
@@ -255,6 +264,17 @@ export function resolveEnvironment(
   };
 }
 
+// The `profile add` flags that choose a Matrix sign-in. `BOXEL_PASSWORD` isn't
+// one: it lingers in a shell, and only a password passed with `-u` uses it.
+function oauthConflicts(options: ProfileCommandOptions): string[] {
+  return [
+    options.browser === false ? '--no-browser' : undefined,
+    options.user ? '-u/--user' : undefined,
+    options.password ? '-p/--password' : undefined,
+    options.hostUrl ? '--host-url' : undefined,
+  ].filter((flag): flag is string => flag !== undefined);
+}
+
 export async function profileCommand(
   subcommand?: string,
   arg?: string,
@@ -269,6 +289,22 @@ export async function profileCommand(
 
     case 'add': {
       const password = options?.password || process.env.BOXEL_PASSWORD;
+      if (options?.oauth) {
+        const conflicting = oauthConflicts(options);
+        if (conflicting.length > 0) {
+          const named =
+            conflicting.length === 1
+              ? conflicting[0]
+              : `${conflicting.slice(0, -1).join(', ')} or ${conflicting.at(-1)}`;
+          console.error(
+            `${FG_RED}Error:${RESET} --oauth signs in through the browser with OAuth, ` +
+              `so it can't be combined with ${named}, which ` +
+              `${conflicting.length === 1 ? 'signs' : 'sign'} in with Matrix.`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+      }
       const { environment, source, overrides } = resolveEnvironment(
         options ?? {},
       );
@@ -277,7 +313,9 @@ export async function profileCommand(
           `${DIM}Using BOXEL_ENVIRONMENT=${process.env.BOXEL_ENVIRONMENT}${RESET}`,
         );
       }
-      if (options?.user && password) {
+      if (options?.oauth) {
+        await addOAuthProfile(manager, environment);
+      } else if (options?.user && password) {
         // A -u Matrix ID whose domain we don't recognize, with nothing else
         // naming an environment, is a mistake rather than a request for
         // production: pass only what the caller actually specified so
@@ -379,6 +417,10 @@ export async function listProfiles(
           domain: getDomainFromMatrixId(id),
           matrixUrl: profile.matrixUrl,
           realmServerUrl: profile.realmServerUrl,
+          signIn: signInKind(profile),
+          ...(profile.oauth
+            ? { connectionEndsAt: profile.oauth.connectionEndsAt }
+            : {}),
           active: id === activeId,
         };
       }),
@@ -422,12 +464,35 @@ export async function listProfiles(
     console.log(`    ${DIM}Name:${RESET} ${profile.displayName}`);
     console.log(`    ${DIM}Environment:${RESET} ${envColor}${domain}${RESET}`);
     console.log(`    ${DIM}Realm Server:${RESET} ${profile.realmServerUrl}`);
+    console.log(`    ${DIM}Sign-in:${RESET} ${describeSignIn(profile)}`);
     console.log('');
   }
 
   if (activeId) {
     console.log(`${DIM}\u2605 = active profile${RESET}`);
   }
+}
+
+// How a profile is signed in, for the listing. An OAuth connection names when
+// it ends, and warns once that is close.
+const CONNECTION_ENDING_WARNING_MS = 3 * 24 * 60 * 60 * 1000;
+
+export function describeSignIn(
+  profile: Profile,
+  now: number = Date.now(),
+): string {
+  if (!profile.oauth) {
+    return 'Matrix';
+  }
+  const ends = Date.parse(profile.oauth.connectionEndsAt);
+  if (!(ends > now)) {
+    return `OAuth, ${FG_RED}ended ${new Date(ends).toLocaleString()}${RESET}. Run \`boxel profile add --oauth\` to sign in again.`;
+  }
+  const when = new Date(ends).toLocaleString();
+  if (ends - now <= CONNECTION_ENDING_WARNING_MS) {
+    return `OAuth, ${FG_YELLOW}ends ${when}${RESET}. Run \`boxel profile add --oauth\` to sign in again before then.`;
+  }
+  return `OAuth, ends ${when}`;
 }
 
 // What adding a profile reaches beyond this module. Tests stand in for the
@@ -442,6 +507,8 @@ export interface AddProfileDeps {
   // a script runs the CLI without a TTY, and a question asked there is never
   // answered.
   isTty?: () => boolean;
+  oauthLogin?: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
+  revokeConnection?: typeof revokeConnection;
 }
 
 interface AddProfileContext {
@@ -451,6 +518,22 @@ interface AddProfileContext {
   ensurePersonalRealm: typeof ensurePersonalRealm;
   prompt: (question: string) => Promise<string>;
   interactive: boolean;
+  oauthLogin: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
+  revokeConnection: typeof revokeConnection;
+}
+
+function addProfileContext(deps: AddProfileDeps): AddProfileContext {
+  return {
+    browserLogin: deps.browserLogin ?? browserLogin,
+    secureOriginForProfiles:
+      deps.secureOriginForProfiles ?? secureOriginForProfiles,
+    secureSignOut: deps.secureSignOut ?? secureSignOut,
+    ensurePersonalRealm: deps.ensurePersonalRealm ?? ensurePersonalRealm,
+    prompt: deps.prompt ?? prompt,
+    interactive: (deps.isTty ?? (() => Boolean(process.stdin.isTTY)))(),
+    oauthLogin: deps.oauthLogin ?? oauthLogin,
+    revokeConnection: deps.revokeConnection ?? revokeConnection,
+  };
 }
 
 // Returns false when the user declined to replace an existing profile.
@@ -596,6 +679,7 @@ async function addProfileViaBrowser(
       .secureSignOut(previous.realmServerUrl, previous.secureSession.token)
       .catch(() => {});
   }
+  await endReplacedConnection(previous, ctx.revokeConnection);
   if (secureSession) {
     console.log(
       `${FG_GREEN}✓${RESET} Signed in to manage keys until ${new Date(
@@ -666,6 +750,7 @@ async function addProfileViaPassword(
 
   const displayName = await promptDisplayName(matrixId, ctx);
 
+  const previous = manager.getProfile(matrixId);
   await manager.addProfile(
     matrixId,
     password,
@@ -673,7 +758,20 @@ async function addProfileViaPassword(
     matrixUrl,
     realmServerUrl,
   );
+  await endReplacedConnection(previous, ctx.revokeConnection);
   return { status: 'added', matrixId };
+}
+
+// A Matrix sign-in that replaces an OAuth profile drops its connection, so the
+// connection is ended on the realm server rather than left live on Connected
+// apps with nothing holding it.
+async function endReplacedConnection(
+  previous: Profile | undefined,
+  revoke: typeof revokeConnection = revokeConnection,
+): Promise<void> {
+  if (previous?.oauth) {
+    await revoke(previous.oauth, previous.oauth).catch(() => false);
+  }
 }
 
 export async function addProfile(
@@ -682,15 +780,7 @@ export async function addProfile(
   useBrowser = true,
   deps: AddProfileDeps = {},
 ): Promise<void> {
-  const ctx: AddProfileContext = {
-    browserLogin: deps.browserLogin ?? browserLogin,
-    secureOriginForProfiles:
-      deps.secureOriginForProfiles ?? secureOriginForProfiles,
-    secureSignOut: deps.secureSignOut ?? secureSignOut,
-    ensurePersonalRealm: deps.ensurePersonalRealm ?? ensurePersonalRealm,
-    prompt: deps.prompt ?? prompt,
-    interactive: (deps.isTty ?? (() => Boolean(process.stdin.isTTY)))(),
-  };
+  const ctx = addProfileContext(deps);
   console.log(`\n${BOLD}Add New Profile${RESET}\n`);
   // The environment comes from flags rather than a prompt, so name it. The
   // realm server identifies it — that's the host every later command talks to,
@@ -738,9 +828,121 @@ export async function addProfile(
   if (outcome.status !== 'added') {
     return;
   }
+  await announceAdded(manager, outcome.matrixId, ctx);
+}
 
-  const matrixId = outcome.matrixId;
+// `boxel profile add --oauth`: the OAuth sign-in through the browser. It
+// never falls back to a Matrix sign-in: the user asked for OAuth.
+export async function addOAuthProfile(
+  manager: ProfileManager,
+  environment: EnvironmentDefaults,
+  deps: AddProfileDeps = {},
+): Promise<void> {
+  const ctx = addProfileContext(deps);
+  console.log(`\n${BOLD}Add New Profile${RESET} ${DIM}(OAuth)${RESET}\n`);
+  console.log(
+    `${DIM}Environment: ${new URL(environment.realmServerUrl).host}${RESET}`,
+  );
+  const outcome = await addProfileViaOAuth(manager, environment, ctx);
+  if (outcome.status !== 'added') {
+    return;
+  }
+  await announceAdded(manager, outcome.matrixId, ctx);
+}
 
+async function addProfileViaOAuth(
+  manager: ProfileManager,
+  environment: EnvironmentDefaults,
+  ctx: AddProfileContext,
+): Promise<AddProfileOutcome> {
+  const { realmServerUrl, matrixUrl } = environment;
+  let result;
+  try {
+    result = await ctx.oauthLogin({ realmServerUrl });
+  } catch (err) {
+    console.error(
+      `\n${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exitCode = 1;
+    return { status: 'cancelled' };
+  }
+  const { provider, tokens, user } = result;
+  const endUnused = async () => {
+    await ctx.revokeConnection(provider, tokens).catch(() => false);
+  };
+
+  // As with the Matrix browser sign-in, the account is named before anything
+  // is written: the browser may have been signed in as someone unexpected.
+  console.log(
+    `\n${FG_GREEN}\u2713${RESET} Signed in as ${formatProfileBadge(user.userId)}`,
+  );
+  let displayName: string | undefined;
+  if (ctx.interactive) {
+    const proceed = await ctx.prompt('Save this profile? [Y/n]: ');
+    if (proceed.toLowerCase() === 'n') {
+      await endUnused();
+      console.log('Cancelled.');
+      return { status: 'cancelled' };
+    }
+    if (!(await confirmOverwrite(manager, user.userId, ctx))) {
+      await endUnused();
+      return { status: 'cancelled' };
+    }
+    displayName = await promptDisplayName(user.userId, ctx);
+  } else {
+    displayName = manager.getProfile(user.userId)?.displayName;
+  }
+
+  const previous = manager.getProfile(user.userId);
+  manager.addOAuthProfile(
+    user.userId,
+    {
+      issuer: provider.issuer,
+      tokenEndpoint: provider.tokenEndpoint,
+      ...(provider.revocationEndpoint
+        ? { revocationEndpoint: provider.revocationEndpoint }
+        : {}),
+      ...tokens,
+    },
+    { matrixUrl, realmServerUrl },
+    displayName,
+  );
+
+  // What the profile held before is ended on the server that issued it,
+  // rather than left live with nothing holding it: an earlier OAuth
+  // connection, and a secure session, which an OAuth profile never keeps.
+  if (previous?.oauth) {
+    await endReplacedConnection(previous, ctx.revokeConnection);
+  }
+  if (previous?.secureSession) {
+    await ctx
+      .secureSignOut(previous.realmServerUrl, previous.secureSession.token)
+      .catch(() => {});
+  }
+
+  console.log(describeConnectionEnd(tokens));
+  return { status: 'added', matrixId: user.userId };
+}
+
+function describeConnectionEnd(tokens: {
+  refreshToken?: string;
+  connectionEndsAt: string;
+}): string {
+  const ends = new Date(tokens.connectionEndsAt).toLocaleString();
+  if (tokens.refreshToken) {
+    return `${FG_GREEN}\u2713${RESET} Connected to the Boxel API until ${ends}. Sign in again then.`;
+  }
+  return (
+    `${FG_YELLOW}This connection doesn't renew, so it ends at ${ends}.${RESET} ` +
+    `${DIM}To keep it for 30 days, sign in again and allow it to renew.${RESET}`
+  );
+}
+
+async function announceAdded(
+  manager: ProfileManager,
+  matrixId: string,
+  ctx: AddProfileContext,
+): Promise<void> {
   console.log(
     `\n${FG_GREEN}\u2713${RESET} Profile created: ${formatProfileBadge(matrixId)}`,
   );
@@ -826,6 +1028,19 @@ async function removeProfile(
 
   if (await manager.removeProfile(profileId)) {
     console.log(`${FG_GREEN}\u2713${RESET} Profile removed.`);
+    // An OAuth profile's connection is ended too, so it leaves Connected
+    // apps rather than staying live with nothing holding it.
+    if (profile.oauth) {
+      const ended = await revokeConnection(profile.oauth, profile.oauth).catch(
+        () => false,
+      );
+      if (!ended) {
+        console.log(
+          `${FG_YELLOW}Warning:${RESET} could not end its OAuth connection. ` +
+            'Disconnect Boxel CLI on Connected apps to end it.',
+        );
+      }
+    }
 
     const newActive = manager.getActiveProfileId();
     if (newActive) {
@@ -852,7 +1067,8 @@ async function addProfileNonInteractive(
     process.exit(1);
   }
 
-  const isUpdate = Boolean(manager.getProfile(matrixId));
+  const previous = manager.getProfile(matrixId);
+  const isUpdate = Boolean(previous);
 
   // addProfile performs a real matrixLogin and persists the resulting
   // access token (the password never lands on disk). It also handles the
@@ -872,6 +1088,7 @@ async function addProfileNonInteractive(
     );
     process.exit(1);
   }
+  await endReplacedConnection(previous);
 
   if (isUpdate) {
     if (matrixUrl || realmServerUrl) {

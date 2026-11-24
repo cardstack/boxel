@@ -105,13 +105,19 @@ function aliasedRealmName(realmUrl: string): string | undefined {
   return match?.[1];
 }
 
+// A profile signs in one of two ways. A Matrix profile holds the user's
+// Matrix access token, and the realm-server and per-realm tokens minted from
+// it. An OAuth profile (`boxel profile add --oauth`) holds only the tokens of
+// its OAuth connection to the realm server's Boxel API, and no Matrix token.
+// Both keep the user's Matrix ID, which names the profile.
 export interface Profile {
   displayName: string;
   matrixUrl: string;
   realmServerUrl: string;
-  matrixAccessToken: string;
+  matrixAccessToken?: string;
   matrixUserId: string;
-  matrixDeviceId: string;
+  matrixDeviceId?: string;
+  oauth?: OAuthSessionRecord;
   realmTokens?: Record<string, string>;
   realmServerToken?: string;
   // A session signed in on the secure origin, through the browser (`boxel
@@ -124,6 +130,26 @@ export interface SecureSessionRecord {
   token: string;
   userId: string;
   expiresAt: string;
+}
+
+// An OAuth profile's connection: where its tokens are refreshed and revoked,
+// and the tokens themselves. Times are ISO 8601.
+export interface OAuthSessionRecord {
+  issuer: string;
+  tokenEndpoint: string;
+  revocationEndpoint?: string;
+  accessToken: string;
+  // Absent on a connection that doesn't renew.
+  refreshToken?: string;
+  accessExpiresAt: string;
+  connectionEndsAt: string;
+  scope?: string;
+}
+
+export type SignInKind = 'matrix' | 'oauth';
+
+export function signInKind(profile: Profile): SignInKind {
+  return profile.oauth ? 'oauth' : 'matrix';
 }
 
 export interface ProfilesConfig {
@@ -390,7 +416,7 @@ export class ProfileManager implements RealmAuthenticator {
     if (!profile) {
       throw new Error(unknownProfileMessage(profileId, this.listProfiles()));
     }
-    if (!profile.matrixAccessToken) {
+    if (!profile.matrixAccessToken && !profile.oauth) {
       throw new Error(noSessionMessage(profileId));
     }
     this.selectedProfileId = profileId;
@@ -499,6 +525,37 @@ export class ProfileManager implements RealmAuthenticator {
         // it carries over a re-authentication against the same one.
         secureSession:
           secureSession ?? (urlsChanged ? undefined : existing?.secureSession),
+      };
+      if (!config.activeProfile) {
+        config.activeProfile = matrixId;
+      }
+    });
+  }
+
+  // Persist a profile signed in with OAuth. It replaces whatever the profile
+  // held: a Matrix token and the tokens minted from it, an earlier OAuth
+  // connection, and a secure session (an OAuth profile never stores one). The
+  // caller ends what it replaces on the server. The profile becomes the
+  // active one when no profile is.
+  addOAuthProfile(
+    matrixId: string,
+    oauth: OAuthSessionRecord,
+    urls: { matrixUrl: string; realmServerUrl: string },
+    displayName?: string,
+  ): void {
+    const slots = this.resolveProfileSlots(
+      matrixId,
+      displayName,
+      urls.matrixUrl,
+      urls.realmServerUrl,
+    );
+    this.commit((config) => {
+      config.profiles[matrixId] = {
+        displayName: slots.displayName,
+        matrixUrl: slots.matrixUrl,
+        realmServerUrl: slots.realmServerUrl,
+        matrixUserId: matrixId,
+        oauth,
       };
       if (!config.activeProfile) {
         config.activeProfile = matrixId;
@@ -673,13 +730,18 @@ export class ProfileManager implements RealmAuthenticator {
     if (!targetId || !profile) {
       throw new Error(NO_ACTIVE_PROFILE_ERROR);
     }
+    if (profile.oauth) {
+      throw new Error(
+        `Profile "${targetId}" is signed in with OAuth, so it has no Matrix session.`,
+      );
+    }
     if (!profile.matrixAccessToken) {
       throw new Error(noSessionMessage(targetId));
     }
     return {
       accessToken: profile.matrixAccessToken,
       userId: profile.matrixUserId,
-      deviceId: profile.matrixDeviceId,
+      deviceId: profile.matrixDeviceId ?? '',
       matrixUrl: profile.matrixUrl,
     };
   }
