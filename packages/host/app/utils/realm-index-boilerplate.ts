@@ -2,7 +2,8 @@
 // decides to skip the full isolated render for the realm's default
 // index card (CardsGrid or Workspace). The decision is made per-render
 // in `card-prerender.gts` based on the card URL, its adoptsFrom chain,
-// and the realm's `includePrerenderedDefaultRealmIndex` config field.
+// the `prerenderDefaultIndex` render option (set when the realm has a host
+// URL), and the realm's `includePrerenderedDefaultRealmIndex` config field.
 //
 // The boilerplate is intentionally minimal. Anywhere the placeholder
 // could be visible (the published-realm SSR injection slot, the
