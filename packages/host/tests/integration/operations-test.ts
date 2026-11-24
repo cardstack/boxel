@@ -1907,8 +1907,9 @@ module('Integration | operations', function (hooks) {
         class Listing extends CardDef {
           @operation static listSome = {
             base: 'query',
-            // An `any` element is a filter node, so it needs a predicate.
-            query: { filter: { any: [{ on: Activity }] } },
+            // An `any` element is a filter node, so it needs a predicate
+            // (a bare `on` is one: every card of its type).
+            query: { filter: { any: [{}] } },
           };
         }
         return Listing;

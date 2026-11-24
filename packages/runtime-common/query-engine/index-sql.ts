@@ -20,8 +20,8 @@ import type {
 import { SEARCH_TEXT_KEY } from '../search-intent.ts';
 import { ungatedRenderErrorSQL } from '../error.ts';
 import { realmIs } from '../realm-union.ts';
-import type { PageTotalMode } from '../query-v2/query.ts';
-import { SEARCH_TOTAL_CAP } from '../query-v2/search-bounds.ts';
+import type { PageTotalMode } from '../query.ts';
+import { SEARCH_TOTAL_CAP } from '../search-bounds.ts';
 
 export function assertIndexEntry<T>(obj: T): Omit<
   T,

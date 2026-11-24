@@ -33,7 +33,7 @@ import {
   type Query,
   type TypeAheadFilter,
   matchesHoldsNoWord,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import { FilterCompiler } from './filter-compiler.ts';
 import {
   MIN_PREFIX_LETTERS,
@@ -63,7 +63,7 @@ import {
 import { arrayElement } from '../sql-literal.ts';
 import { escapeLikePattern, filterAnchor } from './filter-sql.ts';
 import { realmIs, typoRealmIs } from '../realm-union.ts';
-import { matchCandidateCap } from '../query-v2/search-bounds.ts';
+import { matchCandidateCap } from '../search-bounds.ts';
 import { storeKept } from './store-narrow.ts';
 import { typoCorrections } from '../search-intent.ts';
 import { inSearchSettings } from '../search-session.ts';

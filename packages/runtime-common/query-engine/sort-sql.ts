@@ -21,7 +21,7 @@ import {
   type Sort,
   isExprSort,
   isWhenSignal,
-} from '../query-v2/query.ts';
+} from '../query.ts';
 import { expressionSql } from '../query-v2/query-expression.ts';
 import { isNearSort, nearSimilarityAlias } from '../vector-query.ts';
 

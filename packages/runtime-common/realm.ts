@@ -80,10 +80,6 @@ import {
   realmEntryGrammar,
   type RealmEntryQuery,
 } from './query-engine/realm-entry-grammar.ts';
-import type {
-  SearchColumnsDocument,
-  SearchEntryQuery as V2SearchEntryQuery,
-} from './query-v2/search-entry.ts';
 import {
   assembledLinkResourceBudget,
   runWithSearchTimeBudget,
@@ -168,6 +164,7 @@ import {
   htmlQueryFormats,
   htmlQueryFromParams,
   policyScopedRealms,
+  type SearchColumnsDocument,
   type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
@@ -10742,7 +10739,7 @@ export class Realm {
   // table its own `_search` answers, for a query the federated route has
   // already scoped to the caller (`policyScopedQuery`, `grantsForType`).
   async searchColumns(
-    query: V2SearchEntryQuery,
+    query: SearchEntryQuery,
     opts?: { cacheOnlyDefinitions?: boolean; signal?: AbortSignal },
   ): Promise<SearchColumnsDocument> {
     return await this.#realmIndexQueryEngine.searchColumns(query, opts);
@@ -20215,7 +20212,7 @@ export class Realm {
   // Takes either grammar's entry query. Both search routes parse with Query
   // V2's, which may carry a time zone the merge reckons every realm in.
   public async searchEntries(
-    searchEntryQuery: SearchEntryQuery | V2SearchEntryQuery,
+    searchEntryQuery: SearchEntryQuery | SearchEntryQuery,
     opts?: SearchOpts & { timeZone?: string },
   ): Promise<EntryCollectionDocument> {
     return await this.#realmIndexQueryEngine.searchEntries(
@@ -20236,7 +20233,7 @@ export class Realm {
   // The caller reads every realm of the union outright (`unionPathRefusal`).
   public async searchEntryUnionRows(
     union: RealmUnion,
-    searchEntryQuery: SearchEntryQuery | V2SearchEntryQuery,
+    searchEntryQuery: SearchEntryQuery | SearchEntryQuery,
     opts?: SearchOpts & { timeZone?: string },
   ) {
     return await this.#realmIndexQueryEngine.searchEntryRows(
@@ -20250,7 +20247,7 @@ export class Realm {
   // The entries of rows a union search read that are this realm's cards and
   // files, assembled as this realm's own search assembles them.
   public async entriesFromRows(
-    searchEntryQuery: SearchEntryQuery | V2SearchEntryQuery,
+    searchEntryQuery: SearchEntryQuery | SearchEntryQuery,
     results: Parameters<RealmIndexQueryEngine['entriesFromRows']>[1],
     meta: Parameters<RealmIndexQueryEngine['entriesFromRows']>[2],
     opts?: SearchOpts & { timeZone?: string },
@@ -20775,7 +20772,7 @@ export class Realm {
       // `select`: a table of values read off each row (Query V2's grammar
       // only; main's refuses the member).
       let columns = grammar.v2
-        ? (searchEntryQuery as V2SearchEntryQuery).columns
+        ? (searchEntryQuery as SearchEntryQuery).columns
         : undefined;
       let accept = request.headers.get('Accept') ?? '';
       let lineType = accept.includes(SupportedMimeType.JSONL)
@@ -20969,7 +20966,7 @@ export class Realm {
       if (columns) {
         // The page bound above holds on a table too: a table is values off
         // the index, never rendered, so its page is the item leg's page.
-        let columnsQuery = searchEntryQuery as V2SearchEntryQuery;
+        let columnsQuery = searchEntryQuery as SearchEntryQuery;
         // The budget's signal and the request's own both stop the table's
         // SQL, as they stop the item leg's below.
         let runColumns = (budgetSignal?: AbortSignal) => {

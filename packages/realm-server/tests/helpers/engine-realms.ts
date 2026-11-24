@@ -1,4 +1,4 @@
-import type { SearchEntryQuery } from '@cardstack/runtime-common/query-v2/search-entry';
+import type { SearchEntryQuery } from '@cardstack/runtime-common/search-entry';
 import {
   IndexQueryEngine,
   IndexWriter,
@@ -10,7 +10,7 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { hasVectorIndex } from '@cardstack/runtime-common/vector-index';
-import type { EntryCollectionDocument } from '@cardstack/runtime-common/query-v2/document-types';
+import type { EntryCollectionDocument } from '@cardstack/runtime-common/document-types';
 import type { EntryResource } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 

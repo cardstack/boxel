@@ -11,7 +11,7 @@ import {
   type DefinitionLookup,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 import { assertQuery } from '@cardstack/runtime-common/query-v2/query-check';
 
 import { setupDB } from './helpers/index.ts';

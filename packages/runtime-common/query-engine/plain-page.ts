@@ -26,12 +26,8 @@ import {
   tableValuedFunctionsPlaceholder,
 } from '../expression.ts';
 import type { CodeRef } from '../index.ts';
-import {
-  type PageTotalMode,
-  type Sort,
-  isExprSort,
-} from '../query-v2/query.ts';
-import { SEARCH_TOTAL_CAP } from '../query-v2/search-bounds.ts';
+import { type PageTotalMode, type Sort, isExprSort } from '../query.ts';
+import { SEARCH_TOTAL_CAP } from '../search-bounds.ts';
 import { isNearSort } from '../vector-query.ts';
 import {
   notEffectivelyErrored,

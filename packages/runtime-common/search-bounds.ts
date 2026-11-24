@@ -559,6 +559,7 @@ export const LINK_SHAPE_HEARTBEAT_MS = parsePositiveInt(
 // `setSearchBoundsForTests` to exercise a bound without adding realms or
 // waiting out the real time budget. Mirrors `setSearchTimingSinkForTests`.
 let maxPageSize = MAX_SEARCH_PAGE_SIZE;
+let defaultPageSize = MAX_SEARCH_PAGE_SIZE;
 let queryFieldPageSize = QUERY_FIELD_DEFAULT_PAGE_SIZE;
 let serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
 let serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
@@ -580,6 +581,7 @@ const MAX_REPORTED_CLAMPS = 32;
 
 export function setSearchBoundsForTests(overrides: {
   maxPageSize?: number;
+  defaultPageSize?: number;
   queryFieldPageSize?: number;
   serverMaxPageSize?: number;
   serverAbsoluteMaxPageSize?: number;
@@ -597,6 +599,9 @@ export function setSearchBoundsForTests(overrides: {
   }
   if (overrides.maxPageSize !== undefined) {
     maxPageSize = overrides.maxPageSize;
+  }
+  if (overrides.defaultPageSize !== undefined) {
+    defaultPageSize = overrides.defaultPageSize;
   }
   if (overrides.queryFieldPageSize !== undefined) {
     queryFieldPageSize = overrides.queryFieldPageSize;
@@ -621,6 +626,7 @@ export function setSearchBoundsForTests(overrides: {
 export function resetSearchBoundsForTests(): void {
   reportedClamps = new Set();
   maxPageSize = MAX_SEARCH_PAGE_SIZE;
+  defaultPageSize = MAX_SEARCH_PAGE_SIZE;
   queryFieldPageSize = QUERY_FIELD_DEFAULT_PAGE_SIZE;
   serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
   serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
@@ -845,8 +851,13 @@ function boundPageSize(
     return { ...query, page: { size: effectiveDefault } } as Query;
   }
   let size = Number((page as { size?: unknown }).size);
+  // `size: 0` is a counts-only page: the total and the facets, no rows. It is
+  // already bounded, so it passes through as asked.
+  if ((page as { size?: unknown }).size === 0) {
+    return query;
+  }
   if (!Number.isFinite(size) || size < 1) {
-    // A page object with a missing / non-numeric / non-positive size can't
+    // A page object with a missing / non-numeric / negative size can't
     // bound the result set — and would compile to `LIMIT undefined` / a
     // negative limit — so treat it like an absent page and clamp to the
     // default rather than let it through unbounded.
@@ -880,10 +891,11 @@ function boundPageSize(
 }
 
 // The card `@context` page cap, enforced client-side on card-initiated
-// item-leg searches (see host StoreService). One threshold, not two: untrusted
-// card code doesn't get to opt into a larger page by asking for one.
+// item-leg searches (see host StoreService). An absent page gets the default
+// page; an explicit one is honored up to the cap and rejected above it, since
+// untrusted card code doesn't get to opt into a larger page than the cap.
 export function applySearchPageBound(query: Query): Query {
-  return boundPageSize(query, maxPageSize, maxPageSize, 'reject');
+  return boundPageSize(query, defaultPageSize, maxPageSize, 'reject');
 }
 
 // The server-side page bounds. These hold on every search the server handles,

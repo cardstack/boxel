@@ -6,7 +6,7 @@ import {
   type CardResource,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { buildSparseItemResource } from '@cardstack/runtime-common/query-v2/search-entry';
+import { buildSparseItemResource } from '@cardstack/runtime-common/search-entry';
 
 const realmURL = 'http://localhost:4201/test/';
 const cardUrl = rri(`${realmURL}Author/1`);

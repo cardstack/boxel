@@ -8,7 +8,7 @@ import { assertQuery } from '@cardstack/runtime-common/query-v2/query-check';
 import {
   parseSearchEntryQueryFromPayload,
   searchEntryWireQueryFromQuery,
-} from '@cardstack/runtime-common/query-v2/search-entry';
+} from '@cardstack/runtime-common/search-entry';
 import { testRealm } from './helpers/index.ts';
 import { setupTalkCorpus } from './helpers/talk-corpus.ts';
 

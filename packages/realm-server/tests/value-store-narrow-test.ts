@@ -15,12 +15,12 @@ import {
   type FieldDefinition,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 
 import {
   resetSearchBoundsForTests,
   setSearchBoundsForTests,
-} from '@cardstack/runtime-common/query-v2/search-bounds';
+} from '@cardstack/runtime-common/search-bounds';
 import {
   closeTestPgAdapter,
   createTestPgAdapter,

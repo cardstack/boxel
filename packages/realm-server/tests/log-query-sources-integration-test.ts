@@ -19,7 +19,7 @@ import {
   type LogQuery,
 } from '@cardstack/runtime-common/log-query';
 import type { LogAccess } from '@cardstack/runtime-common/query-engine/types';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 
 import { logAnswer, memoryLogHost } from './helpers/case-table-log.ts';
 import { definitionsLookup, ref } from './helpers/case-table-spellings.ts';

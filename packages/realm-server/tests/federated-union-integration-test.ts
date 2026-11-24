@@ -17,7 +17,7 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { parseSearchEntryQueryFromPayload } from '@cardstack/runtime-common/query-v2/search-entry';
+import { parseSearchEntryQueryFromPayload } from '@cardstack/runtime-common/search-entry';
 import { hasVectorIndex } from '@cardstack/runtime-common/vector-index';
 import { unionPathRefusal } from '@cardstack/runtime-common/query-v2/search-entry-union';
 

@@ -6,11 +6,11 @@
 // more than one node.
 import { refuse, refuseLog } from './query-refusals.ts';
 import type { RefusalId, LogRefusalId } from './query-refusals.ts';
-import { MAX_COLUMNS } from './search-bounds.ts';
+import { MAX_COLUMNS } from '../search-bounds.ts';
 import { isEqual } from 'lodash-es';
 import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
 import qs from 'qs';
-import { assertJSONValue, assertJSONPrimitive } from './json-validation.ts';
+import { assertJSONValue, assertJSONPrimitive } from '../json-validation.ts';
 import { InvalidQueryError } from '../invalid-query-error.ts';
 import { parsePathSpecifier } from '../path-specifier.ts';
 import {
@@ -65,7 +65,7 @@ import type {
   LetBinding,
   CardReferenceRole,
   Query,
-} from './query.ts';
+} from '../query.ts';
 import {
   FACET_MEASURES,
   FACET_INTERVALS,

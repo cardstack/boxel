@@ -15,7 +15,7 @@
 // `pattern` instead, ignoring case as a glob does.
 
 import type { CodeRef } from '../index.ts';
-import type { Filter, Rerank, Sort } from '../query-v2/query.ts';
+import type { Filter, Rerank, Sort } from '../query.ts';
 import { refuse } from '../query-v2/query-refusals.ts';
 import { EXPR_SORT_KEY } from '../query-v2/query-values.ts';
 import { setOwn } from '../query-v2/query-syntax.ts';

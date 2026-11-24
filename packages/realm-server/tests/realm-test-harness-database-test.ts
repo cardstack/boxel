@@ -17,7 +17,7 @@ import {
   type Expression,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query-v2/query';
+import type { Query } from '@cardstack/runtime-common/query';
 import { hasVectorIndex } from '@cardstack/runtime-common/vector-index';
 import { runLogQuery } from '@cardstack/runtime-common/log-query';
 import {

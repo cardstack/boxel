@@ -7845,7 +7845,8 @@ boxel:
       let matchesQueryParams = parseSearchQuery(matchesSearchURL);
       assert.deepEqual(
         matchesQueryParams.page,
-        { size: '1', number: '0' },
+        // a linksToMany field counts its whole match set (totalMatchCount)
+        { size: '1', number: '0', total: 'exact' },
         'matches relationship search link encodes pagination',
       );
       assert.strictEqual(
@@ -7926,7 +7927,8 @@ boxel:
       let failingQueryParams = parseSearchQuery(failingSearchURL);
       assert.deepEqual(
         failingQueryParams.page,
-        { size: '1', number: '0' },
+        // a linksToMany field counts its whole match set (totalMatchCount)
+        { size: '1', number: '0', total: 'exact' },
         'failingMatches search link encodes pagination',
       );
       assert.strictEqual(

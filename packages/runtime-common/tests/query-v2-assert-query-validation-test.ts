@@ -14,7 +14,7 @@
 // pointer identifies the entry rather than merely the node it sits under.
 import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
 import type { SharedTests } from '../helpers/index.ts';
-import { InvalidQueryError, assertQuery } from '../query-v2/query.ts';
+import { InvalidQueryError, assertQuery } from '../query.ts';
 
 const sampleRef = {
   module: 'http://localhost:4201/test/person' as RealmResourceIdentifier,

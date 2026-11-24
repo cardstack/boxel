@@ -17,7 +17,7 @@ import {
   exprSortSql,
 } from '@cardstack/runtime-common/query-v2/formula-sql';
 import { provideExpressionSql } from '@cardstack/runtime-common/query-v2/query-expression';
-import { SearchBoundError } from '@cardstack/runtime-common/query-v2/search-bounds';
+import { SearchBoundError } from '@cardstack/runtime-common/search-bounds';
 import { searchSettingsStatements } from '@cardstack/runtime-common/search-session';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'crypto';
