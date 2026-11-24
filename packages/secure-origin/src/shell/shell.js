@@ -1,4 +1,3 @@
-/* eslint-env browser */
 // The only script the secure origin's shell serves. It loads no card, realm or
 // host app code. A page takes only plain values from its own URL, such as a
 // username to fill in, and never hands anything to the page that opened it.

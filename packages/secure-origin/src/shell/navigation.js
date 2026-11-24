@@ -1,4 +1,3 @@
-/* eslint-env browser */
 import { isPagePath, movesAsDocument, splitPagePath } from './pages.js';
 import { flushTelemetry } from './telemetry.ts';
 

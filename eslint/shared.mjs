@@ -6,6 +6,7 @@
 // its own blocks after it.
 import { createRequire } from 'node:module';
 
+import { fixupPluginRules } from '@eslint/compat';
 import js from '@eslint/js';
 import { globalIgnores } from 'eslint/config';
 import ember from 'eslint-plugin-ember/recommended';
@@ -13,6 +14,7 @@ import importX from 'eslint-plugin-import-x';
 import n from 'eslint-plugin-n';
 import prettierRecommended from 'eslint-plugin-prettier/recommended';
 import qunitRecommended from 'eslint-plugin-qunit/configs/recommended';
+import qunitDom from 'eslint-plugin-qunit-dom';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 
@@ -23,6 +25,7 @@ export {
   js,
   n,
   prettierRecommended,
+  qunitDom,
   qunitRecommended,
   ts,
 };
@@ -256,3 +259,39 @@ export function baseImportsOnlyConfig({ ignores = [] } = {}) {
     },
   ];
 }
+
+// A `.gts` block equivalent to eslintrc's `extends: ['eslint:recommended',
+// 'plugin:@typescript-eslint/recommended', 'plugin:ember/recommended',
+// 'plugin:ember/recommended-gts', 'plugin:prettier/recommended', ...]`, in
+// that order. `extraExtends` follow prettier; `rules` come last.
+export function gtsBlock({
+  files = ['**/*.gts'],
+  ignores,
+  extraExtends = [],
+  rules = {},
+} = {}) {
+  return {
+    files,
+    ...(ignores ? { ignores } : {}),
+    extends: [
+      js.configs.recommended,
+      ESLINT_10_RECOMMENDED_OFF,
+      ...ts.configs.recommended,
+      ember.configs.gts,
+      prettierRecommended,
+      ...extraExtends,
+    ],
+    languageOptions: {
+      ...GTS_LANGUAGE_OPTIONS,
+      globals: { ...globals.browser },
+    },
+    rules,
+  };
+}
+
+// `plugin:qunit-dom/recommended`. eslint-plugin-qunit-dom 1.0.0 calls rule
+// context methods that ESLint 10 removed, so its rules are wrapped.
+export const QUNIT_DOM_RECOMMENDED = {
+  plugins: { 'qunit-dom': fixupPluginRules(qunitDom) },
+  rules: qunitDom.configs.recommended.rules,
+};

@@ -99,6 +99,9 @@ catalogs:
     '@ember/test-waiters':
       specifier: ^4.1.1
       version: 4.1.2
+    '@eslint/compat':
+      specifier: ^2.1.1
+      version: 2.1.1
     '@eslint/js':
       specifier: ^10.0.1
       version: 10.0.1
@@ -762,6 +765,9 @@ importers:
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:packages/eslint-plugin-boxel
+      '@eslint/compat':
+        specifier: 'catalog:'
+        version: 2.1.1(eslint@10.15.0(supports-color@8.1.1))
       '@eslint/js':
         specifier: 'catalog:'
         version: 10.0.1(eslint@10.15.0(supports-color@8.1.1))
@@ -822,6 +828,9 @@ importers:
       eslint-plugin-qunit:
         specifier: 'catalog:'
         version: 8.2.6(eslint@10.15.0(supports-color@8.1.1))
+      eslint-plugin-qunit-dom:
+        specifier: 'catalog:'
+        version: 1.0.0(eslint@10.15.0(supports-color@8.1.1))
       globals:
         specifier: 'catalog:'
         version: 17.14.0
@@ -6350,6 +6359,15 @@ packages:
   '@eslint-community/regexpp@4.12.2':
     resolution: {integrity: sha512-EriSTlt5OC9/7SXkRSCAhfSxxoSUgBm33OH+IkwbdpgoqsSsUg7y3uh+IICI/Qg4BBWr3U2i39RpmycbxMq4ew==}
     engines: {node: ^12.0.0 || ^14.0.0 || >=16.0.0}
+
+  '@eslint/compat@2.1.1':
+    resolution: {integrity: sha512-rMcy8GSrwNzcISX/BlTDY/GLB4eCopEuy9woIls3To+15OLxykZrxxq+WUcylCPCQ6F4MujjBM1DX5V1aqI3Vw==}
+    engines: {node: ^20.19.0 || ^22.13.0 || >=24}
+    peerDependencies:
+      eslint: ^8.40 || 9 || 10
+    peerDependenciesMeta:
+      eslint:
+        optional: true
 
   '@eslint/config-array@0.23.6':
     resolution: {integrity: sha512-WrTH7nioI9QPY4NZGnsywmecswJdgeq4BCM76qok9VgjTO29ZgUzUvcuJLVPYVQM4uDbaPBU0M33R9DIxI8X3w==}
@@ -19231,6 +19249,12 @@ snapshots:
       eslint-visitor-keys: 3.4.3
 
   '@eslint-community/regexpp@4.12.2': {}
+
+  '@eslint/compat@2.1.1(eslint@10.15.0(supports-color@8.1.1))':
+    dependencies:
+      '@eslint/core': 1.2.1
+    optionalDependencies:
+      eslint: 10.15.0(supports-color@8.1.1)
 
   '@eslint/config-array@0.23.6(supports-color@8.1.1)':
     dependencies:
