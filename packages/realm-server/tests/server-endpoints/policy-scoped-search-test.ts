@@ -9,6 +9,7 @@ import {
   applyServerSearchPageBound,
   archiveRealm,
   composePolicyScopedFilter,
+  expressionToSql,
   DURING_PRERENDER_HEADER,
   insertPermissions,
   parseSearchEntryQueryFromPayload,
@@ -18,6 +19,8 @@ import {
   type Filter,
 } from '@cardstack/runtime-common';
 import type {
+  DBAdapter,
+  Querier,
   QueuePublisher,
   QueueRunner,
   Realm,
@@ -1506,10 +1509,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     module('a caller filter and a grant on the same list', function () {
-      // A plural path is reached through one table-valued alias per path, so
-      // two conditions on `teacherIds` test the same element of it, and their
-      // `every` needs one element equal to both. This pins that documented
-      // limit: changing it is a change to the query engine, not to policy.
+      // A filter on a list holds when some element satisfies it, and each
+      // filter is its own test of the card (docs/search.md, list fields): the
+      // grant's test of `teacherIds` and the caller's need not meet in one
+      // element. So a grant composed with a caller's filter answers as the
+      // caller's filter over the cards the grant admits, no less.
       function teaching(teacher: string) {
         return {
           filter: { 'item.on': CLASSROOM, eq: { 'item.teacherIds': teacher } },
@@ -1525,7 +1529,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.deepEqual(ids(response).sort(), [A_ONLY, SHARED]);
       });
 
-      test('a filter testing a colleague in the list finds no classroom, not even one listing them both', async function (assert) {
+      test('a filter testing a colleague in the list finds the classroom that lists them both', async function (assert) {
         let owner = await federatedSearch(teaching(PROVIDER_B), OWNER);
         assert.deepEqual(
           ids(owner),
@@ -1537,8 +1541,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(teacher.status, 200, 'HTTP 200 status');
         assert.deepEqual(
           ids(teacher),
-          [],
-          "A's grant admits the shared classroom, and still no element of its `teacherIds` is both A and B",
+          [SHARED],
+          "A's grant admits the shared classroom, and B is in its `teacherIds`: the two tests need not meet in one element",
         );
 
         let own = await realmSearch(
@@ -1546,7 +1550,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           { filter: teaching(PROVIDER_B).filter },
           PROVIDER_A,
         );
-        assert.deepEqual(ids(own), [], "nor through the realm's own search");
+        assert.deepEqual(
+          ids(own),
+          [SHARED],
+          "and through the realm's own search",
+        );
       });
 
       test('the same classroom is found by a filter on another field', async function (assert) {
@@ -2296,20 +2304,60 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         let statements: { sql: string; bind: unknown }[] = [];
         let trace: { atMs: number; sql: string; bind: unknown }[] = [];
         let start = performance.now();
-        let execute = db.execute;
-        db.execute = function (this: PgAdapter, ...args) {
-          statements.push({ sql: args[0], bind: args[1]?.bind });
+        let record = (sql: string, bind: unknown) => {
+          statements.push({ sql, bind });
           trace.push({
             atMs: Math.round((performance.now() - start) * 10) / 10,
-            sql: args[0].slice(0, 120),
-            bind: args[1]?.bind,
+            sql: sql.slice(0, 120),
+            bind,
           });
+        };
+        // A statement run in a transaction block (a filter-first page reads
+        // its matches in one, with its own planner settings) goes to the
+        // block's querier rather than through `execute`, so the querier is
+        // wrapped too, both on the adapter and on a read snapshot's reader.
+        let spyOnBlock =
+          (
+            withTransaction: DBAdapter['withTransaction'],
+          ): DBAdapter['withTransaction'] =>
+          (body, opts) =>
+            withTransaction(
+              (q: Querier) =>
+                body((expression) => {
+                  let sql = expressionToSql('pg', expression);
+                  record(sql.text, sql.values);
+                  return q(expression);
+                }),
+              opts,
+            );
+        let execute = db.execute;
+        let withTransaction = db.withTransaction;
+        let withReadSnapshot = db.withReadSnapshot;
+        db.execute = function (this: PgAdapter, ...args) {
+          record(args[0], args[1]?.bind);
           return execute.apply(this, args);
         };
+        db.withTransaction = spyOnBlock(withTransaction.bind(db));
+        db.withReadSnapshot = function (this: PgAdapter, run, opts) {
+          return withReadSnapshot.call(
+            this,
+            (reader) =>
+              run(
+                Object.assign(Object.create(reader), {
+                  withTransaction: spyOnBlock(
+                    reader.withTransaction.bind(reader),
+                  ),
+                }),
+              ),
+            opts,
+          );
+        } as PgAdapter['withReadSnapshot'];
         try {
           await fn();
         } finally {
           db.execute = execute;
+          db.withTransaction = withTransaction;
+          db.withReadSnapshot = withReadSnapshot;
         }
         let key = (statement: { sql: string; bind: unknown }) =>
           JSON.stringify(statement);
@@ -2390,10 +2438,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
 
         assert.true(unscoped.length > 0, 'the unscoped search read the index');
-        assert.strictEqual(
-          scoped.length,
-          unscoped.length,
-          `one query plan either way (${unscoped.length} index read${unscoped.length === 1 ? '' : 's'})`,
+        // The grant's filter is one the search doc's index serves, so the
+        // scoped page may read filter-first: its matches, count and page in
+        // one statement, in a transaction block of its own. Scoping never
+        // adds a statement.
+        assert.true(
+          scoped.length <= unscoped.length,
+          `no more index reads than unscoped (${scoped.length} against ${unscoped.length})`,
         );
         assert.true(
           scoped.some(({ bind }) => JSON.stringify(bind).includes(PROVIDER_A)),

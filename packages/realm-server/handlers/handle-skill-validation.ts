@@ -1,6 +1,6 @@
 import type Koa from 'koa';
+import { indexQueryEngineFor } from '@cardstack/runtime-common/query-engine/engine-choice';
 import {
-  LegacyIndexQueryEngine,
   RealmPaths,
   SupportedMimeType,
   fetchUserPermissions,
@@ -261,7 +261,8 @@ async function computeValidation(
     prerenderer,
     createPrerenderAuth,
   } = deps;
-  let indexQueryEngine = new LegacyIndexQueryEngine(
+  let indexQueryEngine = indexQueryEngineFor(
+    'skill-validation',
     dbAdapter,
     definitionLookup,
     virtualNetwork,
