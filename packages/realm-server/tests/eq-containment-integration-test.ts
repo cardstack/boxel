@@ -4,7 +4,7 @@ import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import {
-  IndexQueryEngine,
+  LegacyIndexQueryEngine as IndexQueryEngine,
   internalKeyFor,
   param,
   query,

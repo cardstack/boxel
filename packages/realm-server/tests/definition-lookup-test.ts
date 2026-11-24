@@ -3,7 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   CachingDefinitionLookup,
-  IndexQueryEngine,
+  LegacyIndexQueryEngine as IndexQueryEngine,
   isTransientDefinitionLookupError,
   internalKeyFor,
   logger,

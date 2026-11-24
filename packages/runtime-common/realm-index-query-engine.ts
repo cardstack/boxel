@@ -7,7 +7,8 @@ import {
   inferContentType,
   unixTime,
   maybeURL,
-  IndexQueryEngine,
+  // Main's engine until this caller's switch row moves it.
+  LegacyIndexQueryEngine as IndexQueryEngine,
   MATCH_RELEVANCE_SORT_KEY,
   fileEntryFromResult,
   codeRefWithAbsoluteIdentifier,
