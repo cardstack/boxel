@@ -215,8 +215,10 @@ realm published from keeps the permissions it had. Each of these refusals MUST b
 the realm server, and each that names a realm route in the realm too.
 
 An OAuth token MUST NOT change what a realm's policy admits (ADR 006 §1.3): a
-write that changes `realm.json`'s `policy` or `config`, or the `RealmPolicy`
-card `policy` names, MUST be refused. A policy grant that reads the card it
+write that changes `realm.json`'s `policy`, `config` or type, any change to a
+`realm.json` whose type is a RealmConfig subclass (which may compute `config`
+from any field), or a write to the `RealmPolicy` card `policy` names, MUST be
+refused. A policy grant that reads the card it
 guards gives that part of the decision to anyone who can write the card, OAuth
 tokens included.
 

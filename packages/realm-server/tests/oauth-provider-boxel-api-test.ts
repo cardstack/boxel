@@ -544,6 +544,59 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a realm.json whose type is a RealmConfig subclass refuses every change, since the subclass may compute its config from any field', async function (assert) {
+      let { token } = await oauthToken(OWNER);
+      let subclassConfig = (attributes: Record<string, unknown>) =>
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes,
+            meta: {
+              adoptsFrom: { module: './computed-config', name: 'Computed' },
+            },
+          },
+        });
+      let original = subclassConfig({
+        cardInfo: { name: 'Test Workspace' },
+        mode: 'strict',
+      });
+      await started!.realm.write('realm.json', original);
+      let refused: [string, string][] = [
+        [
+          'an attribute the subclass may read',
+          subclassConfig({
+            cardInfo: { name: 'Test Workspace' },
+            mode: 'open',
+          }),
+        ],
+        [
+          'the name',
+          subclassConfig({ cardInfo: { name: 'Renamed' }, mode: 'strict' }),
+        ],
+      ];
+      for (let [label, content] of refused) {
+        let response = await writeSource(token, '/realm.json', content);
+        assert.strictEqual(
+          response.status,
+          403,
+          `a source write changing ${label}: ${response.text}`,
+        );
+      }
+      let unchanged = await writeSource(token, '/realm.json', original);
+      assert.true(
+        succeeded(unchanged),
+        `rewriting the same document is accepted: ${unchanged.status} ${unchanged.text}`,
+      );
+      let stored = JSON.parse(
+        (await started!.realm.operationCore.readFileAsText('realm.json'))!,
+      );
+      assert.deepEqual(
+        stored.data.attributes,
+        { cardInfo: { name: 'Test Workspace' }, mode: 'strict' },
+        'realm.json is unchanged',
+      );
+    });
+
     test('no write route writes or removes the policy card the realm points at', async function (assert) {
       let { token } = await oauthToken(OWNER);
       let policyCard = JSON.stringify({

@@ -6123,8 +6123,9 @@ export class Realm {
 
   // What an OAuth caller's commit would change about what a realm's policy
   // admits, named for a person, or undefined when it changes nothing of that
-  // (ADR 021 §1.6): `realm.json`'s `policy` or `config` (its name, icon and
-  // the rest stay the caller's to edit), the card the realm's policy pointer
+  // (ADR 021 §1.6): `realm.json`'s `policy`, `config` or type (its name, icon
+  // and the rest stay the caller's to edit, unless its type is a RealmConfig
+  // subclass, which may compute `config` from them), the card the policy pointer
   // names, or any RealmPolicy card, as written or as the realm stores it,
   // since a policy card here may govern another realm. Removing `realm.json`
   // or such a card changes it too. A file only appended to is judged by its
@@ -6193,14 +6194,27 @@ export class Realm {
   // its policy pointer or its config from what the realm stores. The file is
   // a RealmConfig card document, so both are read from `data.attributes`. Its
   // type (`data.meta.adoptsFrom`) counts too, since the indexed instance's
-  // `config` wins over the file's and a RealmConfig subclass can compute it.
-  // Content that isn't a JSON object changes them, since the realm would no
-  // longer read any of them.
+  // `config` wins over the file's. A RealmConfig subclass can compute that
+  // `config` from any of the card's fields, so while the file names a type
+  // other than the base RealmConfig, any change to it counts. Content that
+  // isn't a JSON object changes them, since the realm would no longer read
+  // any of them.
   async #changesRealmPolicySettings(content: WriteContent): Promise<boolean> {
-    type Settings = { policy: unknown; config: unknown; adoptsFrom: unknown };
+    type Settings = {
+      document: unknown;
+      policy: unknown;
+      config: unknown;
+      adoptsFrom: unknown;
+    };
+    let none: Settings = {
+      document: undefined,
+      policy: undefined,
+      config: undefined,
+      adoptsFrom: undefined,
+    };
     let settingsOf = (text: string | undefined): Settings => {
       if (text === undefined) {
-        return { policy: undefined, config: undefined, adoptsFrom: undefined };
+        return none;
       }
       let parsed: unknown = JSON.parse(text);
       if (!isPlainObject(parsed)) {
@@ -6212,31 +6226,62 @@ export class Realm {
       let attributes = member(data.attributes);
       let meta = member(data.meta);
       return {
+        document: parsed,
         policy: attributes.policy,
         config: attributes.config,
         adoptsFrom: meta.adoptsFrom,
       };
     };
+    let nextText: string;
     let next: Settings;
     try {
-      next = settingsOf(await this.#writeContentText(content));
+      nextText = await this.#writeContentText(content);
+      next = settingsOf(nextText);
     } catch {
       return true;
     }
+    let currentText = (await this.readFileAsText('realm.json'))?.content;
     let current: Settings;
     try {
-      current = settingsOf((await this.readFileAsText('realm.json'))?.content);
+      current = settingsOf(currentText);
     } catch {
       // A stored realm.json the realm can't read carries no policy, config or
       // type to keep, so only a write that adds none of them leaves them as
       // they are.
-      current = { policy: undefined, config: undefined, adoptsFrom: undefined };
+      current = none;
     }
-    return (
+    if (
       canonicalJSON(next.policy) !== canonicalJSON(current.policy) ||
       canonicalJSON(next.config) !== canonicalJSON(current.config) ||
       canonicalJSON(next.adoptsFrom) !== canonicalJSON(current.adoptsFrom)
+    ) {
+      return true;
+    }
+    return (
+      !this.#adoptsBaseRealmConfig(nextText) &&
+      canonicalJSON(next.document) !== canonicalJSON(current.document)
     );
+  }
+
+  // Whether `realm.json`'s content names the base RealmConfig as its type,
+  // whose `config` is the file's own rather than computed.
+  #adoptsBaseRealmConfig(content: string): boolean {
+    let codeRef = this.#adoptedCodeRef('realm.json', content);
+    if (!codeRef) {
+      return false;
+    }
+    try {
+      return (
+        internalKeyFor(codeRef, undefined, this.#virtualNetwork) ===
+        internalKeyFor(
+          { module: rri('@cardstack/base/realm-config'), name: 'RealmConfig' },
+          undefined,
+          this.#virtualNetwork,
+        )
+      );
+    } catch {
+      return false;
+    }
   }
 
   async #auditedContentOf(
