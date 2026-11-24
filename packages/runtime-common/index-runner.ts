@@ -1822,11 +1822,14 @@ export class IndexRunner {
 
   // The cache context a module's definition is read under: this realm's, or,
   // for a module of another realm, that realm's, which the module's own
-  // response names. That response is asked for without credentials, as a
-  // visitor who isn't signed in: `'not-public'` when the other realm refuses
-  // it, and `'not-found'` when it answers that the module isn't there.
-  // `contexts` holds the contexts this read has asked for, by realm, and the
-  // realm each module named.
+  // response names. That response is the realm's discovery answer to a
+  // `HEAD`, which any caller gets, asked for without credentials:
+  // `'not-found'` when no realm answers for the module, and `'not-public'`
+  // when the realm that does isn't one anyone may read (it doesn't send
+  // `X-Boxel-Realm-Public-Readable`, or it refuses the request), so its info
+  // is never read with this realm's credentials. `contexts` holds the
+  // contexts this read has asked for, by realm, and the realm each module
+  // named.
   async #moduleCacheContextFor(
     moduleURL: string,
     contexts: Map<string, Promise<ModuleCacheContext>>,
@@ -1850,6 +1853,12 @@ export class IndexRunner {
         return 'not-found';
       }
       realmURL = new URL(header);
+      if (
+        realmURL.href !== this.#realmURL.href &&
+        response.headers.get('x-boxel-realm-public-readable') !== 'true'
+      ) {
+        return 'not-public';
+      }
     }
     let context = contexts.get(realmURL.href);
     if (!context) {
