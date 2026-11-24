@@ -201,6 +201,7 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
           'entryPoints.0': { links: { self: './index' } },
           'entryPoints.1': { links: { self: './notes' } },
           'entryPoints.2': { links: { self: './' } },
+          'entryPoints.3': { links: { self: './index.json' } },
         }),
       ),
     );
@@ -797,6 +798,7 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
         workspaceIndexJSON({
           'entryPoints.0': { links: { self: './index' } },
           'entryPoints.1': { links: { self: './' } },
+          'entryPoints.2': { links: { self: './index.json' } },
         }),
       ),
     );
@@ -812,6 +814,26 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
     await click('[data-test-workspace-tab="library"]');
     await waitFor('[data-test-library-filter]');
     assert.dom('[data-test-library-filter="Entry points"]').doesNotExist();
+  });
+
+  test("a Workspace card that isn't the realm's index card keeps a pin to the realm URL", async function (assert) {
+    await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));
+    await mainRealm.write(
+      'side-workspace.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './' } },
+        }),
+      ),
+    );
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}side-workspace`, format: 'isolated' }]],
+    });
+
+    // The realm URL names the index card, not this one, so the pin shows.
+    await waitFor('[data-test-door-unpin="0"]');
+    assert.dom('[data-test-door-unpin]').exists({ count: 1 });
+    assert.dom('[data-test-welcome-new-card]').doesNotExist();
   });
 
   test("the Workspace Home's unpin keeps the other pins, even one whose card is missing", async function (assert) {
