@@ -165,6 +165,24 @@ describe('the workspace list on a profile signed in with OAuth', () => {
     expect(server.requests.map((r) => r.path)).not.toContain('/_realm-auth');
   });
 
+  it('lists a workspace that has been archived only as archived', async () => {
+    // Archiving a realm leaves it in the workspace list.
+    serve({ realms: [MINE, ARCHIVED] });
+
+    let active = await listRealms({ profileManager: pm });
+    let all = await listRealms({ profileManager: pm, includeArchived: true });
+
+    expect(active).toEqual({
+      realms: [{ url: MINE, hidden: false, archived: false }],
+    });
+    expect(all).toEqual({
+      realms: [
+        { url: ARCHIVED, hidden: false, archived: true },
+        { url: MINE, hidden: false, archived: false },
+      ],
+    });
+  });
+
   it('refuses --hidden and --all-accessible, which need a Matrix profile', async () => {
     let server = serve();
 
@@ -238,6 +256,15 @@ describe('the workspace list on a profile signed in with OAuth', () => {
     await expect(
       pm.realmUrlFor(`${SERVER}/nowhere/Card/1`),
     ).resolves.toBeUndefined();
+  });
+
+  it("doesn't look for a realm on another site, which never gets the token", async () => {
+    let server = serve();
+
+    await expect(
+      pm.realmUrlFor('https://elsewhere.example.test/a/b/Card/1'),
+    ).resolves.toBeUndefined();
+    expect(server.requests.map((r) => r.path)).toEqual(['/_user-realms']);
   });
 });
 

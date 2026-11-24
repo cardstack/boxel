@@ -156,6 +156,18 @@ describe('ProfileManager on an OAuth profile', () => {
     expect(server.refreshRequests).toHaveLength(0);
   });
 
+  it('sends the access token only to the realm server', async () => {
+    let pm = manager();
+    clock.now = START + 9.5 * MINUTE;
+
+    await pm.authedRealmFetch('https://elsewhere.example.test/a/card.json');
+    await pm.authedRealmServerFetch('https://elsewhere.example.test/_user');
+
+    expect(server.seen.map((r) => r.authorization)).toEqual([null, null]);
+    // Not even renewed for a request that doesn't carry it.
+    expect(server.refreshRequests).toHaveLength(0);
+  });
+
   it('has no per-realm token to hand out', async () => {
     await expect(
       manager().getRealmTokenForUrl(`${REALM_URL}card.json`),

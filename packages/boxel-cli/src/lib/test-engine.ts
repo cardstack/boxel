@@ -646,9 +646,11 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     // mounts on this same server don't gate on tokens.
     if (!options.realmMounts) {
       let realmOrigin = new URL(resolvedTargetRealm).origin;
+      // The OAuth token goes only to the profile's own realm server.
       let oauth =
         !options.authorization &&
-        Boolean(options.pm.getActiveProfile()?.profile.oauth);
+        Boolean(options.pm.getActiveProfile()?.profile.oauth) &&
+        options.pm.isRealmServerOrigin(resolvedTargetRealm);
       if (oauth) {
         let handlers = oauthRealmRequestHandlers(options.pm, realmOrigin, {
           onAuthorizationError: (e) => {

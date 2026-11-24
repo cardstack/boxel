@@ -68,6 +68,7 @@ export async function listRealms(
   let summaries: RealmSummary[];
   // The workspace list: a realm outside it is hidden.
   let userRealmsSet: Set<string>;
+  let archivedUrls: string[] | undefined;
   if (pm.serverKeepsWorkspaceList()) {
     // An OAuth profile sees only its workspace list: the realms it can reach
     // beyond that come from minting a token for each, which an OAuth token
@@ -87,11 +88,17 @@ export async function listRealms(
       };
     }
     userRealmsSet = new Set(userRealms.map(ensureTrailingSlash));
-    summaries = [...userRealmsSet].map((url) => ({
-      url,
-      hidden: false,
-      archived: false,
-    }));
+    // Archiving a realm leaves it in the workspace list, so the archived
+    // ones are read too, and listed only as archived.
+    let archived = await fetchArchivedRealms(pm, realmServerUrl);
+    if ('error' in archived) {
+      return { realms: [], error: archived.error };
+    }
+    archivedUrls = archived.urls;
+    let archivedSet = new Set(archivedUrls);
+    summaries = [...userRealmsSet]
+      .filter((url) => !archivedSet.has(url))
+      .map((url) => ({ url, hidden: false, archived: false }));
   } else {
     let accessible = await listAccessibleRealms(pm, realmServerUrl);
     if ('error' in accessible) {
@@ -110,26 +117,13 @@ export async function listRealms(
   }
 
   if (options.includeArchived) {
-    let archivedResponse = await pm.authedRealmServerFetch(
-      `${realmServerUrl}/_archived-realms`,
-      {
-        method: 'GET',
-        headers: { Accept: 'application/vnd.api+json' },
-      },
-    );
-    if (!archivedResponse.ok) {
-      let text = await archivedResponse.text();
-      return {
-        realms: [],
-        error: `Archived realms lookup failed: ${archivedResponse.status} ${text}`,
-      };
+    if (!archivedUrls) {
+      let archived = await fetchArchivedRealms(pm, realmServerUrl);
+      if ('error' in archived) {
+        return { realms: [], error: archived.error };
+      }
+      archivedUrls = archived.urls;
     }
-    let archivedBody = (await archivedResponse.json()) as {
-      data?: Array<{ id?: string }>;
-    };
-    let archivedUrls = (archivedBody.data ?? [])
-      .map((entry) => (entry?.id ? ensureTrailingSlash(entry.id) : null))
-      .filter((u): u is string => u !== null);
 
     let alreadyListed = new Set(summaries.map((r) => r.url));
     for (let url of archivedUrls) {
@@ -200,6 +194,32 @@ export function registerListCommand(realm: Command): void {
         console.log(`  ${FG_CYAN}${r.url}${RESET}${tag}`);
       }
     });
+}
+
+// The realms the profile has archived (`GET /_archived-realms`).
+async function fetchArchivedRealms(
+  pm: ProfileManager,
+  realmServerUrl: string,
+): Promise<{ urls: string[] } | { error: string }> {
+  let response = await pm.authedRealmServerFetch(
+    `${realmServerUrl}/_archived-realms`,
+    {
+      method: 'GET',
+      headers: { Accept: 'application/vnd.api+json' },
+    },
+  );
+  if (!response.ok) {
+    let text = await response.text();
+    return {
+      error: `Archived realms lookup failed: ${response.status} ${text}`,
+    };
+  }
+  let body = (await response.json()) as { data?: Array<{ id?: string }> };
+  return {
+    urls: (body.data ?? [])
+      .map((entry) => (entry?.id ? ensureTrailingSlash(entry.id) : null))
+      .filter((u): u is string => u !== null),
+  };
 }
 
 const OAUTH_LISTS_WORKSPACES_ONLY =

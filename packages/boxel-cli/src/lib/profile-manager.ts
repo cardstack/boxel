@@ -992,6 +992,11 @@ export class ProfileManager implements RealmAuthenticator {
       init: RequestInit,
     ) => Promise<Response>,
   ): Promise<Response> {
+    // The token is for the realm server and its realms alone: a request
+    // anywhere else goes without it.
+    if (!this.isRealmServerOrigin(input)) {
+      return fetchFn(input, init ?? {});
+    }
     let token = await this.getOAuthAccessToken();
     let response = await fetchFn(input, {
       ...init,
@@ -1083,8 +1088,23 @@ export class ProfileManager implements RealmAuthenticator {
     return find();
   }
 
-  // A realm's own token. An OAuth profile has none: its access token reaches
-  // every realm itself.
+  // Whether `input` is on the active profile's realm server, the only origin
+  // its OAuth token is sent to.
+  isRealmServerOrigin(input: string | URL | Request): boolean {
+    let active = this.getActiveProfile();
+    if (!active) {
+      return false;
+    }
+    try {
+      let url = input instanceof Request ? input.url : String(input);
+      return (
+        new URL(url).origin === new URL(active.profile.realmServerUrl).origin
+      );
+    } catch {
+      return false;
+    }
+  }
+
   // An OAuth profile has no per-realm tokens to find a realm by. The realm
   // is the longest one in its workspace list that `url` starts with; failing
   // that, the longest path prefix of `url` that answers as a realm
@@ -1107,6 +1127,11 @@ export class ProfileManager implements RealmAuthenticator {
     } catch {
       // The list couldn't be read; the realms themselves can still answer.
     }
+    // Only the realm server's realms are asked: elsewhere the token isn't
+    // sent, so nothing there would answer as one of this profile's realms.
+    if (!this.isRealmServerOrigin(target.href)) {
+      return undefined;
+    }
     let segments = target.pathname.split('/').filter(Boolean);
     for (let depth = segments.length; depth > 0; depth--) {
       let prefix = `${target.origin}/${segments.slice(0, depth).join('/')}/`;
@@ -1124,6 +1149,8 @@ export class ProfileManager implements RealmAuthenticator {
     return undefined;
   }
 
+  // A realm's own token. An OAuth profile has none: its access token reaches
+  // every realm itself.
   async getRealmTokenForUrl(url: string): Promise<string | undefined> {
     if (this.getActiveProfile()?.profile.oauth) {
       return undefined;
