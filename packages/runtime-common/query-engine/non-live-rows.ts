@@ -14,12 +14,12 @@
 // which the planner needs to read them. Postgres only.
 
 import {
-  param,
   tableValuedFunctionsPlaceholder,
   type CardExpression,
   type Expression,
 } from '../expression.ts';
 import { LIVE_CARD } from '../value-store.ts';
+import { realmIs } from '../realm-union.ts';
 import { storeFacetKeysCte, type StoreFacetSet } from './store-facets.ts';
 
 // An instance row with an error (`boxel_index_non_live_rows_idx`). An
@@ -37,42 +37,43 @@ const nonLiveRow = (alias: string) =>
 const instanceRenderError = (alias: string) =>
   `${alias}.type = 'instance' AND ${alias}.error_doc IS NOT NULL`;
 
-// Whether `realm` holds any row that may not be a live card: two index-only
-// reads.
-export function realmHoldsNonLiveRows(realm: string): Expression {
+// Whether the search's realms (`realmURL`, a realm or a union of them) hold
+// any row that may not be a live card: two index-only reads.
+export function realmHoldsNonLiveRows(realmURL: URL): Expression {
   return [
-    'SELECT EXISTS (SELECT 1 FROM boxel_index AS e WHERE e.realm_url =',
-    param(realm),
-    `AND ${nonLiveRow('e')}) OR EXISTS (SELECT 1 FROM prerendered_html AS p WHERE p.realm_url =`,
-    param(realm),
+    'SELECT EXISTS (SELECT 1 FROM boxel_index AS e WHERE',
+    ...realmIs('e.realm_url', realmURL),
+    `AND ${nonLiveRow('e')}) OR EXISTS (SELECT 1 FROM prerendered_html AS p WHERE`,
+    ...realmIs('p.realm_url', realmURL),
     `AND ${instanceRenderError('p')}) AS held`,
   ];
 }
 
-// A condition on `boxel_index AS i` that keeps only `realm`'s rows that are
-// not live cards, read through the two indexes rather than the realm's rows.
-export function nonLiveRowsOf(realm: string): CardExpression {
+// A condition on `boxel_index AS i` that keeps only the search's realms'
+// rows that are not live cards, read through the two indexes rather than
+// the realms' rows.
+export function nonLiveRowsOf(realmURL: URL): CardExpression {
   return [
-    "(i.url, i.type) IN (SELECT e.url, 'instance' FROM boxel_index AS e WHERE e.realm_url =",
-    param(realm),
-    `AND ${nonLiveRow('e')} UNION SELECT p.url, 'instance' FROM prerendered_html AS p WHERE p.realm_url =`,
-    param(realm),
+    "(i.url, i.type) IN (SELECT e.url, 'instance' FROM boxel_index AS e WHERE",
+    ...realmIs('e.realm_url', realmURL),
+    `AND ${nonLiveRow('e')} UNION SELECT p.url, 'instance' FROM prerendered_html AS p WHERE`,
+    ...realmIs('p.realm_url', realmURL),
     `AND ${instanceRenderError('p')}) AND NOT (${LIVE_CARD})`,
   ];
 }
 
 // A counts-only search's match set `m` (`WITH` included), in the columns a
 // page's match set has (`url`, `type`, `__realm_url`, `__type_key`): the
-// live matches the value store names (`set`) and `realm`'s non-live rows
+// live matches the value store names (`set`) and the realms' non-live rows
 // that `condition`, the page's own condition, admits. The two are disjoint,
 // and together they are the rows that condition admits, read without the
-// realm's other index rows. A facet counts a live card's values from the
+// realms' other index rows. A facet counts a live card's values from the
 // store and a non-live row's from its index row's search doc, its last good
 // values, as it does over a page's own match set.
 export function liveAndNonLiveMatches(
   set: StoreFacetSet,
   condition: CardExpression,
-  realm: string,
+  realmURL: URL,
 ): CardExpression {
   return [
     'WITH',
@@ -85,7 +86,34 @@ export function liveAndNonLiveMatches(
     'WHERE',
     ...condition,
     'AND',
-    ...nonLiveRowsOf(realm),
+    ...nonLiveRowsOf(realmURL),
     ')',
   ];
+}
+
+// The non-live rows `condition` admits, each once, with its search doc, in
+// the columns a facet's search-doc arm reads (`kn`, below every store card's
+// id, `card_id`, `type_key`, `path_ids`, `search_doc`); their count; and
+// their count by realm (`realm_url` -> count, as JSON). `condition` holds
+// no list read as a table (the caller checks), so a row is read once.
+export function nonLiveFacetRows(realmURL: URL, condition: CardExpression) {
+  let rows: CardExpression = [
+    'SELECT i.url, i.realm_url, i.types ->> 0 AS type_key, i.search_doc FROM boxel_index AS i WHERE',
+    ...condition,
+    'AND',
+    ...nonLiveRowsOf(realmURL),
+  ];
+  return {
+    docs: [
+      '(SELECT (-ROW_NUMBER() OVER ())::bigint AS kn, NULL::integer AS card_id, x.type_key, NULL::integer[] AS path_ids, x.search_doc FROM (',
+      ...rows,
+      ') AS x)',
+    ] as CardExpression,
+    count: ['(SELECT COUNT(*) FROM (', ...rows, ') AS x)'] as CardExpression,
+    byRealm: [
+      "(SELECT COALESCE(json_object_agg(y.realm_url, y.n), '{}'::json) FROM (SELECT x.realm_url, COUNT(*) AS n FROM (",
+      ...rows,
+      ') AS x GROUP BY x.realm_url) AS y)',
+    ] as CardExpression,
+  };
 }

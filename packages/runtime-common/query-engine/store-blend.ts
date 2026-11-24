@@ -69,7 +69,7 @@ import { tableFromOpts } from './index-sql.ts';
 import { getField } from './filter-paths.ts';
 import { isReferenceFilterField } from '../query-v2/query-values.ts';
 import { formatQuery as booleanQuery } from '../serializers/boolean.ts';
-import { isRealmUnion } from '../realm-union.ts';
+import { isRealmUnion, realmIs } from '../realm-union.ts';
 import { UnionTotals } from './union-totals.ts';
 import type { StoreKeep } from './store-narrow.ts';
 import {
@@ -86,8 +86,9 @@ type Leaf =
   | {
       kind: 'value';
       path: string;
-      op: 'not-eq' | 'not-in' | 'in' | 'eq';
+      op: 'not-eq' | 'not-in' | 'in' | 'eq' | 'range';
       values: (string | boolean)[];
+      range?: Record<string, number>;
     };
 
 type Signal =
@@ -582,7 +583,6 @@ export abstract class StoreBlend extends UnionTotals {
   }): Promise<StoreFacetSet | undefined> {
     if (
       !this.dialect.valueStore ||
-      isRealmUnion(realmURL) ||
       tableFromOpts(opts) !== 'boxel_index' ||
       entryType === 'file' ||
       opts.includeErrors ||
@@ -593,7 +593,8 @@ export abstract class StoreBlend extends UnionTotals {
     ) {
       return undefined;
     }
-    let realm = realmURL.href;
+    // A union of realms on one database (`RealmUnion`) reads every realm's
+    // cards: realm ids, and the types of each.
     let compiled = await this.#storeFilter(
       filter,
       undefined,
@@ -625,18 +626,39 @@ export abstract class StoreBlend extends UnionTotals {
     if (anchorDefinition?.type !== 'card-def') {
       return undefined;
     }
-    let prefixes = [
+    let prefixesOf = (paths: string[]) => [
       ...new Set([
         '',
-        ...[...values.map((l) => l.path), ...facetPaths].flatMap((p) => {
+        ...paths.flatMap((p) => {
           let segments = p.split('.');
           return segments.map((_, i) => segments.slice(0, i + 1).join('.'));
         }),
       ]),
     ];
+    // A marker at or above a path a test reads leaves the card's match
+    // undecided, so it sends the set back to the general read; one at or
+    // above a facet's path only means that facet reads that card's value
+    // from its search doc (`facetMarkers`, facets.ts).
+    let testPrefixes = values.length
+      ? prefixesOf(values.map((l) => l.path))
+      : [];
+    let facetPrefixes = facetPaths.length ? prefixesOf(facetPaths) : [];
+    let prefixes = [...new Set([...testPrefixes, ...facetPrefixes, ''])];
+    let markedAt = (paths: string[]): CardExpression =>
+      paths.length
+        ? [
+            'EXISTS (SELECT 1 FROM boxel_index_values AS m WHERE m.realm_id IN (SELECT r.id FROM boxel_index_value_realms AS r WHERE',
+            ...realmIs('r.realm_url', realmURL),
+            ') AND m.type_id IN (SELECT q.id FROM (',
+            ...typeSet(baseKeys, true),
+            ") AS q) AND m.kind = 'm' AND m.path_id IN (SELECT p.id FROM boxel_index_value_paths AS p WHERE p.path IN (",
+            ...separatedByCommas(paths.map((p) => [param(p)])),
+            ')))',
+          ]
+        : ['FALSE'];
     let typeSet = (keySets: string[][], every: boolean): CardExpression => [
-      'SELECT t.id, t.type FROM boxel_index_value_types AS t WHERE t.realm_url =',
-      param(realm),
+      'SELECT t.id, t.type FROM boxel_index_value_types AS t WHERE',
+      ...realmIs('t.realm_url', realmURL),
       'AND (',
       ...keySets.flatMap((keys, n) => [
         ...(n > 0 ? [every ? 'AND' : 'OR'] : []),
@@ -657,9 +679,9 @@ export abstract class StoreBlend extends UnionTotals {
       : [];
     let [prep] = (await this.queryCards(
       [
-        'SELECT (SELECT r.id FROM boxel_index_value_realms AS r WHERE r.realm_url =',
-        param(realm),
-        ') AS realm,',
+        'SELECT (SELECT json_object_agg(r.id, r.realm_url) FROM boxel_index_value_realms AS r WHERE',
+        ...realmIs('r.realm_url', realmURL),
+        ') AS realms,',
         "(SELECT COALESCE(json_object_agg(q.id, q.type), '{}'::json) FROM (",
         ...typeSet(baseKeys, true),
         ') AS q WHERE TRUE',
@@ -668,18 +690,15 @@ export abstract class StoreBlend extends UnionTotals {
         "(SELECT COALESCE(json_object_agg(p.path, p.id), '{}'::json) FROM boxel_index_value_paths AS p WHERE p.path IN (",
         ...separatedByCommas(prefixes.map((p) => [param(p)])),
         ')) AS paths,',
-        'EXISTS (SELECT 1 FROM boxel_index_values AS m WHERE m.realm_id = (SELECT r.id FROM boxel_index_value_realms AS r WHERE r.realm_url =',
-        param(realm),
-        ') AND m.type_id IN (SELECT q.id FROM (',
-        ...typeSet(baseKeys, true),
-        ") AS q) AND m.kind = 'm' AND m.path_id IN (SELECT p.id FROM boxel_index_value_paths AS p WHERE p.path IN (",
-        ...separatedByCommas(prefixes.map((p) => [param(p)])),
-        '))) AS blocked',
+        ...markedAt(testPrefixes),
+        'AS blocked,',
+        ...markedAt(facetPrefixes),
+        'AS facet_markers',
       ],
       opts.timings,
       opts,
     )) as Record<string, unknown>[];
-    if (prep?.realm == null || prep.blocked) {
+    if (prep?.realms == null || prep.blocked) {
       return undefined;
     }
     let pathId = new Map(
@@ -708,15 +727,34 @@ export abstract class StoreBlend extends UnionTotals {
       ),
     );
     return {
-      realmId: Number(prep.realm),
+      realmIds: Object.keys(prep.realms as Record<string, string>)
+        .map(Number)
+        .sort((a, b) => a - b),
+      realmURLs: new Map(
+        Object.entries(prep.realms as Record<string, string>).map(
+          ([id, url]) => [Number(id), String(url)],
+        ),
+      ),
       typeIds: [...typeKeys.keys()].sort((a, b) => a - b),
       typeKeys,
       rootId,
+      facetMarkers: Boolean(prep.facet_markers),
+      facetPathIds: new Map(
+        facetPaths.flatMap((p): [string, number][] => {
+          let id = pathId.get(p);
+          return id === undefined ? [] : [[p, id]];
+        }),
+      ),
+      facetPrefixIds: facetPrefixes.flatMap((p) => {
+        let id = pathId.get(p);
+        return id === undefined ? [] : [id];
+      }),
       // A path the dictionary does not hold holds no card's value.
       tests: values.map((l) => ({
         pathId: pathId.get(l.path) ?? -1,
         op: l.op,
         values: l.values,
+        ...(l.range ? { range: l.range } : {}),
       })),
     };
   }
@@ -962,6 +1000,52 @@ export abstract class StoreBlend extends UnionTotals {
       }
       let inner = await this.#storeFilter(f.not, scope, true, perRow);
       return inner ? [...anchored, ...inner] : undefined;
+    }
+    // A positive range on a number field, for a facet's match set: the
+    // cards with a number in range there, or text that reads as one
+    // (store-facets.ts).
+    if (op === 'range') {
+      let fields = f.range as Record<string, unknown> | undefined;
+      if (
+        negated ||
+        !positive ||
+        !fields ||
+        typeof fields !== 'object' ||
+        !scope
+      ) {
+        return undefined;
+      }
+      let entries = Object.entries(fields);
+      if (entries.length !== 1) {
+        return undefined;
+      }
+      let [path, raw] = entries[0];
+      let bounds = raw as Record<string, unknown> | undefined;
+      if (
+        !bounds ||
+        typeof bounds !== 'object' ||
+        Object.keys(bounds).length === 0 ||
+        Object.entries(bounds).some(
+          ([b, v]) =>
+            !['gt', 'gte', 'lt', 'lte'].includes(b) ||
+            typeof v !== 'number' ||
+            !Number.isFinite(v),
+        ) ||
+        isReferenceFilterField(path) ||
+        (await this.#fieldKind(scope, path)) !== 'number'
+      ) {
+        return undefined;
+      }
+      return [
+        ...anchored,
+        {
+          kind: 'value',
+          path,
+          op: 'range',
+          values: [],
+          range: bounds as Record<string, number>,
+        },
+      ];
     }
     if (op === 'eq' || op === 'in') {
       let fields = f[op] as Record<string, unknown> | undefined;
