@@ -15,6 +15,7 @@ scope:
   - packages/realm-server/routes.ts
   - packages/realm-server/lib/index-html-injection.ts
   - packages/runtime-common/index-runner/prerender-html-visit.ts
+  - packages/runtime-common/index-writer.ts
   - packages/base/default-templates/head.gts
 ---
 
@@ -130,11 +131,13 @@ against the realm's URL. Everything else stored with the HTML, card ids and
 dependencies among it, MUST keep the realm's URL (§1.5). When a realm gets
 its first host URL, when its canonical host URL changes, and when its last
 host URL is removed, the realm server MUST render the realm's HTML again.
-Until that render finishes, a response MUST translate from the URL the stored
-HTML was rendered against as well, so that every page stays right while the
-render runs. A response on the realm's own URL MUST name the realm's URL
-wherever stored HTML names the canonical host URL, so that the app links into
-the realm, not to its site.
+The realm server MUST record, with the stored HTML, the URL it was rendered
+against, so that a server that serves the HTML knows that URL after a restart,
+and for HTML that a failed render kept. A response MUST translate from that
+URL as well, so that every page stays right while the render runs. A response
+on the realm's own URL MUST name the realm's URL wherever stored HTML names
+the canonical host URL, except as §1.4 says, so that the app links into the
+realm, not to its site.
 
 ## 2. Rationale
 
