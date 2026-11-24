@@ -33,7 +33,7 @@
 //   select-excludes-fields select beside fields (a table or entries, not both)
 export class InvalidQueryError extends Error {
   code: string;
-  constructor(message: string, code = 'invalid-value') {
+  constructor(message: string, code: string) {
     super(message);
     this.name = 'InvalidQueryError';
     this.code = code;
