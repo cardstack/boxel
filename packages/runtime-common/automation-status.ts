@@ -20,6 +20,7 @@ import {
 } from './automation-schedule.ts';
 import {
   getAutomation,
+  lastDeclaredLabels,
   readAutomationFailures,
   type AutomationFailure,
   type AutomationFailures,
@@ -430,22 +431,18 @@ export const RUNS_LEFT_BUDGET_MS = 250;
 // from the row. The next run and whether a trigger is spent are computed at
 // `now`, as the tick computes them, so a slot that came due and isn't
 // enqueued yet reads as due now. Runs left are counted without `now`, so such
-// a slot still counts as left. Without a declaration, each trigger the row
-// has counted that the card declared when it last read: a label an edit
-// removed stays in the row, so the label keeps its count if it comes back,
-// and is left out here.
+// a slot still counts as left. Without a declaration, each trigger the card
+// declared when it last read (`lastDeclaredLabels`), with its run count.
 function triggerStatuses(
   row: AutomationRow,
   declaration: AutomationDeclaration | undefined,
   now: number,
 ): AutomationTriggerStatus[] {
   if (!declaration) {
-    return Object.entries(row.triggerRuns)
-      .filter(([, state]) => state.declared !== false)
-      .map(([label, state]) => ({
-        label,
-        runs: runsOf(state),
-      }));
+    return lastDeclaredLabels(row.triggerRuns).map((label) => ({
+      label,
+      runs: runsOf(row.triggerRuns[label]),
+    }));
   }
   let schedule = computeAutomationSchedule({
     triggers: declaration.triggers,

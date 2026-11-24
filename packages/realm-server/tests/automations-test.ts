@@ -2020,6 +2020,20 @@ module(basename(import.meta.filename), function () {
           { daily: true, hourly: false },
           'an edit while paused that drops the trigger marks it not declared',
         );
+
+        let addedWhilePaused = await sync(
+          indexed({
+            triggers: [
+              cronTrigger(),
+              cronTrigger({ label: 'weekly', expression: '0 9 * * 1' }),
+            ],
+          }),
+        );
+        assert.deepEqual(
+          addedWhilePaused?.automation.triggerRuns.weekly,
+          { runs: 0, live: false, declared: true },
+          'an edit while paused that adds a trigger records the trigger as declared, with no cursor and not live',
+        );
       });
 
       test('a trigger the card adds starts at the edit', async function (assert) {

@@ -1889,6 +1889,43 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
+      test('an automation whose card the index lacks leaves out a trigger an earlier edit removed', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await testRealm.write(
+          'automations/nightly.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                ...attributes,
+                triggers: attributes.triggers.filter(
+                  (t: Record<string, unknown>) => t.label !== 'hourly',
+                ),
+              },
+              relationships: {
+                script: { links: { self: '../scripts/nightly-import.js' } },
+              },
+              meta: { adoptsFrom: automationRef },
+            },
+          }),
+        );
+        await query(dbAdapter, [
+          `UPDATE boxel_index SET is_deleted = TRUE WHERE url =`,
+          param(`${automationURL()}.json`),
+          `OR file_alias =`,
+          param(automationURL()),
+        ]);
+        let [entry] = await entries();
+        assert.deepEqual(
+          entry.attributes.triggers
+            .map(({ label }: { label: string }) => label)
+            .sort(),
+          ['launch', 'nightly', 'push'],
+          'the list names the triggers of the last edit the card read in',
+        );
+      });
+
       test('a reader is listed nothing, and an anonymous caller is refused', async function (assert) {
         await writeAutomation();
         await switchOn();
