@@ -196,7 +196,9 @@ function many(query: Query, name: string): string[] {
 // The parameters a request may carry: the ones Boxel reads, and `prompt`,
 // whose `login` and `consent` change nothing, since consent shows on every
 // flow and sign-in happens on the secure origin either way, so a client that
-// sends one isn't refused for it.
+// sends one isn't refused for it. The confirmation code is one Boxel reads:
+// the check on it below says which clients must send it and refuses it from
+// every other.
 // The library refuses some others itself, such as a request object, a
 // response mode or an ID token hint, and others it reads, such as `max_age`
 // and `nonce`, belong to OpenID, which the provider doesn't serve.
@@ -210,6 +212,7 @@ const ACCEPTED_PARAMETERS: ReadonlySet<string> = new Set([
   'code_challenge',
   'code_challenge_method',
   'prompt',
+  CONFIRMATION_CODE_PARAM,
 ]);
 
 // The prompts the library supports besides `none`, which is refused on its

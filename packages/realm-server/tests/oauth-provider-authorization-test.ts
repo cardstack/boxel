@@ -534,6 +534,8 @@ module(basename(import.meta.filename), function () {
         // Codex adds a resource of its own beside the one its OAuth library
         // names, when it is configured with one.
         ['Codex', validParams(clientId, { resource: [MCP, MCP] })],
+        // boxel-cli, pre-registered, sends a confirmation code.
+        ['boxel-cli', boxelCLIParams()],
       ];
       for (let [name, params] of cases) {
         let response = await server.authorize(params);
