@@ -36,6 +36,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A newsroom realm nobody may read without signing in, governed by a policy
 // card in an Org realm. Its policy opens published articles to callers who
@@ -147,6 +148,7 @@ const DRAFT = `${NEWSROOM}articles/draft`;
 const MISSING = `${NEWSROOM}articles/nowhere`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let newsroom: Realm;
   let library: Realm;
   let org: Realm;

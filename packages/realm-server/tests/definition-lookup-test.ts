@@ -4,10 +4,16 @@ import { basename } from 'path';
 import {
   CachingDefinitionLookup,
   IndexQueryEngine,
+  SearchBoundError,
+  buildSearchErrorBody,
+  isDefinitionsUnavailableError,
   isTransientDefinitionLookupError,
   internalKeyFor,
   logger,
   mintRealmLoaderEpoch,
+  resetSearchBoundsForTests,
+  runWithSearchTimeBudget,
+  setSearchBoundsForTests,
   trimExecutableExtension,
   type DefinitionLookup,
   type ErrorEntry,
@@ -2988,6 +2994,18 @@ module(basename(import.meta.filename), function () {
         opts as any,
         { kind: 'dataOnly' } as any,
       );
+    let wrap = (
+      lookupDefinition: (inner: DefinitionLookup, ref: any) => Promise<any>,
+    ): DefinitionLookup =>
+      new Proxy(definitionLookup, {
+        get(target, prop) {
+          if (prop === 'lookupDefinition') {
+            return (ref: any) => lookupDefinition(target, ref);
+          }
+          let v = Reflect.get(target, prop, target);
+          return typeof v === 'function' ? v.bind(target) : v;
+        },
+      }) as DefinitionLookup;
 
     hooks.beforeEach(async function () {
       prepareTestDB();
@@ -3104,6 +3122,164 @@ module(basename(import.meta.filename), function () {
       let result = await search(definitionLookup);
       assert.deepEqual(result.results, [], 'answers once the row ages out');
       assert.ok(prerenderCalls >= 2, 'the module was prerendered again');
+    });
+
+    test('a rejected definition lookup is a 503 definitions-unavailable refusal, and the next search re-attempts', async function (assert) {
+      let calls = 0;
+      // fails until it is told the module has loaded, for the warm-up and the
+      // search's own lookup alike
+      let failing = true;
+      let lookup = wrap(async (inner, ref) => {
+        calls++;
+        if (failing) {
+          throw new Error(
+            'Prerender request to http://prerender-manager/prerender-module aborted after 120000ms',
+          );
+        }
+        return await inner.lookupDefinition(ref);
+      });
+      let error: any;
+      try {
+        await search(lookup);
+      } catch (e) {
+        error = e;
+      }
+      assert.ok(
+        isDefinitionsUnavailableError(error),
+        'refused as definitions-unavailable',
+      );
+      assert.strictEqual(error?.status, 503, 'status 503');
+      assert.strictEqual(error?.code, 'definitions-unavailable', 'code');
+      assert.ok(error?.retryAfterSeconds > 0, 'carries a Retry-After');
+      let body = buildSearchErrorBody(error.message, error.status, error.code);
+      assert.strictEqual(body.errors[0].code, 'definitions-unavailable');
+      failing = false;
+      let callsAfterFailure = calls;
+      let result = await search(lookup);
+      assert.ok(
+        calls > callsAfterFailure,
+        'the next search looks the definition up again',
+      );
+      assert.deepEqual(result.results, [], 'and answers');
+    });
+
+    test('a definition lookup slower than the search bound gives up at the bound', async function (assert) {
+      let hang = true;
+      let lookup = wrap(async (inner, ref) => {
+        if (hang) {
+          return await new Promise(() => {});
+        }
+        return await inner.lookupDefinition(ref);
+      });
+      let controller = new AbortController();
+      let bound = new SearchBoundError(
+        408,
+        'this realm did not answer within the request time limit',
+      );
+      let started = Date.now();
+      setTimeout(() => controller.abort(bound), 200);
+      await assert.rejects(
+        search(lookup, { signal: controller.signal }),
+        (e: any) => e === bound,
+        'the search ends with the bound, not the lookup',
+      );
+      assert.ok(Date.now() - started < 5_000, 'promptly');
+      assert.strictEqual(
+        adapter.connectionStats.inUse,
+        0,
+        'and holds no connection',
+      );
+      hang = false;
+      let result = await search(lookup);
+      assert.deepEqual(
+        result.results,
+        [],
+        'nothing was kept: the next search answers',
+      );
+    });
+
+    test('a query refused by validation is refused for that, whatever the definition lookup does', async function (assert) {
+      let lookup = wrap(async () => {
+        throw new Error('lookupDefinition should not be needed to refuse this');
+      });
+      await assert.rejects(
+        new IndexQueryEngine(adapter, lookup, virtualNetwork).search(
+          new URL(realmURL),
+          {
+            filter: {
+              on: personRef(),
+              eq: { name: 'Maple' },
+              contains: { name: 'Map' },
+            },
+          } as any,
+          {} as any,
+          { kind: 'dataOnly' } as any,
+        ),
+        /a filter may use only one operator/,
+        'the validation refusal, not definitions-unavailable',
+      );
+    });
+
+    test('no connection is checked out while a definition lookup is pending', async function (assert) {
+      let release!: () => void;
+      let gate = new Promise<void>((r) => (release = r));
+      let pending = 0;
+      let lookup = wrap(async (inner, ref) => {
+        pending++;
+        await gate;
+        pending--;
+        return await inner.lookupDefinition(ref);
+      });
+      let running = search(lookup);
+      for (let i = 0; i < 200 && pending === 0; i++) {
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      // time for any statement the search would run alongside the lookup
+      await new Promise((r) => setTimeout(r, 100));
+      assert.ok(pending > 0, 'the lookup is pending');
+      let { inUse, holds } = adapter.connectionStats;
+      assert.strictEqual(inUse, 0, 'no connection checked out');
+      assert.strictEqual(holds, 0, 'no connection held');
+      release();
+      let result = await running;
+      assert.deepEqual(result.results, []);
+    });
+
+    test('a warm-up lookup that never completes is refused as definitions-unavailable at the bound', async function (assert) {
+      setSearchBoundsForTests({ definitionWaitMs: 300 });
+      try {
+        let lookup = wrap(async () => await new Promise(() => {}));
+        let started = Date.now();
+        let error: any;
+        try {
+          await runWithSearchTimeBudget(
+            (signal) => search(lookup, { signal }),
+            20_000,
+          );
+        } catch (e) {
+          error = e;
+        }
+        assert.ok(isDefinitionsUnavailableError(error), `refused: ${error}`);
+        assert.ok(Date.now() - started < 5_000, 'at the bound');
+        assert.strictEqual(adapter.connectionStats.inUse, 0);
+      } finally {
+        resetSearchBoundsForTests();
+      }
+    });
+
+    test('a search whose definitions are cached reads on one snapshot', async function (assert) {
+      await search(definitionLookup);
+      let before = adapter.readSnapshotRestarts;
+      let result = await runWithSearchTimeBudget(
+        (signal) => search(definitionLookup, { signal }),
+        20_000,
+      );
+      assert.deepEqual(result.results, []);
+      assert.strictEqual(
+        adapter.readSnapshotRestarts,
+        before,
+        'the snapshot was not reopened',
+      );
     });
   });
 

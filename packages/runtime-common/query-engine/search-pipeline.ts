@@ -110,6 +110,7 @@ import {
   withApproximations,
 } from './sqlite-approximations.ts';
 import stringify from 'safe-stable-stringify';
+import { callerFilterUnder } from './store-grant.ts';
 
 // `filter` and a policy's `grants` as one conjunction, for a search whose
 // statement tests both. A policy-scoped search carries its grants twice: in
@@ -947,19 +948,28 @@ export abstract class SearchPipeline extends StoreBlend {
       // (`NearContext#typeCount`), its total is counted as before. The
       // total of a page over a near sort's candidates is the count of
       // either, and of a filter whose one conjunct is a type
-      // (`{ every: [{ on }] }`). A caller a realm policy scopes never reads
-      // it (ADR 006).
-      let wholeType =
+      // (`{ every: [{ on }] }`). A caller a realm policy scopes reads it only
+      // where the store carries the grant (store-grant.ts): the count of the
+      // caller's own filter's type, among the types the grant admits.
+      let countCandidate =
+        filter && opts.grantFilter
+          ? callerFilterUnder(filter, opts.grantFilter)
+          : filter;
+      let countScope =
         this.dialect.valueStore &&
         !isRealmUnion(realmURL) &&
         tableFromOpts(opts) === 'boxel_index' &&
         entryType !== 'file' &&
         !opts.includeErrors &&
         filter &&
-        !opts.grantFilter &&
+        countCandidate &&
+        wholeTypeOf(countCandidate) &&
         !opts.cardUrls?.length
-          ? wholeTypeOf(filter)
+          ? await this.storeScope(filter, realmURL, opts)
           : undefined;
+      let countFilter = countScope?.filter;
+      let countGrant = countScope?.grant;
+      let wholeType = countFilter ? wholeTypeOf(countFilter) : undefined;
       if (wholeType) {
         // Only cards are in the store: a file type is counted from the index.
         let definition = await this.getDefinition(wholeType).catch(
@@ -969,7 +979,7 @@ export abstract class SearchPipeline extends StoreBlend {
           wholeType = undefined;
         }
       }
-      let oneType = wholeType && filter && onlyTypeOf(filter);
+      let oneType = wholeType && countFilter && onlyTypeOf(countFilter);
       let wholeTypeCount: (() => Promise<number>) | undefined;
       if (wholeType) {
         let type = wholeType;
@@ -977,7 +987,11 @@ export abstract class SearchPipeline extends StoreBlend {
         wholeTypeCount = () =>
           (counted ??= (async () => {
             let [row] = await this.queryCards(
-              storedTypeCount(realmURL.href, await this.typeKeysFor(type)),
+              storedTypeCount(
+                realmURL.href,
+                await this.typeKeysFor(type),
+                countGrant,
+              ),
               opts.timings,
               opts,
             );
@@ -985,8 +999,11 @@ export abstract class SearchPipeline extends StoreBlend {
           })());
       }
       let typeCount = oneType ? wholeTypeCount : undefined;
-      let storedCount = filter && 'type' in filter ? typeCount : undefined;
-      nearCtx.typeCount = typeCount;
+      let storedCount =
+        countFilter && 'type' in countFilter ? typeCount : undefined;
+      // A near plan under a grant counts as it did before the store carried
+      // one: the grant's reads of near candidates (`countVisible`) decide it.
+      nearCtx.typeCount = countGrant ? undefined : typeCount;
       let collapsed = collapseBy(collapse);
       let collapseOn = collapsed?.on ?? filterAnchor(filter);
       if (collapsed && !collapseOn) {

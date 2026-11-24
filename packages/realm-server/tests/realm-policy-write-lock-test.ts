@@ -26,6 +26,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A write the realm's policy grants on a predicate is judged against the state
 // it is about to change, and only the write lock holds that state still. So the
@@ -193,6 +194,7 @@ const ROOM_207 = `${EDUCATION}classrooms/room-207`;
 const NOTICE = `${EDUCATION}bulletins/notice`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let educationAdapter: RealmAdapter;
   let request: SuperTest<Test>;

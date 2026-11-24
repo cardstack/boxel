@@ -36,6 +36,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // Realms nobody may read without signing in, governed by policy cards in an
 // Org realm. The Newsroom's policy opens searches over its published articles
@@ -269,6 +270,7 @@ function forumIds(name: ForumType, ...cards: string[]) {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let newsroom: Realm;
   let gazette: Realm;
   let library: Realm;

@@ -31,6 +31,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // What becomes of a policy when part of it, or all of it, does not compile.
 //
@@ -158,6 +159,7 @@ const ROOM_305 = `${EDUCATION}classrooms/room-305`;
 const PART_OF_TEACHER = `${TEACHER}.org`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let request: SuperTest<Test>;

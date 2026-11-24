@@ -37,6 +37,7 @@ import {
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { policyWarningsDuring } from './helpers/policy-log.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // The worked example's topology. The Education realm holds the cards a policy
 // governs, and its policy card lives in an Org realm nobody the Education
@@ -265,6 +266,7 @@ const BULLETIN_1 = `${EDUCATION}bulletins/b1`;
 const NOTE = `${EDUCATION}note`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let request: SuperTest<Test>;

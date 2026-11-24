@@ -26,6 +26,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // What a realm's config card reports of the policy its pointer names: whether
 // it is in force as the realm compiles it, and when it is not, the problem that
@@ -91,6 +92,7 @@ function envelope(...operations: unknown[]) {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let virtualNetwork: VirtualNetwork;

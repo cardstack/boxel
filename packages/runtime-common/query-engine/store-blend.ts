@@ -7,8 +7,9 @@
 // Guarantees: docs/search.md ("Blended ranking (`blend`)").
 //
 // The rule. It applies to a paged search of one realm's promoted index,
-// sorted by a single blend, with no facets, `explain`, grants, card list,
-// errors or staged rows, when the store can decide every part of it:
+// sorted by a single blend, with no facets, `explain`, card list, errors or
+// staged rows, and no grant other than one the store carries
+// (store-grant.ts), when the store can decide every part of it:
 // - the filter is a conjunction of type tests (either way round) and, under
 //   a `not`, an `eq` or `in` on a text or boolean field (one value, read as
 //   text), which is what the general read compiles a negated test to;
@@ -39,6 +40,8 @@
 // whose value the store holds only as a marker (the value is in the search
 // doc) cannot be read here: when any card of the walked types has a marker
 // at or above a path the search reads, the narrow read does not apply.
+
+import stringify from 'safe-stable-stringify';
 
 import {
   type CardExpression,
@@ -78,6 +81,12 @@ import {
   storedComparisonSet,
 } from './store-compare.ts';
 import type { StoreFacetSet } from './store-facets.ts';
+import {
+  type StoreGrantKeys,
+  callerFilterUnder,
+  grantReachesExcludedCards,
+  storeGrantOf,
+} from './store-grant.ts';
 
 // A test the store decides for a card: a type test (the card's own type's
 // chain holds one of `keys`), or a test of the text at `path`.
@@ -100,6 +109,10 @@ export interface StoreBlendPage {
   keys: Record<string, unknown>[];
   total: number;
 }
+
+// Whether a carried grant's card exclusion reaches a card the store holds,
+// per read snapshot (`QueryOptions.reader`) and grant.
+const reachedMemo = new WeakMap<object, Map<string, Promise<boolean>>>();
 
 export abstract class StoreBlend extends UnionTotals {
   // The page's keys (url, type, the blend's score and, collapsed, the
@@ -136,7 +149,6 @@ export abstract class StoreBlend extends UnionTotals {
       entryType === 'file' ||
       opts.includeErrors ||
       opts.pendingStagingId !== undefined ||
-      opts.grantFilter ||
       opts.cardUrls?.length ||
       !filter ||
       !sort ||
@@ -146,11 +158,17 @@ export abstract class StoreBlend extends UnionTotals {
     ) {
       return undefined;
     }
+    let scope = await this.storeScope(filter, realmURL, opts);
+    if (!scope?.filter) {
+      return undefined;
+    }
+    filter = scope.filter;
     let realm = realmURL.href;
     let compiled = await this.#storeFilter(filter, undefined, false, false);
     if (!compiled) {
       return undefined;
     }
+    compiled.push(...this.#grantLeaves(scope.grant));
     let baseTypes = compiled.filter(
       (l): l is Extract<Leaf, { kind: 'type' }> =>
         l.kind === 'type' && !l.negated,
@@ -587,12 +605,16 @@ export abstract class StoreBlend extends UnionTotals {
       entryType === 'file' ||
       opts.includeErrors ||
       opts.pendingStagingId !== undefined ||
-      opts.grantFilter ||
       opts.cardUrls?.length ||
       !filter
     ) {
       return undefined;
     }
+    let scope = await this.storeScope(filter, realmURL, opts);
+    if (!scope?.filter) {
+      return undefined;
+    }
+    filter = scope.filter;
     // A union of realms on one database (`RealmUnion`) reads every realm's
     // cards: realm ids, and the types of each.
     let compiled = await this.#storeFilter(
@@ -605,6 +627,7 @@ export abstract class StoreBlend extends UnionTotals {
     if (!compiled) {
       return undefined;
     }
+    compiled.push(...this.#grantLeaves(scope.grant));
     let baseKeys = compiled.flatMap((l) =>
       l.kind === 'type' && !l.negated ? [l.keys] : [],
     );
@@ -853,7 +876,8 @@ export abstract class StoreBlend extends UnionTotals {
 
   // A comparison set of one whole card type, read from the value store
   // (store-compare.ts): when the search reads only the live cards of one
-  // realm's promoted index, with no grants, and each compared field and the
+  // realm's promoted index, with no grant other than one the store carries
+  // (store-grant.ts), and each compared field and the
   // group are primitive fields of the type, read through `contains` fields
   // only. Undefined, so the set is read the general way, otherwise, and when
   // a card holds a value the set reads only as a marker.
@@ -881,12 +905,15 @@ export abstract class StoreBlend extends UnionTotals {
       tableFromOpts(opts) !== 'boxel_index' ||
       entryType === 'file' ||
       opts.includeErrors ||
-      opts.grantFilter ||
       opts.pendingStagingId !== undefined
     ) {
       return undefined;
     }
-    let type = wholeCardType(filter);
+    let scope = await this.storeScope(filter, realmURL, opts);
+    if (!scope?.filter) {
+      return undefined;
+    }
+    let type = wholeCardType(scope.filter);
     if (!type || (await this.#definitionOf(type))?.type !== 'card-def') {
       return undefined;
     }
@@ -903,6 +930,7 @@ export abstract class StoreBlend extends UnionTotals {
         realm: realmURL.href,
         typeKeys: await this.typeKeysFor(type),
         paths: [...comparedPaths(fields, by)],
+        ...(scope.grant ? { grant: scope.grant } : {}),
       }),
       opts.timings,
       opts,
@@ -933,6 +961,86 @@ export abstract class StoreBlend extends UnionTotals {
       rows: rows.map(({ marked: _marked, total: _total, ...row }) => row),
       total: rows.length ? Number(rows[0].total) : 0,
     };
+  }
+
+  // The filter a value-store path reads, and what a realm policy's grants
+  // add to it (store-grant.ts). With no grant: the filter, and nothing.
+  // With a grant the store carries: the caller's own filter, and the
+  // grant's type tests (`grant`), which the path reads beside it. Undefined,
+  // so the path stands aside, for any other grant, for a union of realms,
+  // for a search told to read grants the general way
+  // (`grantsOnGeneralPath`), and where the grant's card exclusion could
+  // remove a card the store would return.
+  protected async storeScope(
+    filter: Filter | undefined,
+    realmURL: URL,
+    opts: QueryOptions,
+  ): Promise<
+    { filter: Filter | undefined; grant?: StoreGrantKeys } | undefined
+  > {
+    let grantFilter = opts.grantFilter;
+    if (!grantFilter) {
+      return { filter };
+    }
+    if (opts.grantsOnGeneralPath || isRealmUnion(realmURL)) {
+      return undefined;
+    }
+    let grant = storeGrantOf(grantFilter);
+    let caller = grant ? callerFilterUnder(filter, grantFilter) : undefined;
+    if (!grant || !caller) {
+      return undefined;
+    }
+    let keys: StoreGrantKeys = {
+      keys: [
+        ...new Set(
+          (
+            await Promise.all(grant.types.map((t) => this.typeKeysFor(t)))
+          ).flat(),
+        ),
+      ],
+      notKeys: await this.typeKeysFor(grant.excludedType),
+    };
+    // Asked once per read snapshot: the answer holds for the whole search.
+    let reader = opts.reader as object | undefined;
+    let memoKey = stringify([realmURL.href, keys, grant.excludedIds]);
+    let memo = reader ? reachedMemo.get(reader) : undefined;
+    let reached = memo?.get(memoKey);
+    if (!reached) {
+      reached = this.queryCards(
+        grantReachesExcludedCards({
+          realm: realmURL.href,
+          grant: keys,
+          excludedIds: grant.excludedIds,
+          index: tableFromOpts(opts),
+        }),
+        opts.timings,
+        opts,
+      ).then(([row]) => Boolean((row as Record<string, unknown>)?.reached));
+      if (reader) {
+        if (!memo) {
+          memo = new Map();
+          reachedMemo.set(reader, memo);
+        }
+        memo.set(memoKey, reached);
+      }
+    }
+    if (await reached) {
+      return undefined;
+    }
+    return { filter: caller, grant: keys };
+  }
+
+  // A carried grant's tests, as the store decides them: the card's type is
+  // one it admits, and not one it excludes.
+  #grantLeaves(grant: StoreGrantKeys | undefined): Leaf[] {
+    return grant
+      ? [
+          { kind: 'type', keys: grant.keys, negated: false },
+          ...(grant.notKeys.length
+            ? [{ kind: 'type' as const, keys: grant.notKeys, negated: true }]
+            : []),
+        ]
+      : [];
   }
 
   // The filter as tests the store decides, all of which must hold, or

@@ -29,6 +29,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // An archived realm with a policy. Its ACL lets nobody but its admin and a
 // reader in, and its policy, which lives in an Org realm, admits a teacher to
@@ -151,6 +152,7 @@ const ROOM_204 = `${EDUCATION}classrooms/room-204`;
 const BULLETIN_1 = `${EDUCATION}bulletins/b1`;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let request: SuperTest<Test>;

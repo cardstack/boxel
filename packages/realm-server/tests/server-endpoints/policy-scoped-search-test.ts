@@ -51,6 +51,7 @@ import {
 } from '../helpers/index.ts';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from '../helpers/policy-store-differential.ts';
 
 // ============================================================================
 // A search a realm's policy scopes: the grants a `query` policy compiled to
@@ -512,7 +513,12 @@ async function resolves(
   return resolved;
 }
 
-module(`server-endpoints/${basename(import.meta.filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
+  setupPolicyStoreDifferential(hooks, {
+    except: [
+      'a policy-scoped search reads the index as many times as an unscoped one',
+    ],
+  });
   module('composing a policy into a filter', function () {
     const ON = { module: rri(SCHEDULE.module), name: SCHEDULE.name };
     const CALLER: Filter = { on: ON, eq: { status: 'open' } };

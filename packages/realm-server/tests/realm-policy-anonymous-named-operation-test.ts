@@ -30,6 +30,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A civic realm nobody may read or write without signing in, governed by a
 // policy card in an Org realm. Its policy opens two operations its types
@@ -195,6 +196,7 @@ const POLICY = policyCard([
 ]);
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let civic: Realm;
   let board: Realm;
   let commons: Realm;

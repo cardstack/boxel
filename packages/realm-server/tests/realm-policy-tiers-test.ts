@@ -16,6 +16,7 @@ import { RealmPolicyCache } from '@cardstack/runtime-common/card-operations';
 import { classifiedFilterBuiltins } from '@cardstack/runtime-common/card-operations/policy-tiers';
 import { BXL_REGISTRY } from '@cardstack/bxl/bxl/registry/index';
 import { loadAllFormulaExtensions } from '@cardstack/bxl/bxl/bridge/lazy-formulas';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // Which tier a grant's predicate reads, decided when the policy compiles:
 // driven through the compiled-policy cache over an environment held in
@@ -338,7 +339,8 @@ const UNHELD: [string, RegExp][] = [
   ],
 ];
 
-module(basename(import.meta.filename), function () {
+module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   test('a predicate that reads the stored source compiles with no issue, and is judged against the stored source even where it is annotated', async function (assert) {
     for (let source of STORED) {
       for (let where of [source, { bxl: source, snapshot: true }]) {

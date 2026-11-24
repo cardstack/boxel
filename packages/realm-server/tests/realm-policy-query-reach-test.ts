@@ -32,6 +32,7 @@ import {
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // ============================================================================
 // How far a declared query's results reach into each row's link graph, and
@@ -226,6 +227,7 @@ interface EntryBody {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let education: Realm;
   let org: Realm;
   let request: SuperTest<Test>;

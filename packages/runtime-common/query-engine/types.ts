@@ -286,6 +286,11 @@ export type QueryOptions = WIPOptions & {
   // base condition beside the caller's filter, so no rewrite of the caller's
   // filter can drop them.
   grantFilter?: Filter;
+  // Every value-store path stands aside for a `grantFilter`, as they did
+  // before they carried a grant that admits every card of a type
+  // (store-grant.ts): the search reads the general way. For checking the two
+  // reads against each other.
+  grantsOnGeneralPath?: true;
   // Restrict the result set to this subset of URLs (SQL `i.url IN (...)`) —
   // instance rows by their `.json` file URL, file rows by their canonical URL.
   cardUrls?: string[];

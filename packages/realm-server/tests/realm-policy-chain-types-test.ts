@@ -31,6 +31,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { setupPolicyStoreDifferential } from './helpers/policy-store-differential.ts';
 
 // A policy judges an operation by every type the target's adoption chain
 // records, and the chain records each type by its key. Here the types a rule
@@ -151,6 +152,7 @@ function invoke(
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupPolicyStoreDifferential(hooks);
   let testRealm: Realm;
   let request: SuperTest<Test>;
   let server: Server;
