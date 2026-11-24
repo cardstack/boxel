@@ -1,0 +1,71 @@
+import QUnit from 'qunit';
+const { module, test } = QUnit;
+import { basename, join } from 'path';
+import { execFileSync } from 'child_process';
+import { existsSync, readFileSync } from 'fs';
+
+// Only the index writer writes a promoted search doc, because the columns and
+// side tables derived from it (`search_title`, the text vectors, facet values)
+// must change with it. SQL that assigns `search_doc` anywhere else would leave
+// them stale.
+
+const repoRoot = join(import.meta.dirname, '..', '..', '..');
+
+// Files allowed to issue SQL that writes `search_doc`, with why.
+const ALLOWED = new Map<string, string>([
+  [
+    'packages/runtime-common/index-writer.ts',
+    'the index writer: stages and promotes rows (its upserts name columns generically)',
+  ],
+  [
+    'packages/realm-test-harness/src/database.ts',
+    "rewrites a cloned test database's URLs in place, refs and markers included",
+  ],
+]);
+
+// A SQL assignment to the column: `search_doc =` followed by an SQL-looking
+// right-hand side (a function, a placeholder, EXCLUDED, a literal, a cast).
+// A JavaScript property write (`row.search_doc = …`) is not SQL, so a
+// preceding `.` excludes the match.
+const SQL_WRITE =
+  /(?<![.\w])search_doc\s*=\s*(?:[A-Za-z_]+\s*\(|\$\d|EXCLUDED\b|'|\()/;
+
+module(basename(import.meta.filename), function () {
+  test('only the index writer writes search_doc in SQL', function (assert) {
+    // The working tree as it stands: tracked files plus new ones not yet
+    // added (`--others`, minus ignored ones), less any deleted in the tree
+    // and not yet committed, which `ls-files` still lists.
+    let files = execFileSync(
+      'git',
+      [
+        'ls-files',
+        '--cached',
+        '--others',
+        '--exclude-standard',
+        '--',
+        'packages/*.ts',
+        'packages/*.gts',
+        'packages/*.js',
+      ],
+      { cwd: repoRoot, encoding: 'utf8' },
+    )
+      .split('\n')
+      .filter(
+        (f) =>
+          f &&
+          !f.includes('/tests/') &&
+          !f.includes('/migrations') &&
+          !f.includes('node_modules') &&
+          existsSync(join(repoRoot, f)),
+      );
+    let writers = files.filter((file) =>
+      SQL_WRITE.test(readFileSync(join(repoRoot, file), 'utf8')),
+    );
+    assert.deepEqual(
+      writers.filter((file) => !ALLOWED.has(file)),
+      [],
+      'no module outside the allow list assigns search_doc in SQL',
+    );
+    assert.ok(files.length > 100, `scanned ${files.length} files`);
+  });
+});
