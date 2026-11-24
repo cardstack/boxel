@@ -11,6 +11,11 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 
+import {
+  followableLinkURL,
+  isPlainClick,
+} from '@cardstack/host/lib/link-clicks';
+
 import type HostModeService from './host-mode-service';
 import type HostRouteLinksService from './host-route-links';
 import type StoreService from './store';
@@ -43,10 +48,9 @@ const LEAVE: Destination = { kind: 'leave' };
 // `<a href>`: the `hrefTo` helper's links, and links written by hand.
 //
 // A click is taken over only when the browser would have used it to load a
-// page of this site in this tab. Everything else keeps the browser's
-// default: a click another handler dealt with, a click with a modifier key
-// or another button, a link with `target` or `download`, a link outside the
-// site, a link with a query string or a fragment, and a link to a file.
+// page of this site in this tab (the shared filter in `lib/link-clicks`).
+// Everything else keeps the browser's default, and so does a link outside
+// the site and a link to a file.
 //
 // Where a link leads is worked out once for each address, when the link is
 // hovered or focused, or else when it is clicked:
@@ -154,14 +158,7 @@ export default class HostLinkNavigationService extends Service {
 
   // A keyboard activation of a link arrives as a click too.
   private onClick = (event: MouseEvent) => {
-    if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
+    if (!isPlainClick(event)) {
       return;
     }
     let link = this.siteLink(event);
@@ -203,36 +200,8 @@ export default class HostLinkNavigationService extends Service {
     if (!this.hostModeService.isActive) {
       return undefined;
     }
-    let origin = event.composedPath()[0] ?? event.target;
-    if (!(origin instanceof Element)) {
-      return undefined;
-    }
-    let anchor = origin.closest('a[href]');
-    if (
-      !(anchor instanceof HTMLAnchorElement) ||
-      anchor.hasAttribute('download') ||
-      anchor.isContentEditable
-    ) {
-      return undefined;
-    }
-    let target = anchor.target.toLowerCase();
-    if (target && target !== '_self') {
-      return undefined;
-    }
-    let url: URL;
-    try {
-      url = new URL(anchor.href);
-    } catch {
-      return undefined;
-    }
-    // A query string is left to the browser because the app's router keeps
-    // only its own query parameters, and a card may read the others. A
-    // fragment is left to it because the browser scrolls to it.
-    if (
-      (url.protocol !== 'https:' && url.protocol !== 'http:') ||
-      url.href.includes('?') ||
-      url.href.includes('#')
-    ) {
+    let url = followableLinkURL(event);
+    if (!url) {
       return undefined;
     }
     let path = this.hostModeService.sitePath(url);

@@ -11,8 +11,10 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
+import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
+import window from 'ember-window-mock';
 import { get } from 'lodash-es';
 
 import { cn, gt, MenuItem, MenuDivider } from '@cardstack/boxel-ui/helpers';
@@ -55,6 +57,7 @@ import {
   type Filter,
 } from '@cardstack/runtime-common';
 
+import { plainLinkClickURL } from '@cardstack/host/lib/link-clicks';
 import {
   detectStackItemTypeForTarget,
   takesFileDeleteRoute,
@@ -84,6 +87,7 @@ import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
 import type FileUploadService from '../../services/file-upload';
+import type HostRouteLinksService from '../../services/host-route-links';
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -145,12 +149,75 @@ export default class InteractSubmode extends Component {
   @service declare private recentCardsService: RecentCardsService;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
+  @service('host-route-links')
+  declare private hostRouteLinks: HostRouteLinksService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
   @tracked private recentCardCollection:
     | ReturnType<getCardCollection>
     | undefined;
+
+  // While interact mode shows, links get routed addresses from the open
+  // realm's routes, and a plain click on a link to a routed address opens
+  // the card that address resolves to in the stack the link is in, with no
+  // page load, as a page load of the address would serve it. A link that
+  // resolves to no card (a redirect, a path no route serves, a failed
+  // lookup) is loaded by the browser. Any other click keeps the browser's
+  // default: see `lib/link-clicks`.
+  private followRoutedLinks = modifier((element: HTMLElement) => {
+    let stopShowing = this.hostRouteLinks.showInteractMode();
+    let onClick = (event: MouseEvent) => {
+      let url = plainLinkClickURL(event);
+      if (!url || !this.hostRouteLinks.holdsRoutesFor(url)) {
+        return;
+      }
+      let stackIndex = this.stackIndexOf(event);
+      if (stackIndex === undefined) {
+        return;
+      }
+      event.preventDefault();
+      void this.followRoutedLink(url, stackIndex);
+    };
+    element.addEventListener('click', onClick);
+    return () => {
+      element.removeEventListener('click', onClick);
+      stopShowing();
+    };
+  });
+
+  // Counts the routed links followed, so a click that another click
+  // follows before its card is known is dropped.
+  private routedLinkFollows = 0;
+
+  private async followRoutedLink(url: URL, stackIndex: number) {
+    let follow = ++this.routedLinkFollows;
+    let cardHref = await this.hostRouteLinks.cardAtAddress(url);
+    if (follow !== this.routedLinkFollows || this.isDestroying) {
+      return;
+    }
+    if (!cardHref) {
+      window.location.assign(url.href);
+      return;
+    }
+    this.viewCard(stackIndex, cardHref, 'isolated');
+  }
+
+  // The stack the card an event happened in is on.
+  private stackIndexOf(event: Event): number | undefined {
+    let origin = event.composedPath()[0] ?? event.target;
+    let instanceId =
+      origin instanceof Element
+        ? origin.closest('[data-stack-item]')?.getAttribute('data-stack-item')
+        : undefined;
+    if (!instanceId) {
+      return undefined;
+    }
+    let index = this.stacks.findIndex((stack) =>
+      stack.some((item) => item.instanceId === instanceId),
+    );
+    return index === -1 ? undefined : index;
+  }
 
   @action private handleEscape(event: KeyboardEvent) {
     // A modal owns Escape regardless of where focus is.
@@ -839,6 +906,7 @@ export default class InteractSubmode extends Component {
           has-expanded-card=this.operatorModeStateService.hasAnyStackItemExpanded
         }}
         style={{this.backgroundImageStyle}}
+        {{this.followRoutedLinks}}
         {{onKeyMod 'Escape' this.handleEscape}}
         {{! Ctrl+E (not Cmd+E — taken by browsers' "Use Selection for Find").
            Lowercase 'e' matches event.key, so Dvorak/AZERTY users get the
