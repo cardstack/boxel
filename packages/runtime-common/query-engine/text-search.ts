@@ -981,6 +981,15 @@ export abstract class TextSearch extends FilterCompiler {
   // index finds the rows holding the words anywhere, and `ts_filter` keeps
   // those holding them at A. SQLite has no vector; it reads the type-ahead
   // text, which holds the same names.
+  //
+  // A term of words is left unfenced, so Postgres can plan the IN as a hashed
+  // semi-join. Fenced (`OFFSET 0`), the IN became a subquery scan on the
+  // inner side of a nested loop, and the term's GIN lookup ran again for
+  // every candidate card: a `select` page over 9,123 products ran it 9,123
+  // times (19 s, past the search's time budget). Unfenced, it answered in
+  // 0.2 s. A phrase keeps the fence: the index holds no word positions, so an
+  // unfenced phrase rechecks more rows than the fenced lookup reads (24 ms
+  // fenced against 165 ms on four quoted phrases).
   #titleScopedMatchCondition(
     filter: MatchesFilter,
     context: FilterContext,
@@ -995,7 +1004,7 @@ export abstract class TextSearch extends FilterCompiler {
         ...matchTsQuery(filter),
         `AND ts_filter(${vector}, '{a}') @@`,
         ...matchTsQuery(filter),
-        `OFFSET 0)`,
+        filter.matches.includes('"') ? `OFFSET 0)` : `)`,
       ],
       `i.search_doc ->> '${TYPE_AHEAD_KEY}'`,
       filter.matches,
