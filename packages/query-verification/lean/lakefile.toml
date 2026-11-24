@@ -1,0 +1,10 @@
+name = "QueryV2"
+version = "0.1.0"
+defaultTargets = ["QueryV2", "vectors"]
+
+[[lean_lib]]
+name = "QueryV2"
+
+[[lean_exe]]
+name = "vectors"
+root = "Main"
