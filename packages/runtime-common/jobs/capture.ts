@@ -49,14 +49,25 @@ export const CAPTURE_JOB_TIMEOUT_SEC = 60;
 // caller the twin's render verbatim. The `runAs` equality keeps joins
 // within one render identity: every capture renders as the reader who asked
 // for it, so two readers' captures of one spec never join, whichever surface
-// each came through.
-// The capture job type, and the former name a realm server on a previous
-// revision publishes the same job under during a rollout. The coalescer and
-// every queue probe below treat them as one family: a job published under the
-// former name is always a card capture with wire-identical args.
+// each came through. An OAuth app's capture names its own reader
+// (`oauthCaptureReader`), so it never joins the user's own, and it joins only
+// a capture of the same grant, whose tab tokens it renders with.
+// The capture job types: the capture job, an OAuth app's capture, and the
+// former name a realm server on a previous revision publishes the same job
+// under during a rollout. The coalescer and every queue probe below treat them
+// as one family: a job published under the former name is always a card
+// capture with wire-identical args, and an OAuth app's capture differs only in
+// carrying `oauth`.
 export const CAPTURE_JOB_TYPE = 'capture';
+// The job type an OAuth app's capture is published under (see
+// `CaptureArgs.oauth`). Only a worker that renders it with tab tokens
+// registers it, and a worker claims only types it has registered, so a worker
+// on a revision that predates tab tokens never renders such a capture with
+// the user's own sessions.
+export const OAUTH_CAPTURE_JOB_TYPE = 'capture-oauth';
 export const CAPTURE_JOB_TYPES: readonly string[] = [
   CAPTURE_JOB_TYPE,
+  OAUTH_CAPTURE_JOB_TYPE,
   'capture-card',
 ];
 const CAPTURE_JOB_TYPES_SQL = CAPTURE_JOB_TYPES.map((t) => `'${t}'`).join(', ');
@@ -81,6 +92,8 @@ export function chooseCaptureCoalesceDecision(
         (incomingArgs.sourceKind ?? 'card') &&
       candidateArgs.format === incomingArgs.format &&
       candidateArgs.runAs === incomingArgs.runAs &&
+      (candidateArgs.oauth?.grantId ?? null) ===
+        (incomingArgs.oauth?.grantId ?? null) &&
       sameCaptureIdentity(
         candidateArgs.captureSpec,
         incomingArgs.captureSpec,
@@ -190,6 +203,10 @@ function samePersist(
 
 registerQueueJobDefinition({
   jobType: CAPTURE_JOB_TYPE,
+  coalesce: chooseCaptureCoalesceDecision,
+});
+registerQueueJobDefinition({
+  jobType: OAUTH_CAPTURE_JOB_TYPE,
   coalesce: chooseCaptureCoalesceDecision,
 });
 
@@ -328,7 +345,7 @@ export async function enqueueCaptureJob(
   opts?: { concurrencyGroup?: string },
 ) {
   let job = await queue.publish<CapturePrerenderResponse>({
-    jobType: CAPTURE_JOB_TYPE,
+    jobType: args.oauth ? OAUTH_CAPTURE_JOB_TYPE : CAPTURE_JOB_TYPE,
     concurrencyGroup: opts?.concurrencyGroup ?? `capture:${args.realmURL}`,
     timeout: CAPTURE_JOB_TIMEOUT_SEC,
     priority,

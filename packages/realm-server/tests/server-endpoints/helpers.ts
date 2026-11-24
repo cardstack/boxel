@@ -17,6 +17,10 @@ import {
   type RealmFixtureName,
 } from '../helpers/index.ts';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  testOAuthProviderConfig,
+  testOAuthSecureOriginURL,
+} from '../helpers/oauth-provider.ts';
 
 export const testRealmURL = new URL(`http://127.0.0.1:${testPort(4445)}/test/`);
 
@@ -55,6 +59,9 @@ type ServerEndpointsTestOptions = {
   // write has to narrow `'*'` to `['read']` and grant the writing user
   // explicitly, or it proves nothing about auth.
   permissions?: RealmPermissions;
+  // Turns Boxel's OAuth provider on, with the secure origin it needs, so the
+  // server's routes and the realm accept Boxel API OAuth tokens.
+  oauthProvider?: boolean;
 };
 
 export function setupServerEndpointsTest(
@@ -98,6 +105,12 @@ export function setupServerEndpointsTest(
       '*': ['read', 'write'],
       '@node-test_realm:localhost': ['read', 'realm-owner'],
     },
+    ...(options.oauthProvider
+      ? {
+          oauthProvider: testOAuthProviderConfig(),
+          secureOriginURL: testOAuthSecureOriginURL,
+        }
+      : {}),
     onRealmSetup,
   });
 

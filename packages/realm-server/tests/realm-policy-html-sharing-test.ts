@@ -30,6 +30,13 @@ import {
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { settlePrerenderHtmlJobs } from './helpers/indexing.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { randomBytes } from 'node:crypto';
+import { sha256Hex } from '../lib/oauth-provider/objects.ts';
+import { oauthIssuer } from '../lib/oauth-provider/registry.ts';
+import {
+  testOAuthProviderConfig,
+  testOAuthSecureOriginURL,
+} from './helpers/oauth-provider.ts';
 
 // ============================================================================
 // Which prerendered formats a read or a query serves, and who decides.
@@ -318,6 +325,9 @@ module(basename(import.meta.filename), function (hooks) {
       publisher,
       runner,
       matrixURL,
+      // So an OAuth caller's search can be asked too (see 'a render').
+      oauthProvider: testOAuthProviderConfig(),
+      secureOriginURL: testOAuthSecureOriginURL,
     });
     server = result.testRealmHttpServer;
     request = supertest(server);
@@ -375,6 +385,38 @@ module(basename(import.meta.filename), function (hooks) {
       filter: { eq: { htmlQuery: { eq: { format } } } },
       ...(fields ? { fields: { entry: fields } } : {}),
     };
+  }
+
+  // A Boxel API access token for `user`, stored as the provider stores one,
+  // on a grant of its own.
+  async function oauthAccessToken(user: string): Promise<string> {
+    let resource = oauthIssuer(new URL(EDUCATION).origin);
+    let [{ id: userId }] = (await db.execute(
+      `INSERT INTO users (matrix_user_id) VALUES ($1)
+         ON CONFLICT (matrix_user_id)
+         DO UPDATE SET matrix_user_id = EXCLUDED.matrix_user_id
+         RETURNING id`,
+      { bind: [user] },
+    )) as { id: string }[];
+    let grantId = randomBytes(16).toString('base64url');
+    let token = randomBytes(32).toString('base64url');
+    await db.execute(
+      `INSERT INTO oauth_provider_grants
+         (id, user_id, client_id, resources, renewing, expires_at)
+         VALUES ($1, $2::uuid, 'boxel-cli', $3::jsonb, false,
+                 now() + interval '1 hour')`,
+      {
+        bind: [grantId, userId, JSON.stringify({ [resource]: ['boxel:read'] })],
+      },
+    );
+    await db.execute(
+      `INSERT INTO oauth_provider_tokens
+         (id_hash, kind, grant_id, resource, scope, payload, expires_at)
+         VALUES (decode($1, 'hex'), 'AccessToken', $2, $3, 'boxel:read',
+                 '{}'::jsonb, now() + interval '10 minutes')`,
+      { bind: [sha256Hex(token), grantId, resource] },
+    );
+    return token;
   }
 
   function realmSearch(caller: Caller, payload: object) {
@@ -681,6 +723,50 @@ module(basename(import.meta.filename), function (hooks) {
         assert.true(
           (served.get(ALGEBRA) ?? '').includes('Ada, Ben'),
           `${label}: the render receives the embedded markup`,
+        );
+      }
+    });
+
+    // A Boxel API OAuth caller (ADR 021) is never a render, whatever headers
+    // it sends: an access token's caller sets their own, and a tab token's
+    // tab, which marks every request it sends as a render's, runs code the
+    // caller chose and answers them with what it draws.
+    test('an OAuth caller’s search is served as a live search’s, whatever it says', async function (assert) {
+      let token = await oauthAccessToken(ADMIN);
+      let sends = [
+        [
+          'the realm’s own search',
+          (payload: object) =>
+            request
+              .post(`${new URL(EDUCATION).pathname}_search`)
+              .set('Accept', SupportedMimeType.CardJson)
+              .set('Content-Type', 'application/json')
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .set('Authorization', `Bearer ${token}`)
+              .set(DURING_PRERENDER_HEADER, 'true')
+              .send(payload),
+        ],
+        [
+          'the federated search',
+          (payload: object) =>
+            request
+              .post('/_federated-search')
+              .set('Accept', SupportedMimeType.CardJson)
+              .set('Content-Type', 'application/json')
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .set('Authorization', `Bearer ${token}`)
+              .set(DURING_PRERENDER_HEADER, 'true')
+              .send(payload),
+        ],
+      ] as const;
+      for (let [label, send] of sends) {
+        let response = await send(named('listPrivate', 'embedded'));
+        assert.strictEqual(response.status, 200, `${label}: ${response.text}`);
+        let served = markup(response.body as EntryBody);
+        assert.true(served.has(ALGEBRA), `${label}: the row is served`);
+        assert.false(
+          (served.get(ALGEBRA) ?? '').includes('Ada, Ben'),
+          `${label}: the embedded markup the query withholds is withheld`,
         );
       }
     });

@@ -13,6 +13,7 @@ import {
 } from '../prerender/affinity.ts';
 import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
 import { mintRunToken } from '../lib/run-token.ts';
+import { buildCreateOAuthTabAuth } from '../lib/oauth-tab-token.ts';
 import type { AutomationRun } from '@cardstack/runtime-common';
 
 // A render hands its tab its sessions through localStorage, which belongs to
@@ -45,6 +46,25 @@ const otherOwnerAuthorityAuth = createPrerenderAuth(OTHER_OWNER, permissions, {
 const user1Auth = createPrerenderAuth(USER_1, permissions);
 const user2Auth = createPrerenderAuth(USER_2, permissions);
 const anonymousAuth = '{}';
+
+// An OAuth app's tab auth: its tab tokens, one per realm, all for one grant.
+const createOAuthTabAuth = buildCreateOAuthTabAuth(
+  'page-pool-session-affinity-test-seed',
+  { realmServerURL: 'http://localhost:4202' },
+);
+function oauthTabAuth(user: string, grantId = 'grant-1') {
+  return createOAuthTabAuth({
+    userId: user,
+    permissions: {
+      [REALM]: ['read'],
+      'http://localhost:4202/other/': ['read'],
+    },
+    grantId,
+    scopes: ['boxel:read'],
+    purpose: 'run-command',
+    permissionCeiling: 'read',
+  });
+}
 
 // An automation run's tab auth: its run token, alone, for its realm.
 function runAuth(user: string, runId = 'run-1') {
@@ -249,6 +269,61 @@ module(basename(import.meta.filename), function (hooks) {
       assert.false(isRunAffinityKey(realmKeyFor(mixed)));
     });
 
+    test("an OAuth app's tab is keyed by its user and grant, apart from the user's sessions", function (assert) {
+      let auth = oauthTabAuth(USER_1);
+      assert.deepEqual(renderSessionOf(auth), {
+        kind: 'oauth-tab',
+        user: USER_1,
+        grant: 'grant-1',
+      });
+      let key = realmKeyFor(auth);
+      assert.strictEqual(key, `${REALM_KEY}#oauth:${USER_1}:grant-1`);
+      assert.notStrictEqual(
+        realmKeyFor(user1Auth),
+        key,
+        "the user's own sessions never share it",
+      );
+      assert.notStrictEqual(
+        realmKeyFor(oauthTabAuth(USER_1, 'grant-2')),
+        key,
+        "another grant's tab tokens never share it",
+      );
+      assert.false(isRealmAuthorityAffinityKey(key));
+      assert.false(isRunAffinityKey(key));
+      assert.strictEqual(realmAffinityKeyOf(key), REALM_KEY);
+
+      // A command runs on its user's affinity, which a tab token splits too.
+      let userKey = toAffinityKey({
+        affinityType: 'user',
+        affinityValue: USER_1,
+        auth,
+      });
+      assert.strictEqual(userKey, `user:${USER_1}#oauth:grant-1`);
+      assert.strictEqual(
+        realmAffinityKeyOf(userKey),
+        `user:${USER_1}`,
+        'it is reported to the manager as the user',
+      );
+      assert.deepEqual(fromAffinityKey(userKey), {
+        affinityType: 'user',
+        affinityValue: USER_1,
+        session: 'oauth:grant-1',
+      });
+    });
+
+    test('a tab token beside any other session is unreadable', function (assert) {
+      let besideSession = JSON.stringify({
+        ...JSON.parse(oauthTabAuth(USER_1)),
+        'http://localhost:4202/third/': JSON.parse(user1Auth)[REALM],
+      });
+      assert.strictEqual(renderSessionOf(besideSession).kind, 'unreadable');
+      let twoGrants = JSON.stringify({
+        ...JSON.parse(oauthTabAuth(USER_1, 'grant-2')),
+        [REALM]: JSON.parse(oauthTabAuth(USER_1))[REALM],
+      });
+      assert.strictEqual(renderSessionOf(twoGrants).kind, 'unreadable');
+    });
+
     test('a user affinity is keyed by its user alone', function (assert) {
       assert.strictEqual(
         toAffinityKey({
@@ -268,6 +343,21 @@ module(basename(import.meta.filename), function (hooks) {
       });
       assert.false(isAffinityOfRealm(other, REALM_KEY));
     });
+  });
+
+  test("a command an OAuth app starts never gets the BrowserContext of the user's own commands", async function (assert) {
+    let pool = makePool({ maxPages: 3, browserManager: makeBrowserStub() });
+    await pool.warmStandbys();
+    let contexts = new Set();
+    for (let auth of [user1Auth, oauthTabAuth(USER_1)]) {
+      let lease = await pool.getPage(
+        toAffinityKey({ affinityType: 'user', affinityValue: USER_1, auth }),
+        'command',
+      );
+      contexts.add((lease.page as any).browserContext());
+      lease.release();
+    }
+    assert.strictEqual(contexts.size, 2, 'two BrowserContexts');
   });
 
   test("renders of one realm by its own indexing, another realm's owner, two users and an anonymous reader each get a BrowserContext of their own", async function (assert) {

@@ -170,4 +170,13 @@ export interface RealmOAuthResource {
     scope?: string[];
   }): string;
   resolve(token: string): Promise<OAuthLookupResult>;
+  // The grant check for a tab token the realm has verified
+  // (`oauth-tab-token.ts`): the same grant checks the lookup makes, by the
+  // grant the token names. Called at most once per request, in place of
+  // `resolve`.
+  resolveGrant(tabToken: {
+    grantId: string;
+    user: string;
+    scopes: readonly string[];
+  }): Promise<OAuthLookupResult>;
 }

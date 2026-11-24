@@ -14,6 +14,7 @@ import type { MediaCacheAdapter } from '../media-cache.ts';
 import type { MeteredCharges } from '../metered-charges.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { MintRunToken } from './run-automation.ts';
+import type { CreateOAuthTabAuth } from '../oauth-tab-token.ts';
 import type { AutomationAdmissionChecks } from '../automation-admission.ts';
 import type { OAuthProviderCleanup } from './oauth-provider-cleanup.ts';
 import type { AIBatchSettlement } from '../ai-batches.ts';
@@ -77,6 +78,10 @@ export interface TaskArgs {
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
   createPrerenderAuth: CreatePrerenderAuth;
+  // Mints the tab tokens an OAuth app's capture renders with
+  // (`oauth-tab-token.ts`). Optional: a worker without it refuses such a
+  // capture rather than render it with the user's sessions.
+  createOAuthTabAuth?: CreateOAuthTabAuth;
   // Mints an automation run's token. Optional: a worker without it runs no
   // automation, and a run's job there ends the run as an error.
   mintRunToken?: MintRunToken;

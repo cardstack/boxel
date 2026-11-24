@@ -5,8 +5,9 @@ import { inMemorySessions } from '@cardstack/runtime-common/in-memory-sessions';
 import { SessionLocalStorageKey } from './local-storage-keys';
 
 // The realm sessions this tab holds, as the raw JSON map from realm URL to
-// session. An automation run's prerender tab holds them in memory (see
-// `inMemorySessions`); every other tab holds them in local storage.
+// session. An automation run's prerender tab, and the tab of a command or
+// capture an OAuth app starts, hold them in memory (see `inMemorySessions`);
+// every other tab holds them in local storage.
 export function readRealmSessionsString(): string | null {
   let sessions = inMemorySessions();
   if (sessions) {

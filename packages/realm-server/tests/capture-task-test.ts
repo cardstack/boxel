@@ -4,6 +4,7 @@ import { basename } from 'path';
 
 import {
   ANONYMOUS_RENDER,
+  oauthCaptureReader,
   type DBAdapter,
   type ExecuteOptions,
   type Prerenderer,
@@ -17,6 +18,7 @@ import {
   capture,
   type CapturePersistArgs,
 } from '@cardstack/runtime-common/tasks/capture';
+import type { CreateOAuthTabAuth } from '@cardstack/runtime-common/oauth-tab-token';
 
 const REALM_URL = 'http://localhost:4201/experiments/';
 const CARD_ID = `${REALM_URL}Person/fadhlan`;
@@ -487,6 +489,129 @@ module(basename(import.meta.filename), function () {
 
       assert.strictEqual(result.status, 'error');
       assert.false(mintedAuth, 'does not mint a token for a runner it refuses');
+    });
+  });
+
+  // An OAuth app's capture runs code the app may have written, so its tab
+  // holds tab tokens the app's grant bounds, never the user's sessions
+  // (ADR 021 §1.5).
+  module('an OAuth app’s capture', function () {
+    const ALICE_ROWS = [
+      {
+        username: '@alice:localhost',
+        realm_url: REALM_URL,
+        read: true,
+        write: true,
+        realm_owner: true,
+      },
+    ];
+    const OAUTH = {
+      user: '@alice:localhost',
+      grantId: 'grant-1',
+      scopes: ['boxel:read', 'boxel:write'],
+    };
+
+    function runOAuthCapture(
+      taskArgs: TaskArgs,
+      {
+        runAs = oauthCaptureReader('@alice:localhost'),
+        oauth = OAUTH as typeof OAUTH | null,
+      } = {},
+    ) {
+      return capture(taskArgs)({
+        realmURL: REALM_URL,
+        runAs,
+        oauth,
+        cardId: CARD_ID,
+        sourceKind: 'card',
+        format: 'isolated',
+        captureSpec: null,
+        persist: null,
+        surface: 'post',
+        loggingCorrelationId: null,
+        jobInfo: { id: 1 } as any,
+      } as any);
+    }
+
+    test('renders with read-only tab tokens for the grant, never the user’s sessions', async function (assert) {
+      let minted: Parameters<CreateOAuthTabAuth>[0] | undefined;
+      let sessionsMinted = false;
+      let renderedWith: string | undefined;
+      let taskArgs = makeTaskArgs({
+        dbRows: ALICE_ROWS,
+        onCreatePrerenderAuth: () => {
+          sessionsMinted = true;
+        },
+        onPrerenderCapture: (args) => {
+          renderedWith = args.auth;
+        },
+      });
+      taskArgs.createOAuthTabAuth = (args) => {
+        minted = args;
+        return 'tab-tokens';
+      };
+
+      let result = await runOAuthCapture(taskArgs);
+
+      assert.strictEqual(result.status, 'ready');
+      assert.false(sessionsMinted, 'no session is minted for the user');
+      assert.strictEqual(renderedWith, 'tab-tokens');
+      assert.strictEqual(minted?.userId, '@alice:localhost');
+      assert.strictEqual(minted?.grantId, 'grant-1');
+      assert.deepEqual(minted?.scopes, ['boxel:read', 'boxel:write']);
+      assert.strictEqual(minted?.purpose, 'capture');
+      assert.strictEqual(
+        minted?.permissionCeiling,
+        'read',
+        'a capture only reads, whatever the grant allows',
+      );
+    });
+
+    test('is refused by a worker that can’t mint tab tokens', async function (assert) {
+      let sessionsMinted = false;
+      let rendered = false;
+      let result = await runOAuthCapture(
+        makeTaskArgs({
+          dbRows: ALICE_ROWS,
+          onCreatePrerenderAuth: () => {
+            sessionsMinted = true;
+          },
+          onPrerenderCapture: () => {
+            rendered = true;
+          },
+        }),
+      );
+
+      assert.strictEqual(result.status, 'error');
+      assert.false(sessionsMinted, 'no session is minted for the user');
+      assert.false(rendered, 'nothing renders');
+    });
+
+    test('is refused when its reader and its grant disagree', async function (assert) {
+      let rendered = false;
+      let taskArgs = makeTaskArgs({
+        dbRows: ALICE_ROWS,
+        onPrerenderCapture: () => {
+          rendered = true;
+        },
+      });
+      taskArgs.createOAuthTabAuth = () => 'tab-tokens';
+
+      let asTheUser = await runOAuthCapture(taskArgs, {
+        runAs: '@alice:localhost',
+      });
+      assert.strictEqual(
+        asTheUser.status,
+        'error',
+        'a grant is never rendered under the user’s own reader',
+      );
+      let withoutGrant = await runOAuthCapture(taskArgs, { oauth: null });
+      assert.strictEqual(
+        withoutGrant.status,
+        'error',
+        'an OAuth reader is never rendered without its grant',
+      );
+      assert.false(rendered, 'nothing renders');
     });
   });
 });

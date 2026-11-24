@@ -77,6 +77,93 @@ export async function resolveOAuthAccessToken(
   return result;
 }
 
+interface GrantLookupRow extends GrantState {
+  client_id: string;
+  resources: string | Record<string, string[]>;
+  grant_created: number | string;
+  user_id: string;
+  matrix_user_id: string;
+}
+
+// The check of a tab token's grant (ADR 021 §1.5): given the grant a
+// verified tab token names, the user it was minted for and the scopes it
+// carries, who is calling, with the same grant checks an access token's
+// lookup makes, read on every call and cached nothing past the request. Only
+// a Boxel API controller calls it, once per request, for a tab token it has
+// verified. The scopes are the ones the token carries that the grant still
+// approves for the resource. A grant for another user than the token names
+// is refused, though only this server can mint the token.
+export async function resolveOAuthGrant(
+  dbAdapter: DBAdapter,
+  {
+    grantId,
+    user,
+    scopes,
+  }: { grantId: string; user: string; scopes: readonly string[] },
+  resource: string,
+): Promise<OAuthLookupResult> {
+  let started = Date.now();
+  let result = await lookupGrant(
+    dbAdapter,
+    { grantId, user, scopes },
+    resource,
+  );
+  let ms = Date.now() - started;
+  if (result.ok) {
+    log.debug(
+      `tab token accepted: resource ${resource}, client ${result.caller.clientId}, ${ms}ms`,
+    );
+  } else {
+    log.info(
+      `tab token refused: ${result.reason}, resource ${resource}, ${ms}ms`,
+    );
+  }
+  return result;
+}
+
+async function lookupGrant(
+  dbAdapter: DBAdapter,
+  {
+    grantId,
+    user,
+    scopes,
+  }: { grantId: string; user: string; scopes: readonly string[] },
+  resource: string,
+): Promise<OAuthLookupResult> {
+  let [row] = (await dbAdapter.execute(
+    `SELECT g.client_id, g.resources,
+            floor(extract(epoch FROM g.created_at)) AS grant_created,
+            ${GRANT_STATE_COLUMNS},
+            u.id AS user_id, u.matrix_user_id
+       FROM oauth_provider_grants AS g
+       JOIN users AS u ON u.id = g.user_id
+      WHERE g.id = $1`,
+    { bind: [grantId] },
+  )) as unknown as GrantLookupRow[];
+  if (!row || row.matrix_user_id !== user) {
+    return { ok: false, reason: 'unknown' };
+  }
+  if (!(await grantUsable(dbAdapter, grantId, row))) {
+    return { ok: false, reason: 'revoked' };
+  }
+  let resources = asRecord(row.resources) as Record<string, string[]>;
+  if (!Object.prototype.hasOwnProperty.call(resources, resource)) {
+    return { ok: false, reason: 'revoked' };
+  }
+  let approved = resources[resource];
+  return {
+    ok: true,
+    caller: {
+      user: row.matrix_user_id,
+      userId: String(row.user_id),
+      grantId,
+      clientId: row.client_id,
+      scopes: scopes.filter((scope) => approved.includes(scope)),
+      grantCreatedAt: Number(row.grant_created),
+    },
+  };
+}
+
 async function lookup(
   dbAdapter: DBAdapter,
   token: string,

@@ -36,6 +36,7 @@ Boxel tokens are derived credentials with their own, weaker retirement story.
 | publish-realm        | `handle-publish-realm` (in-process)                    | per-realm session shape                                                                     | `1h`                                                                       |
 | diagnostic           | `POST /_diagnostic-render-token` (operator token)      | prerender shape, plus `diagnostic: {id, note, card, scope, realm}`, `permissions: ['read']` | `DIAGNOSTIC_SESSION_LIFETIME_SEC` (15m)                                    |
 | run token            | `mintRunToken` (in-process, one per run attempt)       | `{user, realm, run: {id, attempt, readRealms, writesCap}}`, `permissions: []`               | the run's time limit                                                       |
+| tab token            | `buildCreateOAuthTabAuth` (in-process, one per realm)  | per-realm session shape, plus `oauthTab: {grant, scopes, purpose}`                          | one prerender request's time limit plus a minute                           |
 | OAuth access token   | `POST /_oauth-provider/token` (Boxel's OAuth provider) | none: an opaque value, looked up by its hash                                                | 10m on a renewing grant, 60m otherwise, never past the grant               |
 
 A **diagnostic session** is what an operator renders a live card under to see
@@ -58,10 +59,13 @@ A prerender session carries `realmAuthority: true` when what it renders is kept
 and served to others — indexing, the HTML render, a module's definition render,
 skill validation, a capture that persists — and not when the result goes back
 only to whoever asked (a command, a capture answered to its requester). The
-search routes read a request as a realm-authority principal when its session
-carries that claim **or** the request carries `x-boxel-during-prerender`: a
-render tab marks every request it sends, whatever session it holds, including
-one minted before its minter carried the claim. Such a principal's searches
+search routes read a request as a realm-authority principal only when its
+session carries that claim. `x-boxel-during-prerender`, which a render tab
+marks every request with whatever session it holds, never makes one: it changes
+how a search is served (cache-only definitions, no included closure, and a
+named query's unshareable formats served whole), never who is asking, and an
+OAuth caller's request is served as a live one whatever it carries (ADR 021
+§1.6). Such a principal's searches
 find what the realm ACL grants it and nothing more — no policy scopes them, and
 `policyQueryScope` throws `RealmAuthorityPolicyScopeError` if handed one. The
 claim is read on the search paths only: a single-card read is judged by the
@@ -73,6 +77,27 @@ The two lifetimes a browser holds live in `packages/runtime-common/session-token
 — a **leaf module with no imports**, so the CLI can read them without pulling the
 runtime-common barrel. Keep it that way: the barrel drags in base-realm type
 references that other packages can't resolve.
+
+A **tab token** is what the prerender tab of a command or capture an OAuth app
+starts holds in place of the user's sessions (ADR 021 §1.5;
+`packages/runtime-common/oauth-tab-token.ts` and
+`packages/realm-server/lib/oauth-tab-token.ts`). `/_run-command` and the
+worker's capture task mint one per realm the user's sessions would have
+covered, all naming the user and the OAuth grant, never the access token. Its
+`permissions` claim is only what the host reads; a realm reads the user's
+permissions fresh. A realm (`Realm.#admitOAuthToken`) and
+`multiRealmAuthorization` verify it under `oauthTabTokenSecret(seed)`, check
+its grant with `resolveOAuthGrant` (the access-token lookup's grant checks, by
+grant id), and judge the call as the same `oauthCaller` an access token gives:
+route map, scope ceiling (held to `read` for a capture's), §1.6 guard. One a
+realm can't admit (another server's, another realm's, expired, or whose grant
+is gone) is judged there as a session that doesn't verify: answered as nobody
+on a realm anyone may read, refused elsewhere. A tab reads the base realm on
+another server that way. Every other realm-server route refuses it on its signature, so a tab can't reach
+`_realm-auth`, `_server-session` or a key route. Like an access token, it is
+never asked about `isSessionRevoked`: disconnecting the app or revoking the
+user's OAuth grants ends it on its next call. Its tab holds it in memory only,
+on an affinity of its own (`<key>#oauth:...`).
 
 A **run token** is what an automation run's calls carry (ADR 026;
 `packages/runtime-common/run-token.ts` and `packages/realm-server/lib/run-token.ts`).
@@ -89,8 +114,9 @@ and checks the run's row itself. The `automations` skill has how to trace one.
 
 **Every session token above is signed with `REALM_SECRET_SEED`** (the OAuth access token is no JWT, and nothing signs it) — both families,
 minted and verified with the same seed — except the diagnostic session, which is
-signed under `diagnosticSessionSecret(seed)`, and the run token, signed under
-`runTokenSecret(seed)`, each the seed with a family suffix.
+signed under `diagnosticSessionSecret(seed)`, the run token, signed under
+`runTokenSecret(seed)`, and the tab token, signed under
+`oauthTabTokenSecret(seed)`, each the seed with a family suffix.
 Because of that, every verifier that doesn't ask for one of them by name
 refuses it on its signature; a realm (`Realm.#verifySession`) and
 `multiRealmAuthorization` pick the key from the token's own `diagnostic` claim,
