@@ -814,6 +814,58 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a card that no longer reads as a declaration leaves out a trigger an earlier edit removed', async function (assert) {
+      await writeAutomation();
+      await switchOn();
+      await setRuns('hourly', 7);
+      function cardWith(triggers: Record<string, unknown>[]) {
+        return JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { ...attributes, triggers },
+            relationships: {
+              script: { links: { self: '../scripts/nightly-import.js' } },
+            },
+            meta: { adoptsFrom: automationRef },
+          },
+        });
+      }
+      let withoutHourly = attributes.triggers.filter(
+        (t: Record<string, unknown>) => t.label !== 'hourly',
+      );
+      // The first edit removes `hourly`, and the card still reads.
+      await testRealm.write(
+        'automations/nightly.json',
+        cardWith(withoutHourly),
+      );
+      // The next edit leaves a cron trigger without an expression, so the
+      // card no longer reads.
+      await testRealm.write(
+        'automations/nightly.json',
+        cardWith([...withoutHourly, trigger('cron', { label: 'half-typed' })]),
+      );
+      let status = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      let [row] = await query(dbAdapter, [
+        'SELECT trigger_runs FROM automations WHERE automation_id =',
+        param(automationURL()),
+      ]);
+      let labels = status.switchedOn
+        ? status.triggers.map(({ label }) => label).sort()
+        : [];
+      assert.deepEqual(
+        labels,
+        ['launch', 'nightly', 'push'],
+        `the removed trigger is left out; the row's trigger_runs: ${JSON.stringify(row?.trigger_runs)}`,
+      );
+      assert.strictEqual(
+        (row?.trigger_runs as Record<string, { runs: number }>)?.hourly?.runs,
+        7,
+        "the row keeps the removed trigger's count, should the label come back",
+      );
+    });
+
     module('the webhooks an automation may name', function () {
       function webhooksOf(
         user: string,
