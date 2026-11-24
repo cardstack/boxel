@@ -60,7 +60,7 @@ import {
   SEARCH_TOTAL_CAP,
   TOTAL_ESTIMATED,
   totalEstimatedMessage,
-} from '../search-bounds.ts';
+} from '../query-v2/search-bounds.ts';
 import {
   notEffectivelyErrored,
   prerenderedJoin,

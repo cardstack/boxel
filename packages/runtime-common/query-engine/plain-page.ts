@@ -31,7 +31,7 @@ import {
   type Sort,
   isExprSort,
 } from '../query-v2/query.ts';
-import { SEARCH_TOTAL_CAP } from '../search-bounds.ts';
+import { SEARCH_TOTAL_CAP } from '../query-v2/search-bounds.ts';
 import { isNearSort } from '../vector-query.ts';
 import {
   notEffectivelyErrored,
