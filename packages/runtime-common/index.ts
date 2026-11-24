@@ -2008,6 +2008,7 @@ export * from './call-api-key-kind.ts';
 export * from './call-api-body-kinds.ts';
 export * from './query-field-utils.ts';
 export {
+  assertAuthoredQuerySpelling,
   barePath,
   looksLikeLabel,
   mapQueryPaths,

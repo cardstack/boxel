@@ -102,6 +102,8 @@ import {
   type Saved,
   type VirtualNetwork,
   X_BOXEL_LINK_SHAPE_HEADER,
+  assertAuthoredQuerySpelling,
+  resolveTypeReferences,
 } from '@cardstack/runtime-common';
 
 import CardStore, {
@@ -1603,6 +1605,10 @@ export default class StoreService extends Service implements StoreInterface {
       return { instances: [], meta: { page: { total: 0 } } };
     }
     if (opts?.cardInitiated) {
+      // A card's query is an author's: one in the newer spelling names its
+      // type with a top-level `type`, never an `on` on its top filter
+      // (`mixed-spelling`, with the rewrite).
+      assertAuthoredQuerySpelling(query);
       // Enforce the card-facing caps on the resolved request: the realms cap on
       // the (already current-realm-resolved) list, and the page cap on the
       // query. These throw a SearchBoundError the caller surfaces as a search
@@ -2168,9 +2174,20 @@ export default class StoreService extends Service implements StoreInterface {
     query: Query,
     explicitScope?: SearchEntryScope,
   ): SearchEntryScope | undefined {
-    let typeRefs = query.filter
-      ? getTypeRefsFromFilter(query.filter)
-      : undefined;
+    // A top-level `type` (the newer spelling) anchors the whole query, in
+    // either spelling of a type reference.
+    let declared = (query as { type?: unknown }).type;
+    let typeRefs: { ref: unknown; negated: boolean }[] | undefined =
+      declared !== undefined
+        ? [
+            {
+              ref: resolveTypeReferences({ type: declared }).type,
+              negated: false,
+            },
+          ]
+        : query.filter
+          ? getTypeRefsFromFilter(query.filter)
+          : undefined;
     let hasPositiveType =
       typeRefs?.some((r) => !r.negated && !isEqual(r.ref, baseRef)) ?? false;
     return explicitScope !== undefined
