@@ -11,7 +11,7 @@ import type {
   FileMetaResource,
   Saved,
 } from '../resource-types.ts';
-import { searchEntryWireQueryFromQuery } from '../search-entry.ts';
+import { searchEntryWireQueryFromQuery } from '../query-v2/search-entry.ts';
 import type {
   SearchEntryWireFilter,
   SearchEntryWireQuery,

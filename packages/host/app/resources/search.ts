@@ -28,6 +28,8 @@ import {
   isFileDefInstance,
   isFileDefCodeRef,
   isClientEvaluable,
+  readsRelativeDates,
+  isClientSortable,
   canonicalizeFilterRefs,
   identifyCard,
   isResolvedCodeRef,
@@ -47,7 +49,7 @@ import {
   type MatchResult,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
-import type { Filter, Query } from '@cardstack/runtime-common/query';
+import type { Filter, Query, Sort } from '@cardstack/runtime-common/query';
 
 import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
 import { LiveSearchTypeGate } from '../lib/live-search-type-gate';
@@ -1036,6 +1038,31 @@ export class SearchResource<
     // eligible.
     let filter = this.activeQuery?.filter as Filter | undefined;
     if (filter && !isClientEvaluable(filter)) {
+      return false;
+    }
+    // The server reckoned relative dates in a zone other than UTC (the
+    // query's `timeZone` or the realm's default); the matcher reckons them
+    // in UTC, so it leaves them to the server.
+    if (
+      filter &&
+      (this._meta as { timeZone?: string } | undefined)?.timeZone &&
+      (this._meta as { timeZone?: string }).timeZone !== 'UTC' &&
+      readsRelativeDates(filter)
+    ) {
+      return false;
+    }
+    // A `_blend` sort ranks over the server's whole match set; the client
+    // can't reproduce it from the instances it holds.
+    if (!isClientSortable(this.activeQuery?.sort as Sort | undefined)) {
+      return false;
+    }
+    // A collapsed query keeps each group's best match over the server's
+    // whole match set, and a `let` reads other cards first; the client can
+    // reproduce neither.
+    let active = this.activeQuery as
+      | { collapse?: unknown; let?: unknown }
+      | undefined;
+    if (active?.collapse || active?.let) {
       return false;
     }
     // The matcher needs the filter's refs in canonical form (the engine

@@ -10,21 +10,19 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
-// The federated route reads Query V2's grammar (row 24a) while the host's live
-// search still holds main's matcher. What keeps the two from disagreeing is
-// that a member main's grammar does not have never reaches the matcher with a
-// server answer computed from it: the host's store sends a live search through
-// `searchEntryWireQueryFromQuery` (store.ts, `fetchSearchDocUncoalesced`),
-// which carries only filter, sort and page, and refuses a filter member it
-// cannot spell; and a live search whose filter the matcher cannot evaluate is
-// passed through from the server untouched (`isClientEvaluable`, search.ts
-// `isClientFilterEligible`). These pin each half, so a host change that starts
-// sending the newer members has to bring the matcher along.
+// Both search routes read Query V2's grammar, and since row 25c the host's
+// matcher answers as Query V2 does. The host's store, search panel, card lists
+// and card operations translate a `Query` through `searchEntryWireQueryFromQuery`
+// (store.ts, `fetchSearchDocUncoalesced`), which now sends every member the
+// wire grammar has and refuses, before the request, a filter member it cannot
+// spell: a member is never dropped without a word. A live search whose filter
+// or sort the matcher cannot reproduce is answered by the server alone
+// (`isClientEvaluable`, search.ts `isClientFilterEligible`).
 
 const PERSON = { module: 'http://example.test/person', name: 'Person' };
 
 module(basename(import.meta.filename), function () {
-  test('query members main’s grammar does not have are not sent', function (assert) {
+  test('the newer query members are sent, not dropped', function (assert) {
     let query = {
       filter: { on: PERSON, eq: { name: 'Ada' } },
       sort: [{ by: 'name', on: PERSON }],
@@ -36,24 +34,46 @@ module(basename(import.meta.filename), function () {
       explain: true,
       timeZone: 'Europe/Berlin',
     } as unknown as Query;
-    let wire = searchEntryWireQueryFromQuery(query, { fields: ['item'] });
-    assert.deepEqual(
-      Object.keys(wire).sort(),
-      ['fields', 'filter', 'page', 'sort'],
-      'only the members both grammars share go on the wire',
-    );
+    let wire = searchEntryWireQueryFromQuery(query, {
+      fields: ['item'],
+    }) as Record<string, unknown>;
+    for (let member of [
+      'filter',
+      'sort',
+      'page',
+      'let',
+      'facets',
+      'collapse',
+      'explain',
+      'timeZone',
+    ]) {
+      assert.ok(member in wire, `${member} is on the wire`);
+    }
+    assert.deepEqual(wire.facets, [{ by: 'item.name' }], 'facets by item path');
+    assert.true(wire.explain, 'explain is sent');
+    assert.strictEqual(wire.timeZone, 'Europe/Berlin', 'timeZone is sent');
+    let rerank =
+      'rerank' in wire ||
+      ((wire.sort as Record<string, unknown>[]) ?? []).some(
+        (s) => 'expression' in s,
+      );
+    assert.true(rerank, 'rerank is sent');
   });
 
-  test('a filter member main’s grammar does not have is refused before the request', function (assert) {
-    for (let filter of [
-      { exists: { name: true } },
-      { linkedFrom: { card: 'http://example.test/a', field: 'items' } },
-      { near: [0.1, 0.2] },
-    ]) {
+  test('a filter member is sent, or refused before the request, never dropped', function (assert) {
+    assert.ok(
+      'linkedFrom' in
+        wireFilterFromFilter({
+          linkedFrom: { card: 'http://example.test/a', field: 'items' },
+        } as unknown as Filter),
+      'linkedFrom is sent',
+    );
+    for (let filter of [{ exists: { name: true } }, { nope: { name: 1 } }]) {
+      let key = Object.keys(filter)[0];
       assert.throws(
         () => wireFilterFromFilter(filter as unknown as Filter),
-        /cannot translate filter member/,
-        `${Object.keys(filter)[0]} is refused, not sent`,
+        new RegExp(`cannot translate filter member "${key}"`),
+        `${key} is refused, not dropped`,
       );
     }
   });
