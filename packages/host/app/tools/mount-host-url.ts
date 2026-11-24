@@ -5,7 +5,6 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import config from '@cardstack/host/config/environment';
 
 import HostBaseTool from '../lib/host-base-tool';
-import { HostURLRequestError } from '../services/realm-server';
 import { assertHostModeV2 } from '../utils/host-urls';
 
 import type RealmServerService from '../services/realm-server';
@@ -15,8 +14,8 @@ import type * as BaseToolModule from '@cardstack/base/command';
 // The tool builds the URL from the kind and the name:
 // - 'boxel-space': the Boxel Space URL that the realm server gives for the
 //   realm. The server accepts only this URL, so the name is not used.
-// - 'site-name': `https://<name>.<site domain>/`. When the caller has no claim
-//   on the name, the tool claims the name first, as the host URL manager does.
+// - 'site-name': `https://<name>.<site domain>/`. When no one has claimed the
+//   name, the tool claims it first, as the host URL manager does.
 // - 'custom-domain': `https://<name>/`.
 // A refusal from the realm server throws with the reason that the server
 // gives.
@@ -85,34 +84,35 @@ export default class MountHostURLTool extends HostBaseTool<
     }
   }
 
-  // The mount accepts a site name that is claimed for this realm. The claim
-  // lookup finds only the caller's own claims, so claim the hostname when the
-  // caller has no claim for it. The server refuses a hostname that is already
-  // claimed. That claim can be one that another administrator made for this
-  // realm, which the mount accepts. So that refusal does not stop the mount:
-  // the mount checks the claim and gives its reason when it refuses. Any other
-  // refusal, such as a name that isn't valid, stops here with its own reason.
+  // Claims the site name for the realm before the mount, when no one has
+  // claimed it.
+  // - The home page check comes first. Only an administrator of the realm may
+  //   ask it, so it refuses any other caller before a claim binds the name to
+  //   the realm. The mount refuses a realm whose home page visitors who are
+  //   not signed in can't view, and a claim made for such a realm would stay
+  //   held, so the tool then claims nothing and the mount gives the reason.
+  // - A name that can never be claimed stops here, with the server's reason.
+  // - A name that is claimed already is left to the mount. The claim can be
+  //   the caller's, or one that another administrator made for this realm,
+  //   which the mount accepts. The mount refuses a name that another user
+  //   claimed, and gives the reason.
   private async ensureSiteNameClaim(realmURL: string, hostname: string) {
-    let claimed = await this.realmServer.fetchBoxelClaimedDomain(realmURL);
-    if (claimed?.hostname.toLowerCase() === hostname.toLowerCase()) {
+    let homePage = await this.realmServer.checkHomePage(realmURL);
+    if (!homePage.anonymousCanView) {
       return;
     }
-    try {
-      await this.realmServer.claimBoxelDomain(realmURL, hostname);
-    } catch (error) {
-      if (
-        error instanceof HostURLRequestError &&
-        error.status === 422 &&
-        error.message.includes(ALREADY_CLAIMED)
-      ) {
-        return;
-      }
-      throw error;
+    let availability = await this.realmServer.checkDomainAvailability(
+      hostname.split('.')[0],
+    );
+    if (availability.error) {
+      throw new Error(availability.error);
     }
+    if (!availability.available) {
+      return;
+    }
+    await this.realmServer.claimBoxelDomain(realmURL, hostname);
   }
 }
-
-const ALREADY_CLAIMED = 'Hostname is already claimed';
 
 function requireName(kind: string, name: string | undefined): string {
   let trimmed = name?.trim();
