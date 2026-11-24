@@ -1,7 +1,6 @@
 import { logger } from './log.ts';
 import { setSignalDeadline } from './db.ts';
 import type { Query } from './query.ts';
-import type { SearchEntryFieldset } from './search-entry.ts';
 
 const log = logger('search-bounds');
 
@@ -717,14 +716,6 @@ export function setPrerenderLinkBoundsForTests(
   prerenderMaxLinkResources =
     bounds?.maxResources ?? PRERENDER_MAX_LINK_RESOURCES;
   prerenderLinkHops = bounds?.hops ?? PRERENDER_LINK_HOPS;
-}
-
-// The item leg (`fields[entry]` includes "item" / "item.<field>") is the live
-// serialization + `loadLinks` path — the one whose cost the bounds contain. The
-// default/prerendered fieldset resolves to `kind: 'none'` (html-preferred, item
-// only as a per-row fallback) and is exempt.
-export function isItemLegSearch(fieldset: SearchEntryFieldset): boolean {
-  return fieldset.item.kind !== 'none';
 }
 
 // The HTTP statuses a bound violation maps to. 408 for the time budget so a

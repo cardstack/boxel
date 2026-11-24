@@ -2888,6 +2888,26 @@ export async function searchEntryRealms(
       combined.meta.page.hasMore =
         Boolean(combined.meta.page.hasMore) || union > start + page.size;
     }
+    // Each realm was asked for its top `offset + size` rows, which is what an
+    // exact slice of the union needs. A realm that answered fewer while its
+    // total says it holds more (a bound clipped its page) may have left out
+    // rows that belong on this page, so the page says so and has a next one
+    // rather than reading as exact.
+    if (page && page.size > 0) {
+      let needed = ((page.number ?? 0) + 1) * page.size;
+      let short = answered.some(
+        ({ doc }) =>
+          doc.data.length < Math.min(needed, doc.meta?.page?.total ?? 0),
+      );
+      if (short) {
+        combined.meta.page.hasMore = true;
+        combined.meta.warnings = withWarningOnce(combined.meta.warnings, {
+          code: APPROXIMATE_ORDER,
+          message:
+            'a realm answered fewer rows than this page needs from it, so the page may leave out rows that belong on it; page.total counts every match',
+        });
+      }
+    }
     // Scores each realm computes over its own matches order the union only
     // approximately; a field sort's values compare exactly.
     if (
