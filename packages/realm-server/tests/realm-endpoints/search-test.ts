@@ -4,10 +4,29 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import {
   rri,
-  setSearchBoundsForTests,
-  resetSearchBoundsForTests,
+  setSearchBoundsForTests as setLegacySearchBounds,
+  resetSearchBoundsForTests as resetLegacySearchBounds,
   type Realm,
 } from '@cardstack/runtime-common';
+import {
+  setSearchBoundsForTests as setV2SearchBounds,
+  resetSearchBoundsForTests as resetV2SearchBounds,
+} from '@cardstack/runtime-common/query-v2/search-bounds';
+
+// A realm's `_search` bounds its page with the grammar it reads the request
+// with (realm-entry-grammar.ts), Query V2's or main's, so a test lowering the
+// bounds lowers both copies.
+function setSearchBoundsForTests(
+  overrides: Parameters<typeof setLegacySearchBounds>[0] &
+    Parameters<typeof setV2SearchBounds>[0],
+) {
+  setLegacySearchBounds(overrides);
+  setV2SearchBounds(overrides);
+}
+function resetSearchBoundsForTests() {
+  resetLegacySearchBounds();
+  resetV2SearchBounds();
+}
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   connectionTenantsDuring,

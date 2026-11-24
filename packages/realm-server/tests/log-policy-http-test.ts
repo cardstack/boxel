@@ -46,6 +46,8 @@ const BO = '@bo:localhost';
 const ZED = '@zed:localhost';
 
 const LIKES = 'Feed/likes.jsonl';
+// Each signed-in caller's favorite post, one line each.
+const FAVORITES = 'Feed/favorites.jsonl';
 const BIG = 'Class/big.jsonl';
 // 40 KB of lines: more than the 16 KB tail a log's file meta keeps.
 const bigLogText = () =>
@@ -124,6 +126,12 @@ function policyCard() {
               { operation: 'record', where: 'actor() != "anonymous"' },
             ],
           },
+          // Every post may be found, so what a card query binding a log finds
+          // is decided by the log's line grants alone.
+          {
+            targetType: { module: rri(`${FEED}feed`), name: 'Post' },
+            grants: [{ operation: 'query', where: '.uri != "none"' }],
+          },
         ],
       },
       meta: { adoptsFrom: REALM_POLICY },
@@ -188,6 +196,16 @@ module(basename(import.meta.filename), function (hooks) {
               ]),
             ),
             [LIKES]: `${JSON.stringify({ at: '2026-11-01 08:00:00', actor: OWNER, what: { post: 'p1' } })}\n`,
+            [FAVORITES]: [
+              [OWNER, 'p1'],
+              [ADA, 'p2'],
+              [BO, 'p3'],
+            ]
+              .map(
+                ([actor, post]) =>
+                  `${JSON.stringify({ at: '2026-11-01 08:00:00', actor, what: { post } })}\n`,
+              )
+              .join(''),
           },
           permissions: owner,
         },
@@ -545,6 +563,38 @@ module(basename(import.meta.filename), function (hooks) {
       await ids(),
       ['p1', 'p2'],
       'the appended like is in the next answer, with no index pass between',
+    );
+  });
+
+  test("a caller a policy scopes reads, through a card query's log binding, the lines her grant admits, the same on the realm's _search and the federated one", async function (assert) {
+    let POST = { module: `${FEED}feed`, name: 'Post' };
+    let body = {
+      filter: { 'item.on': POST, in: { 'item.uri': '$favorite' } },
+      let: {
+        $favorite: { from: { log: FAVORITES }, select: 'what.post' },
+      },
+    };
+    let uris = (answer: Row) =>
+      (answer.data as Row[]).map((d) => String(d.id).split('/').pop()).sort();
+    let own = await search(body, ADA);
+    assert.strictEqual(own.status, 200, JSON.stringify(own.body));
+    assert.deepEqual(
+      uris(own.body),
+      ['p2'],
+      "the realm's own _search: the post her own line names, and none of the others' lines",
+    );
+    let fed = await federated({ ...body, realms: [FEED] }, ADA);
+    assert.strictEqual(fed.status, 200, JSON.stringify(fed.body));
+    assert.deepEqual(
+      uris(fed.body),
+      uris(own.body),
+      'the federated _search: the same rows',
+    );
+    let owner = await search(body, OWNER);
+    assert.deepEqual(
+      uris(owner.body),
+      ['p1', 'p2', 'p3'],
+      'the owner reads every line',
     );
   });
 
