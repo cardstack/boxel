@@ -121,6 +121,9 @@ type Answer = {
 module('Acceptance | realm config | Automations', function (hooks) {
   let answer: Answer;
   let asked: number;
+  // Whether the Automation card's status route answers that the viewer is a
+  // direct writer.
+  let statusForWriter: boolean;
 
   setupApplicationTest(hooks);
   setupCatalogTestSubset(hooks);
@@ -145,12 +148,33 @@ module('Acceptance | realm config | Automations', function (hooks) {
     // route answers.
     answer = { status: 200, directWriter: false };
     asked = 0;
+    statusForWriter = false;
     getService('network').virtualNetwork.mount(
       async (request: Request) => {
         let url = new URL(request.url);
         // The Automation card reads its own status, which an in-browser
         // realm has no row for.
         if (url.pathname.endsWith('/_automation-status')) {
+          if (statusForWriter) {
+            return new Response(
+              JSON.stringify({
+                data: {
+                  type: 'automation-status',
+                  id: url.searchParams.get('automation'),
+                  attributes: {
+                    switchedOn: false,
+                    lastRun: null,
+                    currentRun: null,
+                  },
+                },
+                meta: { directWriter: true },
+              }),
+              {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              },
+            );
+          }
           return new Response(JSON.stringify({ errors: [] }), {
             status: 404,
             headers: { 'content-type': 'application/json' },
@@ -306,6 +330,51 @@ module('Acceptance | realm config | Automations', function (hooks) {
       assert
         .dom(`[data-test-stack-card="${DIGEST}"]`)
         .exists('the click opens the card in its isolated view');
+    });
+
+    test("Show in Automations on an automation's card opens the config card with the automation's row in view, focused and marked", async function (assert) {
+      answer = {
+        status: 200,
+        data: [ACTIVE, summary(DIGEST, { title: 'Issue digest' })],
+      };
+      statusForWriter = true;
+      await visitOperatorMode({
+        stacks: [[{ id: DIGEST, format: 'isolated' }]],
+      });
+      let action =
+        '[data-test-automation] header [data-test-automation-show-in-console]';
+      await waitFor(action, { timeout: 10000 });
+      await click(action);
+
+      await waitFor('[data-test-realm-config-isolated]');
+      let slot = `[data-test-automation-slot="${DIGEST}"]`;
+      await waitFor(`${slot}[data-test-automation-slot-focused="true"]`, {
+        timeout: 10000,
+      });
+      await waitFor(`${slot} [data-test-automation-slot-fitted]`, {
+        timeout: 10000,
+      });
+      assert
+        .dom(`[data-test-automation-slot="${NIGHTLY}"]`)
+        .doesNotHaveAttribute(
+          'data-test-automation-slot-focused',
+          'only the automation the card came from is marked',
+        );
+      assert.strictEqual(
+        document.activeElement,
+        document.querySelector(slot)?.closest('li'),
+        "the list's focus moves to the automation's row",
+      );
+      assert
+        .dom(`${slot} [data-test-automation-show-in-console]`)
+        .doesNotExist(
+          'an automation the console lists offers no way into the console',
+        );
+
+      await click(`[data-test-realm-automation="${NIGHTLY}"]`);
+      assert
+        .dom(`${slot}[data-test-automation-slot-focused="true"]`)
+        .doesNotExist('opening another automation clears the mark');
     });
 
     test("New automation opens a new automation in its edit view, in the config card's own stack", async function (assert) {

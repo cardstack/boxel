@@ -1,9 +1,11 @@
 import { getComponent, type CardContext, type CreateCardFn } from './card-api';
 import { isLiveRender } from './render-context';
 import {
+  realmConfigCardURL,
   rri,
   subscribeToRealm,
   type ResolvedCodeRef,
+  type ToolContext,
 } from '@cardstack/runtime-common';
 import type {
   AutomationListDocument,
@@ -21,10 +23,12 @@ import PlusIcon from '@cardstack/boxel-icons/plus';
 import AuthedFetchTool from '@cardstack/boxel-host/tools/authed-fetch';
 import ShowCardTool from '@cardstack/boxel-host/tools/show-card';
 import { on } from '@ember/modifier';
+import { schedule } from '@ember/runloop';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, task, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
+import { provide } from 'ember-provide-consume-context';
 
 // The automations console: the realm config's Automations section, every
 // automation in the realm for the realm's direct writers. It reads the
@@ -47,6 +51,38 @@ const AUTOMATION_TYPE: ResolvedCodeRef = {
   module: rri('@cardstack/catalog/automation/automation'),
   name: 'Automation',
 };
+
+// Provided to everything the console lists, as `true`, so an automation's own
+// views can tell they already show in the console and leave out the way into
+// the console.
+export const AutomationsConsoleContextName = 'automations-console-context';
+
+// The automation the console reveals the next time it lists the automation:
+// set by `showAutomationInConsole`, taken by the console of the same realm.
+class ConsoleFocus {
+  @tracked request: { realm: string; automation: string } | undefined;
+}
+const consoleFocus = new ConsoleFocus();
+
+function withSlash(url: string): string {
+  return url.endsWith('/') ? url : `${url}/`;
+}
+
+// Opens the realm's config card on its Automations section with the given
+// automation's row in view and marked, so the automation's own card leads
+// to the console that lists the automation. `realm` is the realm's URL and
+// `automation` the automation card's id.
+export async function showAutomationInConsole(
+  toolContext: ToolContext,
+  realm: string,
+  automation: string,
+): Promise<void> {
+  consoleFocus.request = { realm: withSlash(realm), automation };
+  await new ShowCardTool(toolContext).execute({
+    cardId: realmConfigCardURL(new URL(withSlash(realm))).href,
+    format: 'isolated',
+  });
+}
 
 // A card with no name reads by the last segment of the card's URL.
 export function automationTitle(automation: Automation): string {
@@ -179,6 +215,14 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
   @tracked private automations: Automation[] = [];
   @tracked private loadFailed = false;
   @tracked private createFailed = false;
+  // The automation an automation card opened the console on, which the
+  // console marks until someone opens another automation from the list.
+  @tracked private focused: string | undefined;
+
+  @provide(AutomationsConsoleContextName)
+  get inConsole(): boolean {
+    return true;
+  }
 
   private get toolContext() {
     return this.args.context?.toolContext;
@@ -276,8 +320,49 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
   // A click on an automation, or Enter on its row, opens the automation's
   // card in its isolated view.
   private openAutomation = (automation: Automation) => {
+    if (this.focused !== automation.id) {
+      this.focused = undefined;
+    }
     this.openCard.perform(automation.id);
   };
+
+  private isFocused = (automation: Automation) =>
+    this.focused === automation.id;
+
+  // When an automation card asked for this realm's console on one of the
+  // listed automations, scrolls that automation's row into view, moves the
+  // list's focus to the row, and marks the row. The request is taken once, so
+  // opening the config card again later shows the plain list.
+  private reveal = modifier(
+    (element: HTMLElement, [id, realm]: [string, string | undefined]) => {
+      let request = consoleFocus.request;
+      if (
+        !realm ||
+        !request ||
+        request.automation !== id ||
+        request.realm !== withSlash(realm)
+      ) {
+        return;
+      }
+      // After the render that read the request, so the change never updates
+      // state that render read.
+      let removed = false;
+      schedule('afterRender', () => {
+        if (removed || consoleFocus.request !== request) {
+          return;
+        }
+        consoleFocus.request = undefined;
+        this.focused = id;
+        element.scrollIntoView({ block: 'center' });
+        (element.closest('li') as HTMLElement | null)?.focus({
+          preventScroll: true,
+        });
+      });
+      return () => {
+        removed = true;
+      };
+    },
+  );
 
   private openCard = task(async (cardId: string) => {
     let toolContext = this.toolContext;
@@ -362,6 +447,8 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
               <AutomationSlot
                 @automation={{automation}}
                 @context={{@context}}
+                @focused={{this.isFocused automation}}
+                {{this.reveal automation.id @realm}}
               />
             </:item>
           </List>
@@ -464,7 +551,10 @@ interface AutomationSlotSignature {
   Args: {
     automation: Automation;
     context: CardContext | undefined;
+    // Whether an automation card opened the console on this automation.
+    focused?: boolean;
   };
+  Element: HTMLDivElement;
 }
 
 // One automation as the Automation card's own fitted view. A card that
@@ -481,7 +571,12 @@ class AutomationSlot extends GlimmerComponent<AutomationSlotSignature> {
   }
 
   <template>
-    <div class='slot' data-test-automation-slot={{@automation.id}}>
+    <div
+      class='slot {{if @focused "slot--focused"}}'
+      data-test-automation-slot={{@automation.id}}
+      data-test-automation-slot-focused={{if @focused 'true'}}
+      ...attributes
+    >
       {{#if this.card}}
         {{#let (getComponent this.card) as |Card|}}
           <Card
@@ -498,6 +593,14 @@ class AutomationSlot extends GlimmerComponent<AutomationSlotSignature> {
     <style scoped>
       .slot {
         container-type: inline-size;
+        border-radius: var(--radius-surface, var(--boxel-border-radius));
+      }
+      /* The automation an automation card opened the console on: ringed in
+         the theme's focus color, so the row stands out among the others
+         after the console scrolls the row into view. */
+      .slot--focused {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: 2px;
       }
       /* The section's slot: as wide as the section, and tall enough for the
          card's state, first trigger, milestones, payer, spend and limits. */
