@@ -973,7 +973,11 @@ export interface CallApiSlotLookup {
   // address, their part of the share's budget, and the key's anonymous cap.
   anonymous?: AnonymousCallApiCaller;
   mode: CallApiMode;
-  // The automation run an `automation` invocation belongs to.
+  // The automation run an `automation` invocation belongs to. Its row says
+  // which bindings may serve the call: a run of the automation's triggers
+  // needs an automation approval matching the version its attempt read, and
+  // a Preview or a Run now a key its identity owns, an interactive binding,
+  // or such an approval.
   runId?: string;
   // The request as the definition cache holds it now, which the binding's
   // fingerprint is checked against.
@@ -1070,7 +1074,7 @@ export interface CallApiUse {
 // slot a request carries and opens its key under the grant it names, or
 // refuses with `binding-not-approved`, `share-suspended`,
 // `binding-needs-reapproval`, `interactive-use-not-approved`,
-// `anonymous-use-not-approved` or `credential-rejected`; an interactive call over its key's limits with
+// `anonymous-use-not-approved`, `key-approval-ended` or `credential-rejected`; an interactive call over its key's limits with
 // `rate-limited` or `over-budget`, or `rate-limit-unavailable` when they
 // couldn't be counted. `send` sends the request through the guarded
 // outbound client and answers with the vendor's response, its credentials
@@ -1092,8 +1096,9 @@ export interface CallApiUse {
 // any key, whether `payer` may invoke one operation the automation declares
 // as an automation call: the refusal the call would get, marked with the share
 // or key that refused it (`refusedFrom`), or `undefined` when it would be
-// served. A sender that can't tell leaves it out, and a run's
-// admission then refuses the run.
+// served. With `runId`, each slot is held to that run as the run's calls
+// are. A sender that can't tell leaves it out, and a run's admission then
+// refuses the run.
 //
 // `checkAutomationKeyApprovals` checks each operation an automation declares
 // for the key approvals a run of its triggers needs, against the automation
@@ -1112,6 +1117,7 @@ export interface CallApiSender {
     codeRef: ResolvedCodeRef;
     operation: string;
     payer: string;
+    runId?: string;
   }): Promise<OperationFailure | undefined>;
   checkAutomationKeyApprovals?(
     args: Parameters<CheckAutomationKeyApprovals>[0] & {

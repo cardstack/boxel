@@ -8,6 +8,7 @@ import {
   type AutomationAdmissionChecks,
 } from '../automation-admission.ts';
 import { MAX_RUN_SECONDS } from '../automation-declaration.ts';
+import { automationVersion, versionKeyOf } from '../automation-key-approval.ts';
 import {
   type AutomationJobInput,
   type AutomationRunTriggerKind,
@@ -37,6 +38,7 @@ import {
   getAutomationRun,
   recordAutomationRunAdmitted,
   recordAutomationRunScript,
+  recordAutomationRunVersion,
   startAutomationRunAttempt,
   type AutomationRun,
   type AutomationRunOutcome,
@@ -406,6 +408,21 @@ async function attemptRun(
   let unrunnable = scriptRefusal(code, scriptURL);
   if (unrunnable) {
     return await refuse(unrunnable.reason, unrunnable.message);
+  }
+  // The automation's version as this attempt read its card and script, with
+  // the run's identity as payer: the realm compares each binding's
+  // automation approval with it at admission and at every call the run
+  // makes, so an edit landing after these reads never decides what the run
+  // is served by.
+  let version = await versionKeyOf(
+    await automationVersion(declaration.declaration, {
+      payer: run.actsAs,
+      script: code,
+    }),
+  );
+  if (!(await recordAutomationRunVersion(dbAdapter, runId, attempt, version))) {
+    log.info(`${tag} left alone: another attempt owns the run, or it ended`);
+    return { state: 'left', reason: 'superseded' };
   }
   let operationsAdmitted = await admitRunOperations(admission, run, {
     automation: identity.automation,

@@ -80,7 +80,9 @@ import {
   confirmationOf,
   versionKeyOf,
   type AutomationVersion,
+  type AutomationVersionKey,
 } from '@cardstack/runtime-common/automation-key-approval';
+import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
 // to send a chosen key in one of the operation's credential slots. Card code
@@ -108,7 +110,8 @@ import {
 //   is sent until they approve the new request.
 // - **Automations, and interactive use when approved for it.** An automation
 //   run's call, which carries the run's token and acts as the run's identity
-//   (`Realm.handleAutomation`), is served by any active binding. An interactive invocation — a card in the browser, the AI
+//   (`Realm.handleAutomation`), is served by an active binding, as the run's
+//   kind allows (below). An interactive invocation — a card in the browser, the AI
 //   assistant, the CLI — is served only by a binding approved `interactive`,
 //   and refused `interactive-use-not-approved` by one approved for automations
 //   only. Approving interactive use is the owner's choice for the whole
@@ -136,7 +139,13 @@ import {
 //   triggers is served only by a binding its key's owner approved for that
 //   automation, as the automation was then (ADR 039): an *automation
 //   approval*, which a confirmation records when it names the automation
-//   (`automation-key-approvals.ts`). A binding that comes to send another
+//   (`automation-key-approvals.ts`). Each of the run's calls, and its
+//   admission, compares the approval with the version the run's attempt read
+//   (`AutomationRun.version`), so a binding revoked mid-run serves none of
+//   the run's later calls. A Preview or a Run now acts as the person who
+//   started it, so it is served by a key that person owns, a binding approved
+//   `interactive`, or an automation approval that matches the version the
+//   run read with that person as payer. A binding that comes to send another
 //   share or key ends its automation approvals, unless the confirmation that
 //   moves it approves those automations again.
 //
@@ -1159,7 +1168,8 @@ function refusal(
     | 'share-suspended'
     | 'binding-needs-reapproval'
     | 'interactive-use-not-approved'
-    | 'anonymous-use-not-approved',
+    | 'anonymous-use-not-approved'
+    | 'key-approval-ended',
   title: string,
   detail: string,
   slot: CallApiSlot,
@@ -1216,10 +1226,70 @@ function slotBindingConditions({
 // What names the bindings that could fill an operation's slots: the realm,
 // the type the operation was resolved on, the operation, the card (for an
 // operation approved per instance), the caller whose own `{{userKey}}`
-// bindings count, and how the invocation arrived.
+// bindings count, and how the invocation arrived. `run` is the automation run
+// an automation invocation belongs to, which decides which of those bindings
+// may serve it (`RunApproval`).
 export type BindingLookup = Omit<CallApiSlotLookup, 'instance'> & {
   instance: string | null;
+  run?: RunApproval;
 };
+
+// An automation run, as its calls and its admission are checked against it
+// (ADR 039 §1.2, §1.7): its automation, whether a person started it (a Preview
+// or a Run now, whose row carries `MANUAL_RUN_TRIGGER`), and the version of
+// the automation the attempt that owns it read, with the run's identity as
+// payer. `automationId` is null for a run with no row, and `version` is null
+// until the attempt records it; either way no automation approval matches.
+export interface RunApproval {
+  automationId: string | null;
+  manual: boolean;
+  version: AutomationVersionKey | null;
+}
+
+// The run `runId` names, as its calls are checked against it.
+export async function runApprovalOf(
+  dbAdapter: DBAdapter,
+  runId: string | undefined,
+): Promise<RunApproval> {
+  let [row] = runId
+    ? await query(dbAdapter, [
+        'SELECT automation_id, trigger, version_key, version_call_api_calls FROM automation_runs WHERE id =',
+        param(runId),
+      ])
+    : [];
+  if (!row) {
+    return { automationId: null, manual: false, version: null };
+  }
+  return {
+    automationId: String(row.automation_id),
+    manual: row.trigger === MANUAL_RUN_TRIGGER,
+    version:
+      row.version_key == null
+        ? null
+        : {
+            versionKey: String(row.version_key),
+            callApiCalls: Number(row.version_call_api_calls),
+          },
+  };
+}
+
+// Whether `b` has an automation approval for the run's automation that
+// matches the version the run read (`approvalMatches`), as a column of the
+// slot's binding.
+function runApprovedColumn(run: RunApproval | undefined): Expression {
+  if (!run?.automationId || !run.version) {
+    return ['FALSE'];
+  }
+  return [
+    'EXISTS (SELECT 1 FROM automation_key_approvals a WHERE a.binding_id = b.id AND a.automation_id = ',
+    param(run.automationId),
+    ' AND a.version_key = ',
+    param(run.version.versionKey),
+    ' AND a.call_api_calls >= ',
+    param(run.version.callApiCalls),
+    ')',
+  ];
+}
 
 // The card a binding names for this invocation: null for an operation
 // approved on its type, and `undefined` for a per-instance operation invoked
@@ -1257,6 +1327,9 @@ export interface CheckedSlotBinding {
   // a personal key's binding, or a share with no key.
   share_key_anonymous: boolean | null;
   share_key_id: string | null;
+  // Who owns the key the binding's share holds; null for a personal key's
+  // binding, or a share with no key.
+  share_key_owner: string | null;
   share_owner: string | null;
   grant_state: string | null;
   grant_destination: string | null;
@@ -1265,6 +1338,9 @@ export interface CheckedSlotBinding {
   key_kind: string | null;
   key_state: string | null;
   key_probe_due: boolean;
+  // Whether the binding has an automation approval that matches the run the
+  // lookup names (`runApprovedColumn`); false when it names none.
+  run_approved: boolean;
 }
 
 // What checking a slot found: the refusal a call would get for it, or that it
@@ -1295,6 +1371,7 @@ export type SlotCheck =
         | 'binding-needs-reapproval'
         | 'interactive-use-not-approved'
         | 'anonymous-use-not-approved'
+        | 'key-approval-ended'
         | 'key-rejected';
     }
   | {
@@ -1316,8 +1393,8 @@ const OAUTH_MINTING_KINDS: ReadonlySet<string> = new Set([
 // approved per instance), by the caller for a `{{userKey}}` slot; its share,
 // if it has one, not suspended; its fingerprint the one the request has now;
 // approved for how the invocation arrived, and for a caller who isn't signed
-// in, its share's key allowing anonymous use; its grant still there for its
-// key;
+// in, its share's key allowing anonymous use; for an automation run's call,
+// approved for the run (`checkSlot`); its grant still there for its key;
 // that grant not rejected by the vendor, unless its probe is due; the
 // grant's key not a service-account key Google refused, unless the key's
 // probe is due; and an OAuth connection or `client_credentials` client able
@@ -1342,10 +1419,13 @@ export async function checkSlots(
   for (let slot of request.slots) {
     let [binding] = (await query(dbAdapter, [
       `SELECT b.id, b.slot, b.key_id, b.share_id, g.id AS grant_id, b.grant_id AS bound_grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state,
-              s.state AS share_state, (SELECT sk.anonymous FROM user_keys sk WHERE sk.id = s.key_id) AS share_key_anonymous, s.key_id AS share_key_id, s.owner AS share_owner,
+              s.state AS share_state, (SELECT sk.anonymous FROM user_keys sk WHERE sk.id = s.key_id) AS share_key_anonymous, s.key_id AS share_key_id,
+              (SELECT sk.owner FROM user_keys sk WHERE sk.id = s.key_id) AS share_key_owner, s.owner AS share_owner,
               g.state AS grant_state, g.destination AS grant_destination,
               k.id AS grant_key_id, k.kind AS key_kind, k.state AS key_state,
               `,
+      ...runApprovedColumn(lookup.run),
+      ` AS run_approved, `,
       ...probeDue('g.last_probe_at', probeIntervalMs),
       ` AS probe_due, `,
       ...probeDue('k.last_probe_at', probeIntervalMs),
@@ -1408,6 +1488,21 @@ function checkSlot(
   if (lookup.mode === 'interactive' && !binding.interactive) {
     return { slot, binding, refused: 'interactive-use-not-approved' };
   }
+  // A run of an automation's triggers is served only by a binding approved
+  // for its automation as the run read it. A Preview or a Run now acts as the
+  // person who started it: a key they own (a `{{userKey}}` binding is always
+  // the caller's own), a binding approved for interactive use, which they
+  // could already invoke from a card, or an approval with them as payer.
+  if (lookup.run && !binding.run_approved) {
+    if (!lookup.run.manual) {
+      return { slot, binding, refused: 'key-approval-ended' };
+    }
+    let ownsKey =
+      binding.key_id != null || binding.share_key_owner === lookup.caller;
+    if (!ownsKey && !binding.interactive) {
+      return { slot, binding, refused: 'interactive-use-not-approved' };
+    }
+  }
   // A personal key's binding has no share, so a `{{userKey}}` slot reaching
   // here for such a caller is refused too.
   if (lookup.anonymous && !binding.share_key_anonymous) {
@@ -1445,7 +1540,7 @@ function checkSlot(
 // uses up no probe.
 async function checkedBindings(
   dbAdapter: DBAdapter,
-  lookup: CallApiSlotLookup,
+  lookup: CallApiSlotLookup & { run?: RunApproval },
   rejection: {
     probeIntervalMs: number;
     claimProbe: boolean;
@@ -1532,9 +1627,22 @@ async function checkedBindings(
             // Says whose key the slot takes, in the words the other refusals
             // use, since the AI assistant sees only the message and answers a
             // caller's own key and a realm's shared key differently.
-            slot.key === 'userKey'
-              ? `operation "${lookup.operation}" is approved for automations only, so the key for the credential slot "${slot.name}" (the invoking user's own key) isn't used when it is invoked from a browser, the AI assistant or the CLI. The invoking user can allow that in the approval window, by choosing "On a schedule and when the card is opened"`
-              : `operation "${lookup.operation}" is approved for automations only, so the key for the credential slot "${slot.name}" (the realm's key) isn't used when it is invoked from a browser, the AI assistant or the CLI. Whoever shared the realm's key can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
+            lookup.run
+              ? `operation "${lookup.operation}" is approved for automations only, so the key for the credential slot "${slot.name}" (the realm's key) isn't used by a Preview or a Run now started by someone who doesn't own it. Whoever shared the realm's key can allow that in the approval window, by choosing "On a schedule and when the card is opened", or by approving this automation with that person as its payer`
+              : slot.key === 'userKey'
+                ? `operation "${lookup.operation}" is approved for automations only, so the key for the credential slot "${slot.name}" (the invoking user's own key) isn't used when it is invoked from a browser, the AI assistant or the CLI. The invoking user can allow that in the approval window, by choosing "On a schedule and when the card is opened"`
+                : `operation "${lookup.operation}" is approved for automations only, so the key for the credential slot "${slot.name}" (the realm's key) isn't used when it is invoked from a browser, the AI assistant or the CLI. Whoever shared the realm's key can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
+            slot,
+          ),
+        );
+      case 'key-approval-ended':
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          refusal(
+            409,
+            'key-approval-ended',
+            'Key approval ended',
+            `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a binding with no approval for this automation that matches it as the run read it: the approval ended, or the automation changed after its key's owner approved it. Nothing is sent until they approve the automation again`,
             slot,
           ),
         );
@@ -1831,11 +1939,23 @@ async function fillCheckedSlots(
   }: FillOptions,
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
-  for (let checked of await checkedBindings(dbAdapter, lookup, {
-    probeIntervalMs,
-    claimProbe: true,
-    ...(publishedRealmURL ? { publishedRealmURL } : {}),
-  })) {
+  // An automation invocation is a run's call, checked against the run it
+  // names. One that names no run, or a run with no row, is checked as a run
+  // of the automation's triggers that no approval matches, so every slot
+  // with a binding is refused `key-approval-ended`.
+  let run =
+    lookup.mode === 'automation'
+      ? await runApprovalOf(dbAdapter, lookup.runId)
+      : undefined;
+  for (let checked of await checkedBindings(
+    dbAdapter,
+    { ...lookup, ...(run ? { run } : {}) },
+    {
+      probeIntervalMs,
+      claimProbe: true,
+      ...(publishedRealmURL ? { publishedRealmURL } : {}),
+    },
+  )) {
     // A refusal filling this slot, from an unusable grant or a credential
     // whose token can't be minted, is this binding's share's or key's.
     try {
@@ -2085,7 +2205,11 @@ async function mintedToken(
 // vendor rejected, or a service-account key Google refused, admits the run
 // only while its probe is due, since only then would the call be sent. A
 // token endpoint failing at the moment (`reason: 'unavailable'`) is found by
-// the call, not here.
+// the call, not here. With `runId`, each slot is held to the run as a call of
+// it is (`RunApproval`): a run of the automation's triggers needs an
+// automation approval matching the version its attempt recorded, and a
+// Preview or a Run now a key its identity owns, an interactive binding or
+// such an approval.
 export async function automationAdmission(
   dbAdapter: DBAdapter,
   {
@@ -2095,6 +2219,7 @@ export async function automationAdmission(
     operation,
     instance,
     payer,
+    runId,
     probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
   }: {
     core: Pick<
@@ -2106,6 +2231,7 @@ export async function automationAdmission(
     operation: string;
     instance?: string;
     payer: string;
+    runId?: string;
     probeIntervalMs?: number;
   },
 ): Promise<OperationFailure | undefined> {
@@ -2149,6 +2275,7 @@ export async function automationAdmission(
         caller: payer,
         mode: 'automation',
         request: definition.callApi,
+        ...(runId ? { runId, run: await runApprovalOf(dbAdapter, runId) } : {}),
       },
       { probeIntervalMs, claimProbe: false },
     );

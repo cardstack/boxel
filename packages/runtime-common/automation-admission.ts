@@ -41,11 +41,15 @@
 //    resolves the declared type and reads its definition as the realm does.
 //    A refusal ends the run with its code, such as `binding-not-approved`,
 //    `share-suspended`, `binding-needs-reapproval` or `credential-rejected`;
-//    a realm that can't be asked refuses it (`run-admission-failed`). For any
-//    run but a Preview or a Run now (as the run's row says), the realm also
-//    checks each binding's automation approval against the automation's
-//    version as the card and script read now (ADR 039 §1.7), and refuses one
-//    that ended or no longer matches (`key-approval-ended`). When a run that acts as the payer is
+//    a realm that can't be asked refuses it (`run-admission-failed`). The
+//    attempt records the automation's version as it read the card and the
+//    script (`recordAutomationRunVersion`) before it asks, and the realm holds
+//    each slot to the run as the run's calls are held (ADR 039 §1.7): for any
+//    run but a Preview or a Run now (as the run's row says), a binding needs
+//    an automation approval matching that version, or the run is refused
+//    `key-approval-ended`; a Preview or a Run now needs a key its identity
+//    owns, an interactive binding, or such an approval with its identity as
+//    payer. When a run that acts as the payer is
 //    refused for a key approval (`KEY_APPROVAL_REFUSAL_REASONS`), the
 //    automation moves to *waiting for key approval*: an approval it was
 //    switched on with ended or stopped matching after switch-on.

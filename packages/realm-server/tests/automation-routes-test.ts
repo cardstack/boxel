@@ -26,6 +26,7 @@ import {
 } from '@cardstack/runtime-common/automations';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
+import { recordAutomationRunVersion } from '@cardstack/runtime-common/automation-runs';
 import {
   appendRunLog,
   type RunLogLine,
@@ -64,6 +65,7 @@ import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import { addUserKey, mintKeyWriteTicket } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
+import { fillSlots } from '../lib/key-bindings.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { checkPricingAtStartup, currentPricing } from '../lib/pricing.ts';
 import { runCostCeiling } from '../lib/automation-estimate.ts';
@@ -932,6 +934,51 @@ module(basename(import.meta.filename), function (hooks) {
       return approved;
     }
 
+    // A run of the automation at `path` acting as `actsAs`, whose attempt
+    // read the automation at `version` (`<versionKey>.<callApiCalls>`, as
+    // switch-on answers it) and recorded it. `manual` makes it a Preview's
+    // or a Run now's.
+    async function runReading(
+      path: string,
+      actsAs: string,
+      version: string,
+      { manual = false }: { manual?: boolean } = {},
+    ) {
+      let { token, run } = await createAutomationRunToken(
+        dbAdapter,
+        realm,
+        actsAs,
+        { automation: path },
+      );
+      if (manual) {
+        await dbAdapter.execute(
+          `UPDATE automation_runs SET trigger = $1 WHERE id = $2`,
+          { bind: [MANUAL_RUN_TRIGGER, run.id] },
+        );
+      }
+      let [versionKey, callApiCalls] = version.split('.');
+      let recorded = await recordAutomationRunVersion(
+        dbAdapter,
+        run.id,
+        run.attempt!,
+        { versionKey, callApiCalls: Number(callApiCalls) },
+      );
+      return { token, run: recorded! };
+    }
+
+    // The realm's answer to the run's admission request.
+    async function admit(token: string) {
+      let response = (await realm.handleAutomation(
+        new Request(`${realm.url}_run-admission`, {
+          headers: {
+            Accept: 'application/vnd.api+json',
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+      ))!;
+      return (await response.json()).data.attributes;
+    }
+
     // Runs the index hook over the keyed card, as the pass after an edit
     // does, and answers what it did to the automation.
     async function syncAfterEdit() {
@@ -1407,29 +1454,11 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('an approval that ended after switch-on is caught by a run’s admission in the realm', async function (assert) {
       await switchOnApproved();
-      let ask = async ({ manual = false }: { manual?: boolean } = {}) => {
-        let { token, run } = await createAutomationRunToken(
-          dbAdapter,
-          realm,
-          OWNER,
-          { automation: KEYED },
+      let { version } = await keyApprovalsOf(KEYED);
+      let ask = async ({ manual = false }: { manual?: boolean } = {}) =>
+        await admit(
+          (await runReading(KEYED, OWNER, version, { manual })).token,
         );
-        if (manual) {
-          await dbAdapter.execute(
-            `UPDATE automation_runs SET trigger = $1 WHERE id = $2`,
-            { bind: [MANUAL_RUN_TRIGGER, run.id] },
-          );
-        }
-        let response = (await realm.handleAutomation(
-          new Request(`${realm.url}_run-admission`, {
-            headers: {
-              Accept: 'application/vnd.api+json',
-              Authorization: `Bearer ${token}`,
-            },
-          }),
-        ))!;
-        return (await response.json()).data.attributes;
-      };
       assert.deepEqual(await ask(), { refusal: null, operations: 1 });
 
       await dbAdapter.execute(
@@ -1442,8 +1471,217 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(
         await ask({ manual: true }),
         { refusal: null, operations: 1 },
-        'a run started by hand needs no automation approval',
+        'a run started by hand is served by the key its starter owns',
       );
+    });
+
+    module('what serves a run’s calls', function () {
+      // The Inbox's `operation` filled as a call of `run` makes it, acting
+      // as `caller`, without sending anything.
+      async function fillFor(run: AutomationRun, operation: string) {
+        let definition =
+          (await realm.operationCore.definitionLookup.lookupDefinition({
+            module: rri(INBOX.module),
+            name: INBOX.name,
+          }))!.operations![operation];
+        return await fillSlots(dbAdapter, secretsKeyring, {
+          realmURL: realm.url,
+          type: INBOX,
+          operation,
+          caller: run.actsAs,
+          mode: 'automation',
+          runId: run.id,
+          request: definition.callApi!,
+        });
+      }
+
+      async function refusalOf(promise: Promise<unknown>) {
+        try {
+          await promise;
+        } catch (e: any) {
+          return e.error?.code ?? String(e);
+        }
+        return undefined;
+      }
+
+      test('a binding revoked mid-run refuses the run’s next call', async function (assert) {
+        await switchOnApproved();
+        let { version } = await keyApprovalsOf(KEYED);
+        let { run } = await runReading(KEYED, OWNER, version);
+        let [filled] = await fillFor(run, 'list');
+        assert.strictEqual(filled.name, 'userKey', 'the first call is served');
+
+        let [{ binding_id }] = await dbAdapter.execute(
+          `SELECT binding_id FROM automation_key_approvals WHERE automation_id = $1`,
+          { bind: [automationId(KEYED)] },
+        );
+        let revoked = await request
+          .delete(`/_key-bindings/${binding_id}`)
+          .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+          .set('Origin', secureOriginURL.origin);
+        assert.strictEqual(revoked.status, 204, revoked.text);
+        assert.strictEqual(
+          await refusalOf(fillFor(run, 'list')),
+          'binding-not-approved',
+          'the run’s next call is refused',
+        );
+      });
+
+      test('an approval that ends mid-run, its binding still active, refuses the run’s next call', async function (assert) {
+        await switchOnApproved();
+        let { version } = await keyApprovalsOf(KEYED);
+        let { run } = await runReading(KEYED, OWNER, version);
+        await fillFor(run, 'list');
+        await dbAdapter.execute(
+          `DELETE FROM automation_key_approvals WHERE automation_id = $1`,
+          { bind: [automationId(KEYED)] },
+        );
+        assert.strictEqual(
+          await refusalOf(fillFor(run, 'list')),
+          'key-approval-ended',
+        );
+      });
+
+      test('a run’s call is served only by an approval that matches the version the run read', async function (assert) {
+        await switchOnApproved();
+        let { version } = await keyApprovalsOf(KEYED);
+        let [versionKey, cap] = version.split('.');
+        let { run: other } = await runReading(
+          KEYED,
+          OWNER,
+          `${'0'.repeat(versionKey.length)}.${cap}`,
+        );
+        assert.strictEqual(
+          await refusalOf(fillFor(other, 'list')),
+          'key-approval-ended',
+          'a run that read another version is refused',
+        );
+        let { run: lower } = await runReading(
+          KEYED,
+          OWNER,
+          `${versionKey}.${Number(cap) - 1}`,
+        );
+        assert.strictEqual(
+          (await fillFor(lower, 'list')).length,
+          1,
+          'a run that read a lower callApiCalls cap is served',
+        );
+        let { run: unrecorded } = await createAutomationRunToken(
+          dbAdapter,
+          realm,
+          OWNER,
+          { automation: KEYED },
+        );
+        assert.strictEqual(
+          await refusalOf(fillFor(unrecorded, 'list')),
+          'key-approval-ended',
+          'a run whose attempt recorded no version is refused',
+        );
+      });
+
+      test('an edit between the attempt’s read and the realm’s check is compared against the attempt’s read', async function (assert) {
+        await switchOnApproved();
+        let { version } = await keyApprovalsOf(KEYED);
+        let { token: readBefore } = await runReading(KEYED, OWNER, version);
+        await editCard(KEYED, (attributes) => {
+          attributes.params = [{ name: 'place', value: 'elsewhere' }];
+        });
+        let edited = (await keyApprovalsOf(KEYED)).version;
+        assert.notStrictEqual(edited, version, 'the edit changed the version');
+        assert.deepEqual(
+          await admit(readBefore),
+          { refusal: null, operations: 1 },
+          'a run that read the card before the edit is admitted',
+        );
+        let { token: readAfter } = await runReading(KEYED, OWNER, edited);
+        assert.strictEqual(
+          (await admit(readAfter)).refusal?.code,
+          'key-approval-ended',
+          'a run that read the edited card is refused',
+        );
+      });
+
+      module('Preview and Run now', function (hooks) {
+        let shareId: string;
+        hooks.beforeEach(async function () {
+          // The realm's key is the owner's, approved for automations only.
+          shareId = (await shareOwnKey(OWNER)).id;
+          let approved = await approveOperation(OWNER, 'shared', { shareId });
+          assert201(approved);
+        });
+
+        function assert201(response: { status: number; text: string }) {
+          if (response.status !== 201) {
+            throw new Error(
+              `approving answered ${response.status}: ${response.text}`,
+            );
+          }
+        }
+
+        // A Preview of the shared automation started by `user`, its attempt
+        // having read the card with `user` as payer.
+        async function previewBy(user: string) {
+          let { version } = await keyApprovalsOf(SHARED, user);
+          return await runReading(SHARED, user, version, { manual: true });
+        }
+
+        test('a Preview using another owner’s automations-only binding is refused, at admission and at the call', async function (assert) {
+          let { token, run } = await previewBy(WRITER);
+          assert.strictEqual(
+            await refusalOf(fillFor(run, 'shared')),
+            'interactive-use-not-approved',
+          );
+          assert.strictEqual(
+            (await admit(token)).refusal?.code,
+            'interactive-use-not-approved',
+          );
+        });
+
+        test('a Preview using a key its starter owns is served', async function (assert) {
+          let { token, run } = await previewBy(OWNER);
+          assert.strictEqual((await fillFor(run, 'shared')).length, 1);
+          assert.deepEqual(await admit(token), {
+            refusal: null,
+            operations: 1,
+          });
+        });
+
+        test('a Preview using a binding approved for interactive use is served', async function (assert) {
+          await dbAdapter.execute(
+            `UPDATE key_bindings SET interactive = true WHERE share_id = $1`,
+            { bind: [shareId] },
+          );
+          let { run } = await previewBy(WRITER);
+          assert.strictEqual((await fillFor(run, 'shared')).length, 1);
+        });
+
+        test('a Preview using an approval that matches the card with its starter as payer is served', async function (assert) {
+          await fund(WRITER);
+          let shown = (await switchOn(WRITER, SHARED)).body.meta.keyApprovals;
+          assert201(
+            await approveOperation(
+              OWNER,
+              'shared',
+              { shareId },
+              { id: cardURL(SHARED), version: shown.version },
+            ),
+          );
+          let { run } = await previewBy(WRITER);
+          assert.strictEqual((await fillFor(run, 'shared')).length, 1);
+
+          let { run: someoneElse } = await runReading(
+            SHARED,
+            READER,
+            (await keyApprovalsOf(SHARED)).version,
+            { manual: true },
+          );
+          assert.strictEqual(
+            await refusalOf(fillFor(someoneElse, 'shared')),
+            'interactive-use-not-approved',
+            'an approval naming another payer serves no one else’s Preview',
+          );
+        });
+      });
     });
 
     test('removing the automation removes its approvals', async function (assert) {
