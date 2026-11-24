@@ -199,8 +199,8 @@ const BOXEL_API_WRITE_ROUTES: readonly OAuthRoute[] = [
   // that didn't exist, and publishing writes read for everyone only on the
   // published copy, never on the realm published from, so neither changes
   // who can reach an existing realm of the user's (§1.6). Creating and
-  // deleting a workspace also edit the caller's own workspace list, which
-  // names realms and grants nothing.
+  // deleting a workspace with one of these tokens also edit the caller's own
+  // workspace list, which names realms and grants nothing.
   server('POST', '/_create-realm'),
   server('DELETE', '/_delete-realm'),
   server('POST', '/_publish-realm'),
@@ -219,7 +219,8 @@ const BOXEL_API: OAuthResourceDefinition = {
   scopes: [
     {
       name: 'boxel:read',
-      description: 'See your workspaces and the cards and files in them.',
+      description:
+        'See your display name, your workspaces, and the cards and files in them.',
       label: 'Read',
       caution: false,
       routes: BOXEL_API_READ_ROUTES,

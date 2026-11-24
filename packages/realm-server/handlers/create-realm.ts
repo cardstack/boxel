@@ -42,6 +42,7 @@ import {
   sendResponseForSystemError,
   setContextResponse,
   requestUser,
+  isOAuthRequest,
 } from '../middleware/index.ts';
 import {
   addToWorkspaceList,
@@ -403,7 +404,7 @@ export default function handleCreateRealmRequest(
       log.debug(`created new realm ${url} in ${Date.now() - start} ms`);
     } catch (e: any) {
       if ('status' in e && e.status === 400) {
-        if (typeof e.existingRealmURL === 'string') {
+        if (isOAuthRequest(ctxt) && typeof e.existingRealmURL === 'string') {
           await addOwnRealmToList(requestDeps, ownerUserId, e.existingRealmURL);
         }
         await sendResponseForBadRequest(ctxt, e.message);
@@ -430,25 +431,30 @@ export default function handleCreateRealmRequest(
       }
     }
 
-    // The new realm joins the owner's workspace list before the response, so
-    // the list names it once the caller hears it exists. The two succeed or
-    // fail together: a realm the list can't take is deleted again, and the
-    // caller is told nothing was created.
-    try {
-      await addToWorkspaceList(requestDeps, ownerUserId, url!);
-    } catch (e: any) {
-      log.error(
-        `could not add ${url} to ${ownerUserId}'s workspace list, so it is deleted again: ${e?.message ?? e}`,
-      );
-      Sentry.captureException(e);
-      await deleteUnlistedRealm(requestDeps, url!);
-      await sendResponseForError(
-        ctxt,
-        503,
-        'Service Unavailable',
-        'The workspace was not created, because your workspace list could not be updated. Try again.',
-      );
-      return;
+    // A caller with an OAuth token holds no Matrix token to keep its owner's
+    // workspace list with, so the new realm joins the list here, before the
+    // response, and the two succeed or fail together: a realm the list can't
+    // take is deleted again. A caller with a session token keeps the list
+    // itself, as the app and every boxel-cli signed in to Matrix do.
+    if (isOAuthRequest(ctxt)) {
+      try {
+        await addToWorkspaceList(requestDeps, ownerUserId, url!);
+      } catch (e: any) {
+        log.error(
+          `could not add ${url} to ${ownerUserId}'s workspace list, so it is deleted again: ${e?.message ?? e}`,
+        );
+        Sentry.captureException(e);
+        let deleted = await deleteUnlistedRealm(requestDeps, url!);
+        await sendResponseForError(
+          ctxt,
+          503,
+          'Service Unavailable',
+          deleted
+            ? 'The workspace was not created, because your workspace list could not be updated. Try again.'
+            : `The workspace was created, but your workspace list could not be updated. Create it again to add it to your list: ${url}`,
+        );
+        return;
+      }
     }
 
     // Phase 3 PR 2: createRealm wrote the realm directory + the
@@ -507,10 +513,10 @@ export default function handleCreateRealmRequest(
 
 type AlreadyExistsError = Error & { status: number; existingRealmURL: string };
 
-// A create that finds the caller's own realm already there is one an earlier
-// create left off the list (it failed after the realm was made, and its own
-// deletion failed too), so the list gets it now. The request still answers
-// that the realm exists. Best-effort: the answer is the same either way.
+// An OAuth create that finds the caller's own realm already there may be one
+// an earlier create left off the list (its list edit failed, and deleting it
+// again failed too), so the list gets it now. The request still answers that
+// the realm exists. Best-effort: the answer is the same either way.
 async function addOwnRealmToList(
   deps: CreateRealmRequestDeps,
   user: string,
@@ -532,28 +538,32 @@ async function addOwnRealmToList(
   }
 }
 
-// Deletes a realm this request created but couldn't add to its owner's list.
-// A deletion that fails leaves the realm off the list; a later create at the
-// same endpoint adds it (`addOwnRealmToList`).
-async function deleteUnlistedRealm(deps: CreateRealmRequestDeps, url: string) {
+// Deletes a realm this request created but couldn't add to its owner's list,
+// and says whether it is gone. A deletion that fails leaves the realm off the
+// list; a later create at the same endpoint adds it (`addOwnRealmToList`).
+async function deleteUnlistedRealm(
+  deps: CreateRealmRequestDeps,
+  url: string,
+): Promise<boolean> {
   try {
     let [row] = (await query(deps.dbAdapter, [
       `SELECT id, disk_id FROM realm_registry WHERE url =`,
       param(url),
     ])) as { id: string; disk_id: string }[];
-    if (!row) {
-      return;
+    if (row) {
+      await deleteSourceRealm(deps, {
+        realmURL: url,
+        registryId: row.id,
+        diskId: row.disk_id,
+      });
     }
-    await deleteSourceRealm(deps, {
-      realmURL: url,
-      registryId: row.id,
-      diskId: row.disk_id,
-    });
+    return true;
   } catch (e: any) {
     log.error(
       `could not delete ${url} after its workspace list edit failed, so it exists off its owner's list: ${e?.message ?? e}`,
     );
     Sentry.captureException(e);
+    return false;
   }
 }
 

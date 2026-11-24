@@ -28,6 +28,7 @@ import {
   sendResponseForUnprocessableEntity,
   setContextResponse,
   requestUser,
+  isOAuthRequest,
 } from '../middleware/index.ts';
 import { notifyRealmsListUpdated } from './archive-realm-utils.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
@@ -166,13 +167,18 @@ export default function handleDeleteRealm(
         return;
       }
 
-      // The realm leaves the caller's workspace list first, since the delete
-      // can't be undone and the list edit can: a list that can't be edited
-      // deletes nothing, and a delete that fails puts the realm back on the
-      // list it was on.
-      let listEdit: { changed: boolean };
+      // A caller with an OAuth token holds no Matrix token to keep its
+      // workspace list with, so the realm leaves the list here, and first,
+      // since the delete can't be undone and the list edit can: a list that
+      // can't be edited deletes nothing, and a delete that fails puts the
+      // realm back on the list it was on. A caller with a session token keeps
+      // the list itself, as the app and every boxel-cli signed in to Matrix
+      // do, and would report a realm it found already gone as a failure.
+      let listEdit = { changed: false };
       try {
-        listEdit = await removeFromWorkspaceList(args, ownerUserId, realmURL);
+        if (isOAuthRequest(ctxt)) {
+          listEdit = await removeFromWorkspaceList(args, ownerUserId, realmURL);
+        }
       } catch (error: any) {
         log.error(
           `could not remove ${realmURL} from ${ownerUserId}'s workspace list, so it was not deleted: ${error?.message ?? error}`,

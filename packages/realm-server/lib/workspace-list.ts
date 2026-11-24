@@ -1,9 +1,8 @@
 // A user's workspace list: the realms the app lists for them, kept in their
 // Matrix account data (`app.boxel.realms`). The realm server reads and edits
 // it through the Synapse admin API, as the user whose list it is and no one
-// else, so a caller that holds no Matrix token (boxel-cli signed in with
-// OAuth) still has the list kept in step with the workspaces it creates and
-// deletes, and can read it.
+// else, for a caller that holds no Matrix token of its own (an app with an
+// OAuth Boxel API token, such as boxel-cli).
 //
 // The admin API reaches only the users of the realm server's own homeserver
 // (ADR 004 §4), so a user of any other server has no list here: reads answer
@@ -38,6 +37,10 @@ export interface WorkspaceListDeps {
 // workspace's create or delete.
 const ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [250, 750];
+// How long one list operation may take, all its tries together. It holds a
+// create or delete request open, so a Matrix server that stops answering
+// fails it rather than hanging it.
+const DEADLINE_MS = 15_000;
 
 export async function addToWorkspaceList(
   deps: WorkspaceListDeps,
@@ -48,35 +51,48 @@ export async function addToWorkspaceList(
     deps,
     user,
     'add a workspace to a list',
-    (accessToken) =>
+    (accessToken, signal) =>
       appendRealmToUserAccountData({
         matrixURL: deps.matrixClient.matrixURL,
         userId: user,
         userAccessToken: accessToken,
         realmURL,
+        signal,
       }),
   );
   return { changed: result ? !result.alreadyPresent : false };
 }
 
+// `changed` says whether the list held the realm when this began, even when a
+// try that removed it failed after its write and a later try found it gone.
 export async function removeFromWorkspaceList(
   deps: WorkspaceListDeps,
   user: string,
   realmURL: string,
 ): Promise<{ changed: boolean }> {
-  let result = await asListOwner(
+  let held = false;
+  await asListOwner(
     deps,
     user,
     'remove a workspace from a list',
-    (accessToken) =>
-      removeRealmFromUserAccountData({
+    async (accessToken, signal) => {
+      // A try that fails may have written the removal already, so the next
+      // one can't tell from the list whether the realm was ever on it: each
+      // try records first whether the realm is there.
+      let content = await read(deps, user, accessToken, signal);
+      if (realmsIn(content).includes(realmURL)) {
+        held = true;
+      }
+      await removeRealmFromUserAccountData({
         matrixURL: deps.matrixClient.matrixURL,
         userId: user,
         userAccessToken: accessToken,
         realmURL,
-      }),
+        signal,
+      });
+    },
   );
-  return { changed: result ? result.wasPresent : false };
+  return { changed: held };
 }
 
 // The user's list, or undefined when this server keeps none for them. A list
@@ -85,21 +101,13 @@ export async function readWorkspaceList(
   deps: WorkspaceListDeps,
   user: string,
 ): Promise<string[] | undefined> {
-  let content = await asListOwner(deps, user, 'read a list', (accessToken) =>
-    fetchAccountData(
-      deps.matrixClient.matrixURL,
-      user,
-      accessToken,
-      APP_BOXEL_REALMS_EVENT_TYPE,
-    ),
+  let content = await asListOwner(
+    deps,
+    user,
+    'read a list',
+    (accessToken, signal) => read(deps, user, accessToken, signal),
   );
-  if (!content) {
-    return undefined;
-  }
-  let { realms } = content;
-  return Array.isArray(realms)
-    ? realms.filter((realm): realm is string => typeof realm === 'string')
-    : [];
+  return content ? realmsIn(content) : undefined;
 }
 
 // The user's display name: null when they have none, undefined when this
@@ -112,24 +120,54 @@ export async function readDisplayName(
     return undefined;
   }
   let admin = matrixAdmin(deps);
-  return await withRetries('read a display name', () =>
-    fetchDisplayName(admin, user),
+  return await withRetries('read a display name', (signal) =>
+    fetchDisplayName(admin, user, { signal }),
   );
 }
 
+function read(
+  deps: WorkspaceListDeps,
+  user: string,
+  accessToken: string,
+  signal: AbortSignal,
+) {
+  return fetchAccountData(
+    deps.matrixClient.matrixURL,
+    user,
+    accessToken,
+    APP_BOXEL_REALMS_EVENT_TYPE,
+    signal,
+  );
+}
+
+function realmsIn(content: Record<string, unknown>): string[] {
+  let { realms } = content;
+  return Array.isArray(realms)
+    ? realms.filter((realm): realm is string => typeof realm === 'string')
+    : [];
+}
+
+// Runs `fn` as `user`, trying again as `withRetries` does.
 async function asListOwner<T>(
   deps: WorkspaceListDeps,
   user: string,
   what: string,
-  fn: (accessToken: string) => Promise<T>,
+  fn: (accessToken: string, signal: AbortSignal) => Promise<T>,
 ): Promise<T | undefined> {
   if (!keepsAccountOf(deps, user)) {
     return undefined;
   }
   let admin = matrixAdmin(deps);
-  return await withRetries(what, () =>
-    withImpersonatedUser(admin, user, fn, (e: any) =>
-      log.warn(`could not log out a workspace-list token: ${e?.message ?? e}`),
+  return await withRetries(what, (signal) =>
+    withImpersonatedUser(
+      admin,
+      user,
+      (accessToken) => fn(accessToken, signal),
+      (e: any) =>
+        log.warn(
+          `could not log out a workspace-list token: ${e?.message ?? e}`,
+        ),
+      { signal },
     ),
   );
 }
@@ -154,24 +192,32 @@ function matrixAdmin(deps: WorkspaceListDeps): MatrixAdmin {
   };
 }
 
-async function withRetries<T>(what: string, fn: () => Promise<T>): Promise<T> {
+// Tries `fn` until it succeeds, it fails in a way that won't pass, or the
+// tries run out, all within `DEADLINE_MS`; `fn`'s requests end when the
+// deadline does.
+async function withRetries<T>(
+  what: string,
+  fn: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  let signal = AbortSignal.timeout(DEADLINE_MS);
   for (let attempt = 1; ; attempt++) {
     try {
-      return await fn();
+      return await fn(signal);
     } catch (e: any) {
-      if (attempt >= ATTEMPTS || !mayPass(e)) {
+      if (attempt >= ATTEMPTS || signal.aborted || !mayPass(e)) {
         throw e;
       }
       log.info(
         `could not ${what} (attempt ${attempt} of ${ATTEMPTS}), trying again: ${e?.message ?? e}`,
       );
-      await delay(RETRY_DELAYS_MS[attempt - 1]);
+      await delay(RETRY_DELAYS_MS[attempt - 1], undefined, { signal });
     }
   }
 }
 
-// Whether a failure may pass if tried again: the Matrix server answered 429
-// or 5xx, or never answered (`fetch` rejects with a `TypeError`).
+// Whether a failure may pass if tried again: the Matrix server, or its admin
+// login, answered 429 or 5xx, or never answered (`fetch` rejects with a
+// `TypeError`).
 function mayPass(e: unknown): boolean {
   if (e instanceof MatrixHttpError) {
     return e.status === 429 || e.status >= 500;
