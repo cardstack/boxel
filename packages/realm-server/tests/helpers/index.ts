@@ -16,6 +16,7 @@ import type {
 import { automationRef } from '@cardstack/runtime-common/automation-declaration';
 import {
   createAutomationRun,
+  recordAutomationRunVersion,
   startAutomationRunAttempt,
   type AutomationRun,
 } from '@cardstack/runtime-common/automation-runs';
@@ -4059,6 +4060,13 @@ export function automationFixture({
 // path in the realm (`TEST_AUTOMATION_PATH` for `automationFixture`'s);
 // without it the run is of a card that doesn't exist, so it declares
 // nothing.
+//
+// A run's `callApi` is served only by a binding with an automation approval
+// matching the version the run's attempt recorded. `approveBindings` gives
+// the run what a switched-on automation whose key owners approved it has: a
+// row for its automation, a recorded version, and an approval of that
+// version by each binding in the realm as the token is made. A test
+// that approves a binding after making the token makes a new one.
 export async function createAutomationRunToken(
   dbAdapter: DBAdapter,
   realm: Realm,
@@ -4069,12 +4077,14 @@ export async function createAutomationRunToken(
     writesCap = 100,
     timeLimitSeconds = 600,
     automation,
+    approveBindings = false,
   }: {
     attempt?: number;
     readRealms?: string[];
     writesCap?: number;
     timeLimitSeconds?: number;
     automation?: string;
+    approveBindings?: boolean;
   } = {},
 ): Promise<{ token: string; run: AutomationRun }> {
   let created = await createAutomationRun(dbAdapter, {
@@ -4090,6 +4100,9 @@ export async function createAutomationRunToken(
   if (start.kind !== 'run') {
     throw new Error(`expected the test run to start, got ${start.kind}`);
   }
+  if (approveBindings) {
+    await approveRunForRealmBindings(dbAdapter, realm, start.run);
+  }
   let token = mintRunToken({
     realmSecretSeed,
     run: start.run,
@@ -4100,6 +4113,48 @@ export async function createAutomationRunToken(
     timeLimitSeconds,
   });
   return { token, run: start.run };
+}
+
+const TEST_RUN_VERSION = { versionKey: 'test-run-version', callApiCalls: 1000 };
+
+// Approves `run`'s automation for every binding in `realm`, whatever its
+// state (so a suspended or changed binding still answers its own refusal), at the
+// version the run records, as each key's owner approving the automation at
+// switch-on does. The automation's row is written if it has none, with the
+// run's identity as payer.
+async function approveRunForRealmBindings(
+  dbAdapter: DBAdapter,
+  realm: Realm,
+  run: AutomationRun,
+): Promise<void> {
+  await dbAdapter.execute(
+    `INSERT INTO automations (automation_id, realm, payer, caps_snapshot, scheduled_since)
+     VALUES ($1, $2, $3, '{}'::jsonb, now())
+     ON CONFLICT (automation_id) DO NOTHING`,
+    { bind: [run.automationId, run.realm, run.actsAs] },
+  );
+  await recordAutomationRunVersion(
+    dbAdapter,
+    run.id,
+    run.attempt!,
+    TEST_RUN_VERSION,
+  );
+  await dbAdapter.execute(
+    `INSERT INTO automation_key_approvals (automation_id, binding_id, approved_by, version, version_key, call_api_calls)
+     SELECT $1, b.id, b.approved_by, '{}'::jsonb, $2, $3
+       FROM key_bindings b
+      WHERE b.realm_url = $4
+     ON CONFLICT (automation_id, binding_id) DO UPDATE
+       SET version_key = EXCLUDED.version_key, call_api_calls = EXCLUDED.call_api_calls`,
+    {
+      bind: [
+        run.automationId,
+        TEST_RUN_VERSION.versionKey,
+        TEST_RUN_VERSION.callApiCalls,
+        realm.url,
+      ],
+    },
+  );
 }
 
 // Variant that builds a realm JWT from URL + seed instead of a Realm

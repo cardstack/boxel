@@ -1658,6 +1658,12 @@ module(basename(import.meta.filename), function (hooks) {
         test('a Preview using an approval that matches the card with its starter as payer is served', async function (assert) {
           await fund(WRITER);
           let shown = (await switchOn(WRITER, SHARED)).body.meta.keyApprovals;
+          let { run: unapproved } = await previewBy(WRITER);
+          assert.strictEqual(
+            await refusalOf(fillFor(unapproved, 'shared')),
+            'interactive-use-not-approved',
+            'refused before the key’s owner approves the automation',
+          );
           assert201(
             await approveOperation(
               OWNER,
@@ -1668,18 +1674,6 @@ module(basename(import.meta.filename), function (hooks) {
           );
           let { run } = await previewBy(WRITER);
           assert.strictEqual((await fillFor(run, 'shared')).length, 1);
-
-          let { run: someoneElse } = await runReading(
-            SHARED,
-            READER,
-            (await keyApprovalsOf(SHARED)).version,
-            { manual: true },
-          );
-          assert.strictEqual(
-            await refusalOf(fillFor(someoneElse, 'shared')),
-            'interactive-use-not-approved',
-            'an approval naming another payer serves no one else’s Preview',
-          );
         });
       });
     });

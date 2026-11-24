@@ -450,6 +450,14 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(result.state, 'complete');
     let row = await getAutomationRun(dbAdapter, run.id);
     assert.ok(row?.admittedAt, 'the admission is on the run row');
+    assert.true(
+      /^[0-9a-f]{64}$/.test(row?.version?.versionKey ?? ''),
+      'the version the attempt read is on the run row, for the realm to compare approvals with',
+    );
+    assert.strictEqual(
+      row?.version?.callApiCalls,
+      ROOMY_AUTOMATION_CAPS.callApiCalls,
+    );
     assert.strictEqual(calls.length, 1, 'the script ran');
     assert.deepEqual(await admissionLines(run.id), [
       {
