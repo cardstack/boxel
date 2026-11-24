@@ -39,6 +39,7 @@ import PublishRealmTool from '@cardstack/host/tools/publish-realm';
 import UnpublishRealmTool from '@cardstack/host/tools/unpublish-realm';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
+import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 
 import HostModeContent from '../host-mode/content';
 
@@ -295,8 +296,32 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     this.operatorModeStateService.removeFromHostModeStack(cardId);
   };
 
+  // Host submode has no search of its own; the dashboard opened over it does.
+  // A result opens in interact submode, as the dashboard's other cards do.
+  private get onCardSelectFromSearch() {
+    return this.operatorModeStateService.workspaceChooserOpened
+      ? this.openSearchResultInInteract
+      : undefined;
+  }
+
+  private openSearchResultInInteract = (
+    cardId: string,
+    kind?: SearchResultKind,
+  ) => {
+    this.operatorModeStateService.openCardInInteractMode(
+      cardId,
+      'isolated',
+      kind,
+    );
+    this.operatorModeStateService.closeWorkspaceChooser();
+  };
+
   <template>
-    <SubmodeLayout class='host-submode-layout' data-test-host-submode>
+    <SubmodeLayout
+      class='host-submode-layout'
+      @onCardSelectFromSearch={{this.onCardSelectFromSearch}}
+      data-test-host-submode
+    >
       <:topBar>
         <div class='publish-realm-button-container'>
           {{#if this.isPublishing}}

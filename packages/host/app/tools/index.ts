@@ -5,6 +5,7 @@ import * as UseAiAssistantToolModule from './ai-assistant';
 import * as ApplyMarkdownEditToolModule from './apply-markdown-edit';
 import * as AskUserToolModule from './ask-user';
 import * as AuthedFetchToolModule from './authed-fetch';
+import * as AutomationRequestToolModule from './automation-request';
 import * as CreateListingPRRequestToolModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventToolModule from './bot-requests/send-bot-trigger-event';
 import * as CanReadRealmToolModule from './can-read-realm';
@@ -133,6 +134,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     AddFieldToCardDefinitionToolModule,
   );
   shimHostToolModule(virtualNetwork, 'authed-fetch', AuthedFetchToolModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'automation-request',
+    AutomationRequestToolModule,
+  );
   shimHostToolModule(
     virtualNetwork,
     'apply-markdown-edit',
@@ -530,6 +536,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   CopySourceToolModule.default,
   DownloadFileToRealmToolModule.default,
   AuthedFetchToolModule.default,
+  AutomationRequestToolModule.default,
   CanReadRealmToolModule.default,
   CreateAIAssistantRoomToolModule.default,
   CopyAndEditToolModule.default,
