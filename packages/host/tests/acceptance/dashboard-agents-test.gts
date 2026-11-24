@@ -13,6 +13,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { Deferred } from '@cardstack/runtime-common';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -23,9 +24,14 @@ import {
 } from '../helpers';
 import {
   realmURL,
+  markHosted,
+  markPublishable,
   nameFromTip,
   setupDashboardTest,
 } from '../helpers/dashboard';
+
+const STARTER_PROMPT =
+  'Build me a card to track my reading list, with a title, author, status and rating for each book.';
 
 // Records what is copied instead of writing the clipboard, until restored.
 // With `fail` set, a copy is refused, as a browser does without permission.
@@ -410,8 +416,51 @@ module('Acceptance | dashboard agents', function (hooks) {
       assert.dom(PANEL).includesText('Uses credits');
 
       await click('[data-test-agent-describe-it]');
+      let matrixService = getService('matrix-service') as MatrixService;
+      await waitUntil(() => matrixService.currentRoomId);
+      await settled();
 
       assert.dom('[data-test-ai-assistant-panel]').exists();
+      assert
+        .dom(`[data-test-message-field="${matrixService.currentRoomId}"]`)
+        .hasValue(STARTER_PROMPT)
+        .isFocused();
+    });
+
+    test('with every Get started step done, Describe it opens a new session from a used one, focused', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await click('[data-test-agent-picker] input[value="boxel"]');
+
+      await click('[data-test-agent-describe-it]');
+      let matrixService = getService('matrix-service') as MatrixService;
+      await waitUntil(() => matrixService.currentRoomId);
+      await settled();
+      let usedRoomId = matrixService.currentRoomId!;
+      mockMatrixUtils.simulateRemoteMessage(usedRoomId, '@testuser:localhost', {
+        body: 'Make me a card for tracking tasks',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+      });
+      (getService('recent-cards-service') as any).add(`${realmURL}index`);
+      markPublishable(realmURL);
+      markHosted(realmURL);
+      await click('[data-test-get-started-button]');
+      await waitUntil(
+        () =>
+          find('[data-test-get-started-count]')
+            ?.textContent?.replace(/\s+/g, ' ')
+            .trim() === '3 of 3 done',
+      );
+
+      await click('[data-test-agent-describe-it]');
+      await waitUntil(() => matrixService.currentRoomId !== usedRoomId);
+      await settled();
+
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      assert
+        .dom(`[data-test-message-field="${matrixService.currentRoomId}"]`)
+        .hasValue(STARTER_PROMPT)
+        .isFocused();
     });
   });
 
@@ -535,6 +584,28 @@ module('Acceptance | dashboard agents', function (hooks) {
       assert.dom(FLYOUT).doesNotExist();
       assert.dom(ENTRY).isFocused('focus goes back to the entry');
       assert.dom('[data-test-ai-assistant-panel]').exists();
+    });
+
+    test('New session in the flyout opens empty when Describe it left its prompt as it was', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await click('[data-test-agent-picker] input[value="boxel"]');
+      await click('[data-test-agent-describe-it]');
+      let matrixService = getService('matrix-service') as MatrixService;
+      await waitUntil(() => matrixService.currentRoomId);
+      await settled();
+      let roomId = matrixService.currentRoomId!;
+      let field = `[data-test-message-field="${roomId}"]`;
+      assert.dom(field).hasValue(STARTER_PROMPT);
+
+      await click(ENTRY);
+      await click(`${FLYOUT} [data-test-section-rail-ai-new-session]`);
+
+      assert.strictEqual(
+        matrixService.currentRoomId,
+        roomId,
+        'the empty session is reused',
+      );
+      assert.dom(field).hasNoValue();
     });
 
     // Agents sits too near the page's end to reach the top, so the jump
