@@ -1,12 +1,19 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { type Query, rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  type CodeRef,
+  type Query,
+  rri,
+  searchEntryWireQueryFromQuery,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type { TelemetryEventInput } from '@cardstack/host/services/client-telemetry';
 import SearchEntriesTool, {
   composeSearchEntriesQuery,
+  searchEntrySummaries,
 } from '@cardstack/host/tools/search-entries';
 
 import {
@@ -25,6 +32,19 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const testRealm2URL = 'http://test-realm/test2/';
+
+const listing = {
+  module: '@cardstack/catalog/catalog-app/listing/listing',
+  name: 'Listing',
+} as unknown as CodeRef;
+
+// What the AI search tools send: the query the model wrote, composed, then
+// wired. The composition lowers a newer-spelling query first.
+function wire(query: unknown) {
+  return searchEntryWireQueryFromQuery(
+    composeSearchEntriesQuery(query as Query, 'cards').query,
+  );
+}
 
 const longReadMe = `# Author card\n\n${'The Author card models a writer with biographical fields. '.repeat(20)}`;
 
@@ -187,6 +207,24 @@ module('Integration | tools | search-entries', function (hooks) {
     assert.false(
       result.incomplete,
       'every searched realm answered, so the result is complete',
+    );
+  });
+
+  test('a query with a top-level type and missing is lowered, not dropped', async function (assert) {
+    // A top-level `type` was dropped on the way to the wire, so the filter
+    // lost its anchor; `missing` threw. Both are the newer spelling.
+    let result = await runSearch({
+      query: {
+        type: { module: rri(`${testRealmURL}author`), name: 'Author' },
+        filter: {
+          every: [{ eq: { firstName: 'Mark' } }, { exists: 'lastName' }],
+        },
+      } as any,
+      scope: 'cards',
+    });
+    assert.deepEqual(
+      result.results.map((row) => row.url),
+      [`${testRealmURL}Author/mark`],
     );
   });
 
@@ -587,6 +625,97 @@ module('Integration | tools | search-entries', function (hooks) {
       );
     });
 
+    // ADR 022 §1.7: a newer-spelling query names its type at the top. The
+    // composition reads the older spelling, so it lowers the query first.
+    test('a newer query is lowered: its top-level type anchors the filter', function (assert) {
+      let { query: composed } = composeSearchEntriesQuery(
+        {
+          type: listing,
+          filter: { eq: { name: 'Pasta' } },
+          facets: [{ by: 'name' }],
+        } as unknown as Query,
+        'cards',
+      );
+      assert.false('type' in composed, 'no top-level type is left');
+      assert.deepEqual(composed.filter as unknown, {
+        on: listing,
+        every: [{ eq: { name: 'Pasta' } }],
+      });
+      assert.deepEqual(composed.facets, [{ by: 'name' }]);
+    });
+
+    test('a top-level type narrows the kind, so the dedup wrap is skipped', function (assert) {
+      // Unlowered, the filter would carry no type ref and the 'all' scope
+      // would add the card-instance-file exclusion.
+      let { query: composed } = composeSearchEntriesQuery(
+        { type: listing } as unknown as Query,
+        'all',
+      );
+      // Lowered, the type is the engine's type filter, which narrows the kind.
+      assert.deepEqual(composed.filter as unknown, { type: listing });
+    });
+
+    test('a query in the older spelling is composed as it is', function (assert) {
+      let query = {
+        filter: { on: listing, eq: { name: 'Pasta' } },
+        sort: [{ by: 'name', on: listing }],
+      } as unknown as Query;
+      let { query: composed } = composeSearchEntriesQuery(query, 'cards');
+      assert.deepEqual(composed, query);
+    });
+
+    test('a top-level type anchors the wired filter instead of being dropped', function (assert) {
+      let wired = wire({ type: listing, filter: { eq: { name: 'Pasta' } } });
+      assert.deepEqual(wired.filter as unknown, {
+        'item.on': listing,
+        every: [{ eq: { 'item.name': 'Pasta' } }],
+      });
+    });
+
+    test('a top-level type in the shorthand spelling anchors the filter and facets', function (assert) {
+      // the AI query schema offers `type` as "<module>#<Name>" or { module, name }
+      let wired = wire({
+        type: '@cardstack/catalog/catalog-app/listing/listing#Listing',
+        filter: { eq: { name: 'Pasta' } },
+        facets: [{ by: 'name' }],
+      });
+      assert.deepEqual(wired.filter as unknown, {
+        'item.on': listing,
+        every: [{ eq: { 'item.name': 'Pasta' } }],
+      });
+      assert.deepEqual(wired.facets as unknown, [{ by: 'item.name' }]);
+    });
+
+    test('a top-level type with no filter is a type filter', function (assert) {
+      let wired = wire({ type: listing });
+      assert.deepEqual(wired.filter as unknown, { 'item.on': listing });
+    });
+
+    test('exists and missing are wired as eq on null instead of throwing', function (assert) {
+      let missing = wire({ type: listing, filter: { missing: 'name' } });
+      assert.deepEqual(missing.filter as unknown, {
+        'item.on': listing,
+        every: [{ eq: { 'item.name': null } }],
+      });
+      let exists = wire({ type: listing, filter: { exists: 'name' } });
+      assert.deepEqual(exists.filter as unknown, {
+        'item.on': listing,
+        every: [{ not: { eq: { 'item.name': null } } }],
+      });
+    });
+
+    test('an expression sort is carried to the wire', function (assert) {
+      let wired = wire({
+        type: listing,
+        sort: [{ expression: 'item.price * 2', direction: 'desc' }],
+      });
+      assert.strictEqual(wired.sort?.length, 1);
+      assert.strictEqual(
+        (wired.sort?.[0] as unknown as { expression?: string }).expression,
+        'item.price * 2',
+      );
+    });
+
     test('a negated matches term does not trigger the relevance sort', function (assert) {
       let { query: composed } = composeSearchEntriesQuery(
         {
@@ -601,6 +730,77 @@ module('Integration | tools | search-entries', function (hooks) {
       );
       assert.strictEqual(composed.sort, undefined);
     });
+  });
+});
+
+// ADR 022 §1.7: a V2 member makes the query the newer spelling, whose type
+// goes at the top. The server cannot tell an author's mixed query from the
+// engine's own form, so the authoring surfaces refuse it.
+module('Unit | tools | search-entries | authored spelling', function () {
+  const mixed = {
+    filter: { on: listing, eq: { name: 'Pasta' } },
+    facets: [{ by: 'name' }],
+  };
+  const rewritten = {
+    type: listing,
+    filter: { eq: { name: 'Pasta' } },
+    facets: [{ by: 'name' }],
+  };
+
+  function counting() {
+    let calls = { sent: 0 };
+    let searchEntries = async () => {
+      calls.sent++;
+      return { data: [], meta: { page: { total: 0 } } } as any;
+    };
+    return { calls, searchEntries };
+  }
+
+  test('an on anchor beside facets is refused with the rewrite, before anything is sent', async function (assert) {
+    let { calls, searchEntries } = counting();
+    await assert.rejects(
+      searchEntrySummaries(searchEntries, mixed as unknown as Query, {
+        scope: 'cards',
+        limit: 5,
+      }),
+      (err: any) =>
+        err?.code === 'mixed-spelling' &&
+        /filter\.on/.test(err.message) &&
+        /"facets"/.test(err.message) &&
+        err.message.includes(`{ "type": ${JSON.stringify(listing)}`),
+    );
+    assert.strictEqual(calls.sent, 0, 'nothing was sent');
+  });
+
+  test('the same query with its type at the top is searched', async function (assert) {
+    let { calls, searchEntries } = counting();
+    await searchEntrySummaries(searchEntries, rewritten as unknown as Query, {
+      scope: 'cards',
+      limit: 5,
+    });
+    assert.strictEqual(calls.sent, 1, 'the rewrite is searched');
+  });
+
+  test('an on anchoring one node, or a whole older query, is not refused', async function (assert) {
+    let { calls, searchEntries } = counting();
+    for (let query of [
+      {
+        type: listing,
+        filter: { any: [{ on: listing, eq: { name: 'a' } }] },
+        facets: [{ by: 'name' }],
+      },
+      {
+        filter: { every: [{ on: listing, eq: { name: 'a' } }] },
+        page: { size: 1, total: 'none' },
+      },
+      { filter: { on: listing, eq: { name: 'a' } } },
+    ]) {
+      await searchEntrySummaries(searchEntries, query as unknown as Query, {
+        scope: 'cards',
+        limit: 5,
+      });
+    }
+    assert.strictEqual(calls.sent, 3, 'each one is searched');
   });
 });
 

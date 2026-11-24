@@ -59,6 +59,10 @@ export class SearchEntriesResult extends CardDef {
   // True when a searched realm failed to answer: `results`/`total` then cover
   // only the realms that responded.
   @field incomplete = contains(BooleanField);
+  // The query's facets, as JSON: `{ facets: { [by]: [{ value, count, label? }] },
+  // facetStats? }`, counted over every match, not only `results`. Absent when
+  // the query asked for none.
+  @field facets = contains(StringField);
   @field cardDescription = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {

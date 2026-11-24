@@ -2011,7 +2011,10 @@ export {
   assertAuthoredQuerySpelling,
   barePath,
   looksLikeLabel,
+  lowerQuery,
+  MIXED_SPELLING,
   mapQueryPaths,
+  usesNewSyntax,
 } from './query-v2/query-syntax.ts';
 export * from './relationship-utils.ts';
 export * from './formats.ts';

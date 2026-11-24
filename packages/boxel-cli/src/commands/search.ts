@@ -5,6 +5,7 @@ import {
   type ProfileManager,
 } from '../lib/profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { newerSpellingMarkers } from '@cardstack/runtime-common/query-grammar';
 import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
 import { resourceIdentity } from '@cardstack/runtime-common/resource-identity';
 import { CARD_INSTANCE_FILE_KEY } from '@cardstack/runtime-common/search-doc-keys';
@@ -114,6 +115,53 @@ interface SearchEntryRequestBody {
   scope?: unknown;
 }
 
+const NEWER_TOP = new Set(newerSpellingMarkers('query'));
+const NEWER_PAGE = new Set(newerSpellingMarkers('page'));
+const NEWER_FILTER = new Set(newerSpellingMarkers('filter'));
+const NEWER_SORT = new Set(newerSpellingMarkers('sortEntry'));
+
+function hasMarker(value: unknown, markers: Set<string>): boolean {
+  let stack = [value];
+  while (stack.length) {
+    let v = stack.pop();
+    if (Array.isArray(v)) {
+      stack.push(...v);
+    } else if (v && typeof v === 'object') {
+      for (let [k, child] of Object.entries(v)) {
+        if (markers.has(k)) return true;
+        stack.push(child);
+      }
+    }
+  }
+  return false;
+}
+
+// Whether a query is written in the newer spelling, by the grammar table's
+// markers (the same table the engine reads).
+export function usesNewerSpelling(query: Record<string, unknown>): boolean {
+  if ('type' in query) return true;
+  if (Object.keys(query).some((k) => NEWER_TOP.has(k))) return true;
+  let page = query.page;
+  if (
+    page &&
+    typeof page === 'object' &&
+    Object.keys(page).some((k) => NEWER_PAGE.has(k))
+  )
+    return true;
+  if (hasMarker(query.filter, NEWER_FILTER)) return true;
+  if (
+    Array.isArray(query.sort) &&
+    query.sort.some(
+      (e) =>
+        e &&
+        typeof e === 'object' &&
+        Object.keys(e).some((k) => NEWER_SORT.has(k)),
+    )
+  )
+    return true;
+  return false;
+}
+
 /**
  * Build an entry request body from a card-rooted query: the
  * `item.`-addressed filter/sort plus the data-only fieldset. Pass `realms` for
@@ -124,6 +172,20 @@ export function searchEntryRequestBody(
   query: Record<string, unknown>,
   realms?: string[],
 ): SearchEntryRequestBody {
+  // A query in the newer spelling (a top-level `type`, or any member Query V2
+  // added) already addresses fields by their own paths and carries members
+  // such as `let`, `facets` and `select`. It goes to the engine whole, with
+  // only the realms and the data-only fieldset added; rewriting its paths
+  // under `item.` would drop those members and mix the two spellings.
+  if (usesNewerSpelling(query)) {
+    return {
+      ...query,
+      ...(realms !== undefined ? { realms } : {}),
+      fields: (query.fields as SearchEntryRequestBody['fields']) ?? {
+        entry: ['item'],
+      },
+    } as SearchEntryRequestBody;
+  }
   let body: SearchEntryRequestBody = {
     fields: { entry: ['item'] },
   };

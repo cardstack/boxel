@@ -2,12 +2,15 @@ import { service } from '@ember/service';
 
 import {
   MATCH_RELEVANCE_SORT_KEY,
+  assertAuthoredQuerySpelling,
   assertQuery,
   collectPositiveMatchTerms,
   excludeCardInstanceFileRows,
   isFileMetaResource,
+  lowerQuery,
   resourceIdentity,
   searchEntryWireQueryFromQuery,
+  usesNewSyntax,
   type CardResource,
   type EntryCollectionDocument,
   type FileMetaResource,
@@ -62,6 +65,9 @@ export interface EntrySummary {
   name?: string;
   readMe?: string;
   matchRelevance?: number;
+  // Cosine similarity to a `near` sort's target (higher is nearer); only on a
+  // near-sorted query.
+  nearSimilarity?: number;
 }
 
 export function resolveSearchEntryScope(
@@ -78,8 +84,12 @@ export function resolveSearchEntryScope(
   return scope as SearchEntryScope;
 }
 
-// Prepares a caller's card-rooted query for the entry endpoint: under the
-// mixed 'all' scope a card matches both its instance row and its dual-indexed
+// Prepares a caller's card-rooted query for the entry endpoint. A query in
+// the newer spelling is lowered first, to the older one this composition and
+// the wire translator read: a top-level `type` becomes the filter's anchor
+// (so it narrows the kind below) and `exists`/`missing` become `eq` on null.
+// Lowering yields exactly the older query, so one written in the older
+// spelling is composed as it is. Under the mixed 'all' scope a card matches both its instance row and its dual-indexed
 // `.json` file row, so the filter gains the card-instance-file exclusion —
 // unless it already carries a kind-narrowing positive type ref, which matches
 // only one of the two. A filter with a positive full-text `matches` term and
@@ -92,6 +102,9 @@ export function composeSearchEntriesQuery(
   query: Query,
   scope: SearchEntryScope,
 ): { query: Query; addedRelevanceSort: boolean } {
+  if (usesNewSyntax(query)) {
+    query = lowerQuery(query as Record<string, any>).query as Query;
+  }
   let filter = query.filter;
   if (scope === 'all' && !hasNarrowingPositiveTypeRef(filter)) {
     filter = filter
@@ -148,6 +161,7 @@ export function summarizeEntries(doc: EntryCollectionDocument): EntrySummary[] {
       name: attributes.name as string | undefined,
       readMe: attributes.readMe as string | undefined,
       matchRelevance: entry.meta?._matchRelevance,
+      nearSimilarity: entry.meta?._nearSimilarity,
     });
   }
   return summaries;
@@ -174,10 +188,19 @@ export async function searchEntrySummaries(
 ): Promise<{
   rows: EntrySummary[];
   total: number;
+  // The search's caveats (`meta.warnings`): `total-estimated` when `total` is
+  // a lower bound, `approximate-order`, `incomplete`, ….
+  warnings?: { code: string; message: string; realms?: string[] }[];
   incomplete: boolean;
   realmTotals: Record<string, number> | undefined;
+  // The query's facet counts and statistics, when it asked for facets.
+  facets?: { facets?: unknown; facetStats?: unknown };
 }> {
   let resolvedScope = resolveSearchEntryScope(scope);
+  // An author's query: one in the newer spelling names its type with a
+  // top-level `type`, never an `on` on its top filter node (`mixed-spelling`,
+  // with the rewrite), refused before anything is sent.
+  assertAuthoredQuerySpelling(requestQuery);
   let { query, addedRelevanceSort } = composeSearchEntriesQuery(
     requestQuery,
     resolvedScope,
@@ -213,12 +236,28 @@ export async function searchEntrySummaries(
   return {
     rows,
     total: doc.meta.page.total,
+    // The search's caveats, as it gave them: with `total-estimated`, `total`
+    // stopped counting at the server's cap and there are at least this many
+    // matches.
+    ...(doc.meta.warnings?.length ? { warnings: doc.meta.warnings } : {}),
     // A realm that fails (or never resolves) during the federated fan-out is
     // reported through this flag rather than a thrown error — the realms
     // that answered still return; the flag keeps their partiality visible.
     incomplete: doc.meta.incomplete === true,
     // The match count of each realm that answered, keyed by realm URL.
     realmTotals: doc.meta.realmTotals,
+    ...((doc.meta as { facets?: unknown }).facets
+      ? {
+          facets: {
+            facets: (doc.meta as { facets?: unknown }).facets,
+            ...((doc.meta as { facetStats?: unknown }).facetStats
+              ? {
+                  facetStats: (doc.meta as { facetStats?: unknown }).facetStats,
+                }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -240,8 +279,10 @@ export default class SearchEntriesTool extends HostBaseTool<
     'Search across realms for existing cards, specs, listings, themes, and files — ' +
     'the primary tool for discovery: always check what already exists before creating ' +
     'anything new. Takes a card query (`filter` supporting `type`/`on`/`eq`/`contains`/' +
-    '`range`/`any`/`every`/`not` and full-text `matches` — whose bare words are ' +
-    'ANDed, with `OR` supported between alternatives — plus optional `sort`). ' +
+    '`range`/`any`/`every`/`not`, full-text `matches` — whose bare words are ' +
+    'ANDed, with `OR` supported between alternatives — and vector `near` on an ' +
+    'embedding field, plus optional `sort`, where `near: [ …vector… ]` on a ' +
+    'field sort ranks by similarity). ' +
     'Also optional ' +
     '`realms` (realm URLs or identifiers such as `@cardstack/catalog/`; defaults to ' +
     'every realm you can read), optional `scope` ' +
@@ -252,7 +293,7 @@ export default class SearchEntriesTool extends HostBaseTool<
     'rows within each realm and then merges them. ' +
     `Returns lightweight entry summaries — url, ` +
     'ref, specType, title, description, file name, full readMe, and full-text match ' +
-    'relevance — not live card instances. A result with `incomplete: true` is ' +
+    'relevance or vector similarity — not live card instances. A result with `incomplete: true` is ' +
     'partial: at least one searched realm failed to answer, so matches may be ' +
     'missing and `total` undercounts. When you need instances to attach, open, or ' +
     'patch, use the card-instance search tools instead.';
@@ -290,7 +331,7 @@ export default class SearchEntriesTool extends HostBaseTool<
       this.recordSearch(input, { query: requestQuery, realms, error });
       throw error;
     }
-    let { rows, total, incomplete, realmTotals } = found;
+    let { rows, total, incomplete, realmTotals, facets } = found;
     this.recordSearch(input, {
       query: requestQuery,
       realms,
@@ -303,6 +344,7 @@ export default class SearchEntriesTool extends HostBaseTool<
       results: rows.map((row) => new SearchEntrySummaryField(row)),
       total,
       incomplete,
+      ...(facets ? { facets: JSON.stringify(facets) } : {}),
       cardDescription: `Query: ${JSON.stringify(requestQuery.filter ?? {})}`,
     });
   }
