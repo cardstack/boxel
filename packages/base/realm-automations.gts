@@ -593,13 +593,13 @@ class AutomationSlot extends GlimmerComponent<AutomationSlotSignature> {
     <style scoped>
       .slot {
         container-type: inline-size;
-        border-radius: var(--radius-surface, var(--boxel-border-radius));
+        border-radius: var(--radius);
       }
       /* The automation an automation card opened the console on: ringed in
          the theme's focus color, so the row stands out among the others
          after the console scrolls the row into view. */
       .slot--focused {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline: 2px solid var(--ring);
         outline-offset: 2px;
       }
       /* The section's slot: as wide as the section, and tall enough for the
