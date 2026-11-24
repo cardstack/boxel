@@ -1822,9 +1822,9 @@ export class IndexRunner {
 
   // The cache context a module's definition is read under: this realm's, or,
   // for a module of another realm, that realm's, which the module's own
-  // response names. `'not-found'` when the other realm answers that the
-  // module isn't there, and `'not-public'` when it refuses the read: a realm
-  // that a visitor who isn't signed in can read answers every reader.
+  // response names. That response is asked for without credentials, as a
+  // visitor who isn't signed in: `'not-public'` when the other realm refuses
+  // it, and `'not-found'` when it answers that the module isn't there.
   // `contexts` holds the contexts this read has asked for, by realm, and the
   // realm each module named.
   async #moduleCacheContextFor(
@@ -1836,7 +1836,9 @@ export class IndexRunner {
     // (`@cardstack/base/…`) is in its prefix form, which isn't a URL.
     let url = this.#virtualNetwork.toURL(moduleURL);
     if (!this.#realmPaths.inRealm(url)) {
-      let response = await this.#fetch(url.href, { method: 'HEAD' });
+      let response = await this.#virtualNetwork.fetch(url.href, {
+        method: 'HEAD',
+      });
       let header = response.headers.get('x-boxel-realm-url');
       if (response.status >= 500) {
         throw new Error(`${moduleURL} answered ${response.status}`);

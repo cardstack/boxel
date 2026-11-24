@@ -434,7 +434,7 @@ export class RouteTypeField extends CodeRefField {
 // (realm.json, at the realm root), is outside the realm.
 function leavesRealm(module: string, configId: string): boolean {
   try {
-    let realmRoot = new URL('./', configId).href;
+    let realmRoot = new URL('.', configId).href;
     return !new URL(module, configId).href.startsWith(realmRoot);
   } catch {
     return false;
