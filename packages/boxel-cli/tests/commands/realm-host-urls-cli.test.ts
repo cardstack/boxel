@@ -17,6 +17,7 @@ import {
 } from '../../src/commands/realm/host-urls.ts';
 import {
   describeHostURLError,
+  ensureSiteNameClaimed,
   findHostURL,
   hostURLAddress,
   siteNameHostname,
@@ -184,6 +185,64 @@ describe('site name detection', () => {
     expect(
       await siteNameHostname(noRequests, 'http://localhost/'),
     ).toBeUndefined();
+  });
+});
+
+describe('site name claims', () => {
+  // A server whose site domain is `boxel.site`. The caller has no claim of
+  // its own for the realm, and the claim endpoint answers with `claimStatus`.
+  function siteServer(claimStatus: number) {
+    let requests: string[] = [];
+    let client: RealmClient = {
+      realmServerURL: 'https://app.example.test/',
+      config: { spaceDomain: '', siteDomain: '' },
+      authedFetch: async (input, init) => {
+        let url = new URL(String(input));
+        let method = init?.method ?? 'GET';
+        requests.push(`${method} ${url.pathname}`);
+        if (url.pathname === '/_check-boxel-domain-availability') {
+          return Response.json({
+            available: false,
+            hostname: `${url.searchParams.get('subdomain')}.boxel.site`,
+          });
+        }
+        if (url.pathname === '/_boxel-claimed-domains' && method === 'GET') {
+          return Response.json(
+            { errors: ['No hostname claim found for this realm'] },
+            { status: 404 },
+          );
+        }
+        if (url.pathname === '/_boxel-claimed-domains' && method === 'POST') {
+          return Response.json(
+            { errors: ['Hostname is already claimed'] },
+            { status: claimStatus },
+          );
+        }
+        throw new Error(`unexpected request to ${url}`);
+      },
+    };
+    return { client, requests };
+  }
+
+  it('leaves a name the claim endpoint refuses to the mount', async () => {
+    // Another administrator may have claimed the name for this realm. The
+    // caller can't see that claim, and the mount accepts it.
+    let { client, requests } = siteServer(422);
+    expect(
+      await ensureSiteNameClaimed(client, REALM, 'https://mango.boxel.site/'),
+    ).toEqual({
+      claimed: true,
+      hostname: 'mango.boxel.site',
+      alreadyClaimed: true,
+    });
+    expect(requests).toContain('POST /_boxel-claimed-domains');
+  });
+
+  it('stops on a claim failure that is not a refusal', async () => {
+    let { client } = siteServer(500);
+    await expect(
+      ensureSiteNameClaimed(client, REALM, 'https://mango.boxel.site/'),
+    ).rejects.toBeInstanceOf(RealmOperationError);
   });
 });
 

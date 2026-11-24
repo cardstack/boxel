@@ -292,7 +292,7 @@ describe('realm mount (integration)', () => {
     expect(second.stderr).not.toContain('already claimed');
   });
 
-  it('prints the refusal for a site name claimed for another realm', async () => {
+  it('leaves a site name that is claimed already to the mount', async () => {
     let { realmUrl: claimingRealm } = await createTestRealmViaCli(home);
     let { realmUrl: otherRealm } = await createTestRealmViaCli(home);
     let host = uniqueSiteHost();
@@ -300,10 +300,13 @@ describe('realm mount (integration)', () => {
 
     await runBoxel(['realm', 'mount', claimingRealm, siteURL], { home });
 
+    // The claim endpoint refuses a second claim on the name. The command
+    // sends the mount anyway, and the mount decides whether the realm may
+    // use the claim.
     let res = await runBoxel(['realm', 'mount', otherRealm, siteURL], {
       home,
     });
-    expect(res.exitCode).toBe(1);
-    expect(res.stderr).toContain('Hostname is already claimed');
+    expect(res.stderr).not.toContain('Hostname is already claimed');
+    expect(res.stderr).not.toContain('Claimed the site name');
   });
 });

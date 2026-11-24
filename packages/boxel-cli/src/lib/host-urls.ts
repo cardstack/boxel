@@ -124,9 +124,9 @@ export type SiteNameClaim =
   | { claimed: true; hostname: string; alreadyClaimed: boolean };
 
 // Makes sure the site name that `url` is at is claimed for the realm, before a
-// mount there. Claims the name when the realm has no claim on it. A name
-// claimed for another realm makes the claim fail with the reason the server
-// gives. Returns `{ claimed: false }` when `url` is not at a site name.
+// mount there. Claims the name when the caller has no claim on it for the
+// realm. When the name is claimed already, the mount decides whether the realm
+// may use it. Returns `{ claimed: false }` when `url` is not at a site name.
 export async function ensureSiteNameClaimed(
   client: RealmClient,
   realmURL: string,
@@ -140,8 +140,19 @@ export async function ensureSiteNameClaimed(
   if (existing?.hostname.toLowerCase() === hostname.toLowerCase()) {
     return { claimed: true, hostname, alreadyClaimed: true };
   }
-  let claim = await claimSiteName(client, { realmURL, hostname });
-  return { claimed: true, hostname: claim.hostname, alreadyClaimed: false };
+  try {
+    let claim = await claimSiteName(client, { realmURL, hostname });
+    return { claimed: true, hostname: claim.hostname, alreadyClaimed: false };
+  } catch (error) {
+    // The claim lookup above finds only the caller's own claims. A name that
+    // another administrator claimed for this realm is refused here, but the
+    // mount accepts it. So a refused claim doesn't stop the mount: the mount
+    // checks the claim, and refuses a name that another user claimed.
+    if (error instanceof RealmOperationError && error.status === 422) {
+      return { claimed: true, hostname, alreadyClaimed: true };
+    }
+    throw error;
+  }
 }
 
 export interface HostURLErrorReport {

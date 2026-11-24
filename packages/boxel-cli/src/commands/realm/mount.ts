@@ -32,8 +32,8 @@ export interface MountResult {
  *
  * When `hostURL` is at a site name that has no claim for this realm, the
  * command claims the name first, as the host app's host URL manager does.
- * The server refuses a name that is claimed for another realm, and the
- * refusal stops the mount.
+ * When the name is claimed already, the mount checks the claim: it accepts a
+ * claim for this realm, and refuses a name that another user claimed.
  */
 export async function mountRealm(
   realmURL: string,
