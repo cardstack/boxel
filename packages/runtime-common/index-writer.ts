@@ -3693,7 +3693,7 @@ export class Batch {
     ) {
       return stored;
     }
-    let types: Record<string, HostRouteTypeInfo | null> = {};
+    let types: Record<string, HostRouteTypeInfo | 'not-public' | null> = {};
     let retryTypeReads = false;
     for (let [key, read] of reads) {
       if (read === 'transient') {

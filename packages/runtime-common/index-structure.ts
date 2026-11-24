@@ -253,9 +253,11 @@ export interface RealmMetaValue {
 // The host routes a realm's index stored.
 export interface StoredHostRoutes extends HostRoutesValidation {
   // The type definitions the routes were validated with, by
-  // `typeLookupKey`; `null` for a type the index didn't find. A later read
-  // of a type that fails for a reason that may pass validates with these.
-  types?: Record<string, HostRouteTypeInfo | null>;
+  // `typeLookupKey`; `null` for a type the index didn't find, and
+  // `'not-public'` for a type in another realm that a visitor who isn't
+  // signed in can't read. A later read of a type that fails for a reason
+  // that may pass validates with these.
+  types?: Record<string, HostRouteTypeInfo | 'not-public' | null>;
   // Set when a type read failed for a reason that may pass and no earlier
   // definition stood in for it, so its route was dropped. A read of the
   // routes then starts an index of realm.json, which reads the type again.

@@ -1093,6 +1093,40 @@ const tests: SharedTests<unknown> = Object.freeze({
         { path: '/', id: `${REALM}home` },
       ]);
     },
+  'validateHostRoutes: a type module that leaves the realm by a relative path, or that a visitor cannot read, drops its route':
+    async (assert) => {
+      let looked: string[] = [];
+      let { routes, warnings } = validate(
+        [
+          {
+            path: '/escape/:slug',
+            type: { module: '../other-workspace/site', name: 'Post' },
+            match: { slug: ':slug' },
+          },
+          {
+            path: '/private/:slug',
+            type: { module: 'http://realm.test/other/site', name: 'Post' },
+            match: { slug: ':slug' },
+          },
+          fieldMatch('/posts/:slug', 'Post', { slug: ':slug' }),
+        ],
+        {
+          lookupType: (ref) => {
+            looked.push(ref.module);
+            return ref.module === MODULE ? TYPES[ref.name] : 'not-public';
+          },
+        },
+      );
+      assert.deepEqual(paths(routes), ['/posts/:slug']);
+      assert.deepEqual(codes(warnings), [
+        { code: 'cross-realm-type-path', path: '/escape/:slug', dropped: true },
+        { code: 'non-public-type', path: '/private/:slug', dropped: true },
+      ]);
+      assert.notOk(
+        looked.includes('../other-workspace/site'),
+        'a module reached by a relative path is not looked up',
+      );
+    },
   'validateHostRoutes: a link to a type the parent descends from counts':
     async (assert) => {
       let { routes, warnings } = validate([

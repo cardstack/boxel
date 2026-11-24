@@ -117,6 +117,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 
+  test('validateHostRoutes: a type module that leaves the realm by a relative path, or that a visitor cannot read, drops its route', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
   test('validateHostRoutes: a link to a type the parent descends from counts', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });

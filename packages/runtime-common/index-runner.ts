@@ -43,7 +43,7 @@ import {
   readRawHostRoutingRules,
   realmConfigCardURL,
   typeLookupKey,
-  type HostRouteTypeInfo,
+  type HostRouteTypeLookup,
   type HostRouteTypeReads,
   type RawHostRoutingRule,
 } from './host-routes.ts';
@@ -1752,7 +1752,7 @@ export class IndexRunner {
   async #readHostRouteType(
     ref: ResolvedCodeRef,
     contexts: Map<string, Promise<ModuleCacheContext>>,
-  ): Promise<HostRouteTypeInfo | 'unavailable' | 'transient' | undefined> {
+  ): Promise<HostRouteTypeLookup | 'transient'> {
     let keyFor = (codeRef: CodeRef) =>
       internalKeyFor(codeRef, undefined, this.#virtualNetwork);
     let fail = (reason: unknown, transient: boolean) => {
@@ -1770,6 +1770,19 @@ export class IndexRunner {
       let context = await this.#moduleCacheContextFor(moduleURL, contexts);
       if (context === 'not-found') {
         return fail(`${moduleURL} was not found`, false);
+      }
+      // The validated routes are public: a page on a host URL carries them,
+      // with the type's module and the fields its route matches. So a type
+      // in another realm is read only when a visitor who isn't signed in
+      // could read it too, as the shared base and catalog types can.
+      if (
+        context.realmURL !== this.#realmURL.href &&
+        context.cacheScope !== 'public'
+      ) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} did not read the definition of ${ref.name} from ${ref.module} for a host route of ${this.#realmURL.href}: its realm is not public`,
+        );
+        return 'not-public';
       }
       entry = await this.#definitionLookup.populateDefinitionCacheEntry({
         moduleURL,
