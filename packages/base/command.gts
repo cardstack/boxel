@@ -1523,7 +1523,7 @@ export class MountHostURLInput extends CardDef {
   });
   @field name = contains(StringField, {
     description:
-      'For "site-name", the subdomain, e.g. "my-site". The tool claims the site name for the realm when the realm has no claim. For "custom-domain", the hostname, e.g. "www.example.com". Not used for "boxel-space".',
+      'For "site-name", the subdomain, e.g. "my-site". The tool claims the site name for the realm when the caller has no claim on it. For "custom-domain", the hostname, e.g. "www.example.com". Not used for "boxel-space".',
   });
 }
 
