@@ -1970,90 +1970,55 @@ export async function notifyRealmIndexUpdated(
   }
 }
 
-// Postgres NOTIFY channel announcing that a from-scratch index pass over a
-// realm with automations has landed and the worker's index hook has synced
-// them with their cards. Payload is the realm URL. Each realm server serving
-// the realm then checks the key approvals of its automations in full
-// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`), which the
-// worker can't do, as it reads no operation definitions. Best-effort like
-// the other realm channels: a missed NOTIFY leaves an automation as the
-// hook left it, until an approval lands or its next run's admission.
-export const REALM_AUTOMATIONS_REINDEXED_CHANNEL =
-  'realm_automations_reindexed';
+// The realm route the worker asks, once an index pass over the realm has
+// landed and its index hook has synced the realm's automations, to check
+// their key approvals in full, which the worker can't do, as it reads no
+// operation definitions. After a from-scratch pass it is a `POST` with no
+// body, and the realm checks every automation in it
+// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`). After an
+// incremental pass no realm awaits, the body names the automations the pass
+// touched (`FollowAutomationKeyApprovalsRequest`), and the realm checks those
+// (`Realm.followAutomationKeyApprovalsAfterWorkerPass`). Answered 204 once
+// the check has run; like every `POST`, it takes a direct writer of the
+// realm.
+export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
+  '/_follow-automation-key-approvals';
 
-export async function notifyRealmAutomationsReindexed(
-  dbAdapter: DBAdapter,
-  realmURL: string,
-): Promise<void> {
-  try {
-    await dbAdapter.notify(REALM_AUTOMATIONS_REINDEXED_CHANNEL, realmURL);
-  } catch (err: unknown) {
-    logger('realm').warn(
-      `notify ${REALM_AUTOMATIONS_REINDEXED_CHANNEL} failed for ${realmURL}: ${String(err)}`,
-    );
-  }
-}
-
-// Postgres NOTIFY channel announcing the automations an incremental index
-// pass touched when no realm awaiting the pass checks their key approvals
-// (`CoalescedCaller.followsKeyApprovals`): a pass the worker enqueues on its
-// own, such as the prerender reconcile's retry or a commit's follow-up. The
-// payload is JSON (`RealmAutomationsTouched`). Each realm server serving the
-// realm then checks those automations' key approvals in full
-// (`Realm.followAutomationKeyApprovalsAfterWorkerPass`), which the worker
-// can't do, as it reads no operation definitions. Best-effort like the other
-// realm channels: a missed NOTIFY leaves an automation as the worker's index
-// hook left it, until an approval lands or its next run's admission.
-export const REALM_AUTOMATIONS_TOUCHED_CHANNEL = 'realm_automations_touched';
-
-export interface RealmAutomationsTouched {
-  realmURL: string;
+// The body of `FOLLOW_AUTOMATION_KEY_APPROVALS_PATH` after an incremental
+// pass no realm awaits.
+export interface FollowAutomationKeyApprovalsRequest {
+  // The automations the pass touched, by id.
   automationIds: string[];
   // False when the writes behind the pass asked for no realm events: the
-  // check still moves the rows, and reports nothing.
-  reportChanges: boolean;
+  // check moves the rows all the same, and reports nothing. Absent, it
+  // reports.
+  reportChanges?: boolean;
 }
 
-// Postgres caps a NOTIFY payload at 8000 bytes; a pass that touched more
-// automations than fit in one is announced over several.
-const MAX_AUTOMATIONS_TOUCHED_PAYLOAD_BYTES = 7000;
-
-export async function notifyRealmAutomationsTouched(
-  dbAdapter: DBAdapter,
-  { realmURL, automationIds, reportChanges }: RealmAutomationsTouched,
-): Promise<void> {
-  let bytes = (text: string) => new TextEncoder().encode(text).byteLength;
-  let payloadOf = (ids: string[]) =>
-    JSON.stringify({ realmURL, automationIds: ids, reportChanges });
-  let payloads: string[] = [];
-  let chunk: string[] = [];
-  let chunkBytes = bytes(payloadOf([]));
-  for (let automationId of automationIds) {
-    // The id as the array spells it, with the comma before it.
-    let idBytes = bytes(JSON.stringify(automationId)) + 1;
-    if (
-      chunk.length > 0 &&
-      chunkBytes + idBytes > MAX_AUTOMATIONS_TOUCHED_PAYLOAD_BYTES
-    ) {
-      payloads.push(payloadOf(chunk));
-      chunk = [];
-      chunkBytes = bytes(payloadOf([]));
-    }
-    chunk.push(automationId);
-    chunkBytes += idBytes;
+function parseFollowAutomationKeyApprovalsRequest(
+  body: string,
+): FollowAutomationKeyApprovalsRequest | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
   }
-  if (chunk.length > 0) {
-    payloads.push(payloadOf(chunk));
+  if (!parsed || typeof parsed !== 'object') {
+    return undefined;
   }
-  for (let payload of payloads) {
-    try {
-      await dbAdapter.notify(REALM_AUTOMATIONS_TOUCHED_CHANNEL, payload);
-    } catch (err: unknown) {
-      logger('realm').warn(
-        `notify ${REALM_AUTOMATIONS_TOUCHED_CHANNEL} failed for ${realmURL}: ${String(err)}`,
-      );
-    }
+  let { automationIds, reportChanges } = parsed as Record<string, unknown>;
+  if (
+    !Array.isArray(automationIds) ||
+    !automationIds.every((id) => typeof id === 'string') ||
+    (reportChanges !== undefined && typeof reportChanges !== 'boolean')
+  ) {
+    return undefined;
   }
+  return {
+    automationIds,
+    ...(reportChanges !== undefined ? { reportChanges } : {}),
+  };
 }
 
 // Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
@@ -4215,6 +4180,15 @@ export class Realm {
         RUN_STATE_PATH,
         SupportedMimeType.JSONAPI,
         this.runState.bind(this),
+        ACL_ONLY,
+      )
+      // The worker's request, after a from-scratch pass over this realm, to
+      // check its automations' key approvals in full. Answered on the realm
+      // ACL alone: it runs only what the realm's own follow would.
+      .post(
+        FOLLOW_AUTOMATION_KEY_APPROVALS_PATH,
+        SupportedMimeType.JSONAPI,
+        this.followAutomationKeyApprovalsOnRequest.bind(this),
         ACL_ONLY,
       )
       // The operations envelope, under the media type that carries its
@@ -15666,14 +15640,15 @@ export class Realm {
 
   // Once a from-scratch pass over this realm has landed, follows the key
   // approvals of every automation in the realm that isn't paused, as an
-  // incremental pass does for the automations it touched. A from-scratch pass
-  // rebuilds the whole realm, so it can be the first to index an edit made
-  // while no realm server watched the files. The worker that ran the pass
-  // announces it (`REALM_AUTOMATIONS_REINDEXED_CHANNEL`) whoever started it,
-  // a reindex no realm awaits included, and each realm server serving the
-  // realm answers here. Each automation's follow locks its row, so the
-  // servers' follows of one automation take turns and the later ones find it
-  // already in step.
+  // incremental pass this realm starts does for the automations it touched.
+  // A from-scratch pass rebuilds the whole realm, so it can be the first to
+  // index an edit made while no realm server watched the files. The worker
+  // that ran the pass asks for this whoever started it
+  // (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`), and the request mounts the realm
+  // on whichever realm server it reaches, so a realm no server had mounted is
+  // followed too. Each automation's follow locks its row, so a follow racing
+  // another one of the same automation takes its turn and finds the row in
+  // step.
   //
   // It reports what it moved, as the worker's index hook in the same pass
   // does: a from-scratch pass that announces nothing (a boot's reindex of an
@@ -15714,10 +15689,11 @@ export class Realm {
   // commit's follow-up), follows the key approvals of the automations it
   // touched that are in this realm and aren't paused, as the realm does after
   // a pass it awaits. Such a pass can be the first to index an edit made
-  // while no realm server watched the files. The worker announces the
-  // automations (`REALM_AUTOMATIONS_TOUCHED_CHANNEL`), and each realm server
-  // serving the realm answers here; each automation's follow locks its row,
-  // so the servers take turns and the later ones find it already in step.
+  // while no realm server watched the files. The worker asks for this
+  // (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`, naming the automations), and the
+  // request mounts the realm on whichever realm server it reaches. Each
+  // automation's follow locks its row, so a follow racing another one of the
+  // same automation takes its turn and finds the row in step.
   //
   // `reportChanges` is false when the writes behind the pass asked for no
   // realm events. The follow is held in `#automationFollowsAfterPass`, so
@@ -15764,6 +15740,32 @@ export class Realm {
     } finally {
       this.#automationFollowsAfterPass.delete(tracked);
     }
+  }
+  private async followAutomationKeyApprovalsOnRequest(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let body = (await request.text()).trim();
+    if (body) {
+      let touched = parseFollowAutomationKeyApprovalsRequest(body);
+      if (!touched) {
+        return badRequest({
+          message: `the body of ${FOLLOW_AUTOMATION_KEY_APPROVALS_PATH} names no automations as { automationIds: string[], reportChanges?: boolean }`,
+          requestContext,
+        });
+      }
+      await this.followAutomationKeyApprovalsAfterWorkerPass(
+        touched.automationIds,
+        { reportChanges: touched.reportChanges !== false },
+      );
+    } else {
+      await this.followAutomationKeyApprovalsAfterFromScratchPass();
+    }
+    return createResponse({
+      body: null,
+      init: { status: 204 },
+      requestContext,
+    });
   }
 
   // The automation's version with `payer` as its payer, its card read as

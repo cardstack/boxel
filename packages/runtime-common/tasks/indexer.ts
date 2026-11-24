@@ -4,8 +4,8 @@ import {
   jobIdentity,
   notifyAllFileChanges,
   notifyRealmIndexUpdated,
-  notifyRealmAutomationsReindexed,
-  notifyRealmAutomationsTouched,
+  FOLLOW_AUTOMATION_KEY_APPROVALS_PATH,
+  type FollowAutomationKeyApprovalsRequest,
   incrementalCompletionThatFits,
   userIdFromUsername,
   fetchUserPermissions,
@@ -96,9 +96,8 @@ export interface CoalescedCaller extends JSONTypes.Object {
   // Whether this caller's realm checks the key approvals of the automations
   // the pass touched once the pass lands (`Realm.followAutomationKeyApprovals`).
   // When no caller does (a pass the worker enqueues on its own, such as the
-  // prerender reconcile's retry or a commit's follow-up), the pass announces
-  // the automations it touched on `REALM_AUTOMATIONS_TOUCHED_CHANNEL` so a
-  // realm server serving the realm checks them.
+  // prerender reconcile's retry or a commit's follow-up), the pass asks the
+  // realm to check them (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`).
   followsKeyApprovals: boolean;
 }
 
@@ -859,12 +858,12 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
         log,
       }),
     });
-    // The realm servers serving the realm check the automations' key
-    // approvals in full, which the hook can't, as the worker reads no
-    // operation definitions. They hear of it from here whoever started the
-    // pass, a reindex no realm awaits included.
+    // The realm checks the automations' key approvals in full, which the
+    // hook can't, as the worker reads no operation definitions. It hears of
+    // the pass from here whoever started it, a reindex no realm awaits
+    // included.
     if (synced.size > 0) {
-      await notifyRealmAutomationsReindexed(dbAdapter, args.realmURL);
+      await followAutomationKeyApprovalsInRealm(log, jobInfo, _fetch, realmURL);
     }
     reportStatus(args.jobInfo, 'finish');
     let queueClaim = queueClaimOf(jobInfo);
@@ -1112,9 +1111,9 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
     });
     // The hook can't check the automations' key approvals in full, as the
     // worker reads no operation definitions. A realm that awaits the pass
-    // checks the automations it touched once it lands; when none does, a
-    // realm server serving the realm hears of them from here. A paused
-    // automation, or one the pass removed, has nothing to check.
+    // checks the automations it touched once it lands; when none does, the
+    // pass asks the realm to. A paused automation, or one the pass removed,
+    // has nothing to check.
     if (!coalescedCallers.some((caller) => caller.followsKeyApprovals)) {
       let automationIds = [...synced]
         .filter(
@@ -1125,11 +1124,16 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         )
         .map(([automationId]) => automationId);
       if (automationIds.length > 0) {
-        await notifyRealmAutomationsTouched(dbAdapter, {
+        await followAutomationKeyApprovalsInRealm(
+          log,
+          jobInfo,
+          _fetch,
           realmURL,
-          automationIds,
-          reportChanges: args.realmEvents !== false,
-        });
+          {
+            automationIds,
+            reportChanges: args.realmEvents !== false,
+          },
+        );
       }
     }
     let chargedRunIndexing: RunIndexing | undefined;
@@ -1256,6 +1260,52 @@ async function syncAutomationsAfterPass(
       `${jobIdentity(jobInfo)} failed to sync automations with their cards in ${args.realmURL}: ${(e as Error)?.message}`,
     );
     return new Map();
+  }
+}
+
+// How long the from-scratch task waits for the realm's check of its
+// automations' key approvals before it lets its job finish without the
+// answer. The check runs on in the realm either way.
+const FOLLOW_AUTOMATION_KEY_APPROVALS_TIMEOUT_MS = 60_000;
+
+// Asks the realm to check the key approvals of its automations in full
+// (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`): every one in it, or only those
+// `touched` names, as the realm's own user, through
+// the pass's fetch. The request reaches one realm server, which mounts the
+// realm if it hasn't. The index is already committed, so a refusal or failure
+// is logged and leaves the job a success: an automation then stays as the
+// hook left it until the next pass over it, an approval landing, or its next
+// run's admission.
+async function followAutomationKeyApprovalsInRealm(
+  log: TaskArgs['log'],
+  jobInfo: JobInfo | undefined,
+  _fetch: typeof globalThis.fetch,
+  realmURL: string,
+  touched?: FollowAutomationKeyApprovalsRequest,
+): Promise<void> {
+  let url = new URL(
+    FOLLOW_AUTOMATION_KEY_APPROVALS_PATH.replace(/^\//, ''),
+    realmURL,
+  ).href;
+  try {
+    let response = await _fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        ...(touched ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(touched ? { body: JSON.stringify(touched) } : {}),
+      signal: AbortSignal.timeout(FOLLOW_AUTOMATION_KEY_APPROVALS_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      log.warn(
+        `${jobIdentity(jobInfo)} the realm ${realmURL} refused to check its automations' key approvals: ${response.status} ${await response.text()}`,
+      );
+    }
+  } catch (e) {
+    log.warn(
+      `${jobIdentity(jobInfo)} couldn't ask the realm ${realmURL} to check its automations' key approvals: ${(e as Error)?.message}`,
+    );
   }
 }
 
