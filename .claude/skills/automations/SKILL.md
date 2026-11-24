@@ -2201,11 +2201,15 @@ again (`job` absent). A click that already started a run for someone else,
 or a run of the other kind, is refused (`click-reused`). Both then move
 through `pending`, `running`, and `complete` or `error`, like any run.
 
-A Preview holds back the realm writes and nothing else. `dryRun` reaches
-the script as `realm.current.automation.dryRun`, and the run uses the flag
-only to check the job against its row and to skip the commit
-(`packages/runtime-common/tasks/run-automation.ts`), so every `callApi` and
-`resolve` call in a Preview goes out and is charged as in any run. A script
+A Preview holds back the realm writes, and its outside calls go out as in
+any run. `dryRun` reaches the script as `realm.current.automation.dryRun`,
+and the run uses the flag only to check the job against its row and to skip
+the commit (`packages/runtime-common/tasks/run-automation.ts`), so every
+`callApi` and `resolve` call in a Preview reaches the vendor and is charged.
+The one difference in charging is batched AI: `handleSubmitAIBatch` refuses
+a Preview's batch submit, so a Preview of a `batchedAI` automation sends its
+`resolve` calls at the normal price (`ceilingCaps` reserves for it with
+`batchedAI` off), where a scheduled run pays the batch price. A script
 that changes something outside the realm (sends, creates, charges) checks
 the flag before each such call. The boxel-skills `automation-authoring`
 skill, _Outside calls in a Preview_, is what authors and the AI assistant
