@@ -48,6 +48,7 @@ import {
 import {
   automationFixture,
   createAutomationRunToken,
+  createJWT,
   ensureTestUser,
   insertIncomingWebhookRow,
   realmSecretSeed,
@@ -1723,12 +1724,15 @@ module(basename(import.meta.filename), function (hooks) {
       let refused = await request
         .post(path)
         .set('Accept', 'application/vnd.api+json')
-        .set('Authorization', auth(READER));
+        .set('Authorization', `Bearer ${createJWT(realm, READER, ['read'])}`);
       assert.strictEqual(refused.status, 403, refused.text);
       let answered = await request
         .post(path)
         .set('Accept', 'application/vnd.api+json')
-        .set('Authorization', auth(WRITER));
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, WRITER, ['read', 'write'])}`,
+        );
       assert.strictEqual(answered.status, 204, answered.text);
     });
 
