@@ -85,6 +85,8 @@ module(basename(import.meta.filename), function () {
       'near',
       'pattern',
       'regex',
+      // main's path filter (a policy grant narrowed by realm path)
+      'paths',
       'linkedFrom',
       'every',
       'any',

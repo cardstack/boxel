@@ -259,7 +259,7 @@ export abstract class IndexRows extends EngineCore {
     opts?: GetEntryOptions,
   ): Promise<IndexedInstanceSource | undefined> {
     let rows = (await this.query([
-      'SELECT i.url, i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc, i.diagnostics',
+      `SELECT ${INSTANCE_SOURCE_COLUMNS}`,
       `FROM ${tableFromOpts(opts)} AS i`,
       'WHERE',
       ...every([
@@ -271,33 +271,61 @@ export abstract class IndexRows extends EngineCore {
         any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
       'LIMIT 1',
-    ] as Expression)) as unknown as {
-      url: string;
-      realm_url: string;
-      generation: number;
-      source_content_hash: string | null;
-      types: string[] | null;
-      pristine_doc: CardResource | null;
-      has_error: boolean | null;
-      error_doc: SerializedError | null;
-      diagnostics: Diagnostics | null;
-    }[];
+    ] as Expression)) as unknown as InstanceSourceRow[];
     let row = rows[0];
-    if (!row) {
-      return undefined;
-    }
-    return {
-      url: row.url,
-      realmURL: row.realm_url,
-      generation: Number(row.generation),
-      sourceContentHash: row.source_content_hash ?? null,
-      types: row.types,
-      instance: row.has_error ? null : row.pristine_doc,
-      error: row.has_error ? row.error_doc : null,
-      failureWithheld:
-        !row.has_error &&
-        verdictCoversRow(row.diagnostics ?? undefined, 'instance'),
-    };
+    return row ? instanceSourceFromRow(row) : undefined;
+  }
+
+  // The dependencies the instance's HTML renders read
+  // (`prerendered_html.deps`). They can name modules its index visit never
+  // loaded, such as a rendered link the search doc doesn't follow, which
+  // `getInstance`'s `deps` (the index visit's) leave out. Empty when the
+  // instance has no HTML row yet.
+  async getInstanceRenderDeps(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<string[]> {
+    let rows = (await this.query([
+      'SELECT ph.deps AS deps',
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+      'WHERE',
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+      'LIMIT 1',
+    ] as Expression)) as unknown as { deps: string[] | null }[];
+    return rows[0]?.deps ?? [];
+  }
+
+  // Every live instance row in the realm whose adoption chain carries
+  // `typeKey`, read as `getInstanceSource` reads one, in URL order. The key is
+  // matched as given, the way a reader that checks the chain for one key (the
+  // automation declaration reader, say) matches it, so a row listed here is
+  // one that reader accepts by type. A row whose visit failed keeps the chain
+  // its last good visit recorded.
+  async getInstanceSourcesOfType(
+    realmURL: URL,
+    typeKey: string,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedInstanceSource[]> {
+    let rows = (await this.query([
+      `SELECT ${INSTANCE_SOURCE_COLUMNS}`,
+      `FROM ${tableFromOpts(opts)} AS i`,
+      'WHERE',
+      ...every([
+        ['i.realm_url =', param(realmURL.href)],
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+        [typesContains(typeKey)],
+      ]),
+      'ORDER BY i.url',
+    ] as Expression)) as unknown as InstanceSourceRow[];
+    return rows.map(instanceSourceFromRow);
   }
 
   // The declared-capture manifest of a live instance — the `?name=`
@@ -699,4 +727,34 @@ export abstract class IndexRows extends EngineCore {
 
     return normalizeRealmMetaValue(results[0]?.value);
   }
+}
+
+const INSTANCE_SOURCE_COLUMNS =
+  'i.url, i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc, i.diagnostics';
+
+interface InstanceSourceRow {
+  url: string;
+  realm_url: string;
+  generation: number;
+  source_content_hash: string | null;
+  types: string[] | null;
+  pristine_doc: CardResource | null;
+  has_error: boolean | null;
+  error_doc: SerializedError | null;
+  diagnostics: Diagnostics | null;
+}
+
+function instanceSourceFromRow(row: InstanceSourceRow): IndexedInstanceSource {
+  return {
+    url: row.url,
+    realmURL: row.realm_url,
+    generation: Number(row.generation),
+    sourceContentHash: row.source_content_hash ?? null,
+    types: row.types,
+    instance: row.has_error ? null : row.pristine_doc,
+    error: row.has_error ? row.error_doc : null,
+    failureWithheld:
+      !row.has_error &&
+      verdictCoversRow(row.diagnostics ?? undefined, 'instance'),
+  };
 }
