@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   BOXEL_CLI_CLIENT_ID,
   CONFIRMATION_CODE_PARAM,
+  OAuthConnectionEndedError,
   OAuthNotOfferedError,
   buildAuthorizeUrl,
   discoverBoxelApi,
@@ -12,6 +13,7 @@ import {
   makeConfirmationCode,
   makePkce,
   oauthLogin,
+  refreshTokens,
   type BoxelApiProvider,
 } from '../../src/lib/oauth-login.ts';
 
@@ -276,6 +278,30 @@ describe('exchangeCode', () => {
     );
 
     expect(tokens.accessExpiresAt).toBe('2026-11-24T00:10:00.000Z');
+  });
+});
+
+describe('refreshTokens', () => {
+  it('reports a refused refresh token as an ended connection', async () => {
+    let fetchFn = (async () =>
+      jsonResponse({ error: 'invalid_grant' }, 400)) as typeof fetch;
+
+    await expect(
+      refreshTokens(PROVIDER, 'refresh-token-placeholder', { fetchFn }),
+    ).rejects.toBeInstanceOf(OAuthConnectionEndedError);
+  });
+
+  it("doesn't report a server failure as an ended connection", async () => {
+    let fetchFn = (async () =>
+      new Response('upstream failed', { status: 502 })) as typeof fetch;
+
+    let attempt = refreshTokens(PROVIDER, 'refresh-token-placeholder', {
+      fetchFn,
+    });
+    await expect(attempt).rejects.toThrow(
+      "The realm server didn't renew the connection's tokens: 502",
+    );
+    await expect(attempt).rejects.not.toBeInstanceOf(OAuthConnectionEndedError);
   });
 });
 

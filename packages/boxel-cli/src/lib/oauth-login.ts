@@ -243,7 +243,7 @@ interface TokenResponse {
 }
 
 async function tokenRequest(
-  provider: BoxelApiProvider,
+  provider: Pick<BoxelApiProvider, 'resource' | 'tokenEndpoint'>,
   params: Record<string, string>,
   fetchFn: typeof fetch,
 ): Promise<TokenResponse & { status: number }> {
@@ -316,6 +316,65 @@ export async function exchangeCode(
     accessExpiresAt: new Date(accessExpiresAt).toISOString(),
     connectionEndsAt: new Date(
       refreshToken ? startedAt + RENEWING_GRANT_LIFETIME_MS : accessExpiresAt,
+    ).toISOString(),
+    ...(typeof body.scope === 'string' ? { scope: body.scope } : {}),
+  };
+}
+
+// The connection is over: the provider refused its refresh token, or it has
+// none and its access token has run out. Only a new sign-in brings it back.
+export class OAuthConnectionEndedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OAuthConnectionEndedError';
+  }
+}
+
+// Trades a refresh token for a new access token. The provider rotates refresh
+// tokens, so the answer carries a new one, and the one sent can never be used
+// again: presenting it a second time ends the whole connection. Callers must
+// make sure no two refreshes of one connection run at once.
+export async function refreshTokens(
+  provider: Pick<BoxelApiProvider, 'resource' | 'tokenEndpoint'>,
+  refreshToken: string,
+  {
+    fetchFn = fetch,
+    now = Date.now,
+  }: { fetchFn?: typeof fetch; now?: () => number } = {},
+): Promise<
+  Pick<
+    OAuthTokens,
+    'accessToken' | 'refreshToken' | 'accessExpiresAt' | 'scope'
+  >
+> {
+  // Counted from before the request, as in `exchangeCode`.
+  let requestedAt = now();
+  let body = await tokenRequest(
+    provider,
+    { grant_type: 'refresh_token', refresh_token: refreshToken },
+    fetchFn,
+  );
+  if (body.status === 400 && body.error === 'invalid_grant') {
+    throw new OAuthConnectionEndedError(
+      `The realm server ended this connection: ${describeTokenError(body)}`,
+    );
+  }
+  if (
+    body.status !== 200 ||
+    typeof body.access_token !== 'string' ||
+    typeof body.expires_in !== 'number'
+  ) {
+    throw new Error(
+      `The realm server didn't renew the connection's tokens: ${describeTokenError(body)}`,
+    );
+  }
+  return {
+    accessToken: body.access_token,
+    ...(typeof body.refresh_token === 'string'
+      ? { refreshToken: body.refresh_token }
+      : {}),
+    accessExpiresAt: new Date(
+      requestedAt + body.expires_in * 1000,
     ).toISOString(),
     ...(typeof body.scope === 'string' ? { scope: body.scope } : {}),
   };

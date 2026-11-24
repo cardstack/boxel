@@ -14,6 +14,12 @@ import {
   getUserRealmsFromMatrixAccountData,
   type MatrixAuth,
 } from './auth.ts';
+import { withFileLock } from './file-lock.ts';
+import {
+  boxelApiResource,
+  OAuthConnectionEndedError,
+  refreshTokens,
+} from './oauth-login.ts';
 import { promptPassword as defaultPromptPassword } from './prompt.ts';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
 import { realmFetch } from './realm-fetch.ts';
@@ -24,6 +30,9 @@ export interface ProfileManagerDeps {
   isTty?: () => boolean;
   // Moves the written profiles file into place.
   renameFile?: (from: string, to: string) => void;
+  // Renews an OAuth profile's tokens at the realm server.
+  refreshTokens?: typeof refreshTokens;
+  now?: () => number;
 }
 
 // What a rename over the profiles file throws on Windows while another
@@ -32,6 +41,11 @@ const RENAME_REFUSED_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
+
+// An OAuth access token this close to its expiry is renewed before it is
+// sent, rather than sent to be refused. A request it is refused on is retried
+// once with a renewed one.
+const OAUTH_ACCESS_EXPIRY_MARGIN_MS = 60_000;
 
 /**
  * Re-mint a realm-server token when this little of its life is left, so a
@@ -223,6 +237,8 @@ export class ProfileManager implements RealmAuthenticator {
   private promptPasswordFn: (question: string) => Promise<string>;
   private isTtyFn: () => boolean;
   private renameFileFn: (from: string, to: string) => void;
+  private refreshTokensFn: typeof refreshTokens;
+  private now: () => number;
   // Set when a profiles file exists on disk but couldn't be read as a profiles
   // store (unparseable, or a shape we don't recognize). The manager still
   // starts empty so `profile add` can recover, but discovery callers must be
@@ -243,6 +259,8 @@ export class ProfileManager implements RealmAuthenticator {
     this.promptPasswordFn = deps?.promptPassword ?? defaultPromptPassword;
     this.isTtyFn = deps?.isTty ?? (() => Boolean(process.stdin.isTTY));
     this.renameFileFn = deps?.renameFile ?? fs.renameSync;
+    this.refreshTokensFn = deps?.refreshTokens ?? refreshTokens;
+    this.now = deps?.now ?? Date.now;
   }
 
   private ensureConfigDir(): void {
@@ -849,6 +867,141 @@ export class ProfileManager implements RealmAuthenticator {
     }
   }
 
+  // A live access token for the active profile's OAuth connection. It is
+  // renewed first when it is about to run out, or when it is `rejected`, the
+  // token a request was just refused with.
+  async getOAuthAccessToken(rejected?: string): Promise<string> {
+    let active = this.getActiveProfile();
+    let oauth = active?.profile.oauth;
+    if (!active || !oauth) {
+      throw new Error(
+        active
+          ? `Profile "${active.id}" is signed in with Matrix, not OAuth.`
+          : NO_ACTIVE_PROFILE_ERROR,
+      );
+    }
+    if (oauth.accessToken !== rejected && !this.isOAuthNearExpiry(oauth)) {
+      return oauth.accessToken;
+    }
+    return this.renewOAuth(active.id, oauth.accessToken);
+  }
+
+  private isOAuthNearExpiry(oauth: OAuthSessionRecord): boolean {
+    return (
+      Date.parse(oauth.accessExpiresAt) - this.now() <
+      OAUTH_ACCESS_EXPIRY_MARGIN_MS
+    );
+  }
+
+  // Renews a profile's OAuth tokens, `stale` being the access token this
+  // process holds. The provider rotates refresh tokens and ends the whole
+  // connection when one is presented twice, so renewals are serialized across
+  // processes by a lock beside the profiles file, and each starts from the
+  // file as it is: when another boxel command has renewed already, its
+  // tokens are used, and the refresh token this process loaded, which that
+  // renewal spent, is never sent.
+  private async renewOAuth(profileId: string, stale: string): Promise<string> {
+    return withFileLock(`${this.profilesFile}.lock`, async () => {
+      let read = this.readProfilesFile();
+      let profile = read.kind === 'ok' ? read.config.profiles[profileId] : null;
+      let current = profile?.oauth;
+      if (!profile || !current) {
+        throw new OAuthConnectionEndedError(
+          `Profile "${profileId}" no longer has an OAuth connection: another boxel command signed it out or replaced it. ` +
+            `Run \`boxel profile add --oauth\` to sign in again.`,
+        );
+      }
+      if (current.accessToken !== stale && !this.isOAuthNearExpiry(current)) {
+        let held = this.config.profiles[profileId];
+        if (held) {
+          held.oauth = current;
+        }
+        return current.accessToken;
+      }
+      if (!current.refreshToken) {
+        throw new OAuthConnectionEndedError(
+          `The OAuth connection for ${profileId} didn't renew, so it ended with its access token at ${current.accessExpiresAt}. ` +
+            `Run \`boxel profile add --oauth\` to sign in again, and allow it to renew to keep it for 30 days.`,
+        );
+      }
+      if (Date.parse(current.connectionEndsAt) <= this.now()) {
+        throw new OAuthConnectionEndedError(
+          `The OAuth connection for ${profileId} ended at ${current.connectionEndsAt}, 30 days after it was signed in. ` +
+            `Run \`boxel profile add --oauth\` to sign in again.`,
+        );
+      }
+      let renewed;
+      try {
+        renewed = await this.refreshTokensFn(
+          {
+            resource: boxelApiResource(profile.realmServerUrl),
+            tokenEndpoint: current.tokenEndpoint,
+          },
+          current.refreshToken,
+          { now: this.now },
+        );
+      } catch (e) {
+        if (e instanceof OAuthConnectionEndedError) {
+          throw new OAuthConnectionEndedError(
+            `The OAuth connection for ${profileId} has ended: it was disconnected, or its 30 days ran out. ` +
+              `Run \`boxel profile add --oauth\` to sign in again.`,
+          );
+        }
+        throw e;
+      }
+      let next: OAuthSessionRecord = {
+        ...current,
+        ...renewed,
+        refreshToken: renewed.refreshToken ?? current.refreshToken,
+      };
+      let spent = current.refreshToken;
+      this.updateProfile(profileId, (p) => {
+        // In the file, only the connection this renewal spent is replaced: a
+        // sign-in that replaced it meanwhile is kept. This process's copy
+        // takes the renewed tokens whatever it held.
+        if (
+          p.oauth &&
+          (p === this.config.profiles[profileId] ||
+            p.oauth.refreshToken === spent)
+        ) {
+          p.oauth = next;
+        }
+      });
+      return next.accessToken;
+    });
+  }
+
+  // A request with the active profile's OAuth access token. A 401 is
+  // retried once with a renewed token. The Boxel API answers 401 both for a
+  // token that has run out and for a route it doesn't offer, so a retry that
+  // is refused again is returned as it is. A connection that doesn't renew
+  // has nothing to retry with.
+  private async oauthFetch(
+    input: string | URL | Request,
+    init: RequestInit | undefined,
+    fetchFn: (
+      input: string | URL | Request,
+      init: RequestInit,
+    ) => Promise<Response>,
+  ): Promise<Response> {
+    let token = await this.getOAuthAccessToken();
+    let response = await fetchFn(input, {
+      ...init,
+      headers: this.buildHeaders(input, init, `Bearer ${token}`),
+    });
+    if (
+      response.status !== 401 ||
+      !this.getActiveProfile()?.profile.oauth?.refreshToken
+    ) {
+      return response;
+    }
+    let renewed = await this.getOAuthAccessToken(token);
+    return fetchFn(input, {
+      ...init,
+      headers: this.buildHeaders(input, init, `Bearer ${renewed}`),
+    });
+  }
+
   private findRealmTokenForUrl(url: string): string | undefined {
     let active = this.getActiveProfile();
     if (!active?.profile.realmTokens) {
@@ -914,7 +1067,12 @@ export class ProfileManager implements RealmAuthenticator {
     return find();
   }
 
+  // A realm's own token. An OAuth profile has none: its access token reaches
+  // every realm itself.
   async getRealmTokenForUrl(url: string): Promise<string | undefined> {
+    if (this.getActiveProfile()?.profile.oauth) {
+      return undefined;
+    }
     let realmToken = this.findRealmTokenForUrl(url);
     if (realmToken) {
       return realmToken;
@@ -956,6 +1114,10 @@ export class ProfileManager implements RealmAuthenticator {
         : input instanceof URL
           ? input.href
           : input;
+
+    if (this.getActiveProfile()?.profile.oauth) {
+      return this.oauthFetch(input, init, realmFetch);
+    }
 
     let token = await this.getRealmTokenForUrl(url);
     if (token) {
@@ -1005,6 +1167,9 @@ export class ProfileManager implements RealmAuthenticator {
     input: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
+    if (this.getActiveProfile()?.profile.oauth) {
+      return this.oauthFetch(input, init, fetch);
+    }
     let token = await this.getOrRefreshServerToken();
     let headers = this.buildHeaders(input, init, token);
     let response = await fetch(input, { ...init, headers });

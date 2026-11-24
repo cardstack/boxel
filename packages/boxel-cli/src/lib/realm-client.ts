@@ -125,6 +125,10 @@ export function buildCliRealmClient(
       if (isRealmServerEndpoint(url, realmServerURL)) {
         return profileManager.authedRealmServerFetch(url, init);
       }
+      // An OAuth profile's access token reaches every realm itself.
+      if (active.profile.oauth) {
+        return profileManager.authedRealmFetch(url, init);
+      }
       let token = await realmTokenFor(realmURLForEndpoint(url));
       let headers = new Headers(init?.headers);
       if (token) {
