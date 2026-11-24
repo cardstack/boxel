@@ -561,7 +561,129 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
     assert.deepEqual((await savedPins(2)).sort(), ['./notes', './roadmap']);
   });
 
+  test('cards pinned together are added in the order given, each once', async function (assert) {
+    await mainRealm.write('roadmap.json', JSON.stringify(cardJSON('Roadmap')));
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('plans.json', JSON.stringify(cardJSON('Plans')));
+    await mainRealm.write(
+      'index.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './roadmap' } },
+        }),
+      ),
+    );
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}notes`, format: 'isolated' }]],
+    });
+
+    let { toolContext } = getService('tool-service');
+    await new SetWorkspacePinTool(toolContext).execute({
+      cardIds: [
+        `${realmURL}plans`,
+        `${realmURL}roadmap`,
+        `${realmURL}notes`,
+        `${realmURL}plans`,
+      ],
+      pinned: true,
+    });
+
+    assert.deepEqual(await savedPins(4), [
+      './roadmap',
+      './plans',
+      './notes',
+      undefined,
+    ]);
+  });
+
+  test('a card that fails to load is left out and named once, and the cards pinned with it are pinned', async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('plans.json', JSON.stringify(cardJSON('Plans')));
+    await mainRealm.write(
+      'broken.json',
+      JSON.stringify({
+        data: {
+          meta: { adoptsFrom: { module: './no-such-module', name: 'Nothing' } },
+        },
+      }),
+    );
+    await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}notes`, format: 'isolated' }]],
+    });
+
+    let { toolContext } = getService('tool-service');
+    let result = await new SetWorkspacePinTool(toolContext).execute({
+      cardIds: [
+        `${realmURL}notes`,
+        `${realmURL}broken`,
+        `${realmURL}plans`,
+        `${realmURL}broken.json`,
+      ],
+      pinned: true,
+    });
+    assert.strictEqual(
+      result?.leftOut,
+      `Card not found: ${realmURL}broken. The other cards are pinned.`,
+    );
+    assert.deepEqual(await savedPins(3), ['./notes', './plans', undefined]);
+  });
+
+  test('cards unpinned together are all removed, and the other pins kept', async function (assert) {
+    await mainRealm.write('roadmap.json', JSON.stringify(cardJSON('Roadmap')));
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('plans.json', JSON.stringify(cardJSON('Plans')));
+    await mainRealm.write(
+      'index.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './roadmap' } },
+          'entryPoints.1': { links: { self: './missing' } },
+          'entryPoints.2': { links: { self: './notes' } },
+          'entryPoints.3': { links: { self: './plans' } },
+        }),
+      ),
+    );
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}notes`, format: 'isolated' }]],
+    });
+
+    let { toolContext } = getService('tool-service');
+    await new SetWorkspacePinTool(toolContext).execute({
+      cardIds: [`${realmURL}notes`, `${realmURL}roadmap`],
+      pinned: false,
+    });
+
+    assert.deepEqual(await savedPins(3), ['./missing', './plans', undefined]);
+  });
+
+  test("cards in two workspaces can't be pinned in one call", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}notes`, format: 'isolated' }]],
+    });
+
+    let { toolContext } = getService('tool-service');
+    await assert.rejects(
+      new SetWorkspacePinTool(toolContext).execute({
+        cardIds: [`${realmURL}notes`, `${pinnedRealmURL}launch-notes`],
+        pinned: true,
+      }),
+      /in different workspaces/,
+    );
+    await assert.rejects(
+      new SetWorkspacePinTool(toolContext).execute({
+        cardIds: [`${realmURL}notes`, 'http://no-such-realm/notes'],
+        pinned: true,
+      }),
+      /No known workspace holds http:\/\/no-such-realm\/notes/,
+    );
+    assert.deepEqual(await savedPins(1), [undefined]);
+  });
+
   test("a workspace's root URL can't be pinned to it", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
     await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));
     await visitOperatorMode({
       stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
@@ -576,6 +698,17 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
       /index card can't be one of its pins/,
     );
     assert.deepEqual(await savedPins(1), [undefined]);
+
+    let result = await new SetWorkspacePinTool(toolContext).execute({
+      cardIds: [`${realmURL}notes`, realmURL],
+      pinned: true,
+    });
+    assert.strictEqual(
+      result?.leftOut,
+      `A workspace's index card can't be one of its pins: ${realmURL}. The other cards are pinned.`,
+      'with other cards, the index card is left out and they are pinned',
+    );
+    assert.deepEqual(await savedPins(2), ['./notes', undefined]);
   });
 
   test("the Workspace Home's unpin keeps the other pins, even one whose card is missing", async function (assert) {
@@ -621,6 +754,40 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
 
     assert.deepEqual(await savedPins(3), ['./roadmap', './missing', './notes']);
     // The Home draws the new pin without a reload.
+    await waitFor('[data-test-door-unpin="2"]');
+    assert.dom('[data-test-door-unpin="2"]').exists();
+  });
+
+  test("the Workspace Home's pin adds every card chosen, in the order picked, and skips one already pinned", async function (assert) {
+    await mainRealm.write('roadmap.json', JSON.stringify(cardJSON('Roadmap')));
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('plans.json', JSON.stringify(cardJSON('Plans')));
+    await mainRealm.write(
+      'index.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './roadmap' } },
+        }),
+      ),
+    );
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+    });
+
+    await click('[data-test-door-add]');
+    await waitFor(`[data-test-item-button="${realmURL}plans"]`);
+    await click(`[data-test-item-button="${realmURL}plans"]`);
+    await click(`[data-test-item-button="${realmURL}roadmap"]`);
+    await click(`[data-test-item-button="${realmURL}notes"]`);
+    assert.dom('[data-test-card-chooser-go-button]').hasText('Choose 3 Cards');
+    await click('[data-test-card-chooser-go-button]');
+
+    assert.deepEqual(await savedPins(4), [
+      './roadmap',
+      './plans',
+      './notes',
+      undefined,
+    ]);
     await waitFor('[data-test-door-unpin="2"]');
     assert.dom('[data-test-door-unpin="2"]').exists();
   });

@@ -2671,8 +2671,9 @@ class Isolated extends Component<typeof Workspace> {
     }
   };
 
-  // Pin management: the ghost tile pins a card from the card chooser through
-  // the same tool as the card menus; the kicker × removes a pin by position.
+  // Pin management: the ghost tile pins the cards chosen in the card chooser
+  // through the same tool as the card menus; the kicker × removes a pin by
+  // position.
   pinCard = () => {
     this.pinCardTask.perform();
   };
@@ -2682,7 +2683,7 @@ class Isolated extends Component<typeof Workspace> {
     if (!toolContext) {
       return;
     }
-    let chosenId = await chooseCard(
+    let chosenIds = await chooseCard(
       {
         filter: {
           every: [
@@ -2693,15 +2694,17 @@ class Isolated extends Component<typeof Workspace> {
         page: { size: SEARCH_PAGE_SIZE },
       },
       {
+        multiSelect: true,
         consumingRealm: this.args.model[realmURL],
         lockConsumingRealm: true,
       },
     );
-    if (!chosenId) {
+    if (!chosenIds?.length) {
       return;
     }
+    // In the order picked; the tool skips a card that's already pinned.
     await new SetWorkspacePinTool(toolContext).execute(
-      new SetWorkspacePinInput({ cardId: chosenId, pinned: true }),
+      new SetWorkspacePinInput({ cardIds: chosenIds, pinned: true }),
     );
   });
 
