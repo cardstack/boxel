@@ -166,6 +166,11 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
               `${tag}: batch ${followUp.batchId} of automation ${followUp.automationId} had pending follow-up run ${followUp.runId} from a tick that stopped; its job was enqueued again`,
             );
             break;
+          case 'held':
+            log.info(
+              `${tag}: batch ${followUp.batchId} of automation ${followUp.automationId} is held: the automation was paused, began waiting for a key approval or was removed as the tick reached it`,
+            );
+            break;
           case 'found':
             log.info(
               `${tag}: batch ${followUp.batchId} of automation ${followUp.automationId} already has follow-up run ${followUp.runId}`,

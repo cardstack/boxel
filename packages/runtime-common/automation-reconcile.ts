@@ -46,10 +46,11 @@
 // An outage costs at most one late run per trigger, and because the realm is
 // the state, that run catches up on everything since.
 //
-// Other kinds of missed work, such as a batch's follow-up whose deadline
-// passed with nothing enqueued, register a step with
+// Other kinds of missed work register a step with
 // `registerAutomationReconcileStep`; each pass runs every registered step
-// after its own.
+// after its own. A batch whose deadline passed with no follow-up needs none:
+// the minute tick reads every such batch on each pass
+// (`startDueAIBatchFollowUps`).
 
 import { aiBatchFollowUpInput } from './ai-batch-follow-ups.ts';
 import {

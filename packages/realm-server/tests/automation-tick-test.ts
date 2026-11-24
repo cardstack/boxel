@@ -1234,13 +1234,83 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual((await followUpRuns()).length, 1);
     });
 
-    test('a batch of an automation that is not switched on gets no follow-up', async function (assert) {
+    test('a batch of an automation that is not switched on gets no follow-up, and is marked dropped', async function (assert) {
       await switchOn();
       await submitBatch();
       await query(dbAdapter, ['DELETE FROM automations']);
 
       assert.deepEqual(await followUps(ONE + 30), []);
       assert.deepEqual(await followUpRuns(), []);
+      let [batch] = await query(dbAdapter, [
+        `SELECT follow_up_dropped_at FROM ai_batches WHERE batch_id = 'batch_1'`,
+      ]);
+      assert.notStrictEqual(
+        batch.follow_up_dropped_at,
+        null,
+        'it leaves the tick’s search',
+      );
+    });
+
+    test('a pause that lands while the tick starts follow-ups holds the follow-ups it has not reached', async function (assert) {
+      await switchOn();
+      await submitBatch('batch_1');
+      await submitBatch('batch_2');
+      // Pause the automation from another connection the moment the first
+      // follow-up's job is published. The pause waits for the tick's hold on
+      // the automation's row, then commits ahead of the second batch's.
+      let paused: Promise<unknown> | undefined;
+      let pausingQueue: QueuePublisher = {
+        ...publisher,
+        publish: async (...args: Parameters<QueuePublisher['publish']>) => {
+          let job = await publisher.publish(...args);
+          if (!paused) {
+            paused = query(dbAdapter, [
+              `UPDATE automations SET state = 'paused', pause_reason = 'requested'`,
+            ]);
+            // Return only once the pause is queued on the row's lock, so it
+            // is ahead of the second batch's hold.
+            for (let waited = 0; waited < 100; waited++) {
+              let [{ waiting }] = await query(dbAdapter, [
+                "SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE automations SET state%'",
+              ]);
+              if (Number(waiting) > 0) {
+                break;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+          }
+          return job;
+        },
+      } as QueuePublisher;
+
+      let outcomes = await startDueAIBatchFollowUps(dbAdapter, {
+        queue: pausingQueue,
+        virtualNetwork,
+        now: ONE + 30,
+      });
+      await paused;
+
+      assert.deepEqual(
+        outcomes.map((o) => [o.kind, o.batchId]),
+        [
+          ['started', 'batch_1'],
+          ['held', 'batch_2'],
+        ],
+      );
+      assert.deepEqual(
+        (await followUpRuns()).map((run) => run.slot),
+        ['batch_1'],
+        'no follow-up is made for the held batch',
+      );
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'active', pause_reason = NULL`,
+      ]);
+      let [resumed] = await followUps(ONE + 90);
+      assert.deepEqual(
+        [resumed.kind, resumed.batchId],
+        ['started', 'batch_2'],
+        'the held batch starts once the automation is active again',
+      );
     });
 
     test('a paused automation’s batch starts its follow-up however long the pause lasted', async function (assert) {

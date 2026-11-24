@@ -16,6 +16,8 @@ scope:
   - packages/runtime-common/automations.ts
   - packages/runtime-common/automation-runs.ts
   - packages/runtime-common/automation-reconcile.ts
+  - packages/runtime-common/tasks/run-automation.ts
+  - packages/host/app/tools/run-realm-code.ts
 ---
 
 # 030. Batch AI only when an automation opts in, end the run while it waits, and bill every batch

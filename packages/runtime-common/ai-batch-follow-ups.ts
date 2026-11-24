@@ -26,10 +26,16 @@
 //
 // A batch of an automation that is paused, or waiting for a key approval,
 // waits however long that lasts: its follow-up starts once the automation is
-// active again, as the tick next sees it (ADR 030 §1.5). A follow-up started
-// meanwhile would be refused at its admission, for good. A batch of an automation that has been
-// removed gets no follow-up, including after the automation is switched on
-// again: only batches submitted since the automation's row was made count.
+// active again, as the tick next sees it (ADR 030 §1.5). The tick holds the
+// automation's row while it makes the follow-up's run row, enqueues its job
+// and records it, as it does for a trigger's run, so a pause or a key-approval
+// wait either lands first, and the batch waits, or lands after and finds the
+// follow-up there to cancel. A batch of an automation that has been removed
+// gets no follow-up, including after the automation is switched on again:
+// only batches submitted since the automation's row was made count. Once its
+// deadline has passed, such a batch is marked dropped
+// (`follow_up_dropped_at`), which takes it out of the tick's search; the
+// settle job still bills it.
 
 import { BATCH_RUN_TRIGGER } from './automation-declaration.ts';
 import type { AutomationJobInput } from './automation-run-command.ts';
@@ -40,7 +46,13 @@ import {
 } from './automation-run-telemetry.ts';
 import { insertOrFindAutomationRun } from './automation-runs.ts';
 import type { DBAdapter } from './db.ts';
-import { dbAdapterQuerier, param, query } from './expression.ts';
+import {
+  dbAdapterQuerier,
+  param,
+  query,
+  type Expression,
+  type Querier,
+} from './expression.ts';
 import { enqueueAutomationRunJob } from './jobs/run-command.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import type { QueuePublisher } from './queue.ts';
@@ -71,6 +83,8 @@ export interface AIBatchFollowUpOptions {
 //   stopped before recording it on the batch; its job was enqueued again.
 // - `found`: the run row was already there and had started, so nothing was
 //   enqueued.
+// - `held`: the automation was paused, or began waiting for a key approval,
+//   or was removed, after the search read the batch; it stays due.
 // - `failed`: starting the follow-up threw. The batch stays due, and the next
 //   tick tries again.
 export type AIBatchFollowUpOutcome =
@@ -86,6 +100,11 @@ export type AIBatchFollowUpOutcome =
       batchId: string;
       automationId: RealmResourceIdentifier;
       runId: string;
+    }
+  | {
+      kind: 'held';
+      batchId: string;
+      automationId: RealmResourceIdentifier;
     }
   | {
       kind: 'failed';
@@ -107,6 +126,7 @@ export async function startDueAIBatchFollowUps(
   // The last batch read, by deadline and then id, so a batch that failed
   // isn't read again in the same pass.
   let after: { deadline: string; batchId: string } | undefined;
+  await dropUnreachableFollowUps(dbAdapter, now);
   for (;;) {
     let due = await dueBatches(dbAdapter, now, pageSize, after);
     for (let batch of due) {
@@ -158,9 +178,10 @@ async function dueBatches(
   let rows = await query(dbAdapter, [
     "SELECT b.batch_id, b.run_id, b.acts_as, b.realm, b.automation_id, b.deadline, b.request_count, a.caps_snapshot ->> 'seconds' AS seconds_cap",
     'FROM ai_batches b JOIN automations a ON a.automation_id = b.automation_id',
-    'WHERE b.follow_up_run_id IS NULL AND b.deadline <=',
+    'WHERE b.follow_up_run_id IS NULL AND b.follow_up_dropped_at IS NULL AND b.deadline <=',
     param(nowISO),
-    "::timestamptz AND a.state NOT IN ('paused', 'waiting-for-key-approval') AND b.submitted_at >= a.switched_on_at",
+    '::timestamptz AND',
+    ...followUpMayStart(),
     ...(after
       ? [
           'AND (b.deadline, b.batch_id) > (',
@@ -191,33 +212,60 @@ async function startFollowUp(
   { queue, virtualNetwork }: AIBatchFollowUpOptions,
 ): Promise<AIBatchFollowUpOutcome> {
   let { batchId, automationId } = batch;
-  let { run, created } = await insertOrFindAutomationRun(
-    dbAdapterQuerier(dbAdapter),
-    {
+  // Held until the run row, the job and the record are written, so a pause or
+  // a key-approval wait can't land between reading the automation's state and
+  // writing the follow-up (see the header).
+  let started = await dbAdapter.withTransaction(async (txQuery) => {
+    let [mayStart] = await txQuery([
+      'SELECT 1 FROM automations a JOIN ai_batches b ON b.automation_id = a.automation_id WHERE b.batch_id =',
+      param(batchId),
+      'AND b.follow_up_run_id IS NULL AND',
+      ...followUpMayStart(),
+      'FOR UPDATE OF a',
+    ]);
+    if (!mayStart) {
+      return { kind: 'held' as const };
+    }
+    // Written outside the transaction, as the tick writes a trigger's run,
+    // so the worker that takes the job finds the run row.
+    let { run, created } = await insertOrFindAutomationRun(
+      dbAdapterQuerier(dbAdapter),
+      {
+        automationId,
+        realm: batch.realm,
+        trigger: BATCH_RUN_TRIGGER,
+        slot: batchId,
+        actsAs: batch.actsAs,
+      },
+    );
+    if (!created && run.state !== 'pending') {
+      await recordFollowUp(txQuery, batchId, run.id);
+      return { kind: 'found' as const, run };
+    }
+    let job = await enqueueAutomationRunJob(queue, {
       automationId,
-      realm: batch.realm,
+      realmURL: ensureTrailingSlash(virtualNetwork.toURLHref(batch.realm)),
+      actsAs: run.actsAs,
       trigger: BATCH_RUN_TRIGGER,
       slot: batchId,
-      actsAs: batch.actsAs,
-    },
-  );
-  if (!created && run.state !== 'pending') {
-    await recordFollowUp(dbAdapter, batchId, run.id);
-    return { kind: 'found', batchId, automationId, runId: run.id };
-  }
-  let job = await enqueueAutomationRunJob(queue, {
-    automationId,
-    realmURL: ensureTrailingSlash(virtualNetwork.toURLHref(batch.realm)),
-    actsAs: run.actsAs,
-    trigger: BATCH_RUN_TRIGGER,
-    slot: batchId,
-    secondsCap: batch.secondsCap,
-    input: aiBatchFollowUpInput(run.id, batch.deadline),
+      secondsCap: batch.secondsCap,
+      input: aiBatchFollowUpInput(run.id, batch.deadline),
+    });
+    await recordFollowUp(txQuery, batchId, run.id);
+    return {
+      kind: created ? ('started' as const) : ('resumed' as const),
+      run,
+      job,
+    };
   });
-  await recordFollowUp(dbAdapter, batchId, run.id);
-  if (!created) {
-    return { kind: 'resumed', batchId, automationId, runId: run.id };
+  if (started.kind === 'held') {
+    return { kind: 'held', batchId, automationId };
   }
+  let { run } = started;
+  if (started.kind !== 'started') {
+    return { kind: started.kind, batchId, automationId, runId: run.id };
+  }
+  let { job } = started;
   let enqueuedAt = Date.now();
   let enqueued: AutomationRunEnqueuedEvent = {
     kind: 'enqueued',
@@ -269,15 +317,40 @@ export function aiBatchFollowUpInput(
 // Records the batch's follow-up run, which takes the batch out of the tick's
 // search.
 async function recordFollowUp(
-  dbAdapter: DBAdapter,
+  querier: Querier,
   batchId: string,
   runId: string,
 ): Promise<void> {
-  await query(dbAdapter, [
+  await querier([
     'UPDATE ai_batches SET follow_up_run_id =',
     param(runId),
     '::uuid WHERE batch_id =',
     param(batchId),
     'AND follow_up_run_id IS NULL',
+  ]);
+}
+
+// Whether a batch's automation lets its follow-up start (`a` the automation,
+// `b` the batch): it is neither paused nor waiting for a key approval, and
+// was switched on before the batch was submitted.
+function followUpMayStart(): Expression {
+  return [
+    "a.state NOT IN ('paused', 'waiting-for-key-approval') AND b.submitted_at >= a.switched_on_at",
+  ];
+}
+
+// Marks dropped every batch whose deadline has passed and that can never get
+// a follow-up: its automation has been removed, or was switched on again after
+// the batch was submitted. Without the mark, such a batch would stay in the
+// tick's search for good.
+async function dropUnreachableFollowUps(
+  dbAdapter: DBAdapter,
+  now: number,
+): Promise<void> {
+  await query(dbAdapter, [
+    'UPDATE ai_batches b SET follow_up_dropped_at = now()',
+    'WHERE b.follow_up_run_id IS NULL AND b.follow_up_dropped_at IS NULL AND b.deadline <=',
+    param(new Date(now * 1000).toISOString()),
+    '::timestamptz AND NOT EXISTS (SELECT 1 FROM automations a WHERE a.automation_id = b.automation_id AND b.submitted_at >= a.switched_on_at)',
   ]);
 }
