@@ -2216,8 +2216,12 @@ skill, _Outside calls in a Preview_, is what authors and the AI assistant
 follow: the `dryRun` check with a log line of what the call would send,
 the data in the request body rather than a realm URL the service can't read
 before the commit, `cards.get` by key rather than `cards.search` for the
-run's own writes, and an idempotency key on each change, since a commit can
-fail after the call. When a Preview's outside call did something it
+run's own writes, and an idempotency key on each change where the service
+reads one, since a commit can fail after the call (for a service that reads
+none, such as Slack's `chat.postMessage`, the section's fallback: record
+each change on the item's card, look the item up at the service first where
+the service allows, and tell the person a failed run can repeat the
+change). When a Preview's outside call did something it
 shouldn't have, read the run's `call-api` log lines (_Comparing a Preview
 with a Run now_) and check the script against that section.
 
