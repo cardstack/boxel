@@ -146,13 +146,25 @@ export async function ensureSiteNameClaimed(
   } catch (error) {
     // The claim lookup above finds only the caller's own claims. A name that
     // another administrator claimed for this realm is refused here, but the
-    // mount accepts it. So a refused claim doesn't stop the mount: the mount
-    // checks the claim, and refuses a name that another user claimed.
-    if (error instanceof RealmOperationError && error.status === 422) {
+    // mount accepts it. So a claim refused because the name is claimed
+    // doesn't stop the mount: the mount checks the claim, and refuses a name
+    // that another user claimed. Any other refusal, such as a name that isn't
+    // valid, stops here with its own reason.
+    if (isAlreadyClaimedRefusal(error)) {
       return { claimed: true, hostname, alreadyClaimed: true };
     }
     throw error;
   }
+}
+
+const ALREADY_CLAIMED = 'Hostname is already claimed';
+
+function isAlreadyClaimedRefusal(error: unknown): boolean {
+  return (
+    error instanceof RealmOperationError &&
+    error.status === 422 &&
+    error.message.includes(ALREADY_CLAIMED)
+  );
 }
 
 export interface HostURLErrorReport {

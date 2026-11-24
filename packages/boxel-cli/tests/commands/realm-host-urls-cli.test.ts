@@ -190,8 +190,12 @@ describe('site name detection', () => {
 
 describe('site name claims', () => {
   // A server whose site domain is `boxel.site`. The caller has no claim of
-  // its own for the realm, and the claim endpoint answers with `claimStatus`.
-  function siteServer(claimStatus: number) {
+  // its own for the realm, and the claim endpoint answers with `claimStatus`
+  // and `claimError`.
+  function siteServer(
+    claimStatus: number,
+    claimError = 'Hostname is already claimed',
+  ) {
     let requests: string[] = [];
     let client: RealmClient = {
       realmServerURL: 'https://app.example.test/',
@@ -214,7 +218,7 @@ describe('site name claims', () => {
         }
         if (url.pathname === '/_boxel-claimed-domains' && method === 'POST') {
           return Response.json(
-            { errors: ['Hostname is already claimed'] },
+            { errors: [claimError] },
             { status: claimStatus },
           );
         }
@@ -224,7 +228,7 @@ describe('site name claims', () => {
     return { client, requests };
   }
 
-  it('leaves a name the claim endpoint refuses to the mount', async () => {
+  it('leaves a name that is claimed already to the mount', async () => {
     // Another administrator may have claimed the name for this realm. The
     // caller can't see that claim, and the mount accepts it.
     let { client, requests } = siteServer(422);
@@ -236,6 +240,13 @@ describe('site name claims', () => {
       alreadyClaimed: true,
     });
     expect(requests).toContain('POST /_boxel-claimed-domains');
+  });
+
+  it('stops on a claim refusal for another reason', async () => {
+    let { client } = siteServer(422, 'Subdomain must be lowercase');
+    await expect(
+      ensureSiteNameClaimed(client, REALM, 'https://mango.boxel.site/'),
+    ).rejects.toThrow('Subdomain must be lowercase');
   });
 
   it('stops on a claim failure that is not a refusal', async () => {
