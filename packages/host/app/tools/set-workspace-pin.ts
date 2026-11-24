@@ -23,7 +23,7 @@ import type * as BaseToolModule from '@cardstack/base/command';
 // realm's index card. This adds cards to them, or removes them, in one save.
 export default class SetWorkspacePinTool extends HostBaseTool<
   typeof BaseToolModule.SetWorkspacePinInput,
-  undefined
+  typeof BaseToolModule.SetWorkspacePinResult | undefined
 > {
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
@@ -32,7 +32,7 @@ export default class SetWorkspacePinTool extends HostBaseTool<
   static actionVerb = 'Set';
 
   description =
-    "Pin cards to their workspace, or unpin them: one card in cardId, or several in cardIds, all in the same workspace. Pins are added in the order given. Pinned cards show on the workspace's Home and on its desk in the dashboard. Only works in a workspace whose index card is a Workspace card.";
+    "Pin cards to their workspace, or unpin them: one card in cardId, or several in cardIds, all in the same workspace. Pins are added in the order given. Pinned cards show on the workspace's Home and on its desk in the dashboard. Only works in a workspace whose index card is a Workspace card. A card that can't be pinned, because it isn't found or is the workspace's index card, is left out; the others are still pinned, and the result's leftOut names the cards left out.";
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -43,11 +43,17 @@ export default class SetWorkspacePinTool extends HostBaseTool<
 
   protected async run(
     input: BaseToolModule.SetWorkspacePinInput,
-  ): Promise<undefined> {
+  ): Promise<BaseToolModule.SetWorkspacePinResult | undefined> {
+    // A card named twice is loaded, checked and reported once.
     let inputIds = [
       ...(input.cardId ? [input.cardId] : []),
       ...(input.cardIds ?? []),
-    ];
+    ].filter(
+      (id, i, ids) =>
+        ids.findIndex(
+          (other) => trimJsonExtension(other) === trimJsonExtension(id),
+        ) === i,
+    );
     if (inputIds.length === 0) {
       throw new Error('Name the cards to pin or unpin in cardId or cardIds.');
     }
@@ -74,12 +80,14 @@ export default class SetWorkspacePinTool extends HostBaseTool<
     // Unpinning never loads the cards, so a card that fails to load can still
     // be unpinned.
     let [
+      { SetWorkspacePinResult },
       workspaceModule,
       { rawArrayValues },
       { isNonPresentLink },
       index,
       cards,
     ] = await Promise.all([
+      this.loadToolModule(),
       loader.import<typeof import('@cardstack/base/workspace')>(
         '@cardstack/base/workspace',
       ),
@@ -100,7 +108,7 @@ export default class SetWorkspacePinTool extends HostBaseTool<
       );
     }
     // A card that fails to load, or is the workspace's index card, isn't
-    // pinned. The others still are, and the error names the cards left out.
+    // pinned. The others still are, and the result names the cards left out.
     let cardsToPin: { id: RealmResourceIdentifier; card: CardDef }[] = [];
     let notFound: string[] = [];
     let indexCards: string[] = [];
@@ -160,13 +168,14 @@ export default class SetWorkspacePinTool extends HostBaseTool<
     let newPins: CardDef[] = [];
     let remainingPins = pins;
     if (input.pinned) {
-      // A card already pinned, or named twice, is pinned once.
+      // A card already pinned, or named twice, is pinned once. One whose URL
+      // can't be worked out is told apart by its id.
       for (let { id, card } of cardsToPin) {
-        let url = urlOf(id);
-        if (url !== undefined && pinnedURLs.has(url)) {
+        let key = urlOf(id) ?? card.id;
+        if (key !== undefined && pinnedURLs.has(key)) {
           continue;
         }
-        pinnedURLs.add(url);
+        pinnedURLs.add(key);
         newPins.push(card);
       }
     } else {
@@ -201,7 +210,9 @@ export default class SetWorkspacePinTool extends HostBaseTool<
       }
     }
     if (leftOut) {
-      throw new Error(`${leftOut} The other cards are pinned.`);
+      return new SetWorkspacePinResult({
+        leftOut: `${leftOut} The other cards are pinned.`,
+      });
     }
     return undefined;
   }

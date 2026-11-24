@@ -596,7 +596,7 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
     ]);
   });
 
-  test('a card that fails to load is left out, and the cards pinned with it are pinned', async function (assert) {
+  test('a card that fails to load is left out and named once, and the cards pinned with it are pinned', async function (assert) {
     await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
     await mainRealm.write('plans.json', JSON.stringify(cardJSON('Plans')));
     await mainRealm.write(
@@ -613,12 +613,18 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
     });
 
     let { toolContext } = getService('tool-service');
-    await assert.rejects(
-      new SetWorkspacePinTool(toolContext).execute({
-        cardIds: [`${realmURL}notes`, `${realmURL}broken`, `${realmURL}plans`],
-        pinned: true,
-      }),
-      /Card not found: \S*broken\. The other cards are pinned\./,
+    let result = await new SetWorkspacePinTool(toolContext).execute({
+      cardIds: [
+        `${realmURL}notes`,
+        `${realmURL}broken`,
+        `${realmURL}plans`,
+        `${realmURL}broken.json`,
+      ],
+      pinned: true,
+    });
+    assert.strictEqual(
+      result?.leftOut,
+      `Card not found: ${realmURL}broken. The other cards are pinned.`,
     );
     assert.deepEqual(await savedPins(3), ['./notes', './plans', undefined]);
   });
@@ -693,12 +699,13 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
     );
     assert.deepEqual(await savedPins(1), [undefined]);
 
-    await assert.rejects(
-      new SetWorkspacePinTool(toolContext).execute({
-        cardIds: [`${realmURL}notes`, realmURL],
-        pinned: true,
-      }),
-      /index card can't be one of its pins: \S+\. The other cards are pinned\./,
+    let result = await new SetWorkspacePinTool(toolContext).execute({
+      cardIds: [`${realmURL}notes`, realmURL],
+      pinned: true,
+    });
+    assert.strictEqual(
+      result?.leftOut,
+      `A workspace's index card can't be one of its pins: ${realmURL}. The other cards are pinned.`,
       'with other cards, the index card is left out and they are pinned',
     );
     assert.deepEqual(await savedPins(2), ['./notes', undefined]);

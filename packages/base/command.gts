@@ -143,6 +143,11 @@ export class SetWorkspacePinInput extends CardIdCard {
   @field pinned = contains(BooleanField);
 }
 
+// The cards a pin call left out while it pinned the others, and why.
+export class SetWorkspacePinResult extends CardDef {
+  @field leftOut = contains(StringField);
+}
+
 export class CardTypeSchemaInput extends CardDef {
   @field codeRef = contains(CodeRefField);
 }
