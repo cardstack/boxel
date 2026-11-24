@@ -44,8 +44,8 @@ export type QueryEngineChoice = 'legacy' | 'v2';
 const DEFAULTS: Readonly<Record<QueryEngineCaller, QueryEngineChoice>> =
   Object.freeze({
     'realm-search': 'v2',
-    automations: 'legacy',
-    'skill-validation': 'legacy',
+    automations: 'v2',
+    'skill-validation': 'v2',
     'realm-logs': 'v2',
     federated: 'legacy',
     'query-fields': 'legacy',
