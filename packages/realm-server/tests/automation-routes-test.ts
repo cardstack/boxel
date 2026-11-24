@@ -1742,7 +1742,7 @@ module(basename(import.meta.filename), function (hooks) {
           'Authorization',
           `Bearer ${createJWT(realm, WRITER, ['read', 'write'])}`,
         );
-      assert.strictEqual(answered.status, 204, answered.text);
+      assert.strictEqual(answered.status, 202, answered.text);
     });
 
     // Runs an incremental pass over `paths` that no realm awaits, enqueued

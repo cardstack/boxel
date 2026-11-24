@@ -1256,11 +1256,11 @@ async function syncAutomationsAfterPass(
   }
 }
 
-// How long a pass waits for the realm's answer to its request to check the
-// automations' key approvals before it lets its job finish without it: the
-// whole check after a from-scratch pass, the check's start after an
-// incremental pass. The check runs on in the realm either way.
-const FOLLOW_AUTOMATION_KEY_APPROVALS_TIMEOUT_MS = 60_000;
+// How long an index pass waits for the realm to take its request to check
+// the automations' key approvals. The realm answers once the check has
+// started, so this covers reaching a realm server and its mounting the realm;
+// the job holds the realm's index lane while it waits.
+const FOLLOW_AUTOMATION_KEY_APPROVALS_TIMEOUT_MS = 10_000;
 
 // Asks the realm to check the key approvals of its automations in full
 // (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`): every one in it, or only those

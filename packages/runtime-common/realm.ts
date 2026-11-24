@@ -1974,14 +1974,15 @@ export async function notifyRealmIndexUpdated(
 // landed and its index hook has synced the realm's automations, to check
 // their key approvals in full, which the worker can't do, as it reads no
 // operation definitions. After a from-scratch pass it is a `POST` with no
-// body: the realm checks every automation in it
-// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`) and answers 204
-// once the check has run. After an incremental pass the body names the
-// automations the pass touched (`FollowAutomationKeyApprovalsRequest`): the
-// realm starts checking those (`Realm.followAutomationKeyApprovalsAfterWorkerPass`)
-// and answers 202 at once, so the pass's job, which holds the realm's index
-// lane, doesn't wait on the check. Like every `POST`, it takes a direct writer
-// of the realm.
+// body, and the realm checks every automation in it
+// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`). After an
+// incremental pass the body names the automations the pass touched
+// (`FollowAutomationKeyApprovalsRequest`), and the realm checks those
+// (`Realm.followAutomationKeyApprovalsAfterWorkerPass`). Either way it answers
+// 202 once the check has started, without waiting for it: the pass's job
+// holds the realm's index lane, so its writers would wait behind the check's
+// definition lookups. `Realm.incrementalIndexing()` holds the check until it
+// settles. Like every `POST`, it takes a direct writer of the realm.
 export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
   '/_follow-automation-key-approvals';
 
@@ -15767,10 +15768,14 @@ export class Realm {
         requestContext,
       });
     }
-    await this.followAutomationKeyApprovalsAfterFromScratchPass();
+    let tracked = this.followAutomationKeyApprovalsAfterFromScratchPass();
+    this.#automationFollowsAfterPass.add(tracked);
+    void tracked.finally(() =>
+      this.#automationFollowsAfterPass.delete(tracked),
+    );
     return createResponse({
       body: null,
-      init: { status: 204 },
+      init: { status: 202 },
       requestContext,
     });
   }
