@@ -2142,11 +2142,24 @@ module('Acceptance | automation view', function (hooks) {
         );
     });
 
-    test('an active automation, or one paused for another reason, offers no switch-on screen', async function (assert) {
+    test('an active automation offers no switch-on screen', async function (assert) {
       answer = { status: 200, attributes: ACTIVE };
       await openIsolated();
       await waitForStatus();
       assert.dom('[data-test-automation-switch-on]').doesNotExist();
+    });
+
+    test('an automation paused for a reason other than a raised limit or batched AI offers no switch-on screen', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+      };
+      await openIsolated();
+      await waitForStatus();
+      assert.dom('[data-test-automation-state="Paused"]').exists();
+      assert
+        .dom('[data-test-automation-switch-on]')
+        .doesNotExist('a pause someone asked for resumes without the screen');
     });
 
     test('an estimate the realm server refuses shows the server’s message and can be read again', async function (assert) {

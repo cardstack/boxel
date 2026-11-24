@@ -1,5 +1,15 @@
 import { service } from '@ember/service';
 
+import {
+  AUTOMATION_RESOURCE_TYPE,
+  AUTOMATION_ROUTE_AUTOMATION_PARAM,
+  AUTOMATION_ROUTE_PATH_PARAM,
+  AUTOMATION_ROUTE_REALM_PARAM,
+  AUTOMATION_ROUTE_RUN_PARAM,
+  AUTOMATION_RUN_CANCEL_PATH,
+  AUTOMATION_RUN_RESOURCE_TYPE,
+} from '@cardstack/runtime-common/automation-routes';
+
 import HostBaseTool, { type ClickReason } from '../lib/host-base-tool';
 
 import type RealmServerService from '../services/realm-server';
@@ -13,7 +23,7 @@ const ROUTE_PATTERN = /^_automation-[a-z-]+$/;
 
 // The routes about one run name it in the body by `automation-run`; the rest
 // name the Automation card by `automation`.
-const RUN_BODY_ROUTES = new Set(['_automation-run-cancel']);
+const RUN_BODY_ROUTES = new Set([AUTOMATION_RUN_CANCEL_PATH.slice(1)]);
 
 // Calls one of the realm server's automation routes for a card: the
 // Automation card's switch-on screen, and the console's Preview, Run now,
@@ -77,10 +87,10 @@ export default class AutomationRequestTool extends HostBaseTool<
     let init: RequestInit = { method, headers: { Accept: 'application/json' } };
     if (method === 'GET') {
       let params: [string, string | undefined | null][] = [
-        ['realm', input.realm],
-        ['automation', input.automation],
-        ['run', input.run],
-        ['path', input.filePath],
+        [AUTOMATION_ROUTE_REALM_PARAM, input.realm],
+        [AUTOMATION_ROUTE_AUTOMATION_PARAM, input.automation],
+        [AUTOMATION_ROUTE_RUN_PARAM, input.run],
+        [AUTOMATION_ROUTE_PATH_PARAM, input.filePath],
       ];
       for (let [name, value] of params) {
         if (value) {
@@ -102,7 +112,9 @@ export default class AutomationRequestTool extends HostBaseTool<
       };
       init.body = JSON.stringify({
         data: {
-          type: forRun ? 'automation-run' : 'automation',
+          type: forRun
+            ? AUTOMATION_RUN_RESOURCE_TYPE
+            : AUTOMATION_RESOURCE_TYPE,
           id: forRun ? input.run : input.automation,
           attributes,
         },
