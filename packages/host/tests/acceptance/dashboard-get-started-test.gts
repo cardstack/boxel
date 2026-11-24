@@ -14,6 +14,7 @@ import { module, test } from 'qunit';
 
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
+import type LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import {
@@ -493,6 +494,133 @@ module('Acceptance | dashboard get started', function (hooks) {
       'the empty session is reused',
     );
     assert.dom(field).hasValue('A card for my recipes').isFocused();
+  });
+
+  test("the prompt is saved as the draft and marked as the panel's, and an edit is saved", async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let roomId = await openBoxelAiSession();
+    let field = `[data-test-message-field="${roomId}"]`;
+    let localPersistence = getService(
+      'local-persistence-service',
+    ) as LocalPersistenceService;
+    let prompt = (find(field) as HTMLTextAreaElement).value;
+
+    assert.strictEqual(
+      localPersistence.getMessageDraft(roomId),
+      prompt,
+      'the prompt is saved',
+    );
+    assert.strictEqual(
+      localPersistence.getFilledPrompt(roomId),
+      prompt,
+      "it is marked as the panel's",
+    );
+
+    await fillIn(field, 'A card for my recipes');
+
+    assert.strictEqual(
+      localPersistence.getMessageDraft(roomId),
+      'A card for my recipes',
+      'the edit is saved',
+    );
+  });
+
+  test('asking again shows and keeps a draft another tab saved for the same session', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let roomId = await openBoxelAiSession();
+    let localPersistence = getService(
+      'local-persistence-service',
+    ) as LocalPersistenceService;
+    // Another tab reuses the same empty session and types into it.
+    localPersistence.setMessageDraft(roomId, 'A card for my recipes');
+
+    await click('[data-test-get-started-action="ask-ai"]');
+
+    assert
+      .dom(`[data-test-message-field="${roomId}"]`)
+      .hasValue('A card for my recipes');
+    assert.strictEqual(
+      localPersistence.getMessageDraft(roomId),
+      'A card for my recipes',
+      "the other tab's draft is kept",
+    );
+  });
+
+  test('asking again shows a draft another tab typed into a session this tab showed empty', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let roomId = await openBoxelAiSession();
+    let field = `[data-test-message-field="${roomId}"]`;
+    let localPersistence = getService(
+      'local-persistence-service',
+    ) as LocalPersistenceService;
+    await fillIn(field, '');
+    // Another tab types into the same empty session.
+    localPersistence.setMessageDraft(roomId, 'A card for my recipes');
+
+    await click('[data-test-get-started-action="ask-ai"]');
+
+    assert.dom(field).hasValue('A card for my recipes');
+    assert.strictEqual(
+      localPersistence.getMessageDraft(roomId),
+      'A card for my recipes',
+      "the other tab's draft is kept",
+    );
+  });
+
+  test('asking again from another workspace after another tab cleared the prompt fills it for that workspace', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let roomId = await openBoxelAiSession();
+    let field = `[data-test-message-field="${roomId}"]`;
+    let localPersistence = getService(
+      'local-persistence-service',
+    ) as LocalPersistenceService;
+    // Another tab reuses the same empty session and clears the prompt.
+    localPersistence.setMessageDraft(roomId, undefined);
+
+    await operatorModeState().openWorkspace(realmURL);
+    await settled();
+    operatorModeState().workspaceChooserOpened = true;
+    await waitFor('[data-test-dashboard-greeting]');
+    await openSteps();
+    await click('[data-test-get-started-action="ask-ai"]');
+
+    assert
+      .dom(field)
+      .hasValue(
+        'In Workspace A, build me a card to track my reading list, with a title, author, status and rating for each book.',
+      );
+  });
+
+  test('asking again from another workspace renames the workspace in a prompt edited back to what the panel filled in', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let roomId = await openBoxelAiSession();
+    let field = `[data-test-message-field="${roomId}"]`;
+    let prompt = (find(field) as HTMLTextAreaElement).value;
+    await fillIn(field, `${prompt} More`);
+    await fillIn(field, prompt);
+
+    await operatorModeState().openWorkspace(realmURL);
+    await settled();
+    operatorModeState().workspaceChooserOpened = true;
+    await waitFor('[data-test-dashboard-greeting]');
+    await openSteps();
+    await click('[data-test-get-started-action="ask-ai"]');
+
+    assert
+      .dom(field)
+      .hasValue(
+        'In Workspace A, build me a card to track my reading list, with a title, author, status and rating for each book.',
+      );
   });
 
   test('asking again from another workspace renames the workspace in a prompt left unchanged', async function (assert) {

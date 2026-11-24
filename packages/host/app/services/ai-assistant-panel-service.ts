@@ -80,9 +80,6 @@ export default class AiAssistantPanelService extends Service {
   // object per request, so the room can tell a request it has handled from a
   // new one for the same room.
   @tracked promptFocusRequest: { roomId: string } | undefined = undefined;
-  // The prompt the panel last filled a session's box with. While the box
-  // still holds it, it is the panel's text, not the user's.
-  private filledPrompt: { roomId: string; prompt: string } | undefined;
 
   constructor(owner: Owner) {
     super(owner);
@@ -119,7 +116,6 @@ export default class AiAssistantPanelService extends Service {
     this.roomToDelete = undefined;
     this.roomDeleteError = undefined;
     this.promptFocusRequest = undefined;
-    this.filledPrompt = undefined;
     this.deletedRoomIds.clear();
     window.localStorage.removeItem(NewSessionIdPersistenceKey);
     this.loadRoomsTask.cancelAll();
@@ -306,7 +302,9 @@ export default class AiAssistantPanelService extends Service {
 
   // Opens a new session with `prompt` in its prompt box, unsent, and focuses
   // the box. The new session may be an empty one opened before, so a draft
-  // the user typed there stays instead.
+  // the user typed there stays instead. The prompt is saved as the session's
+  // draft, marked as the panel's, so after a reload or in another tab it is
+  // still told apart from text the user typed.
   async openNewSessionWithPrompt(prompt: string) {
     let roomId = await this.openNewSession();
     if (!roomId) {
@@ -314,27 +312,28 @@ export default class AiAssistantPanelService extends Service {
     }
     if (!this.matrixService.getMessageToSend(roomId)) {
       this.matrixService.setMessageToSend(roomId, prompt);
-      this.filledPrompt = { roomId, prompt };
+      this.localPersistenceService.setFilledPrompt(roomId, prompt);
     }
     this.promptFocusRequest = { roomId };
   }
 
-  // Empties a session's prompt box when it still holds the prompt the panel
-  // filled it with.
-  private clearFilledPrompt(roomId: string) {
-    let filled = this.filledPrompt;
-    this.filledPrompt = undefined;
-    if (
-      filled?.roomId === roomId &&
-      filled.prompt === this.matrixService.getMessageToSend(roomId)
-    ) {
-      this.matrixService.setMessageToSend(roomId, undefined);
+  // Puts a session's saved draft in its prompt box, less a prompt the panel
+  // filled in and the user left as it was. The saved draft is what every tab
+  // shares, while the box can still hold what this tab showed before another
+  // tab changed the draft. Between tabs the last saved text wins, as it does
+  // for any draft, and only the text is taken, not the attachments.
+  private showSavedDraft(roomId: string) {
+    let saved = this.localPersistenceService.getMessageDraft(roomId);
+    let filled = this.localPersistenceService.getFilledPrompt(roomId);
+    let draft = saved === filled ? undefined : saved;
+    if ((this.matrixService.getMessageToSend(roomId) || undefined) !== draft) {
+      this.matrixService.setMessageToSend(roomId, draft);
     }
   }
 
   // Enters a new session, and resolves to its room, or to nothing when it
-  // couldn't be created. A reused empty session drops a prompt the panel
-  // filled in and the user left as it was, so it opens as empty as a new one.
+  // couldn't be created. A reused empty session shows its saved draft, less a
+  // prompt the panel filled in and the user left as it was.
   @action
   async createNewSession(
     opts: {
@@ -356,7 +355,7 @@ export default class AiAssistantPanelService extends Service {
       !opts.shouldSummarizeSession &&
       !opts.shouldCopyFileHistory
     ) {
-      this.clearFilledPrompt(newSessionId);
+      this.showSavedDraft(newSessionId);
       this.enterRoom(newSessionId);
       return newSessionId;
     }
