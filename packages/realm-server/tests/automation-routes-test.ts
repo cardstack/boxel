@@ -1571,23 +1571,30 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('revoking a binding sends an automation event for a paused automation it served, which keeps its pause', async function (assert) {
+    test('deleting a key sends an automation event for a paused automation its bindings served, which keeps its pause', async function (assert) {
       await switchOnApproved();
       assert.strictEqual(
         (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(KEYED) }))
           .status,
         200,
       );
-      let [{ binding_id }] = await dbAdapter.execute(
-        `SELECT binding_id FROM automation_key_approvals WHERE automation_id = $1`,
+      let [{ key_id: keyId }] = await dbAdapter.execute(
+        `SELECT b.key_id FROM automation_key_approvals a JOIN key_bindings b ON b.id = a.binding_id WHERE a.automation_id = $1`,
         { bind: [automationId(KEYED)] },
       );
       let sent = await automationEventsDuring(async () => {
-        let revoked = await request
-          .delete(`/_key-bindings/${binding_id}`)
-          .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
-          .set('Origin', secureOriginURL.origin);
-        assert.strictEqual(revoked.status, 204, revoked.text);
+        let deleted = await request
+          .delete(`/_user-keys/${keyId}`)
+          .set('Authorization', auth(OWNER))
+          .set('Content-Type', 'application/json')
+          .send({
+            meta: {
+              ticket: await keyWriteTicket(OWNER, 'delete', {
+                keyId: keyId as string,
+              }),
+            },
+          });
+        assert.strictEqual(deleted.status, 204, deleted.text);
       });
       assert.deepEqual(
         sent,
@@ -1648,6 +1655,9 @@ module(basename(import.meta.filename), function (hooks) {
       let approvals = await approvalRowsOf(KEYED);
       await realm.write(`${KEYED}-script.js`, `return 'changed';`);
       await reachesState(KEYED, 'waiting-for-key-approval');
+      // The realm's own check after that pass reads the script as the realm
+      // holds it, so it settles before the file changes under it.
+      await realm.incrementalIndexing();
       editUnwatched(`${KEYED}-script.js`, `return 'ok';`);
 
       await realm.reindex();
@@ -1702,6 +1712,7 @@ module(basename(import.meta.filename), function (hooks) {
       await switchOnApproved();
       await realm.write(`${KEYED}-script.js`, `return 'changed';`);
       await reachesState(KEYED, 'waiting-for-key-approval');
+      await realm.incrementalIndexing();
       assert.strictEqual(
         (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(KEYED) }))
           .status,
@@ -1714,6 +1725,112 @@ module(basename(import.meta.filename), function (hooks) {
         (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
         'paused',
       );
+    });
+
+    test('approving a slot again with another key sends an automation event for the automation whose approval it ended', async function (assert) {
+      await switchOnApproved();
+      let other = await addKey(OWNER);
+      let sent = await automationEventsDuring(async () => {
+        let approved = await approveOperation(OWNER, 'list', {
+          keyId: other.id,
+        });
+        assert.strictEqual(approved.status, 201, approved.text);
+      });
+      assert.deepEqual(sent, [automationId(KEYED)]);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'waiting-for-key-approval',
+        'its approval was given for the key the binding sent before',
+      );
+    });
+
+    // Switches the shared automation on with WRITER's share approved for it,
+    // and answers the share.
+    async function switchOnShared() {
+      let share = await shareOwnKey(WRITER);
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      let approved = await approveOperation(
+        WRITER,
+        'shared',
+        { shareId: share.id },
+        { id: cardURL(SHARED), version: shown.version },
+      );
+      if (approved.status !== 201) {
+        throw new Error(
+          `approving shared answered ${approved.status}: ${approved.text}`,
+        );
+      }
+      await reachesState(SHARED, 'active');
+      return share;
+    }
+
+    test('unsharing a key sends an automation event for each automation its share’s bindings served, and moves it to waiting for key approval', async function (assert) {
+      let share = await switchOnShared();
+      let sent = await automationEventsDuring(async () => {
+        let unshared = await request
+          .delete(`/_key-shares/${share.id}`)
+          .set('Authorization', auth(WRITER));
+        assert.strictEqual(unshared.status, 204, unshared.text);
+      });
+      assert.deepEqual(sent, [automationId(SHARED)]);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SHARED)))?.state,
+        'waiting-for-key-approval',
+      );
+    });
+
+    test('swapping a key into a share sends an automation event for each automation whose approval of its bindings the swap ended', async function (assert) {
+      let share = await switchOnShared();
+      let suspended = await request
+        .post(`/_key-shares/${share.id}/suspend`)
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(suspended.status, 200, suspended.text);
+      let key = await addKey(OWNER);
+      let ticket = (
+        await mintKeyWriteTicket(dbAdapter, OWNER, {
+          action: 'swap',
+          keyId: key.id,
+          realmURL: null,
+          shareId: share.id,
+        })
+      ).ticket;
+      let sent = await automationEventsDuring(async () => {
+        let swapped = await request
+          .post(`/_key-shares/${share.id}/swap`)
+          .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+          .set('Origin', secureOriginURL.origin)
+          .set('Content-Type', 'application/json')
+          .send({
+            data: { type: 'key-share', attributes: { keyId: key.id } },
+            meta: { ticket },
+          });
+        assert.strictEqual(swapped.status, 200, swapped.text);
+      });
+      assert.deepEqual(sent, [automationId(SHARED)]);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SHARED)))?.state,
+        'waiting-for-key-approval',
+        'the approval was given for the key the share held before',
+      );
+    });
+
+    test('a revert written with no realm events runs the automation again and sends no automation event', async function (assert) {
+      await switchOnApproved();
+      await realm.write(`${KEYED}-script.js`, `return 'changed';`);
+      await reachesState(KEYED, 'waiting-for-key-approval');
+      await realm.incrementalIndexing();
+      let sent = await automationEventsDuring(async () => {
+        await realm.write(`${KEYED}-script.js`, `return 'ok';`, {
+          broadcastRealmEvents: false,
+        });
+        await realm.incrementalIndexing();
+      });
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'active',
+        'the realm’s check moved the row once the pass landed',
+      );
+      assert.deepEqual(sent, [], 'and reported nothing');
     });
 
     test('removing the automation removes its approvals', async function (assert) {

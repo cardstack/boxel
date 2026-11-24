@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import {
   automationsWaitingForKeyApproval,
   followAutomationKeyApprovals,
+  followEndedKeyApprovals,
 } from '../lib/automation-key-approvals.ts';
 import {
   logger,
@@ -260,10 +261,16 @@ export function handleShareKey(args: CreateRoutesArgs): Handler {
   });
 }
 
-export function handleUnshareKey({ dbAdapter }: CreateRoutesArgs): Handler {
+// Unsharing removes the share's bindings and their automation approvals; the
+// automations they served are reported and checked again.
+export function handleUnshareKey(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
-    await unshareKey(dbAdapter, { user, shareId: ctxt.params.shareId });
+    let affected = await unshareKey(args.dbAdapter, {
+      user,
+      shareId: ctxt.params.shareId,
+    });
+    await followEndedKeyApprovals(args, affected);
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }
