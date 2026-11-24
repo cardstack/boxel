@@ -195,16 +195,30 @@ module(basename(import.meta.filename), function (hooks) {
       ]),
     );
     for (let table of ['boxel_index', 'prerendered_html']) {
+      let columns = await insertableColumns(table);
       await adapter.execute(
         `WITH t AS (DELETE FROM ${table} WHERE url = $1 RETURNING *)
-         INSERT INTO ${table}
-         SELECT (jsonb_populate_record(NULL::${table}, to_jsonb(t) || jsonb_build_object(
+         INSERT INTO ${table} (${columns})
+         SELECT ${columns} FROM (SELECT (jsonb_populate_record(NULL::${table}, to_jsonb(t) || jsonb_build_object(
            'url', r->>0, 'file_alias', r->>1, 'deps', r->2))).*
-         FROM t, jsonb_array_elements($2::jsonb) AS r`,
+         FROM t, jsonb_array_elements($2::jsonb) AS r) AS seeded`,
         { bind: [template.href, rows] },
       );
       await adapter.execute(`ANALYZE ${table}`);
     }
+  }
+
+  // The columns a row can be written with: Postgres computes a generated one
+  // (the search tables' title_sort, search_tsv, ...) and refuses a value for it.
+  async function insertableColumns(table: string) {
+    let [{ columns }] = (await adapter.execute(
+      `SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position) AS columns
+         FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = $1
+          AND is_generated = 'NEVER'`,
+      { bind: [table] },
+    )) as { columns: string }[];
+    return columns;
   }
 
   // The GIN setting the run measures, applied before the rows are written so
@@ -214,7 +228,12 @@ module(basename(import.meta.filename), function (hooks) {
   async function applyGinSettings() {
     let gin = (
       (await adapter.execute(
-        `SELECT indexname FROM pg_indexes WHERE indexdef ILIKE '%USING gin%'`,
+        // A partitioned index (the log lines') holds no storage parameters
+        // of its own; its partitions' indexes are listed on their own.
+        `SELECT i.indexname FROM pg_indexes AS i
+           JOIN pg_class AS c ON c.relname = i.indexname
+           JOIN pg_namespace AS n ON n.oid = c.relnamespace AND n.nspname = i.schemaname
+          WHERE i.indexdef ILIKE '%USING gin%' AND c.relkind = 'i'`,
       )) as { indexname: string }[]
     ).map(({ indexname }) => indexname);
     for (let index of gin) {

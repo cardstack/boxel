@@ -51,6 +51,13 @@
    host_shell_generation INTEGER,
    source_content_hash TEXT,
    relationship_deps BLOB,
+   search_tsv,
+   pattern_text TEXT,
+   rank_tsv,
+   search_title TEXT,
+   title_sort TEXT,
+   search_keys BLOB,
+   search_text_fp TEXT,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -65,14 +72,20 @@
    error_doc BLOB,
    deps BLOB DEFAULT '[]',
    types BLOB,
+   isolated_html TEXT,
    indexed_at,
    is_deleted BOOLEAN,
    last_modified,
+   embedded_html BLOB,
+   atom_html TEXT,
+   fitted_html BLOB,
    display_names BLOB,
    resource_created_at,
    icon_html TEXT,
+   head_html TEXT,
    has_error BOOLEAN DEFAULT false NOT NULL,
    last_known_good_deps BLOB,
+   markdown TEXT,
    diagnostics BLOB,
    host_shell_generation INTEGER,
    source_content_hash TEXT,
@@ -162,6 +175,7 @@
    rendered_at,
    diagnostics BLOB,
    captures BLOB,
+   markdown_tsv,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -183,9 +197,9 @@
    error_doc BLOB,
    rendered_at,
    diagnostics BLOB,
-   captures BLOB,
    job_id INTEGER,
    staging_id TEXT NOT NULL,
+   captures BLOB,
    PRIMARY KEY ( realm_url, staging_id, url, type ) 
 );
 

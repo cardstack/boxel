@@ -850,6 +850,8 @@ export class Batch {
   // (`loadResumedRows`). A batch outside a job stages under
   // `adhoc:<pass id>`, which nothing else shares.
   #stagingId: string;
+  // `table.column` of each production column promoted as NULL.
+  #unstagedColumns = new Set<string>();
   // Whether this pass rebuilt the whole realm (a from-scratch index), as
   // opposed to an incremental fan-out; recorded on the ledger row.
   #fullRealm = false;
@@ -1174,6 +1176,23 @@ export class Batch {
       ') AS earlier WHERE earlier.resume_rank = 1',
       'ON CONFLICT ON CONSTRAINT prerendered_html_pending_pkey DO NOTHING',
     ] as Expression);
+  }
+
+  // An entry with only the columns its pending table has. A row read whole
+  // from `boxel_index` or `prerendered_html` carries the columns the search
+  // tables' migrations added there (the Query V2 text columns, and the
+  // generated ones), which the pending tables don't have; the writer fills
+  // them when it promotes, once it knows them.
+  async #onlyPendingColumns<T extends Record<string, unknown>>(
+    table: 'boxel_index_pending' | 'prerendered_html_pending',
+    entry: T,
+  ): Promise<T> {
+    let columns = new Set(await this.#pendingColumns(table));
+    return Object.fromEntries(
+      Object.entries(entry).filter(
+        ([name]) => name === 'staging_id' || columns.has(name),
+      ),
+    ) as T;
   }
 
   // A pending table's columns other than `staging_id`, which a copy sets
@@ -2013,7 +2032,10 @@ export class Batch {
     // card content that can carry a split emoji surrogate or a stray NUL folded
     // in from an upstream resolver.
     return {
-      preparedEntry: sanitizeForJsonb(preparedEntry) as Record<string, unknown>,
+      preparedEntry: await this.#onlyPendingColumns(
+        'boxel_index_pending',
+        sanitizeForJsonb(preparedEntry) as Record<string, unknown>,
+      ),
       htmlEntry: prerenderedHtmlEntryFrom(entry, diagnostics),
     };
   }
@@ -2441,7 +2463,12 @@ export class Batch {
     // Same write-boundary sanitization as `updateEntry`: a single
     // jsonb-illegal code point anywhere in the row would abort the upsert.
     let { nameExpressions, valueExpressions } = asExpressions(
-      sanitizeForJsonb(preparedEntry),
+      sanitizeForJsonb(
+        await this.#onlyPendingColumns(
+          'prerendered_html_pending',
+          preparedEntry,
+        ),
+      ),
       {
         jsonFields: [...Object.entries(coerceTypes)]
           .filter(([_, type]) => type === 'JSON')
@@ -2596,9 +2623,32 @@ export class Batch {
     // Read outside the transaction: `getColumnNames` runs on the adapter, not
     // on the transaction's connection, so calling it inside would check out a
     // second pool connection while the first sits waiting.
+    // Only the columns its pending table also has are promoted: a column the
+    // search tables' migrations add to `boxel_index` or `prerendered_html`
+    // (the Query V2 text columns, and the generated ones, which no insert may
+    // name) is left to the database until the writer fills it.
+    let promoted = async (
+      table: 'boxel_index' | 'prerendered_html',
+      pending: 'boxel_index_pending' | 'prerendered_html_pending',
+    ) => {
+      let staged = new Set(await this.#dbAdapter.getColumnNames(pending));
+      let names = await this.#dbAdapter.getColumnNames(table);
+      // A production column the pending table lacks (one a newer writer
+      // added) is promoted as NULL, so a row never keeps a value derived from
+      // the document it replaced.
+      for (let name of names) {
+        if (!staged.has(name)) {
+          this.#unstagedColumns.add(`${table}.${name}`);
+        }
+      }
+      return names;
+    };
     let columns = {
-      boxelIndex: await this.#dbAdapter.getColumnNames('boxel_index'),
-      prerenderedHtml: await this.#dbAdapter.getColumnNames('prerendered_html'),
+      boxelIndex: await promoted('boxel_index', 'boxel_index_pending'),
+      prerenderedHtml: await promoted(
+        'prerendered_html',
+        'prerendered_html_pending',
+      ),
     };
     if (this.#prerenderHtmlOnly) {
       // A prerenderHtmlOnly batch touches nothing but the prerendered_html
@@ -3893,7 +3943,9 @@ export class Batch {
         'INSERT INTO boxel_index',
         ...addExplicitParens(separatedByCommas(columnExpressions)),
         'SELECT',
-        ...separatedByCommas(this.#restampedColumns(columns.boxelIndex)),
+        ...separatedByCommas(
+          this.#restampedColumns(columns.boxelIndex, 'boxel_index'),
+        ),
         'FROM boxel_index_pending',
         'WHERE',
         ...every([
@@ -3933,15 +3985,20 @@ export class Batch {
   // which takes this commit's. The pending rows carry the provisional
   // generation the pass anticipated at setup, which a peer that committed
   // first may have taken.
-  #restampedColumns(columns: string[]): Expression[] {
+  #restampedColumns(
+    columns: string[],
+    table: 'boxel_index' | 'prerendered_html',
+  ): Expression[] {
     return columns.map((column) =>
-      column === 'generation'
-        ? ([
-            'CAST(',
-            param(this.commitGeneration),
-            'AS INTEGER) AS generation',
-          ] as Expression)
-        : [column],
+      this.#unstagedColumns.has(`${table}.${column}`)
+        ? [`NULL AS ${column}`]
+        : column === 'generation'
+          ? ([
+              'CAST(',
+              param(this.commitGeneration),
+              'AS INTEGER) AS generation',
+            ] as Expression)
+          : [column],
     );
   }
 
@@ -4179,8 +4236,12 @@ export class Batch {
       'SELECT',
       ...separatedByCommas(
         opts?.monotonicGuard
-          ? prerenderedColumns
-          : this.#restampedColumns(prerenderedNames),
+          ? prerenderedNames.map((column) =>
+              this.#unstagedColumns.has(`prerendered_html.${column}`)
+                ? [`NULL AS ${column}`]
+                : [column],
+            )
+          : this.#restampedColumns(prerenderedNames, 'prerendered_html'),
       ),
       'FROM prerendered_html_pending',
       'WHERE',

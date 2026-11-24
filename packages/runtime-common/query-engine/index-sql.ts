@@ -113,13 +113,12 @@ export function stagedRows(
   if (!STAGING_ID_PATTERN.test(stagingId)) {
     throw new Error(`not a staging id: ${JSON.stringify(stagingId)}`);
   }
-  // Staged index rows have no `title_sort` or `search_keys` (production
-  // generates them). A title sort of them reads the same expression
-  // (`handleFieldQuery`), and a doc read of them reads the doc itself as its
-  // `search_keys`, which `docRead` answers exactly as it answers the doc.
+  // Staged index rows have no `title_sort` (production generates it); a
+  // title sort of them reads the same expression (`handleFieldQuery`). Their
+  // `search_keys` is the staged row's own, filled when it was staged.
   let derived =
     table === 'boxel_index_pending'
-      ? `, search_doc ->> 'cardTitle' AS title_sort, search_doc AS search_keys`
+      ? `, search_doc ->> 'cardTitle' AS title_sort`
       : '';
   return `(SELECT *${derived} FROM ${table} WHERE staging_id = '${stagingId}')`;
 }

@@ -1685,7 +1685,9 @@ export class PgAdapter implements DBAdapter {
     await this.started;
 
     let result = await this.execute(
-      'SELECT column_name FROM information_schema.columns WHERE table_name = $1',
+      // Generated columns are left out: no statement may write them.
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_name = $1 AND is_generated = 'NEVER'`,
       {
         bind: [tableName],
       },
