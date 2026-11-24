@@ -24,6 +24,8 @@ const WEEKLY = `${testRealmURL}automations/weekly`;
 // An automation whose card the realm holds, so the section shows the card's
 // own fitted view for it.
 const DIGEST = `${testRealmURL}automations/digest`;
+// A second automation whose card the realm holds.
+const REPORT = `${testRealmURL}automations/report`;
 
 const digestJSON = {
   data: {
@@ -141,6 +143,15 @@ module('Acceptance | realm config | Automations', function (hooks) {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'realm.json': realmConfigCardJSON({ name: 'Research Notes' }),
         'automations/digest.json': digestJSON,
+        'automations/report.json': {
+          data: {
+            ...digestJSON.data,
+            attributes: {
+              ...digestJSON.data.attributes,
+              cardInfo: { name: 'Weekly report', summary: null },
+            },
+          },
+        },
       },
     });
     // The realm's automation list answers from the server's automation rows,
@@ -335,7 +346,11 @@ module('Acceptance | realm config | Automations', function (hooks) {
     test("Show in Automations on an automation's card brings the config card back on top, with only that console marking the automation's row", async function (assert) {
       answer = {
         status: 200,
-        data: [ACTIVE, summary(DIGEST, { title: 'Issue digest' })],
+        data: [
+          ACTIVE,
+          summary(DIGEST, { title: 'Issue digest' }),
+          summary(REPORT, { title: 'Weekly report' }),
+        ],
       };
       statusForWriter = true;
       // One config card open on the left, and the automation opened on top
@@ -392,7 +407,11 @@ module('Acceptance | realm config | Automations', function (hooks) {
           'an automation the console lists offers no way into the console',
         );
 
-      await click(`${right} [data-test-realm-automation="${NIGHTLY}"]`);
+      await waitFor(
+        `${right} [data-test-automation-slot="${REPORT}"] [data-test-automation-slot-fitted]`,
+        { timeout: 10000 },
+      );
+      await click(`${right} [data-test-automation-slot="${REPORT}"]`);
       assert
         .dom(`${slot}[data-test-automation-slot-focused="true"]`)
         .doesNotExist('opening another automation clears the mark');
