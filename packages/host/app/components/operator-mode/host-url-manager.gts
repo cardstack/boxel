@@ -386,10 +386,13 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
             await this.hostUrlService.setCanonical(
               this.args.realmURL,
               newCanonical.id,
+              { refresh: false },
             );
             movedCanonical = true;
           }
-          await this.hostUrlService.unmount(this.args.realmURL, hostURL.id);
+          await this.hostUrlService.unmount(this.args.realmURL, hostURL.id, {
+            refresh: false,
+          });
           unmounted = true;
           this.cancelUnmount();
           await this.afterUnmount(hostURL);
@@ -424,9 +427,10 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
     }
   }
 
-  // Rereads the site name claim, which unmounting a site name frees. The
-  // host URL service has already reread the host URLs.
+  // Rereads what an unmount changes: the host URLs, and the site name claim,
+  // which unmounting a site name frees.
   private async afterUnmount(hostURL: HostURL) {
+    await this.refreshHostURLs();
     if (hostURL.kind === 'site-name') {
       this.claimedDomain = await this.realmServer.fetchBoxelClaimedDomain(
         this.args.realmURL,

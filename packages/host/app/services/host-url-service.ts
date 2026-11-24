@@ -21,6 +21,10 @@ export interface HostURLState {
   loadError: string | undefined;
 }
 
+interface ChangeOptions {
+  refresh?: boolean;
+}
+
 // Holds each realm's host URLs, so everything that shows them (the host URL
 // manager, the Open Site button) reads one list, and a change made in one
 // place shows in the others. Each change goes through here and reads the
@@ -114,14 +118,29 @@ export default class HostURLService extends Service {
     await this.refresh(realmURL);
   }
 
-  async setCanonical(realmURL: string, id: string): Promise<void> {
+  // A change reads the list again, unless `refresh` is false. A caller that
+  // must know that the change was made, also when the read after it fails,
+  // gives false and calls `refresh` itself.
+  async setCanonical(
+    realmURL: string,
+    id: string,
+    { refresh = true }: ChangeOptions = {},
+  ): Promise<void> {
     await this.realmServer.setCanonicalHostURL(id);
-    await this.refresh(realmURL);
+    if (refresh) {
+      await this.refresh(realmURL);
+    }
   }
 
-  async unmount(realmURL: string, id: string): Promise<void> {
+  async unmount(
+    realmURL: string,
+    id: string,
+    { refresh = true }: ChangeOptions = {},
+  ): Promise<void> {
     await this.realmServer.unmountHostURL(id);
-    await this.refresh(realmURL);
+    if (refresh) {
+      await this.refresh(realmURL);
+    }
   }
 }
 

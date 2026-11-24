@@ -352,6 +352,39 @@ module('Acceptance | host URL manager', function (hooks) {
     assert.deepEqual(fake.calls, []);
   });
 
+  test('when the list can’t be read after an unmount, still says the host URL was unmounted', async function (assert) {
+    let shopURL = `https://shop.${siteDomain}/`;
+    fake.hostURLs = [
+      { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
+      { id: 'b', url: shopURL, kind: 'site-name', isCanonical: false },
+    ];
+    let realmServer = getService('realm-server') as any;
+    let fakeUnmount = realmServer.unmountHostURL;
+    let fakeList = realmServer.listHostURLs;
+    realmServer.unmountHostURL = async (id: string) => {
+      await fakeUnmount(id);
+      realmServer.listHostURLs = async () => {
+        throw new HostURLRequestError(503, 'The host URLs could not be read');
+      };
+    };
+    try {
+      await openManager();
+      await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
+      await click('[data-test-confirm-unmount-button]');
+      await waitFor(
+        '[data-test-host-url-toaster] [data-test-pretui-toast-item]',
+      );
+
+      assert.deepEqual(fake.calls, ['canonical b', 'unmount a']);
+      assert
+        .dom('[data-test-host-url-toaster] [data-test-pretui-toast-item]')
+        .containsText('which was unmounted');
+    } finally {
+      realmServer.unmountHostURL = fakeUnmount;
+      realmServer.listHostURLs = fakeList;
+    }
+  });
+
   test('when the unmount is refused after the canonical host URL moved, says both', async function (assert) {
     let shopURL = `https://shop.${siteDomain}/`;
     fake.hostURLs = [
