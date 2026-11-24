@@ -5,6 +5,7 @@ import {
   runActsAsDirectWriter,
   getAIBatch,
   isLateAIBatch,
+  listAIBatchesForRun,
   recordAIBatchReadByRun,
   reserveAutomationRunAICredits,
   isSessionRevoked,
@@ -74,6 +75,8 @@ const log = logger('ai-batches');
 // (`AI_BATCH_SUBMITS_ENABLED`, `aiBatchSubmitsEnabled`). A status read never
 // is, so a batch already submitted can always be read.
 //
+// A run submits at most one batch, whichever attempt sends it.
+//
 // A batch counts each of its requests against the run's `resolveCalls` cap,
 // as a plain `resolve` counts its one. A batch that would pass the cap ends
 // the run at the cap, as a plain `resolve` past it does, and nothing is sent.
@@ -139,6 +142,19 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       await sendResponseForForbiddenRequest(
         ctxt,
         "This automation hasn't turned on batched AI, so its runs can't submit batches",
+      );
+      return;
+    }
+    // A run submits one batch, which gets one follow-up. The tab holds a
+    // script to one call; this holds a run to one batch across its attempts,
+    // so an attempt that takes over a run whose batch is already submitted
+    // can't submit, and pay for, a second.
+    if ((await listAIBatchesForRun(dbAdapter, run.id)).length > 0) {
+      await sendResponseForError(
+        ctxt,
+        409,
+        'Conflict',
+        'This run has already submitted a batch, and a run submits one batch',
       );
       return;
     }

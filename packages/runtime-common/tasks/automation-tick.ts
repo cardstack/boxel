@@ -161,6 +161,11 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
               `${tag}: batch ${followUp.batchId} of automation ${followUp.automationId} reached its deadline and started follow-up run ${followUp.runId} (job ${followUp.jobId})`,
             );
             break;
+          case 'resumed':
+            log.info(
+              `${tag}: batch ${followUp.batchId} of automation ${followUp.automationId} had pending follow-up run ${followUp.runId} from a tick that stopped; its job was enqueued again`,
+            );
+            break;
           case 'found':
             log.info(
               `${tag}: batch ${followUp.batchId} of automation ${followUp.automationId} already has follow-up run ${followUp.runId}`,

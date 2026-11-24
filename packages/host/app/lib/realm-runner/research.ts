@@ -906,10 +906,9 @@ export function resolveChatBody(
 
 // realm.resolve.batch: `realm.resolve` requests nobody is waiting on, sent
 // together as one batch at about half the price. An automation run submits
-// the batch and finishes; a follow-up run picks up the answers once the
-// batch ends, or at the deadline the script sets with `by`, whichever comes
-// first. Each request is one `realm.resolve` request, checked the same way,
-// and its answer is keyed by its position in the list.
+// the batch and finishes; a follow-up run starts at the deadline the script
+// sets with `by`. Each request is one `realm.resolve` request, checked the
+// same way, and its answer is keyed by its position in the list.
 
 // The most requests one batch holds, and the most bytes their requests take
 // together, as JSON: the tab builds the whole batch before it sends it.

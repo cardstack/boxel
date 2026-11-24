@@ -2,33 +2,37 @@
 // of AI requests an automation run submitted (ADR 030 §1.2). The submitting
 // run finishes as soon as the batch is submitted, and nothing waits on the
 // batch. The batch's `ai_batches` row is the follow-up's schedule: once its
-// deadline passes, the minute tick makes the follow-up's run row and enqueues
-// its `run-command` job.
+// deadline passes, the minute tick makes the follow-up's run row, enqueues
+// its `run-command` job, and records the run on the batch
+// (`follow_up_run_id`).
 //
 // The follow-up's run row carries the trigger label `batch`
 // (`BATCH_RUN_TRIGGER`) and the batch's id as its slot, and its job carries
 // `triggerKind: 'batch'` and the dedupe key `automation:<id>:batch:<batch
-// id>`. A run row is unique by its automation, trigger and slot, so a batch
-// gets one follow-up however many ticks see its deadline pass: the tick that
-// creates the row enqueues the job, and a tick that finds the row already
-// there leaves it. A run row made by a tick that stopped before enqueueing
-// is a pending run with no job, which reconcile finds as a lost run.
+// id>`. A run row is unique by its automation, trigger and slot, and the
+// queue joins a job to an unfinished one with the same dedupe key, so a batch
+// gets one follow-up and one job however many ticks see its deadline pass.
+// A tick that stops after making the row and before recording it on the
+// batch leaves the batch due: the next tick finds the same row, enqueues its
+// job again while the run is still pending (joining the job already there,
+// or replacing one that never got enqueued), and records it. Once recorded,
+// a follow-up whose job is lost is reconcile's to enqueue again
+// (`automation-reconcile.ts`).
 //
 // The follow-up acts as, and is billed to, whoever the submitting run acted
 // as (the batch's `acts_as`), in the automation's concurrency group, at the
 // automation tier, with a queue timeout from the `seconds` cap the payer
 // agreed to. It goes through admission like any run.
 //
-// A batch of an automation that is paused waits: its follow-up starts once
-// the automation is no longer paused, as the tick next sees it (ADR 030
-// §1.5). A batch of an automation that has been removed (no `automations`
-// row) gets no follow-up. A batch whose deadline passed more than
-// `AI_BATCH_HOLD_SECONDS` ago is left alone: OpenRouter deletes a batch's
-// results 30 days after submit, and the settle job bills it whatever
-// happens.
+// A batch of an automation that is paused, or waiting for a key approval,
+// waits however long that lasts: its follow-up starts once the automation is
+// active again, as the tick next sees it (ADR 030 §1.5). A follow-up started
+// meanwhile would be refused at its admission, for good. A batch of an automation that has been
+// removed gets no follow-up, including after the automation is switched on
+// again: only batches submitted since the automation's row was made count.
 
-import { AI_BATCH_HOLD_SECONDS } from './ai-batches.ts';
 import { BATCH_RUN_TRIGGER } from './automation-declaration.ts';
+import type { AutomationJobInput } from './automation-run-command.ts';
 import { logRunPlatformLine } from './automation-run-log.ts';
 import {
   emitAutomationRunEvent,
@@ -63,10 +67,12 @@ export interface AIBatchFollowUpOptions {
 // What came of one batch whose deadline passed with no follow-up:
 //
 // - `started`: this call made the follow-up's run row and enqueued its job.
-// - `found`: another tick made the follow-up's run row first, so this one
-//   enqueued nothing.
-// - `failed`: starting the follow-up threw. A row made before the error is
-//   found again as a pending run (by reconcile, when its job never came).
+// - `resumed`: the run row was already there, still pending, from a tick that
+//   stopped before recording it on the batch; its job was enqueued again.
+// - `found`: the run row was already there and had started, so nothing was
+//   enqueued.
+// - `failed`: starting the follow-up threw. The batch stays due, and the next
+//   tick tries again.
 export type AIBatchFollowUpOutcome =
   | {
       kind: 'started';
@@ -76,7 +82,7 @@ export type AIBatchFollowUpOutcome =
       jobId: number;
     }
   | {
-      kind: 'found';
+      kind: 'resumed' | 'found';
       batchId: string;
       automationId: RealmResourceIdentifier;
       runId: string;
@@ -138,9 +144,10 @@ interface DueBatch {
   secondsCap: number;
 }
 
-// The batches whose deadline passed by `now`, within the hold, that have no
-// follow-up run row, of an automation that is switched on and not paused,
-// earliest deadline first.
+// The batches whose deadline passed by `now` that have no follow-up recorded,
+// of an automation that is switched on, neither paused nor waiting for a key
+// approval, and was switched on before the batch was submitted, earliest
+// deadline first.
 async function dueBatches(
   dbAdapter: DBAdapter,
   now: number,
@@ -151,16 +158,9 @@ async function dueBatches(
   let rows = await query(dbAdapter, [
     "SELECT b.batch_id, b.run_id, b.acts_as, b.realm, b.automation_id, b.deadline, b.request_count, a.caps_snapshot ->> 'seconds' AS seconds_cap",
     'FROM ai_batches b JOIN automations a ON a.automation_id = b.automation_id',
-    'WHERE b.deadline <=',
+    'WHERE b.follow_up_run_id IS NULL AND b.deadline <=',
     param(nowISO),
-    '::timestamptz AND b.deadline >',
-    param(nowISO),
-    '::timestamptz - make_interval(secs =>',
-    param(AI_BATCH_HOLD_SECONDS),
-    ") AND a.state <> 'paused'",
-    'AND NOT EXISTS (SELECT 1 FROM automation_runs r WHERE r.automation_id = b.automation_id AND r.trigger =',
-    param(BATCH_RUN_TRIGGER),
-    'AND r.slot = b.batch_id)',
+    "::timestamptz AND a.state NOT IN ('paused', 'waiting-for-key-approval') AND b.submitted_at >= a.switched_on_at",
     ...(after
       ? [
           'AND (b.deadline, b.batch_id) > (',
@@ -201,7 +201,8 @@ async function startFollowUp(
       actsAs: batch.actsAs,
     },
   );
-  if (!created) {
+  if (!created && run.state !== 'pending') {
+    await recordFollowUp(dbAdapter, batchId, run.id);
     return { kind: 'found', batchId, automationId, runId: run.id };
   }
   let job = await enqueueAutomationRunJob(queue, {
@@ -211,13 +212,12 @@ async function startFollowUp(
     trigger: BATCH_RUN_TRIGGER,
     slot: batchId,
     secondsCap: batch.secondsCap,
-    input: {
-      runId: run.id,
-      scheduledAt: batch.deadline,
-      dryRun: false,
-      triggerKind: 'batch',
-    },
+    input: aiBatchFollowUpInput(run.id, batch.deadline),
   });
+  await recordFollowUp(dbAdapter, batchId, run.id);
+  if (!created) {
+    return { kind: 'resumed', batchId, automationId, runId: run.id };
+  }
   let enqueuedAt = Date.now();
   let enqueued: AutomationRunEnqueuedEvent = {
     kind: 'enqueued',
@@ -256,4 +256,28 @@ async function startFollowUp(
     runId: run.id,
     jobId: job.id,
   };
+}
+
+// The job input of a batch's follow-up run: due at the batch's deadline.
+export function aiBatchFollowUpInput(
+  runId: string,
+  deadline: string,
+): AutomationJobInput {
+  return { runId, scheduledAt: deadline, dryRun: false, triggerKind: 'batch' };
+}
+
+// Records the batch's follow-up run, which takes the batch out of the tick's
+// search.
+async function recordFollowUp(
+  dbAdapter: DBAdapter,
+  batchId: string,
+  runId: string,
+): Promise<void> {
+  await query(dbAdapter, [
+    'UPDATE ai_batches SET follow_up_run_id =',
+    param(runId),
+    '::uuid WHERE batch_id =',
+    param(batchId),
+    'AND follow_up_run_id IS NULL',
+  ]);
 }

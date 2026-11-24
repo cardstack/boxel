@@ -1242,12 +1242,80 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(await followUpRuns(), []);
     });
 
-    test('a batch whose deadline passed beyond the batch hold is left alone', async function (assert) {
+    test('a paused automation’s batch starts its follow-up however long the pause lasted', async function (assert) {
       await switchOn();
       await submitBatch();
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'paused', pause_reason = 'requested'`,
+      ]);
+      let fortyDaysOn = ONE + 40 * 24 * 60 * 60;
+      assert.deepEqual(await followUps(fortyDaysOn), []);
 
-      assert.deepEqual(await followUps(ONE + 32 * 24 * 60 * 60), []);
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'active', pause_reason = NULL`,
+      ]);
+      let [outcome] = await followUps(fortyDaysOn + 60);
+      assert.strictEqual(outcome.kind, 'started');
+    });
+
+    test('an automation waiting for a key approval holds its batch’s follow-up until it is active again', async function (assert) {
+      await switchOn();
+      await submitBatch();
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'waiting-for-key-approval'`,
+      ]);
+
+      assert.deepEqual(await followUps(ONE + 30), []);
+
+      await query(dbAdapter, [`UPDATE automations SET state = 'active'`]);
+      let [outcome] = await followUps(ONE + 90);
+      assert.strictEqual(outcome.kind, 'started');
+    });
+
+    test('a batch submitted before the automation was last switched on gets no follow-up', async function (assert) {
+      await switchOn();
+      await submitBatch();
+      // Removed and switched on again after the batch was submitted.
+      await query(dbAdapter, [
+        `UPDATE automations SET switched_on_at = '2026-11-10T12:30:00Z'`,
+      ]);
+
+      assert.deepEqual(await followUps(ONE + 30), []);
       assert.deepEqual(await followUpRuns(), []);
+    });
+
+    test('a follow-up whose run row a stopped tick made, with no job, has its job enqueued by the next tick', async function (assert) {
+      await switchOn();
+      await submitBatch();
+      // A tick that stopped after making the row, before enqueueing.
+      let orphan = await createAutomationRun(dbAdapter, {
+        automationId: AUTOMATION,
+        realm: REALM,
+        trigger: 'batch',
+        slot: 'batch_1',
+        actsAs: OWNER,
+      });
+
+      let [outcome] = await followUps(ONE + 30);
+
+      assert.deepEqual(
+        { kind: outcome.kind, runId: (outcome as { runId: string }).runId },
+        { kind: 'resumed', runId: orphan.id },
+      );
+      let jobs = (await queuedRuns()).filter(
+        (job) => job.input.runId === orphan.id,
+      );
+      assert.strictEqual(jobs.length, 1, 'its job is enqueued');
+      assert.strictEqual(jobs[0].input.triggerKind, 'batch');
+      let [batch] = await query(dbAdapter, [
+        `SELECT follow_up_run_id FROM ai_batches WHERE batch_id = 'batch_1'`,
+      ]);
+      assert.strictEqual(
+        String(batch.follow_up_run_id),
+        orphan.id,
+        'the follow-up is recorded on the batch',
+      );
+      assert.deepEqual(await followUps(ONE + 90), [], 'and is not due again');
     });
   });
 });

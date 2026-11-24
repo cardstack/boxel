@@ -15,7 +15,9 @@
 //   the make-up's slot is the missed instant and its trigger's count and
 //   cursor don't change. Its card's `seconds` cap sets the job's timeout; a
 //   card that can't be read gets the longest a run may take, and the run's
-//   admission then ends it with the reason the card doesn't read.
+//   admission then ends it with the reason the card doesn't read. A batch's
+//   follow-up (trigger `batch`) is enqueued again with the input the tick
+//   gave it, due at its batch's deadline (`aiBatchFollowUpInput`).
 //
 //   A **running** run is ended: an attempt had started it, and a retry gets
 //   only what is left of the run's time limit, counted from that first start,
@@ -49,7 +51,9 @@
 // `registerAutomationReconcileStep`; each pass runs every registered step
 // after its own.
 
+import { aiBatchFollowUpInput } from './ai-batch-follow-ups.ts';
 import {
+  BATCH_RUN_TRIGGER,
   MANUAL_RUN_TRIGGER,
   MAX_RUN_SECONDS,
 } from './automation-declaration.ts';
@@ -69,7 +73,7 @@ import {
 } from './automation-tick.ts';
 import { pauseAfterRepeatedFailures } from './automations.ts';
 import type { DBAdapter } from './db.ts';
-import { param, query } from './expression.ts';
+import { param, query, type Querier } from './expression.ts';
 import { enqueueAutomationRunJob } from './jobs/run-command.ts';
 import type { MeteredCharges } from './metered-charges.ts';
 import { ensureTrailingSlash } from './paths.ts';
@@ -315,6 +319,9 @@ async function reconcileLostRun(
       );
     }
     let scheduled = run.trigger !== MANUAL_RUN_TRIGGER;
+    // A batch's follow-up: its slot is its batch's id, and no trigger on the
+    // card names it.
+    let followUp = run.trigger === BATCH_RUN_TRIGGER;
     if (
       scheduled &&
       (!automation ||
@@ -337,6 +344,7 @@ async function reconcileLostRun(
     let declaration = read.ok ? read.declaration : undefined;
     if (
       scheduled &&
+      !followUp &&
       declaration &&
       !declaration.triggers.some(
         ({ label, kind }) =>
@@ -362,14 +370,19 @@ async function reconcileLostRun(
       trigger: run.trigger,
       slot: run.slot,
       secondsCap: declaration?.caps.seconds ?? MAX_RUN_SECONDS,
-      input: scheduled
-        ? { runId, scheduledAt: run.slot, dryRun: false }
-        : {
+      input: followUp
+        ? aiBatchFollowUpInput(
             runId,
-            scheduledAt: run.createdAt,
-            dryRun: run.dryRun,
-            triggerKind: 'manual',
-          },
+            (await aiBatchDeadline(txQuery, run.slot)) ?? run.createdAt,
+          )
+        : scheduled
+          ? { runId, scheduledAt: run.slot, dryRun: false }
+          : {
+              runId,
+              scheduledAt: run.createdAt,
+              dryRun: run.dryRun,
+              triggerKind: 'manual',
+            },
     });
     return {
       kind: 'requeued',
@@ -457,4 +470,17 @@ function noLiveJob(): string[] {
     "AND j.job_type = 'run-command'",
     "AND j.args->>'dedupeKey' = 'automation:' || r.automation_id || ':' || r.trigger || ':' || r.slot)",
   ];
+}
+
+// The deadline of the batch a follow-up's slot names, as ISO text, or
+// undefined when no batch has that id.
+async function aiBatchDeadline(
+  txQuery: Querier,
+  batchId: string,
+): Promise<string | undefined> {
+  let [row] = await txQuery([
+    'SELECT deadline FROM ai_batches WHERE batch_id =',
+    param(batchId),
+  ]);
+  return row ? new Date(row.deadline as string).toISOString() : undefined;
 }

@@ -440,13 +440,19 @@ SELECT r.id, r.trigger, r.slot, r.state, r.created_at, l.message
 
 The ticks themselves are `automation-tick` rows in `jobs`; their `result` counts what each did.
 
-**Batch follow-ups.** The same job then starts each batch's follow-up run (`startDueAIBatchFollowUps` in `packages/runtime-common/ai-batch-follow-ups.ts`): every `ai_batches` row whose `deadline` has passed (within `AI_BATCH_HOLD_SECONDS`, read through `ai_batches_deadline_idx`), whose automation has a row that isn't `paused`, and that has no run row with trigger `batch` and the batch's id as its slot. For each, it makes that run row (`acts_as` = the batch's `acts_as`) and enqueues its job with `triggerKind: 'batch'`, `scheduledAt` = the deadline, the dedupe key `automation:<id>:batch:<batch id>` and a timeout from the caps snapshot's `seconds`. A tick that finds the row already made (another tick got there first) enqueues nothing, so each batch has one follow-up. A paused automation's batch waits until the automation is no longer paused; a removed automation's batch gets none. The follow-up's log starts with a `trigger` line naming the batch and the run that submitted it, and the worker logs:
+**Batch follow-ups.** The same job then starts each batch's follow-up run (`startDueAIBatchFollowUps` in `packages/runtime-common/ai-batch-follow-ups.ts`): every `ai_batches` row whose `deadline` has passed and whose `follow_up_run_id` is null (read through `ai_batches_follow_up_due_idx`), whose automation has a row that is neither `paused` nor `waiting-for-key-approval`, and that was submitted since that row's `switched_on_at`. For each, it makes the run row (trigger `batch`, slot = the batch's id, `acts_as` = the batch's `acts_as`), enqueues its job with `triggerKind: 'batch'`, `scheduledAt` = the deadline, the dedupe key `automation:<id>:batch:<batch id>` and a timeout from the caps snapshot's `seconds`, then records the run in `follow_up_run_id`, which takes the batch out of the search. A tick that finds the run row already made and still pending (a tick stopped before recording it) enqueues its job again, which the queue joins to any unfinished job with that key, and records it; one that finds it started only records it. So each batch has one follow-up. A paused or key-approval-waiting automation's batch waits however long that lasts; a removed automation's batch gets none, including after the automation is switched on again. Once recorded, a follow-up whose job is lost is enqueued again by reconcile, with the same input (`aiBatchFollowUpInput`). The follow-up's log starts with a `trigger` line naming the batch and the run that submitted it, and the worker logs:
 
 ```
 automation-tick: batch <batch id> of automation <id> reached its deadline and started follow-up run <run id> (job <job id>)
 ```
 
 The job's `result` counts `followUpsStarted` and `followUpsFailed`.
+
+```sql
+-- batches waiting for their follow-up
+SELECT batch_id, automation_id, deadline FROM ai_batches
+ WHERE follow_up_run_id IS NULL ORDER BY deadline;
+```
 
 **Why a due run didn't start.** Check in this order:
 
@@ -1142,13 +1148,14 @@ answers.
   realm server's `/_ai-batches` with the run's token. The handler
   (`handle-ai-batches.ts`) refuses it unless `AI_BATCH_SUBMITS_ENABLED` is
   `true` on the realm server (`aiBatchSubmitsEnabled`), refuses a Preview and
-  an automation whose caps snapshot has `batchedAI` off, reserves the batch on
+  an automation whose caps snapshot has `batchedAI` off, and a run that already has a batch in `ai_batches` (409, so a retried attempt can't submit a second), reserves the batch on
   `aiCredits` (_The AI spending cap_), and counts each request against
   `resolveCalls` in one statement (`countRunCall` with a call count): a batch
   past the cap ends the run with `hit-a-cap`, releases its reservation and
   sends nothing. The refusal comes back to the script as the call's error.
 - **The record** is the batch's `ai_batches` row, whose `run_id` names the
-  submitting run and whose `deadline` is the follow-up's schedule.
+  submitting run, whose `deadline` is the follow-up's schedule, and whose
+  `follow_up_run_id` names the follow-up once it starts.
 - **The follow-up**: once the deadline passes, the minute tick starts it
   (_The tick: enqueueing due runs_). Its run row has trigger `batch`
   (`BATCH_RUN_TRIGGER`, a label no card trigger may take) and the batch's id

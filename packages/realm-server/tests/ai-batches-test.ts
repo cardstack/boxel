@@ -696,6 +696,26 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a run that has submitted a batch is refused a second, whichever attempt sends it', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+
+      let first = await submit(token, twoRequests());
+      assert.strictEqual(first.status, 202);
+      let second = await submit(token, twoRequests());
+
+      assert.strictEqual(second.status, 409);
+      assert.ok(
+        second.body.errors[0].includes('already submitted a batch'),
+        second.body.errors[0],
+      );
+      assert.strictEqual(
+        sent.filter((call) => call.method === 'POST').length,
+        1,
+        'one batch went to OpenRouter',
+      );
+    });
+
     test('a batch that would pass the run’s AI request cap ends the run at the cap, and nothing is sent', async function (assert) {
       await switchOn(AUTOMATION, true, 100, 1);
       let { run, token } = await runningRun();
