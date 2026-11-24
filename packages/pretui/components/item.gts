@@ -212,11 +212,6 @@ export class Item extends Component<ItemSignature> {
           align-items: center;
           gap: var(--space-2, 6px);
         }
-        /* An actions block that renders nothing for this viewer (an action
-           only some viewers get) takes no column and no gap. */
-        .pretui-item-actions:not(:has(*)) {
-          display: none;
-        }
         /* Unnamed container query on the nearest ancestor container (List's
            row, or whatever the caller made a container). At this width the
            trailing meta wraps under the body rather than crushing the title. */
