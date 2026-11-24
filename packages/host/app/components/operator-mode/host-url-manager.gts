@@ -25,6 +25,7 @@ import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/cons
 import ModalContainer from '@cardstack/host/components/modal-container';
 import config from '@cardstack/host/config/environment';
 
+import type HostURLService from '@cardstack/host/services/host-url-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
@@ -32,7 +33,6 @@ import type {
   HomePageCheck,
   HostURL,
   HostURLKind,
-  HostURLList,
 } from '@cardstack/host/services/realm-server';
 
 // Host Mode v2's publish dialog. It lists the addresses a realm is mounted at
@@ -90,14 +90,14 @@ interface MountTarget {
 }
 
 // The dialog's content. The modal renders it only while the dialog is open,
-// so each opening loads the host URLs and the home page check again.
+// so each opening loads the host URLs and the home page check again. The
+// host URLs are kept in the host URL service, which the Open Site button
+// also reads, and each change goes through it.
 class HostURLs extends Component<{ Args: ContentArgs }> {
+  @service declare private hostUrlService: HostURLService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
-  @tracked private hostURLs: HostURL[] = [];
-  // The Boxel Space URL the realm can be mounted at, in its owner's Space.
-  @tracked private boxelSpaceURL: string | undefined;
   @tracked private homePage: HomePageCheck | undefined;
   @tracked private claimedDomain: ClaimedDomain | null = null;
   @tracked private siteName = '';
@@ -125,12 +125,11 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
   private loadTask = restartableTask(async () => {
     this.loadError = undefined;
     try {
-      let [list, homePage, claimedDomain] = await Promise.all([
-        this.realmServer.listHostURLs(this.args.realmURL),
+      let [, homePage, claimedDomain] = await Promise.all([
+        this.hostUrlService.refresh(this.args.realmURL),
         this.realmServer.checkHomePage(this.args.realmURL),
         this.realmServer.fetchBoxelClaimedDomain(this.args.realmURL),
       ]);
-      this.setHostURLs(list);
       this.homePage = homePage;
       this.claimedDomain = claimedDomain;
     } catch (error) {
@@ -154,9 +153,13 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
     );
   }
 
-  private setHostURLs({ hostURLs, boxelSpaceURL }: HostURLList) {
-    this.hostURLs = hostURLs;
-    this.boxelSpaceURL = boxelSpaceURL;
+  private get hostURLs(): HostURL[] {
+    return this.hostUrlService.hostURLsFor(this.args.realmURL);
+  }
+
+  // The Boxel Space URL the realm can be mounted at, in its owner's Space.
+  private get boxelSpaceURL(): string | undefined {
+    return this.hostUrlService.stateFor(this.args.realmURL)?.boxelSpaceURL;
   }
 
   private get siteDomain() {
@@ -245,15 +248,14 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
   }
 
   private refreshHostURLs = async () => {
-    this.setHostURLs(await this.realmServer.listHostURLs(this.args.realmURL));
+    await this.hostUrlService.refresh(this.args.realmURL);
   };
 
   private mountTask = task(async (url: string) => {
     this.setError(url, undefined);
     await this.changing(url, async () => {
       try {
-        await this.realmServer.mountHostURL(this.args.realmURL, url);
-        await this.refreshHostURLs();
+        await this.hostUrlService.mount(this.args.realmURL, url);
       } catch (error) {
         this.setError(url, error);
       }
@@ -289,8 +291,7 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
     this.setError(hostURL.url, undefined);
     await this.changing(hostURL.url, async () => {
       try {
-        await this.realmServer.setCanonicalHostURL(hostURL.id);
-        await this.refreshHostURLs();
+        await this.hostUrlService.setCanonical(this.args.realmURL, hostURL.id);
       } catch (error) {
         this.setError(hostURL.url, error);
       }
@@ -382,10 +383,13 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
       await this.changing(hostURL.url, async () => {
         try {
           if (newCanonical) {
-            await this.realmServer.setCanonicalHostURL(newCanonical.id);
+            await this.hostUrlService.setCanonical(
+              this.args.realmURL,
+              newCanonical.id,
+            );
             movedCanonical = true;
           }
-          await this.realmServer.unmountHostURL(hostURL.id);
+          await this.hostUrlService.unmount(this.args.realmURL, hostURL.id);
           unmounted = true;
           this.cancelUnmount();
           await this.afterUnmount(hostURL);
@@ -420,10 +424,9 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
     }
   }
 
-  // Rereads what an unmount changes: the host URLs, and the site name claim,
-  // which unmounting a site name frees.
+  // Rereads the site name claim, which unmounting a site name frees. The
+  // host URL service has already reread the host URLs.
   private async afterUnmount(hostURL: HostURL) {
-    await this.refreshHostURLs();
     if (hostURL.kind === 'site-name') {
       this.claimedDomain = await this.realmServer.fetchBoxelClaimedDomain(
         this.args.realmURL,

@@ -9,11 +9,6 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 import type RealmService from '@cardstack/host/services/realm';
-import type {
-  ClaimedDomain,
-  HomePageCheck,
-  HostURL,
-} from '@cardstack/host/services/realm-server';
 import { HostURLRequestError } from '@cardstack/host/services/realm-server';
 
 import {
@@ -27,16 +22,16 @@ import {
   visitOperatorMode,
   withCachedRealmSetup,
 } from '../helpers';
+import { FakeHostURLs, SPACE_URL, VIEWABLE } from '../helpers/fake-host-urls';
 import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 
 // The UI builds site-name URLs from these domains, which are the same in the
-// test build. The server gives the Boxel Space URL, in the realm owner's Space.
+// test build.
 const spaceDomain = ENV.publishedRealmBoxelSpaceDomain;
 const siteDomain = ENV.publishedRealmBoxelSiteDomain;
-const SPACE_URL = `https://testuser.${spaceDomain}/test/`;
 
 const personCardSource = `
   import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
@@ -49,81 +44,6 @@ const personCardSource = `
     };
   }
 `;
-
-const VIEWABLE: HomePageCheck = {
-  homeCardId: `${testRealmURL}index`,
-  homeCardReadable: true,
-  homeCardStatus: 200,
-  unloadableModules: [],
-  anonymousCanView: true,
-};
-
-// A stand-in for the realm server's `/_host-urls` endpoints, set on the
-// realm-server service's methods. It keeps the realm's host URLs, and records
-// each change in `calls`.
-class FakeHostURLs {
-  hostURLs: HostURL[] = [];
-  boxelSpaceURL: string | undefined = SPACE_URL;
-  homePage: HomePageCheck = VIEWABLE;
-  calls: string[] = [];
-  refusal: string | undefined;
-  claimedDomain: ClaimedDomain | null = null;
-  #nextId = 1;
-  #restore: (() => void)[] = [];
-
-  install() {
-    let realmServer = getService('realm-server') as any;
-    let stub = (name: string, fn: (...args: any[]) => unknown) => {
-      let original = realmServer[name];
-      realmServer[name] = fn;
-      this.#restore.push(() => (realmServer[name] = original));
-    };
-    stub('listHostURLs', async () => ({
-      hostURLs: this.hostURLs.map((h) => ({ ...h })),
-      boxelSpaceURL: this.boxelSpaceURL,
-    }));
-    stub('checkHomePage', async () => this.homePage);
-    stub('fetchBoxelClaimedDomain', async () => this.claimedDomain);
-    stub('mountHostURL', async (_realmURL: string, url: string) => {
-      this.calls.push(`mount ${url}`);
-      if (this.refusal) {
-        throw new HostURLRequestError(422, this.refusal);
-      }
-      let hostURL: HostURL = {
-        id: `host-url-${this.#nextId++}`,
-        url,
-        kind: url.includes(spaceDomain) ? 'boxel-space' : 'custom-domain',
-        isCanonical: this.hostURLs.length === 0,
-      };
-      this.hostURLs.push(hostURL);
-      return hostURL;
-    });
-    stub('setCanonicalHostURL', async (id: string) => {
-      this.calls.push(`canonical ${id}`);
-      for (let hostURL of this.hostURLs) {
-        hostURL.isCanonical = hostURL.id === id;
-      }
-    });
-    stub('unpublishRealm', async (publishedRealmURL: string) => {
-      this.calls.push(`unpublish ${publishedRealmURL}`);
-      return { sourceRealmURL: null, publishedRealmURL, lastPublishedAt: null };
-    });
-    stub('unmountHostURL', async (id: string) => {
-      this.calls.push(`unmount ${id}`);
-      // Unmounting a site name frees its claim.
-      if (this.hostURLs.find((h) => h.id === id)?.kind === 'site-name') {
-        this.claimedDomain = null;
-      }
-      this.hostURLs = this.hostURLs.filter((h) => h.id !== id);
-    });
-  }
-
-  restore() {
-    for (let restore of this.#restore) {
-      restore();
-    }
-  }
-}
 
 module('Acceptance | host URL manager', function (hooks) {
   setupApplicationTest(hooks);

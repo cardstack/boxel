@@ -40,6 +40,7 @@ function ensureSingleTitle(headHTML: string): string {
 }
 
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
+import type HostURLService from '@cardstack/host/services/host-url-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -77,8 +78,17 @@ interface PublishedRealmMetadata {
   currentCardUrlString: string | undefined;
 }
 
+// A host URL the Open Site button can open: `href` is the host URL with the
+// path of the card on screen.
+export interface OpenSiteHostURL {
+  url: string;
+  href: string;
+  isCanonical: boolean;
+}
+
 export default class HostModeService extends Service {
   @service declare hostModeStateService: HostModeStateService;
+  @service declare private hostUrlService: HostURLService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
@@ -518,6 +528,35 @@ export default class HostModeService extends Service {
     }
 
     return this.fullURL(defaultURL);
+  }
+
+  get isHostModeV2() {
+    return Boolean(config.featureFlags?.hostModeV2);
+  }
+
+  // Host Mode v2: the realm's host URLs, canonical first, each with the path
+  // of the card on screen. Empty until the host URL service has read them,
+  // and when the flag is off.
+  get openSiteHostURLs(): OpenSiteHostURL[] {
+    if (!this.isHostModeV2 || !this.realmURL) {
+      return [];
+    }
+    return [...this.hostUrlService.hostURLsFor(this.realmURL)]
+      .sort((a, b) => Number(b.isCanonical) - Number(a.isCanonical))
+      .map(({ url, isCanonical }) => ({
+        url,
+        href: this.fullURL(ensureTrailingSlash(url)),
+        isCanonical,
+      }));
+  }
+
+  // What the Open Site button opens: the canonical host URL with Host Mode
+  // v2, else the last site published with v1.
+  get defaultSiteURL(): string | undefined {
+    let canonical = this.openSiteHostURLs.find(
+      ({ isCanonical }) => isCanonical,
+    );
+    return canonical?.href ?? this.defaultPublishedSiteURL;
   }
 
   fullURL(baseURL: string) {
