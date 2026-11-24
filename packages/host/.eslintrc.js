@@ -5,6 +5,7 @@ const { DATA_TEST_SELECTORS } = require('../../eslint/data-test-selectors.cjs');
 const {
   CLOUD_PROVIDER_SDK_RULE,
 } = require('../../eslint/cloud-provider-sdk-imports.cjs');
+const { BXL_SQL_IMPORT_RULE } = require('../../eslint/bxl-sql-imports.cjs');
 
 // Applies to all of JS, TS, GJS, and GTS in the browser context.
 const sharedBrowserConfig = {
@@ -88,6 +89,16 @@ module.exports = {
       },
     },
     {
+      // Re-declared from the root config, which this `root: true` config does
+      // not inherit: BXL's SQL push-down stays out of the browser
+      // (eslint/bxl-sql-imports.cjs).
+      files: ['app/**/*'],
+      plugins: ['@typescript-eslint'],
+      rules: {
+        '@typescript-eslint/no-restricted-imports': BXL_SQL_IMPORT_RULE,
+      },
+    },
+    {
       // Disallow `data-test-*` CSS/DOM selectors in app code. ember-test-selectors
       // strips these attributes in production, so selectors like
       // `querySelector('[data-test-foo]')` silently break outside of tests.
@@ -166,6 +177,23 @@ module.exports = {
       rules: {
         'n/no-process-exit': 'off',
         'n/hashbang': 'off',
+      },
+    },
+    // A node ESM script that CI runs (test-web-assets.yaml), linted as the
+    // module it is.
+    {
+      files: ['./scripts/check-bundle-server-only.mjs'],
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+      env: {
+        browser: false,
+        node: true,
+      },
+      extends: ['plugin:n/recommended'],
+      rules: {
+        'n/no-process-exit': 'off',
       },
     },
     // node ESM files — `.mts` so Node and the type-checker agree they are

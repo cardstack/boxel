@@ -132,6 +132,12 @@ jobs:
           # vite chunks. Empty preserves the standard-mode defaults.
           BOXEL_ENVIRONMENT: ${{ inputs.boxel_environment }}
 
+      - name: Check host dist for server-side BXL
+        # The test-assets build keeps declaration names, so this sees which
+        # modules made it into the bundle (scripts/check-bundle-server-only.mjs).
+        run: node scripts/check-bundle-server-only.mjs
+        working-directory: packages/host
+
       - name: Write assets manifest
         shell: bash
         run: |
