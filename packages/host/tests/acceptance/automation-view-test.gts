@@ -1040,7 +1040,7 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-milestones]')
       .includesText(
-        'Someone who can edit this workspace sees the milestones of the last run here.',
+        'A realm administrator sees the milestones of the last run here.',
       );
   });
 
@@ -1134,7 +1134,7 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-state-sentence]')
       .hasText(
-        'Boxel paused the automation because the automation’s settings have problems. Boxel will resume the automation once someone who can edit this workspace fixes each problem below.',
+        'Boxel paused the automation because the automation’s settings have problems. Boxel will resume the automation once a realm administrator fixes each problem below.',
       );
     assert
       .dom('[data-test-automation-pause-problem="Trigger “hourly”"]')
@@ -1152,7 +1152,7 @@ module('Acceptance | automation view', function (hooks) {
     await waitUntil(
       () =>
         text('[data-test-automation-state-sentence]')?.includes(
-          'Someone who can edit this workspace paused',
+          'A realm administrator paused',
         ),
       { timeout: 10000 },
     );
@@ -1166,12 +1166,12 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'paused', pauseReason: 'requested' },
         'Paused',
-        'Someone who can edit this workspace paused the automation, so Boxel runs nothing until someone resumes the automation.',
+        'A realm administrator paused the automation, so Boxel runs nothing until a realm administrator resumes the automation.',
       ],
       [
         { state: 'paused', pauseReason: 'caps-raised' },
         'Paused',
-        'Someone raised a limit above what the payer agreed to pay for, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and agrees to the new limits.',
+        'Someone raised a limit above what the payer agreed to pay for, so Boxel paused the automation. Boxel runs nothing until a realm administrator resumes the automation and agrees to the new limits.',
       ],
       [
         { state: 'paused', pauseReason: 'webhook-changed' },
@@ -1181,7 +1181,7 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'paused', pauseReason: 'payer-lost-access' },
         'Paused',
-        'The payer can no longer edit this workspace, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and becomes the new payer.',
+        'The payer is no longer a realm administrator, so Boxel paused the automation. Boxel runs nothing until a realm administrator resumes the automation and becomes the new payer.',
       ],
       [
         {
@@ -1197,7 +1197,7 @@ module('Acceptance | automation view', function (hooks) {
           },
         },
         'Paused',
-        'Boxel paused the automation after 5 runs in a row failed. Boxel runs nothing until someone who can edit this workspace fixes what the runs fail on and resumes the automation.',
+        'Boxel paused the automation after 5 runs in a row failed. Boxel runs nothing until a realm administrator fixes what the runs fail on and resumes the automation.',
       ],
       [
         {
@@ -1208,7 +1208,7 @@ module('Acceptance | automation view', function (hooks) {
           lastFailure: null,
         },
         'Paused',
-        'Boxel paused the automation after several runs in a row failed. Boxel runs nothing until someone who can edit this workspace fixes what the runs fail on and resumes the automation.',
+        'Boxel paused the automation after several runs in a row failed. Boxel runs nothing until a realm administrator fixes what the runs fail on and resumes the automation.',
       ],
       [
         { state: 'waiting-for-credits', pauseReason: null },
@@ -1228,7 +1228,7 @@ module('Acceptance | automation view', function (hooks) {
           })),
         },
         'Done',
-        'The automation has no runs left on any trigger, so Boxel runs nothing more. Boxel runs the automation again when someone who can edit this workspace adds a trigger.',
+        'The automation has no runs left on any trigger, so Boxel runs nothing more. Boxel runs the automation again when a realm administrator adds a trigger.',
       ],
     ];
     for (let [change, label, sentence] of cases) {
@@ -1792,7 +1792,7 @@ module('Acceptance | automation view', function (hooks) {
       );
       assert.ok(
         runText('access').includes(
-          'Boxel didn’t start the run because the person the run acts as can no longer edit this workspace.',
+          'Boxel didn’t start the run because the person the run acts as is no longer a realm administrator.',
         ),
       );
       assert.ok(
