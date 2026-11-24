@@ -1,3 +1,4 @@
+import { InvalidQueryError } from './invalid-query-error.ts';
 import { isScopedCSSRequest, scopedCSSServingHref } from './scoped-css.ts';
 import { cloneDeep } from 'lodash-es';
 import {
@@ -359,13 +360,19 @@ export interface SearchResultError {
   };
 }
 
-type QueryFieldErrorType = 'authorization' | 'network' | 'unknown';
+type QueryFieldErrorType =
+  | 'authorization'
+  | 'network'
+  | 'invalid-query'
+  | 'unknown';
 
 type QueryFieldErrorDetail = {
   realm: string;
   type: QueryFieldErrorType;
   message: string;
   status?: number;
+  // An `invalid-query` refusal's code (`unknown-key`, …).
+  code?: string;
 };
 
 function absolutizeInstanceURL(
@@ -1567,20 +1574,42 @@ export class RealmIndexQueryEngine {
     // matches via its equivalent-spelling tolerance, and the resulting
     // `links.search` seed URL reconciles with the client's RRI-space rebuild
     // of the same query.
-    let normalized = normalizeQueryDefinition({
-      fieldDefinition,
-      queryDefinition,
-      resource,
-      realmURL,
-      fieldName,
-      fieldPath,
-      resolvePathValue: (path) => getValueForResourcePath(resource, path),
-      // The realm mappings live here, not in the card: an entry naming a
-      // resource resolves to the realm holding it, so a field can target
-      // "wherever these references live".
-      resolveRealmForReference: (reference) =>
-        this.realmHrefForReference(reference),
-    });
+    let normalized: ReturnType<typeof normalizeQueryDefinition>;
+    try {
+      normalized = normalizeQueryDefinition({
+        fieldDefinition,
+        queryDefinition,
+        resource,
+        realmURL,
+        fieldName,
+        fieldPath,
+        resolvePathValue: (path) => getValueForResourcePath(resource, path),
+        // The realm mappings live here, not in the card: an entry naming a
+        // resource resolves to the realm holding it, so a field can target
+        // "wherever these references live".
+        resolveRealmForReference: (reference) =>
+          this.realmHrefForReference(reference),
+      });
+    } catch (err: unknown) {
+      // A refused field query links no cards, and the field says why rather
+      // than failing the card that declares it.
+      if (err instanceof InvalidQueryError) {
+        return {
+          results: [],
+          errors: [
+            {
+              realm: realmURL.href,
+              type: 'invalid-query',
+              code: err.code,
+              message: err.message,
+            },
+          ],
+          searchURL: '',
+          total: undefined,
+        };
+      }
+      throw err;
+    }
     if (!normalized) {
       return { results: [], errors: [], searchURL: '', total: undefined };
     }

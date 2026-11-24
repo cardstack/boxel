@@ -2007,6 +2007,11 @@ export * from './prerendered-html-format.ts';
 export * from './call-api-key-kind.ts';
 export * from './call-api-body-kinds.ts';
 export * from './query-field-utils.ts';
+export {
+  barePath,
+  looksLikeLabel,
+  mapQueryPaths,
+} from './query-v2/query-syntax.ts';
 export * from './relationship-utils.ts';
 export * from './formats.ts';
 export * from './dependency-tracker.ts';

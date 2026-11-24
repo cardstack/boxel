@@ -85,6 +85,21 @@ module('Integration | query-field relationship status', function (hooks) {
         },
       });
       @field declared = linksToMany(() => Person);
+      // Written with a label (`Name`) where the field is `name`: the query is
+      // saved with the label resolved against Person, and links what the
+      // bare path would.
+      @field byLabel = linksToMany(() => Person, {
+        query: { filter: { eq: { Name: '$this.cardTitle' } } },
+      });
+      // In the newer spelling (a top-level type) with a member the grammar
+      // lacks, so the query is refused rather than read without it.
+      @field refused = linksToMany(() => Person, {
+        query: {
+          type: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          filter: { eq: { name: '$this.cardTitle' } },
+          sortBy: [{ by: 'name' }],
+        } as any,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -564,6 +579,49 @@ module('Integration | query-field relationship status', function (hooks) {
     } finally {
       network.virtualNetwork.unmount(spy);
     }
+  });
+
+  test('a field whose query is refused links no cards and reports the refusal', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState } = cardApi;
+    let host = await loadHost();
+
+    let refused = getRelationshipMembershipState(host, 'refused');
+    assert.false(refused.isLoading, 'a refused field is not loading');
+    assert.true(refused.isLoaded, 'it is settled');
+    assert.deepEqual(refused.membership, [], 'and links no cards');
+    assert.false(refused.isPartial, 'a refusal is not a shortfall');
+    assert.strictEqual(refused.queryError?.code, 'unknown-key');
+    assert.true(
+      refused.queryError?.message.includes('sortBy'),
+      `the message names the member: ${refused.queryError?.message}`,
+    );
+
+    let matches = getRelationshipMembershipState(host, 'matches');
+    assert.strictEqual(
+      matches.queryError,
+      undefined,
+      'a field whose query runs reports no refusal',
+    );
+  });
+
+  test('a field query written with labels is saved with bare paths', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState } = cardApi;
+    let host = await loadHost();
+    let field = (cardApi.getFields(host) as any).byLabel;
+    assert.deepEqual(
+      field.queryDefinition.filter,
+      { eq: { name: '$this.cardTitle' } },
+      'the label resolves to the field it names',
+    );
+    let byLabel = getRelationshipMembershipState(host, 'byLabel');
+    let matches = getRelationshipMembershipState(host, 'matches');
+    assert.strictEqual(byLabel.queryError, undefined, 'it is not refused');
+    assert.strictEqual(byLabel.membership?.length, 2, 'it links both matches');
+    assert.deepEqual(
+      byLabel.membership?.map((m: any) => m.value?.id),
+      matches.membership?.map((m: any) => m.value?.id),
+      'and links what the bare path links',
+    );
   });
 
   test('a declared linksToMany reports no match count', async function (this: RenderingTestContext, assert) {

@@ -136,7 +136,9 @@ import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
   queryFieldHasUnreachableRealms,
+  queryFieldRefusal,
   resolveQueryFieldEagerly,
+  resolveSavedFieldQuery,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
@@ -1612,7 +1614,22 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly searchable: Searchable | undefined;
   searchIntent: FieldSearchOption | undefined;
   readonly configuration?: ConfigurationInput<any>;
-  readonly queryDefinition?: QueryWithInterpolations;
+  #declaredQuery?: QueryWithInterpolations;
+  #savedQuery?: QueryWithInterpolations;
+  // The field's query with its labels resolved against its target type, on
+  // first read (the type may not be defined yet when the field is).
+  get queryDefinition(): QueryWithInterpolations | undefined {
+    if (!this.#declaredQuery) return undefined;
+    if (this.#savedQuery) return this.#savedQuery;
+    // Cached only once resolved: read before the target type is defined, the
+    // query comes back as written and is resolved again on the next read.
+    let { query, resolved } = resolveSavedFieldQuery(
+      this.#declaredQuery,
+      () => this.card as unknown as typeof BaseDef,
+    );
+    if (resolved) this.#savedQuery = query;
+    return query;
+  }
   readonly eager?: boolean;
   constructor({
     cardThunk,
@@ -1630,7 +1647,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     this.name = name;
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
-    this.queryDefinition = queryDefinition;
+    this.#declaredQuery = queryDefinition;
     this.eager = eager;
   }
 
@@ -2092,7 +2109,22 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   readonly searchable: Searchable | undefined;
   searchIntent: FieldSearchOption | undefined;
   readonly configuration?: ConfigurationInput<any>;
-  readonly queryDefinition?: QueryWithInterpolations;
+  #declaredQuery?: QueryWithInterpolations;
+  #savedQuery?: QueryWithInterpolations;
+  // The field's query with its labels resolved against its target type, on
+  // first read (the type may not be defined yet when the field is).
+  get queryDefinition(): QueryWithInterpolations | undefined {
+    if (!this.#declaredQuery) return undefined;
+    if (this.#savedQuery) return this.#savedQuery;
+    // Cached only once resolved: read before the target type is defined, the
+    // query comes back as written and is resolved again on the next read.
+    let { query, resolved } = resolveSavedFieldQuery(
+      this.#declaredQuery,
+      () => this.card as unknown as typeof BaseDef,
+    );
+    if (resolved) this.#savedQuery = query;
+    return query;
+  }
   readonly eager?: boolean;
   constructor({
     cardThunk,
@@ -2110,7 +2142,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     this.name = name;
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
-    this.queryDefinition = queryDefinition;
+    this.#declaredQuery = queryDefinition;
     this.eager = eager;
   }
 
@@ -5404,6 +5436,12 @@ registerRelationshipProbe((instance, field) => {
         source: 'card-api:relationship-probe',
       }),
     );
+    // Read after the resource is asked for: resolving the query is what
+    // finds a refusal on this side.
+    let queryError = queryFieldRefusal(instance, field.name);
+    if (queryError) {
+      return { isLoading: false, isQueryField: true, queryError };
+    }
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
