@@ -1507,6 +1507,31 @@ module(basename(import.meta.filename), function (hooks) {
         });
       }
 
+      // The run's script invoking the Inbox's `operation` through the realm,
+      // with the run's token; answers the response's body.
+      async function invokeAs(token: string, operation: string) {
+        let response = (await realm.handleAutomation(
+          new Request(`${realm.url}_operations`, {
+            method: 'POST',
+            headers: {
+              Accept: SupportedMimeType.BoxelOperations,
+              'Content-Type': SupportedMimeType.BoxelOperations,
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              'boxel:operations': [
+                {
+                  op: 'invoke',
+                  'boxel:name': operation,
+                  data: { meta: { adoptsFrom: INBOX } },
+                },
+              ],
+            }),
+          }),
+        ))!;
+        return JSON.parse(await response.text());
+      }
+
       async function refusalOf(promise: Promise<unknown>) {
         try {
           await promise;
@@ -1615,26 +1640,7 @@ module(basename(import.meta.filename), function (hooks) {
           `DELETE FROM automation_key_approvals WHERE automation_id = $1`,
           { bind: [automationId(KEYED)] },
         );
-        let response = (await realm.handleAutomation(
-          new Request(`${realm.url}_operations`, {
-            method: 'POST',
-            headers: {
-              Accept: SupportedMimeType.BoxelOperations,
-              'Content-Type': SupportedMimeType.BoxelOperations,
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              'boxel:operations': [
-                {
-                  op: 'invoke',
-                  'boxel:name': 'list',
-                  data: { meta: { adoptsFrom: INBOX } },
-                },
-              ],
-            }),
-          }),
-        ))!;
-        let body = JSON.parse(await response.text());
+        let body = await invokeAs(token, 'list');
         assert.strictEqual(
           body.errors?.[0]?.code,
           'key-approval-ended',
@@ -1704,6 +1710,26 @@ module(basename(import.meta.filename), function (hooks) {
             (await admit(token)).refusal?.code,
             'interactive-use-not-approved',
           );
+        });
+
+        test('a Preview’s call refused for a key approval ends the run, and leaves the automation as it is', async function (assert) {
+          let before = await getAutomation(dbAdapter, automationId(SHARED));
+          let { token, run } = await previewBy(WRITER);
+          let body = await invokeAs(token, 'shared');
+          assert.strictEqual(
+            body.errors?.[0]?.code,
+            'interactive-use-not-approved',
+            JSON.stringify(body),
+          );
+          let ended = await getAutomationRun(dbAdapter, run.id);
+          assert.strictEqual(ended?.state, 'error');
+          assert.strictEqual(
+            ended?.errorReason,
+            'interactive-use-not-approved',
+          );
+          let after = await getAutomation(dbAdapter, automationId(SHARED));
+          assert.strictEqual(after?.state, before?.state);
+          assert.strictEqual(after?.nextRun, before?.nextRun);
         });
 
         test('a Preview using a key its starter owns is served', async function (assert) {

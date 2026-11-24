@@ -37,7 +37,7 @@ const REFUSED_BECAUSE: Record<string, string> = {
   'key-rejected': 'Key rejected by the service',
   'binding-needs-reapproval': 'Request changed since it was approved',
   'interactive-use-not-approved': 'Not approved for use from a card',
-  'key-approval-ended': 'Automation’s approval ended or doesn’t match',
+  'key-approval-ended': 'Automation changed or no longer approved',
   'guard-refused': 'Destination refused',
   'upstream-timeout': 'Service didn’t answer in time',
   'response-too-large': 'Response too large',

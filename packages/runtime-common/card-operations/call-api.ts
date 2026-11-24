@@ -1192,7 +1192,7 @@ export interface CallApiRunMeter {
     subject: CallApiUseSubject | undefined,
   ): Promise<void>;
   // Ends the run on a slot refused for a key approval it lacks
-  // (`KEY_APPROVAL_REFUSAL_REASONS`), with the refusal's code, which counts
+  // (`endsRunOnKeyApproval`), with the refusal's code, which counts
   // toward no failure streak, and moves a run of the automation's triggers
   // to *waiting for key approval* (ADR 039 §1.4, §1.7). A run that already
   // ended is left as it is.
@@ -1200,11 +1200,16 @@ export interface CallApiRunMeter {
 }
 
 // Whether a refusal is a key approval the run lacks: the automation's
-// approval ended or stopped matching, or the binding a slot needs is
-// missing, changed or suspended. None is the script's fault.
+// approval ended or stopped matching, the binding a slot needs is missing,
+// changed or suspended, or, for a Preview or a Run now, the slot's key is
+// neither its starter's own, approved for interactive use, nor approved for
+// the automation with its starter as payer (`interactive-use-not-approved`,
+// which a run's call gets only then: a run of the automation's triggers is
+// refused `key-approval-ended` first). None is the script's fault.
 export function endsRunOnKeyApproval(refusal: OperationError): boolean {
-  return (KEY_APPROVAL_REFUSAL_REASONS as readonly string[]).includes(
-    refusal.code,
+  return (
+    refusal.code === 'interactive-use-not-approved' ||
+    (KEY_APPROVAL_REFUSAL_REASONS as readonly string[]).includes(refusal.code)
   );
 }
 
