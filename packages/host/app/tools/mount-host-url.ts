@@ -5,6 +5,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import config from '@cardstack/host/config/environment';
 
 import HostBaseTool from '../lib/host-base-tool';
+import { HostURLRequestError } from '../services/realm-server';
 import { assertHostModeV2 } from '../utils/host-urls';
 
 import type RealmServerService from '../services/realm-server';
@@ -14,8 +15,8 @@ import type * as BaseToolModule from '@cardstack/base/command';
 // The tool builds the URL from the kind and the name:
 // - 'boxel-space': the Boxel Space URL that the realm server gives for the
 //   realm. The server accepts only this URL, so the name is not used.
-// - 'site-name': `https://<name>.<site domain>/`. When the realm has no site
-//   name claim, the tool claims the name first, as the host URL manager does.
+// - 'site-name': `https://<name>.<site domain>/`. When the caller has no claim
+//   on the name, the tool claims the name first, as the host URL manager does.
 // - 'custom-domain': `https://<name>/`.
 // A refusal from the realm server throws with the reason that the server
 // gives.
@@ -84,20 +85,25 @@ export default class MountHostURLTool extends HostBaseTool<
     }
   }
 
-  // A realm has one site name claim at most. When it has none, claim the
-  // hostname. When it claims a different hostname, refuse, because the realm
-  // can be mounted only at the site name that it claims.
+  // The mount accepts a site name that is claimed for this realm. The claim
+  // lookup finds only the caller's own claims, so claim the hostname when the
+  // caller has no claim for it. The server refuses a hostname that is already
+  // claimed with a 422. That claim can be one that another administrator made
+  // for this realm, which the mount accepts. So a 422 does not stop the mount:
+  // the mount checks the claim and gives its reason when it refuses.
   private async ensureSiteNameClaim(realmURL: string, hostname: string) {
     let claimed = await this.realmServer.fetchBoxelClaimedDomain(realmURL);
-    if (claimed?.hostname === hostname) {
+    if (claimed?.hostname.toLowerCase() === hostname.toLowerCase()) {
       return;
     }
-    if (claimed) {
-      throw new Error(
-        `The realm ${realmURL} already claims the site name ${claimed.hostname}. A realm can claim one site name only. Mount the realm at https://${claimed.hostname}/ instead.`,
-      );
+    try {
+      await this.realmServer.claimBoxelDomain(realmURL, hostname);
+    } catch (error) {
+      if (error instanceof HostURLRequestError && error.status === 422) {
+        return;
+      }
+      throw error;
     }
-    await this.realmServer.claimBoxelDomain(realmURL, hostname);
   }
 }
 

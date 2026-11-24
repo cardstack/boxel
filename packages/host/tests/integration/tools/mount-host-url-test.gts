@@ -29,6 +29,7 @@ class FakeHostURLs {
   boxelSpaceURL: string | undefined = SPACE_URL;
   claimedDomain: ClaimedDomain | null = null;
   refusal: string | undefined;
+  claimRefusal: { status: number; message: string } | undefined;
   calls: string[] = [];
 
   install() {
@@ -43,6 +44,12 @@ class FakeHostURLs {
       hostname: string,
     ) => {
       this.calls.push(`claim ${hostname}`);
+      if (this.claimRefusal) {
+        throw new HostURLRequestError(
+          this.claimRefusal.status,
+          this.claimRefusal.message,
+        );
+      }
       this.claimedDomain = {
         id: 'claim-1',
         hostname,
@@ -169,7 +176,7 @@ module('Integration | tools | mount-host-url', function (hooks) {
       ]);
     });
 
-    test('refuses a site name when the realm claims a different one', async function (assert) {
+    test('claims and mounts a site name when the caller claims a different one for the realm', async function (assert) {
       fake.claimedDomain = {
         id: 'claim-1',
         hostname: `other-site.${siteDomain}`,
@@ -177,15 +184,76 @@ module('Integration | tools | mount-host-url', function (hooks) {
         sourceRealmURL: testRealmURL,
       };
 
+      await makeTool().execute({
+        realmURL: testRealmURL,
+        kind: 'site-name',
+        name: 'my-site',
+      });
+
+      assert.deepEqual(fake.calls, [
+        `claim my-site.${siteDomain}`,
+        `mount ${testRealmURL} https://my-site.${siteDomain}/`,
+      ]);
+    });
+
+    test('mounts a site name when the claim is refused with a 422', async function (assert) {
+      fake.claimRefusal = {
+        status: 422,
+        message: 'Hostname is already claimed',
+      };
+
+      let result = await makeTool().execute({
+        realmURL: testRealmURL,
+        kind: 'site-name',
+        name: 'my-site',
+      });
+
+      let url = `https://my-site.${siteDomain}/`;
+      assert.deepEqual(fake.calls, [
+        `claim my-site.${siteDomain}`,
+        `mount ${testRealmURL} ${url}`,
+      ]);
+      assert.strictEqual(result.url, url);
+    });
+
+    test('gives the reason for a mount refusal after a claim refused with a 422', async function (assert) {
+      fake.claimRefusal = {
+        status: 422,
+        message: 'Hostname is already claimed',
+      };
+      fake.refusal = 'The site name is claimed by another user.';
+
       await assert.rejects(
         makeTool().execute({
           realmURL: testRealmURL,
           kind: 'site-name',
           name: 'my-site',
         }),
-        /already claims the site name other-site\./,
+        (error: Error) =>
+          error.message === 'The site name is claimed by another user.',
       );
-      assert.deepEqual(fake.calls, [], 'claimed and mounted nothing');
+      assert.deepEqual(fake.calls, [
+        `claim my-site.${siteDomain}`,
+        `mount ${testRealmURL} https://my-site.${siteDomain}/`,
+      ]);
+    });
+
+    test('refuses a site name when the claim fails with a status other than 422', async function (assert) {
+      fake.claimRefusal = { status: 500, message: 'Internal server error' };
+
+      await assert.rejects(
+        makeTool().execute({
+          realmURL: testRealmURL,
+          kind: 'site-name',
+          name: 'my-site',
+        }),
+        (error: Error) => error.message === 'Internal server error',
+      );
+      assert.deepEqual(
+        fake.calls,
+        [`claim my-site.${siteDomain}`],
+        'mounted nothing',
+      );
     });
 
     test('mounts the realm at a custom domain', async function (assert) {

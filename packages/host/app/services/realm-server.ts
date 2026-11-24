@@ -111,8 +111,8 @@ export interface HomePageCheck {
   anonymousCanView: boolean;
 }
 
-// A request to `/_host-urls` that the server refused. `message` is the
-// server's reason, which is written for the user.
+// A request to `/_host-urls` or `/_boxel-claimed-domains` that the server
+// refused. `message` is the server's reason, which is written for the user.
 export class HostURLRequestError extends Error {
   constructor(
     readonly status: number,
@@ -2062,7 +2062,10 @@ export default class RealmServerService
     );
 
     if (!response.ok) {
-      throw new Error(refusalReason(await response.text()));
+      throw new HostURLRequestError(
+        response.status,
+        refusalReason(await response.text()),
+      );
     }
 
     return response.json();
