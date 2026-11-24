@@ -4,7 +4,13 @@ import {
   type LogAccess,
 } from '@cardstack/runtime-common/log-query';
 import { isLogBinding } from '@cardstack/runtime-common/query-v2/query-values';
-import { applyServerSearchPageBound } from '@cardstack/runtime-common/search-bounds';
+import {
+  applyServerSearchPageBound,
+  pageSizeClampWarning,
+  takesDefaultPage,
+  withDefaultPageTruncation,
+  withPageSizeClampWarning,
+} from '@cardstack/runtime-common/search-bounds';
 import {
   emptySearchEntryDocument,
   markPolicyScoped,
@@ -837,7 +843,12 @@ export default function handleSearch(opts: {
     // searches are bounded as well, because the headers that mark a render are
     // set by the caller, so an exemption keyed on them is one anyone can
     // claim. Clamping never rejects, so a render still draws the first page.
-    parsed.itemQuery = grammar.boundPage(parsed.itemQuery);
+    // A clamped page says so in `meta.warnings` (`page-size-clamped`), and
+    // the page the default gave a query that named none says so when it cut
+    // the answer short (`default-page-truncated`), on either leg.
+    let asked = parsed.itemQuery;
+    parsed.itemQuery = grammar.boundPage(asked);
+    let pageClamp = pageSizeClampWarning(asked, parsed.itemQuery);
     // The bound is rows per response. Results by realm (the default) are each
     // realm's own page, concatenated, so the realms that contribute rows share
     // the absolute maximum: naming more realms — and a caller may name every
@@ -855,6 +866,8 @@ export default function handleSearch(opts: {
         ).size,
       );
     }
+    let defaultPage: { size?: unknown; number?: unknown } | undefined =
+      takesDefaultPage(asked) ? parsed.itemQuery.page : undefined;
 
     // The query each policy-scoped realm runs. Composed here, off the bounded
     // query, so the page the engine fills is a page of rows the policy admits:
@@ -993,6 +1006,19 @@ export default function handleSearch(opts: {
       ...searchOpts,
       fieldset: parsed.fieldset,
     };
+    // A clamped page's notice is part of the body, and it names the size
+    // asked for, so that size keys the cache too (folded only when it was
+    // clamped, so other keys stay as they were).
+    if (pageClamp) {
+      cacheKeyOpts.pageSizeAsked = pageClamp.message;
+    }
+    // Whether the default page applied decides whether a short page carries
+    // the default-page notice, and the federated share can give a default page
+    // and a named one the same size, so it keys the cache too (folded only
+    // when the default applied).
+    if (defaultPage) {
+      cacheKeyOpts.defaultPage = true;
+    }
     if (parsed.fieldset.html) {
       cacheKeyOpts.htmlQuery = parsed.htmlQuery;
     }
@@ -1155,7 +1181,13 @@ export default function handleSearch(opts: {
                       parsed,
                     ),
               );
-        let doc = markPolicyScoped(merged, scopedRealms);
+        let doc = withDefaultPageTruncation(
+          withPageSizeClampWarning(
+            markPolicyScoped(merged, scopedRealms),
+            pageClamp,
+          ),
+          defaultPage,
+        );
         // If the budget already fired, skip stringifying a document we're about
         // to discard (the time-budget race has already resolved with the 408).
         signal?.throwIfAborted();
