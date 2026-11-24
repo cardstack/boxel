@@ -6,6 +6,7 @@ import {
   type Expression,
 } from './expression.ts';
 import type { DBAdapter } from './db.ts';
+import { searchRead } from './search-session.ts';
 import { sqlTextLiteral } from './sql-literal.ts';
 import { hasVectorIndex } from './vector-index.ts';
 import { spaceDimensions } from './vector-space.ts';
@@ -117,6 +118,19 @@ function sqlLiteral(value: string): string {
 // The spaces a field's vectors of one size are stored in, in one realm
 // (`VectorQuery#spacesOf`). Exported for the test that pins its plan.
 export const spacesOfSql = `SELECT DISTINCT space FROM boxel_index_vectors WHERE realm_url = $1 AND field_path = $2 AND dims = $3 LIMIT 8`;
+const spacesOfExpression = (
+  realmURL: string,
+  fieldPath: string,
+  dims: number,
+): Expression => [
+  'SELECT DISTINCT space FROM boxel_index_vectors WHERE realm_url =',
+  param(realmURL),
+  'AND field_path =',
+  param(fieldPath),
+  'AND dims =',
+  param(dims),
+  'LIMIT 8',
+];
 
 // Restricts a vector-table alias to a space, when there is one.
 function spaceEquals(alias: string, space: string | undefined): Expression {
@@ -144,12 +158,11 @@ export class PgVectorStore implements VectorStore {
   #isPartitioned(): Promise<boolean> {
     if (!this.#partitioned || Date.now() - this.#partitionedAt > 30_000) {
       this.#partitionedAt = Date.now();
-      this.#partitioned = this.#dbAdapter
-        .execute(
-          `SELECT to_regclass('boxel_vector_spaces') IS NOT NULL
-              AND EXISTS (SELECT 1 FROM pg_partitioned_table
-                           WHERE partrelid = to_regclass('boxel_index_vectors')) AS partitioned`,
-        )
+      this.#partitioned = searchRead(this.#dbAdapter, [
+        `SELECT to_regclass('boxel_vector_spaces') IS NOT NULL
+            AND EXISTS (SELECT 1 FROM pg_partitioned_table
+                         WHERE partrelid = to_regclass('boxel_index_vectors')) AS partitioned`,
+      ])
         .then((rows) => Boolean(rows[0]?.partitioned))
         .catch(() => false);
     }
@@ -169,9 +182,8 @@ export class PgVectorStore implements VectorStore {
   >();
   #spacesAt = 0;
   async #loadSpaces() {
-    let rows = await this.#dbAdapter
-      .execute(
-        `SELECT s.space, s.partition_name, s.dims,
+    let rows = await searchRead(this.#dbAdapter, [
+      `SELECT s.space, s.partition_name, s.dims,
                 max(p.reltuples) AS rows,
                 COALESCE(bool_or(i.indisvalid AND i.indisready), false) AS indexed
            FROM boxel_vector_spaces AS s
@@ -181,8 +193,7 @@ export class PgVectorStore implements VectorStore {
              ON c.relname = s.partition_name || '_hnsw' AND c.relkind = 'i'
            LEFT JOIN pg_index AS i ON i.indexrelid = c.oid
           GROUP BY s.space, s.partition_name, s.dims`,
-      )
-      .catch(() => []);
+    ]).catch(() => []);
     this.#spacesAt = Date.now();
     this.#spaces = new Map(
       rows.map((row) => [
@@ -238,13 +249,17 @@ export class PgVectorStore implements VectorStore {
       let info = await this.#space(opts.space);
       cached = {
         at: Date.now(),
-        n: this.#dbAdapter
-          .execute(
-            `SELECT count(*)::int AS n FROM (SELECT 1 FROM ${info?.partition ?? 'boxel_index_vectors'} WHERE realm_url = $1 AND field_path = $2 AND space = $3 LIMIT $4) AS s`,
-            {
-              bind: [opts.realmURL, opts.fieldPath, opts.space, opts.limit],
-            },
-          )
+        n: searchRead(this.#dbAdapter, [
+          `SELECT count(*)::int AS n FROM (SELECT 1 FROM ${info?.partition ?? 'boxel_index_vectors'} WHERE realm_url =`,
+          param(opts.realmURL),
+          'AND field_path =',
+          param(opts.fieldPath),
+          'AND space =',
+          param(opts.space),
+          'LIMIT',
+          param(opts.limit),
+          ') AS s',
+        ])
           .then((rows) => Number(rows[0]?.n ?? 0))
           .catch(() => 0),
       };
@@ -554,9 +569,10 @@ export class PgVectorStore implements VectorStore {
     fieldPath: string,
     dims: number,
   ): Promise<string[]> {
-    let rows = await this.#dbAdapter.execute(spacesOfSql, {
-      bind: [realmURL, fieldPath, dims],
-    });
+    let rows = await searchRead(
+      this.#dbAdapter,
+      spacesOfExpression(realmURL, fieldPath, dims),
+    );
     return rows.map((row) => String(row.space ?? ''));
   }
 
@@ -565,10 +581,13 @@ export class PgVectorStore implements VectorStore {
     realmURL: string,
     fieldPath: string,
   ): Promise<number | undefined> {
-    let [dimsRow] = await this.#dbAdapter.execute(
-      'SELECT dims FROM boxel_index_vectors WHERE realm_url = $1 AND field_path = $2 LIMIT 1',
-      { bind: [realmURL, fieldPath] },
-    );
+    let [dimsRow] = await searchRead(this.#dbAdapter, [
+      'SELECT dims FROM boxel_index_vectors WHERE realm_url =',
+      param(realmURL),
+      'AND field_path =',
+      param(fieldPath),
+      'LIMIT 1',
+    ]);
     return dimsRow ? Number(dimsRow.dims) : undefined;
   }
 

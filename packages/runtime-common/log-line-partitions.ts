@@ -19,6 +19,7 @@ import { param, type Expression, type Querier } from './expression.ts';
 import { logger } from './log.ts';
 import { sqlTextLiteral } from './sql-literal.ts';
 import { dialectFor } from './query-engine/dialect.ts';
+import { searchSettingsStatements } from './search-session.ts';
 
 const log = logger('realm:log-lines');
 
@@ -62,6 +63,10 @@ export async function ensureLogPartition(
   try {
     await dbAdapter.withTransaction(
       async (q) => {
+        // a log query's first read of a realm runs this: the search settings
+        for (let statement of searchSettingsStatements()) {
+          await q([statement] as Expression);
+        }
         let [partitioned] = await q([
           `SELECT EXISTS (SELECT 1 FROM pg_partitioned_table
              WHERE partrelid = to_regclass('boxel_log_lines')) AS partitioned`,

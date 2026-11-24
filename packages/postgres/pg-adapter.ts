@@ -12,6 +12,14 @@ import {
   param,
 } from '@cardstack/runtime-common';
 import { WriteLockTimeoutError } from '@cardstack/runtime-common/card-operations/types';
+import {
+  exprFieldPaths,
+  exprSortSql,
+} from '@cardstack/runtime-common/query-v2/formula-sql';
+import { provideExpressionSql } from '@cardstack/runtime-common/query-v2/query-expression';
+import { SearchBoundError } from '@cardstack/runtime-common/query-v2/search-bounds';
+import { searchSettingsStatements } from '@cardstack/runtime-common/search-session';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'crypto';
 import nodePgMigrate, { type RunnerOption } from 'node-pg-migrate';
 import { join } from 'path';
@@ -22,10 +30,17 @@ import {
   markConnectionHeld,
   type ConnectionHold,
   waitingOnLock,
+  waitingOnSharedWork,
   withSharedWork,
 } from './connection-scheduler.ts';
 import { boxelDatabaseConfig, postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
+
+// Postgres runs a query's expressions as SQL (BXL's score profile). Wherever
+// this adapter is loaded, the query grammar checks that an expression
+// compiles and the index query engine compiles it; a browser has no Postgres
+// and checks expressions lightly (runtime-common/query-expression.ts).
+provideExpressionSql({ exprSortSql, exprFieldPaths });
 
 // node-pg-migrate is CJS and exposes the runner as its default export. Under
 // native ESM the default import binds the module's namespace object, so the
@@ -267,6 +282,217 @@ function configuredPoolOverflow(): number | undefined {
   return Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
+// How long a nested acquisition — one made while its caller holds a
+// connection, as a search's definition lookup does inside its read snapshot —
+// may wait before it fails with `PoolWedgedError` (see `ConnectionScheduler`).
+// It is a backstop for a wedge the scheduler cannot see: no healthy nested
+// acquisition waits this long, since nested work is granted ahead of the
+// queue. PG_POOL_NESTED_ACQUIRE_TIMEOUT_MS overrides it.
+export const NESTED_ACQUIRE_TIMEOUT_MS = 60_000;
+
+// How long a read snapshot's transaction may sit idle between statements
+// before Postgres ends its session (`idle_in_transaction_session_timeout`).
+// A search is idle in its snapshot while it waits on work outside the
+// database, such as a definition lookup that prerenders a module; past this,
+// the snapshot is given up rather than held. PG_READ_SNAPSHOT_IDLE_TIMEOUT_MS
+// overrides it.
+export const READ_SNAPSHOT_IDLE_TIMEOUT_MS = 300_000;
+
+// How long a read snapshot that holds its connection lets its body wait on
+// work outside the database (`outsideReadSnapshot`) before the attempt is
+// given up and the wait moves outside the snapshot: long enough for a cached
+// definition's read, short enough that no connection sits idle in its
+// transaction for a prerender. PG_READ_SNAPSHOT_WAIT_GRACE_MS overrides it.
+export const READ_SNAPSHOT_WAIT_GRACE_MS = 250;
+
+// How many times a read snapshot is opened for one body before work it waits
+// on is waited on in place. Each wait moved outside the snapshot settles the
+// work it names for every later attempt, so a body needs one attempt more
+// than the rounds of new work it discovers; this is a backstop against a body
+// that discovers new work on every attempt.
+export const READ_SNAPSHOT_MAX_ATTEMPTS = 8;
+
+// Thrown inside a read snapshot's body once the attempt is being given up to
+// wait outside it (`withReadSnapshot`). The body's outcome is discarded
+// whatever it does with this, so a caller that swallows it changes nothing.
+export class ReadSnapshotRestart extends Error {
+  constructor() {
+    super('the read snapshot is being reopened after waiting outside it');
+    this.name = 'ReadSnapshotRestart';
+  }
+}
+
+// One read snapshot call's waits on work outside the database.
+interface SnapshotWaits {
+  // every piece of work the body waited on, by key, across attempts
+  known: Map<string, Promise<unknown>>;
+  signal?: AbortSignal;
+  deadline?: number;
+  // this attempt:
+  // the work to wait on before the next attempt
+  deferred: Set<Promise<unknown>>;
+  // the attempt is being given up
+  restart: boolean;
+  // false on the last attempt: work is waited on in place
+  canRestart: boolean;
+  // the attempt has checked out (or is checking out) its connection
+  pinned: boolean;
+  onPinned: Set<() => void>;
+  // waits to end at once when the attempt is given up
+  onRestart: Set<() => void>;
+}
+
+const snapshotWaits = new AsyncLocalStorage<SnapshotWaits>();
+
+function freshAttempt(
+  canRestart: boolean,
+): Pick<
+  SnapshotWaits,
+  'deferred' | 'restart' | 'canRestart' | 'pinned' | 'onPinned' | 'onRestart'
+> {
+  return {
+    deferred: new Set(),
+    restart: false,
+    canRestart,
+    pinned: false,
+    onPinned: new Set(),
+    onRestart: new Set(),
+  };
+}
+
+// Give the attempt up to wait on `work` outside it. Every other wait of the
+// attempt ends too, so the body settles and its connection goes back.
+function giveUpAttempt(waits: SnapshotWaits, work: Promise<unknown>) {
+  waits.deferred.add(work);
+  if (waits.restart) return;
+  waits.restart = true;
+  for (let notify of [...waits.onRestart]) notify();
+  waits.onRestart.clear();
+}
+
+function markPinned(waits: SnapshotWaits) {
+  if (waits.pinned) return;
+  waits.pinned = true;
+  for (let notify of [...waits.onPinned]) notify();
+  waits.onPinned.clear();
+}
+
+// Whether `work` settles before the attempt has held its connection for the
+// grace: a wait while nothing is pinned holds nothing, so it runs on until
+// the attempt pins a connection, and only then is the grace counted.
+function settlesWhileUnpinnedOrWithinGrace(
+  work: Promise<unknown>,
+  waits: SnapshotWaits,
+): Promise<boolean> {
+  let graceMs =
+    positiveIntegerEnv('PG_READ_SNAPSHOT_WAIT_GRACE_MS') ??
+    READ_SNAPSHOT_WAIT_GRACE_MS;
+  return new Promise<boolean>((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let arm = () => {
+      timer = setTimeout(() => {
+        waits.onRestart.delete(giveUp);
+        resolve(false);
+      }, graceMs);
+    };
+    let giveUp = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      waits.onPinned.delete(arm);
+      resolve(false);
+    };
+    let done = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      waits.onPinned.delete(arm);
+      waits.onRestart.delete(giveUp);
+      resolve(true);
+    };
+    waits.onRestart.add(giveUp);
+    work.then(done, done);
+    if (waits.pinned) {
+      arm();
+    } else {
+      waits.onPinned.add(arm);
+    }
+  });
+}
+
+// Wait for every piece of `work` to settle, or for `signal` to abort (with
+// its reason).
+async function settledOrAborted(
+  work: Promise<unknown>[],
+  signal?: AbortSignal,
+): Promise<void> {
+  let all = Promise.allSettled(work);
+  if (!signal) {
+    await all;
+    return;
+  }
+  signal.throwIfAborted();
+  let onAbort: (() => void) | undefined;
+  try {
+    await Promise.race([
+      all,
+      new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(signal!.reason);
+        signal!.addEventListener('abort', onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+  }
+}
+
+// The margin a read snapshot's statement timeout allows past its search's
+// deadline (`withReadSnapshot`): the signal cancels a statement first, and
+// Postgres stops it only when that failed. PG_SEARCH_STATEMENT_TIMEOUT_MARGIN_MS
+// overrides it.
+export const STATEMENT_TIMEOUT_MARGIN_MS = 500;
+
+function positiveIntegerEnv(name: string): number | undefined {
+  let raw = process.env[name];
+  if (!raw) return undefined;
+  let value = Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function statementTimeoutMarginMs(): number {
+  return (
+    positiveIntegerEnv('PG_SEARCH_STATEMENT_TIMEOUT_MARGIN_MS') ??
+    STATEMENT_TIMEOUT_MARGIN_MS
+  );
+}
+
+// A whole number of milliseconds, at least 1 (0 would turn the timeout off).
+export function statementTimeoutFor(
+  deadline: number,
+  now: number = Date.now(),
+): number {
+  return Math.max(1, Math.ceil(deadline - now)) + statementTimeoutMarginMs();
+}
+
+// The search settings a read snapshot opens with (jit off, work_mem) live in
+// runtime-common's search-session.ts, so a search's reads outside a snapshot
+// share them.
+export {
+  SEARCH_WORK_MEM_KB,
+  searchSessionSettings,
+} from '@cardstack/runtime-common/search-session';
+
+// Postgres's query_canceled (57014) raised by `statement_timeout`; the same
+// code for a cancel request says "user request".
+function isStatementTimeout(e: any): boolean {
+  return (
+    e?.code === '57014' && /statement timeout/i.test(String(e?.message ?? ''))
+  );
+}
+
+function budgetRefusal() {
+  return new SearchBoundError(
+    408,
+    'search exceeded the request time limit and was stopped by the database; narrow the query or request a smaller page',
+  );
+}
+
 export type NotificationHandler = (notification: Notification) => void;
 
 export interface NotificationSubscription {
@@ -352,6 +578,15 @@ function recordConnectionErrors(
 export class PgAdapter implements DBAdapter {
   readonly kind = 'pg';
   #isClosed = false;
+  // The open read snapshots, by the handle their statements carry through
+  // `execute` (see `withReadSnapshot`).
+  #snapshots = new WeakMap<
+    object,
+    (
+      sql: string,
+      opts?: ExecuteOptions,
+    ) => Promise<Record<string, PgPrimitive>[]>
+  >();
   private pool: Pool;
   // Decides who checks out the pool's connections, and in what order. Every
   // checkout goes through it, and it grants at most the pool's own max at
@@ -417,6 +652,9 @@ export class PgAdapter implements DBAdapter {
       limit: max,
       tenantShare: configuredPoolTenantShare(),
       overflow: configuredPoolOverflow(),
+      nestedAcquireTimeoutMs:
+        positiveIntegerEnv('PG_POOL_NESTED_ACQUIRE_TIMEOUT_MS') ??
+        NESTED_ACQUIRE_TIMEOUT_MS,
     });
     log.debug(`connecting to DB ${this.url}`);
     this.pool =
@@ -486,6 +724,11 @@ export class PgAdapter implements DBAdapter {
   // See `DBAdapter.withSharedWork`.
   withSharedWork<T>(fn: () => Promise<T>): Promise<T> {
     return withSharedWork(fn);
+  }
+
+  // See `DBAdapter.waitingOnSharedWork`.
+  waitingOnSharedWork<T>(fn: () => Promise<T>): Promise<T> {
+    return waitingOnSharedWork(fn);
   }
 
   get url() {
@@ -861,7 +1104,16 @@ export class PgAdapter implements DBAdapter {
     sql: string,
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
+    // A statement of a read snapshot runs on the snapshot's connection.
+    let snapshot = opts?.readSnapshot
+      ? this.#snapshots.get(opts.readSnapshot)
+      : undefined;
+    if (snapshot) {
+      return await snapshot(sql, opts);
+    }
     await this.started;
+    // Work whose caller has already gone does not wait for a connection.
+    opts?.signal?.throwIfAborted();
     let { client, release } = await this.#checkout();
     // The checkout gives this connection back if it dies; recording logs why.
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
@@ -869,12 +1121,18 @@ export class PgAdapter implements DBAdapter {
       `executing sql: ${sql}, with bindings: ${loggableBindings(opts)}`,
     );
     try {
-      let { rows } = await client.query({
-        text: sql,
-        values: opts?.bind,
-      });
+      let { rows } = await this.#cancellable(client, opts?.signal, () =>
+        client.query({
+          text: sql,
+          values: opts?.bind,
+        }),
+      );
       return rows;
     } catch (e: any) {
+      if (opts?.signal?.aborted) {
+        // Cancelled on purpose: the caller has gone, and the statement with it.
+        throw opts.signal.reason ?? e;
+      }
       if (opts?.redactBindings) {
         // Postgres quotes the offending row or value in `detail` (and the
         // statement context in `where`) for constraint and type errors.
@@ -891,6 +1149,54 @@ export class PgAdapter implements DBAdapter {
     } finally {
       stopRecording();
       release();
+    }
+  }
+
+  // Run one statement on `client`, cancelling it in Postgres if `signal`
+  // aborts while it runs. The cancel goes over a connection of its own (the
+  // pool may be the very thing the abandoned work is holding), and it names
+  // the backend by pid, so this does not return until any cancel it sent has
+  // been answered: the client goes back to the pool only once no cancel aimed
+  // at it is still on its way, so the next statement it runs cannot be the one
+  // cancelled.
+  async #cancellable<T>(
+    client: PoolClient,
+    signal: AbortSignal | undefined,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    if (!signal) {
+      return await run();
+    }
+    signal.throwIfAborted();
+    let pid = (client as unknown as { processID?: number }).processID;
+    let cancelling: Promise<void> | undefined;
+    let onAbort = () => {
+      if (pid !== undefined) {
+        cancelling = this.#cancelBackend(pid);
+      }
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      return await run();
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+      if (cancelling) {
+        await cancelling;
+      }
+    }
+  }
+
+  async #cancelBackend(pid: number): Promise<void> {
+    let { user, host, database, password, port } = this.config;
+    let client = new Client({ user, host, database, password, port });
+    try {
+      await client.connect();
+      await client.query('SELECT pg_cancel_backend($1)', [pid]);
+      log.debug(`cancelled the statement running on backend ${pid}`);
+    } catch (e) {
+      log.warn(`could not cancel the statement on backend ${pid}: ${e}`);
+    } finally {
+      await client.end().catch(() => {});
     }
   }
 
@@ -1678,6 +1984,334 @@ export class PgAdapter implements DBAdapter {
       holding.end();
       stopRecording();
       release();
+    }
+  }
+
+  // One read snapshot for `fn` (see `DBAdapter.withReadSnapshot`). The
+  // connection is checked out at the first statement rather than here, so the
+  // work a search does before it reads anything (definition lookups, which
+  // may prerender a module) holds no connection, and a search refused before
+  // it reads holds none at all. It is a holding checkout, as `withConnection`'s
+  // is: whatever `fn` checks out through the adapter meanwhile (a write, a
+  // statistics read) is nested work, granted ahead of the queue, so a pool
+  // full of snapshots cannot deadlock on their own nested statements.
+  //
+  // Statements run one at a time on the pinned client, in the order they
+  // arrive: a search's concurrent reads queue here instead of each taking a
+  // connection. A failed statement rolls back to the savepoint taken after
+  // BEGIN, which leaves the snapshot in place (a REPEATABLE READ transaction
+  // keeps the snapshot its first statement took), so a caller that catches
+  // the error reads on as it would have outside a transaction.
+  //
+  // With a `deadline`, the transaction's `statement_timeout` is the time left
+  // when the snapshot opens plus a small margin: a backstop that has Postgres
+  // stop a statement the signal failed to cancel. A statement it stops fails
+  // as the time budget's refusal (`SearchBoundError`, 408).
+  //
+  // Work outside the database that `fn` waits on through
+  // `outsideReadSnapshot` (a definition lookup) is never waited on with the
+  // connection idle in its transaction: past a short grace, the attempt is
+  // given up, its connection and snapshot released, the work awaited holding
+  // nothing, and `fn` run again on a fresh snapshot, where the work is
+  // already settled. `fn` must therefore be safe to run again; a search is.
+  async withReadSnapshot<T>(
+    fn: (reader: DBAdapter) => Promise<T>,
+    opts?: {
+      signal?: AbortSignal;
+      deadline?: number;
+      settled?: ReadonlyMap<string, Promise<unknown>>;
+    },
+  ): Promise<T> {
+    await this.started;
+    opts?.signal?.throwIfAborted();
+    let waits: SnapshotWaits = {
+      known: new Map(opts?.settled ?? []),
+      signal: opts?.signal,
+      deadline: opts?.deadline,
+      ...freshAttempt(true),
+    };
+    for (let attempt = 1; ; attempt++) {
+      Object.assign(waits, freshAttempt(attempt < READ_SNAPSHOT_MAX_ATTEMPTS));
+      let outcome: { ok: true; value: T } | { ok: false; error: unknown };
+      try {
+        outcome = {
+          ok: true,
+          value: await this.#readSnapshotAttempt(fn, waits, opts),
+        };
+      } catch (error) {
+        outcome = { ok: false, error };
+      }
+      if (!waits.restart) {
+        if (outcome.ok) return outcome.value;
+        throw outcome.error;
+      }
+      // The attempt's connection is back in the pool; wait holding nothing.
+      this.#readSnapshotRestarts++;
+      log.debug(
+        `a read snapshot gave up its connection to wait on ${waits.deferred.size} pending lookup(s) (attempt ${attempt})`,
+      );
+      await settledOrAborted([...waits.deferred], opts?.signal);
+    }
+  }
+
+  // How many times a read snapshot has given its connection up to wait on
+  // work outside the database and been reopened (`outsideReadSnapshot`).
+  #readSnapshotRestarts = 0;
+  get readSnapshotRestarts(): number {
+    return this.#readSnapshotRestarts;
+  }
+
+  // See `DBAdapter.outsideReadSnapshot`.
+  async outsideReadSnapshot<T>(
+    key: string,
+    start: (bound: { signal?: AbortSignal; deadline?: number }) => Promise<T>,
+  ): Promise<T> {
+    let waits = snapshotWaits.getStore();
+    if (!waits) {
+      return await start({});
+    }
+    let known = waits.known.get(key) as Promise<T> | undefined;
+    if (!known) {
+      let bound = { signal: waits.signal, deadline: waits.deadline };
+      // started outside the snapshot's scope: the work outlives an attempt
+      known = snapshotWaits.exit(() => start(bound));
+      known.catch(() => {});
+      waits.known.set(key, known);
+    }
+    if (!waits.canRestart) {
+      return await known;
+    }
+    if (waits.restart) {
+      waits.deferred.add(known);
+      throw new ReadSnapshotRestart();
+    }
+    if (!(await settlesWhileUnpinnedOrWithinGrace(known, waits))) {
+      giveUpAttempt(waits, known);
+      throw new ReadSnapshotRestart();
+    }
+    return await known;
+  }
+
+  async #readSnapshotAttempt<T>(
+    fn: (reader: DBAdapter) => Promise<T>,
+    waits: SnapshotWaits,
+    opts?: { signal?: AbortSignal; deadline?: number },
+  ): Promise<T> {
+    opts?.signal?.throwIfAborted();
+    let snapshotSignal = opts?.signal;
+    let deadline = opts?.deadline;
+    let timeoutSet = false;
+    let adapterIsClosed = () => this.isClosed;
+    let holding = markConnectionHeld({ held: false });
+    let pinned:
+      | {
+          client: PoolClient;
+          release: (destroy?: boolean) => void;
+          stopRecording: () => void;
+        }
+      | undefined;
+    // the client cannot be trusted with the next caller's work
+    let broken = false;
+    let ended = false;
+    let tail: Promise<unknown> = Promise.resolve();
+    // Statements, and a savepoint block with its statements, run one after
+    // another: a block's SET LOCAL and its read must not interleave with
+    // another statement of the search.
+    let inTurn = <R>(work: () => Promise<R>): Promise<R> => {
+      let run = tail.then(
+        () => work(),
+        () => work(),
+      );
+      tail = run.catch(() => {});
+      return run;
+    };
+    let raw = async (text: string, values?: unknown[]) =>
+      (await pinned!.client.query({ text, values })).rows as Record<
+        string,
+        PgPrimitive
+      >[];
+    let open = async () => {
+      if (ended) {
+        throw new Error('a read snapshot was used after it ended');
+      }
+      // this attempt is being given up to wait outside it
+      if (waits.restart) {
+        throw new ReadSnapshotRestart();
+      }
+      if (!pinned) {
+        markPinned(waits);
+        let { client, release } = await this.#checkout({ hold: holding });
+        holding.hold();
+        pinned = {
+          client,
+          release,
+          stopRecording: recordConnectionErrors(client, this.url, 'warn'),
+        };
+        try {
+          // One simple-protocol message, so opening the snapshot costs one
+          // round trip rather than one per statement. The settings come
+          // before the savepoint, so rolling back to it keeps them; they are
+          // whole numbers and fixed words this code computed, so they are
+          // written into the SQL.
+          let setup = [
+            'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+            ...searchSettingsStatements(),
+            `SET LOCAL idle_in_transaction_session_timeout = ${
+              positiveIntegerEnv('PG_READ_SNAPSHOT_IDLE_TIMEOUT_MS') ??
+              READ_SNAPSHOT_IDLE_TIMEOUT_MS
+            }`,
+          ];
+          let withTimeout = deadline !== undefined && Number.isFinite(deadline);
+          if (withTimeout) {
+            setup.push(
+              `SET LOCAL statement_timeout = ${statementTimeoutFor(deadline!)}`,
+            );
+          }
+          setup.push('SAVEPOINT read_snapshot');
+          await raw(setup.join('; '));
+          timeoutSet = withTimeout;
+        } catch (e) {
+          broken = true;
+          throw e;
+        }
+      }
+      if (broken) {
+        throw new Error('the read snapshot was lost to an earlier error');
+      }
+    };
+    // After a failed statement: back to the savepoint, so the transaction
+    // (and its snapshot) takes the next statement.
+    let recover = async () => {
+      if (broken) return;
+      try {
+        await raw('ROLLBACK TO SAVEPOINT read_snapshot');
+      } catch (e) {
+        broken = true;
+        log.warn(`could not recover a read snapshot after an error: ${e}`);
+      }
+    };
+    let signalOf = (own?: AbortSignal) =>
+      own && snapshotSignal && own !== snapshotSignal
+        ? AbortSignal.any([own, snapshotSignal])
+        : (own ?? snapshotSignal);
+    let statement = async (sql: string, execOpts?: ExecuteOptions) => {
+      let signal = signalOf(execOpts?.signal);
+      signal?.throwIfAborted();
+      await open();
+      log.debug(
+        `executing sql in a read snapshot: ${sql}, with bindings: ${loggableBindings(execOpts)}`,
+      );
+      try {
+        return await this.#cancellable(pinned!.client, signal, () =>
+          raw(sql, execOpts?.bind),
+        );
+      } catch (e: any) {
+        await recover();
+        if (signal?.aborted) {
+          throw signal.reason ?? e;
+        }
+        if (timeoutSet && isStatementTimeout(e)) {
+          throw budgetRefusal();
+        }
+        if (execOpts?.redactBindings) {
+          delete e.detail;
+          delete e.where;
+        }
+        console.error(
+          `Error executing SQL ${e.message} (${e.hint}):\n${sql}${
+            execOpts?.bind
+              ? ' with bindings: ' + loggableBindings(execOpts)
+              : ''
+          }`,
+          e,
+        );
+        throw e;
+      }
+    };
+    // The body runs on the snapshot inside a savepoint that is rolled back
+    // when it ends, so its SET LOCALs (a vector read's HNSW settings) end
+    // with it.
+    // rolled back and released in one round trip
+    let endBlock =
+      'ROLLBACK TO SAVEPOINT read_snapshot_block; RELEASE SAVEPOINT read_snapshot_block';
+    let block = async <R>(body: (q: Querier) => Promise<R>): Promise<R> => {
+      let signal = signalOf(undefined);
+      signal?.throwIfAborted();
+      await open();
+      await raw('SAVEPOINT read_snapshot_block');
+      let q: Querier = async (expression) => {
+        let sql = expressionToSql('pg', expression);
+        return await this.#cancellable(pinned!.client, signal, () =>
+          raw(sql.text, sql.values),
+        );
+      };
+      let result: R;
+      try {
+        result = await body(q);
+      } catch (e) {
+        try {
+          await raw(endBlock);
+        } catch {
+          await recover();
+        }
+        if (signal?.aborted) throw signal.reason ?? e;
+        throw timeoutSet && isStatementTimeout(e) ? budgetRefusal() : e;
+      }
+      await raw(endBlock);
+      return result;
+    };
+    // Each statement goes through `execute`, with the handle that runs it on
+    // the snapshot, so whatever wraps `execute` sees it.
+    let handle = {};
+    this.#snapshots.set(handle, statement);
+    let reader: DBAdapter = {
+      kind: 'pg',
+      get isClosed() {
+        return adapterIsClosed();
+      },
+      execute: (sql, execOpts) =>
+        inTurn(() => this.execute(sql, { ...execOpts, readSnapshot: handle })),
+      withTransaction: (body) => inTurn(() => block(body)),
+      withReadSnapshot: (inner) => inner(reader),
+      close: () => this.close(),
+      getColumnNames: (tableName) => this.getColumnNames(tableName),
+      notify: (channel, payload) => this.notify(channel, payload),
+      withWriteLock: (realmUrl, body) => this.withWriteLock(realmUrl, body),
+      withFileWriteLocks: (realmUrl, localPaths, body) =>
+        this.withFileWriteLocks(realmUrl, localPaths, body),
+      withUserCostLock: (matrixUserId, body) =>
+        this.withUserCostLock(matrixUserId, body),
+      withSharedWork: (body) => this.withSharedWork(body),
+      waitingOnSharedWork: (body) => this.waitingOnSharedWork(body),
+      outsideReadSnapshot: (key, start) => this.outsideReadSnapshot(key, start),
+    };
+    let failed = false;
+    try {
+      return await snapshotWaits.run(waits, () =>
+        holding.run(() => fn(reader)),
+      );
+    } catch (e) {
+      failed = true;
+      throw e;
+    } finally {
+      // Statements `fn` left running finish (or fail) before the end.
+      await tail;
+      ended = true;
+      holding.end();
+      if (pinned) {
+        let { release, stopRecording } = pinned;
+        try {
+          if (!broken) {
+            await raw(failed ? 'ROLLBACK' : 'COMMIT');
+          }
+        } catch (e) {
+          broken = true;
+          log.warn(`could not end a read snapshot: ${e}`);
+        } finally {
+          stopRecording();
+          release(broken ? true : undefined);
+        }
+      }
     }
   }
 

@@ -6,6 +6,7 @@ import { PREFIX_REALM_PREFIXES } from './realm-prefixes.ts';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
 import { baseRealm } from './index.ts';
 import { isPrefixForm } from './realm-identifiers.ts';
+import { setSignalDeadline, signalDeadline } from './db.ts';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
@@ -1181,7 +1182,7 @@ export function shouldTimeoutRetryableFetch(url: URL): boolean {
 
 // Combine an optional caller-supplied signal with the per-attempt timeout
 // signal so a fetch is aborted when either fires.
-function mergeAbortSignals(
+export function mergeAbortSignals(
   a: AbortSignal | null | undefined,
   b: AbortSignal | null | undefined,
 ): AbortSignal | undefined {
@@ -1194,8 +1195,16 @@ function mergeAbortSignals(
       any?: (signals: AbortSignal[]) => AbortSignal;
     }
   ).any;
+  // The combined signal keeps the earliest time budget's deadline of the two.
+  let withDeadline = (merged: AbortSignal) => {
+    for (let signal of signals) {
+      let deadline = signalDeadline(signal);
+      if (deadline !== undefined) setSignalDeadline(merged, deadline);
+    }
+    return merged;
+  };
   if (typeof combine === 'function') {
-    return combine(signals);
+    return withDeadline(combine(signals));
   }
   // Fallback for a runtime without AbortSignal.any: mirror both signals onto a
   // single controller so either firing aborts the fetch, carrying its reason.
@@ -1209,7 +1218,7 @@ function mergeAbortSignals(
       once: true,
     });
   }
-  return controller.signal;
+  return withDeadline(controller.signal);
 }
 
 export function shouldRetryFetch(url: URL): boolean {

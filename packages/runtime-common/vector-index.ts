@@ -4,6 +4,7 @@ import {
   parseQueryableVector,
 } from './serializers/vector.ts';
 import { dialectFor } from './query-engine/dialect.ts';
+import { searchRead } from './search-session.ts';
 
 // `boxel_index_vectors` exists only on a Postgres that has pgvector (see the
 // `add-boxel-index-vectors` migration). Probed once per adapter; the answer
@@ -16,10 +17,9 @@ export function hasVectorIndex(dbAdapter: DBAdapter): Promise<boolean> {
   }
   let known = vectorIndexAvailability.get(dbAdapter);
   if (!known) {
-    known = dbAdapter
-      .execute(
-        `SELECT to_regclass('boxel_index_vectors') IS NOT NULL AS available`,
-      )
+    known = searchRead(dbAdapter, [
+      `SELECT to_regclass('boxel_index_vectors') IS NOT NULL AS available`,
+    ])
       .then((rows) => Boolean(rows[0]?.available))
       .catch(() => false);
     vectorIndexAvailability.set(dbAdapter, known);
