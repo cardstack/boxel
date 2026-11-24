@@ -99,6 +99,11 @@ export interface KeysCommandDeps {
 
 export interface Context {
   pm: ProfileManager;
+  profileId: string;
+  // Whether the profile is signed in with OAuth, whose token never reaches
+  // key management: every keys call then uses a secure session held for the
+  // one command (see `secureToken`).
+  oauth: boolean;
   realmServerUrl: string;
   matrixUserId: string;
   json: boolean;
@@ -116,6 +121,8 @@ export function context(
   }
   return {
     pm,
+    profileId: active.id,
+    oauth: Boolean(active.profile.oauth),
     realmServerUrl: active.profile.realmServerUrl,
     matrixUserId: active.profile.matrixUserId,
     json: Boolean(json),
@@ -141,19 +148,21 @@ export function emit(ctx: Context, value: unknown, print: () => void): void {
   }
 }
 
-// Opens the secure window's sign-in in the browser and keeps the session it
-// hands back on the active profile. The browser must sign in the profile's
-// own account.
+// Opens the secure window's sign-in in the browser and, unless `keep` is
+// false, keeps the session it hands back on the active profile. The browser
+// must sign in the profile's own account.
 export async function signInToManageKeys(
   pm: ProfileManager,
   {
     openBrowserFn,
     timeoutMs,
     log = console.log,
+    keep = true,
   }: {
     openBrowserFn?: (url: string) => Promise<boolean>;
     timeoutMs?: number;
     log?: (message: string) => void;
+    keep?: boolean;
   } = {},
 ): Promise<PostedSecureSession> {
   let active = pm.getActiveProfile();
@@ -175,14 +184,79 @@ export async function signInToManageKeys(
         `${profile.matrixUserId}. Run it again and sign in as ${profile.matrixUserId}.`,
     );
   }
-  pm.setSecureSession(session);
+  if (keep) {
+    pm.setSecureSession(session);
+  }
   return session;
+}
+
+// The secure sessions this process signed in for profiles signed in with
+// OAuth, by profile. One is never written to the profiles file: it is a full
+// realm-server session, which would put a credential that can do anything
+// back on disk beside the OAuth token meant to replace one. It is ended when
+// the command finishes (`endHeldSecureSessions`).
+let heldSessions = new Map<
+  string,
+  { realmServerUrl: string; token: string; expiresAt: string }
+>();
+
+// Ends the secure sessions this process holds for OAuth profiles. A session
+// that can't be ended is named, since it lasts until it expires.
+export async function endHeldSecureSessions(): Promise<void> {
+  let sessions = [...heldSessions.values()];
+  heldSessions.clear();
+  await Promise.all(
+    sessions.map(async ({ realmServerUrl, token, expiresAt }) => {
+      try {
+        await secureSignOut(realmServerUrl, token);
+      } catch (e) {
+        console.error(
+          `${FG_YELLOW}Couldn't end the browser sign-in this command used${RESET} ` +
+            `(${e instanceof Error ? e.message : String(e)}). It ends on its own at ${new Date(expiresAt).toLocaleString()}.`,
+        );
+      }
+    }),
+  );
+}
+
+async function oauthSecureToken(ctx: Context): Promise<string> {
+  let held = heldSessions.get(ctx.profileId);
+  if (held) {
+    return held.token;
+  }
+  let interactive =
+    ctx.deps.interactive ??
+    (ctx.deps.openBrowserFn ? true : Boolean(process.stderr.isTTY));
+  if (!interactive) {
+    throw new Error(
+      'On a profile signed in with OAuth, every `boxel keys` command signs in through the browser, so it needs a terminal. ' +
+        'Run it in a terminal, or use a profile signed in with Matrix.',
+    );
+  }
+  say(
+    ctx,
+    'Managing keys needs you to sign in to Boxel in the browser, for this command only.',
+  );
+  let session = await signInToManageKeys(ctx.pm, {
+    openBrowserFn: ctx.deps.openBrowserFn,
+    log: (message) => say(ctx, message),
+    keep: false,
+  });
+  heldSessions.set(ctx.profileId, {
+    realmServerUrl: ctx.realmServerUrl,
+    token: session.token,
+    expiresAt: session.expiresAt,
+  });
+  return session.token;
 }
 
 // The profile's secure session, checked with the realm server, which ends
 // one early on sign-out or a password change. Without a live one, signs in
 // through the browser when someone is there to, and refuses otherwise.
 export async function secureToken(ctx: Context): Promise<string> {
+  if (ctx.oauth) {
+    return oauthSecureToken(ctx);
+  }
   let stored = ctx.pm.getSecureSession();
   if (stored) {
     try {
@@ -213,7 +287,12 @@ export async function secureToken(ctx: Context): Promise<string> {
   return session.token;
 }
 
+// The token for a keys call that needs no secure session. An OAuth profile
+// has no realm-server session to use, so it uses its held secure session.
 export async function ordinaryToken(ctx: Context): Promise<string> {
+  if (ctx.oauth) {
+    return oauthSecureToken(ctx);
+  }
   return await ctx.pm.getOrRefreshServerToken();
 }
 
@@ -1467,7 +1546,8 @@ export async function keysConnect(
 
 // Runs a command, printing a refusal with the server's status and reason.
 // Under `--json` a refusal prints as `{ error: { status, reason, errors } }`
-// on stdout, `errors` being the server's own, unchanged.
+// on stdout, `errors` being the server's own, unchanged. A secure session the
+// command signed in for an OAuth profile is ended when it finishes.
 export async function runKeysCommand(
   json: boolean | undefined,
   fn: () => Promise<unknown> | unknown,
@@ -1489,5 +1569,7 @@ export async function runKeysCommand(
         ? `Refused (HTTP ${e.status}): ${e.reason || e.message}`
         : (e?.message ?? String(e));
     console.error(`${FG_RED}Error:${RESET} ${message}`);
+  } finally {
+    await endHeldSecureSessions();
   }
 }
