@@ -352,7 +352,11 @@ module('Acceptance | open the secure window', function (hooks) {
       'the connection, never an operation or a realm',
     );
     await assert.rejects(
-      tool.execute({ mode: 'connect', reconnect: 'key-42', realm: testRealmURL }),
+      tool.execute({
+        mode: 'connect',
+        reconnect: 'key-42',
+        realm: testRealmURL,
+      }),
       /names the connection \(reconnect, its key id\) alone/,
       'a reconnect names nothing else',
     );
