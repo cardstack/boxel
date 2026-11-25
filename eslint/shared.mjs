@@ -43,8 +43,7 @@ export const ESLINT_10_RECOMMENDED_OFF = {
   },
 };
 
-// eslintrc never linted dotfiles and dot-directories; flat config does.
-// Keep them out, as before.
+// Dotfiles and dot-directories are not linted.
 export const DOTFILE_IGNORES = globalIgnores(['**/.*'], 'dotfiles');
 
 export const boxel = require('@cardstack/eslint-plugin-boxel');
@@ -229,7 +228,7 @@ export const NODE_GLOBALS = {
 // inline disables that name their rules still resolve.
 export function baseImportsOnlyConfig({ ignores = [] } = {}) {
   return [
-    // Only `.ts` and `.gts` are realm source here, as `--ext .ts,.gts` had it.
+    // Only `.ts` and `.gts` files are realm source here.
     globalIgnores(['**/*.{js,mjs,cjs}', ...ignores]),
     {
       // The same files are linted with the rules these directives name
@@ -260,10 +259,9 @@ export function baseImportsOnlyConfig({ ignores = [] } = {}) {
   ];
 }
 
-// A `.gts` block equivalent to eslintrc's `extends: ['eslint:recommended',
-// 'plugin:@typescript-eslint/recommended', 'plugin:ember/recommended',
-// 'plugin:ember/recommended-gts', 'plugin:prettier/recommended', ...]`, in
-// that order. `extraExtends` follow prettier; `rules` come last.
+// A `.gts` block that extends eslint:recommended, typescript-eslint's
+// recommended, ember's gts preset and prettier, in that order.
+// `extraExtends` follow prettier; `rules` come last.
 export function gtsBlock({
   files = ['**/*.gts'],
   ignores,

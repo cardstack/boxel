@@ -30,7 +30,7 @@ import ts from 'typescript-eslint';
 import { ESLINT_10_RECOMMENDED_OFF } from '../../eslint/shared.mjs';
 
 const require = createRequire(import.meta.url);
-// CJS modules shared with the eslintrc-based packages in this monorepo
+// CJS modules shared with the other packages in this monorepo
 const boxel = require('@cardstack/eslint-plugin-boxel');
 const MISSING_INVOKABLES_CONFIG = require('../runtime-common/etc/eslint/missing-invokables-config');
 const { DATA_TEST_SELECTORS } = require('../../eslint/data-test-selectors.cjs');

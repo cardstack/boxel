@@ -34,7 +34,7 @@ export default defineConfig([
     },
     rules: {
       camelcase: 'off',
-      // As eslintrc's `plugin:n/recommended` configured it.
+      // Migrations use ES module syntax.
       'n/no-unsupported-features/es-syntax': [
         'error',
         { ignores: ['modules'] },

@@ -26,10 +26,10 @@ const MISSING_INVOKABLES_CONFIG = require('../runtime-common/etc/eslint/missing-
 
 const withoutFiles = ({ files, ...config }) => config;
 
-// What eslintrc's `extends` gave JS, TS, GJS and GTS in the browser context,
-// in its order: eslint:recommended, ember/recommended, typescript-eslint,
-// ember/recommended-gts, prettier, qunit-dom, boxel, host. `ember` is the
-// ember preset for the file type.
+// The presets for JS, TS, GJS and GTS in the browser context, in order:
+// eslint:recommended, ember/recommended, typescript-eslint,
+// ember/recommended-gts, prettier, qunit-dom, boxel, host. `emberPreset` is
+// the ember preset for the file type.
 const sharedBrowserExtends = (emberPreset) => [
   js.configs.recommended,
   ESLINT_10_RECOMMENDED_OFF,
@@ -187,13 +187,13 @@ export default defineConfig([
   {
     files: NODE_FILES.filter((glob) => glob.endsWith('.js')),
     rules: {
-      // As eslintrc's `plugin:n/recommended` configured it for `.js`.
+      // Allow ES module syntax in these files.
       'n/no-unsupported-features/es-syntax': [
         'error',
         { ignores: ['modules'] },
       ],
-      // ESLint 8's default. ESLint 9 also reports a CommonJS module's own
-      // binding named like a global, as `config/fastboot.js` defines `btoa`.
+      // A CommonJS module may define its own binding named like a global,
+      // as `config/fastboot.js` defines `btoa`.
       'no-redeclare': ['error', { builtinGlobals: false }],
     },
   },
