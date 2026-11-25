@@ -1,4 +1,3 @@
-/* eslint-env node */
 import fsExtra from 'fs-extra';
 const { readFileSync } = fsExtra;
 import { join } from 'path';

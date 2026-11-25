@@ -1,4 +1,6 @@
-# Ensure every host tool module is imported, shimmed, and exported (`@cardstack/host/host-tools-registered`)
+# @cardstack/host/host-tools-registered
+
+📝 Ensure every host tool module is imported, shimmed, and exported.
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

@@ -59,7 +59,7 @@ if (!handlers.Program) {
 
 // Run some basic tests
 const ruleTester = new RuleTester({
-  parserOptions: {
+  languageOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
   },

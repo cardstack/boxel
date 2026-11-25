@@ -108,7 +108,7 @@ module.exports = {
     let allowedHosts = new Set(
       context.options[0]?.allowedHosts ?? DEFAULT_ALLOWED_HOSTS,
     );
-    let sourceCode = context.sourceCode ?? context.getSourceCode();
+    let sourceCode = context.sourceCode;
 
     return {
       Property(node) {
@@ -117,9 +117,7 @@ module.exports = {
           return;
         }
 
-        let scope = sourceCode.getScope
-          ? sourceCode.getScope(node)
-          : context.getScope();
+        let scope = sourceCode.getScope(node);
         let value = staticStringValue(node.value, scope);
         if (typeof value !== 'string') {
           return;

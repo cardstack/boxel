@@ -4,8 +4,8 @@ const rule = require('../../../lib/rules/realm-server-test-template-database');
 const RuleTester = require('eslint').RuleTester;
 
 const ruleTester = new RuleTester({
-  parser: require.resolve('@typescript-eslint/parser'),
-  parserOptions: {
+  languageOptions: {
+    parser: require('@typescript-eslint/parser'),
     ecmaVersion: 2022,
     sourceType: 'module',
   },

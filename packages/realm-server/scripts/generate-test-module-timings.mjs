@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-env node */
 
 // Regenerates tests/test-module-timings.json — the per-file duration data that
 // drives duration-weighted shard assignment (see scripts/shard-test-modules.cjs)

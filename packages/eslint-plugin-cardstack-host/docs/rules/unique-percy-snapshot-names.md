@@ -1,4 +1,6 @@
-# Require every Percy snapshot within a test to have a distinct name (`@cardstack/host/unique-percy-snapshot-names`)
+# @cardstack/host/unique-percy-snapshot-names
+
+📝 Require every Percy snapshot within a test to have a distinct name.
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

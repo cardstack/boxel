@@ -1518,6 +1518,48 @@ export class UnpublishRealmResult extends CardDef {
   @field error = contains(StringField);
 }
 
+// A host URL is an address that serves a realm besides the realm's own URL.
+// The mount-host-url tool builds the address from 'kind' and 'name'.
+export class MountHostURLInput extends CardDef {
+  @field realmURL = contains(StringField, {
+    description:
+      'URL of the realm to mount, e.g. "https://example.com/user/my-realm/".',
+  });
+  @field kind = contains(StringField, {
+    description:
+      'The kind of address: "boxel-space" (the address in the Boxel Space of the realm owner), "site-name" (a subdomain of the Boxel site domain) or "custom-domain" (a domain the deployment routes to the realm).',
+  });
+  @field name = contains(StringField, {
+    description:
+      'For "site-name", the subdomain, e.g. "my-site". The tool claims the site name for the realm when the caller has no claim on it. For "custom-domain", the hostname, e.g. "www.example.com". Not used for "boxel-space".',
+  });
+}
+
+// 'hostURLId' rather than 'id' because CardDef already has 'id' as the
+// identifier of the instance.
+export class MountHostURLResult extends CardDef {
+  @field hostURLId = contains(StringField);
+  @field url = contains(StringField);
+  @field kind = contains(StringField);
+  @field isCanonical = contains(BooleanField);
+}
+
+export class UnmountHostURLInput extends CardDef {
+  @field realmURL = contains(StringField, {
+    description: 'URL of the realm that is mounted at the host URL.',
+  });
+  @field url = contains(StringField, {
+    description:
+      'The host URL to unmount, e.g. "https://my-site.example.com/". The scheme is optional.',
+  });
+}
+
+// 'status' is 'unmounted'. A refusal throws an error and gives no result.
+export class UnmountHostURLResult extends CardDef {
+  @field url = contains(StringField);
+  @field status = contains(StringField);
+}
+
 export class GetPublishedRealmsInput extends CardDef {
   @field realmURL = contains(StringField);
 }
