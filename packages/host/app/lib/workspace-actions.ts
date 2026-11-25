@@ -33,6 +33,7 @@ import {
   type RealmIdentifier,
 } from '@cardstack/runtime-common';
 
+import { automationNoticeCount } from '@cardstack/host/components/operator-mode/dashboard/automation-notice-count';
 import ENV from '@cardstack/host/config/environment';
 import {
   realmURLDisplayText,
@@ -87,6 +88,13 @@ export class WorkspaceActions {
   @tracked reindexError: string | undefined;
 
   #getRealmIdentifier: () => RealmIdentifier;
+
+  // The count of the workspace's automation notices after Realm Settings,
+  // made once, so the menu doesn't remount it on every read of its items.
+  @cached
+  private get automationNoticeCount() {
+    return automationNoticeCount(this.realmIdentifier);
+  }
 
   // Destroyed with `parent`, which cancels its tasks.
   constructor(parent: object, getRealmIdentifier: () => RealmIdentifier) {
@@ -269,6 +277,7 @@ export class WorkspaceActions {
         label: 'Realm Settings',
         icon: FileSettingsIcon,
         action: this.openRealmConfig,
+        postscriptComponent: this.automationNoticeCount,
       }),
     );
     if (this.canPublish) {

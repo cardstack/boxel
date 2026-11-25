@@ -39,6 +39,11 @@ import {
   utcDayStart,
   utcMonthStart,
 } from './automation-spend.ts';
+import {
+  automationNotices,
+  type AutomationNotice,
+  type CredentialNotices,
+} from './automation-notices.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
 import { dbAdapterQuerier, param, type Querier } from './expression.ts';
@@ -141,6 +146,9 @@ export type AutomationStatusAttributes =
       dailyCredits: number | null;
       spentToday: number;
       triggers: AutomationTriggerStatus[];
+      // What tells the realm's direct writers the automation stopped doing
+      // its job, and what fixes it (`automation-notices.ts`), or null.
+      notice: AutomationNotice | null;
     };
 
 // The answer to a direct writer of the realm.
@@ -192,6 +200,7 @@ export async function answerAutomationStatus({
   viewer,
   automation,
   readInstance,
+  credentialNotices,
   now = Math.floor(clockNow() / 1000),
 }: {
   dbAdapter: DBAdapter;
@@ -205,6 +214,9 @@ export async function answerAutomationStatus({
   // The `automation` query parameter.
   automation: string | null;
   readInstance: (url: URL) => Promise<IndexedInstanceSource | undefined>;
+  // Reads who a rejected credential's notice is for; absent where no realm
+  // server can (`automation-notices.ts`).
+  credentialNotices?: CredentialNotices;
   // Unix seconds; the realm's clock when absent.
   now?: number;
 }): Promise<AutomationStatusAnswer> {
@@ -242,6 +254,7 @@ export async function answerAutomationStatus({
   let declaration: AutomationDeclaration | undefined;
   let payerShown = false;
   let failures: AutomationFailures | undefined;
+  let notice: AutomationNotice | null = null;
   let spentThisMonth = 0;
   let spentToday = 0;
   let lastRunUsage = lastRun
@@ -270,6 +283,13 @@ export async function answerAutomationStatus({
     payerShown =
       row.payer === viewer ||
       (await shareARealmGrant(dbAdapter, viewer, row.payer));
+    notice =
+      (
+        await automationNotices(dbAdapter, [row], {
+          viewer,
+          credentialNotices,
+        })
+      ).get(row.automationId) ?? null;
   }
   return {
     status: 200,
@@ -286,6 +306,7 @@ export async function answerAutomationStatus({
       spentThisMonth,
       spentToday,
       lastRunUsage,
+      notice,
     }),
   };
 }
@@ -310,6 +331,7 @@ export function automationStatusDocument({
   spentThisMonth = 0,
   spentToday = 0,
   lastRunUsage = null,
+  notice = null,
 }: {
   url: string;
   row: AutomationRow | undefined;
@@ -325,6 +347,8 @@ export function automationStatusDocument({
   spentThisMonth?: number;
   spentToday?: number;
   lastRunUsage?: AutomationRunUsage | null;
+  // Read only for a switched-on automation.
+  notice?: AutomationNotice | null;
 }): AutomationStatusDocument {
   return {
     data: {
@@ -357,6 +381,7 @@ export function automationStatusDocument({
             lastRun,
             currentRun,
             lastRunUsage,
+            notice,
           }
         : {
             switchedOn: false,

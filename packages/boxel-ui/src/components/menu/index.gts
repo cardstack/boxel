@@ -127,6 +127,10 @@ export default class Menu extends Component<Signature> {
                   </span>
                   {{#if menuItem.postscript}}
                     <span class='postscript'>{{menuItem.postscript}}</span>
+                  {{else if menuItem.postscriptComponent}}
+                    <span class='postscript'>
+                      <menuItem.postscriptComponent />
+                    </span>
                   {{/if}}
                   <span
                     class={{cn

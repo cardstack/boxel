@@ -20,6 +20,7 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  automationsInRealm,
   cancelAutomationRunFor,
   getAutomation,
   pauseAutomation,
@@ -49,6 +50,8 @@ import {
   type RunLogLevel,
 } from '@cardstack/runtime-common/automation-run-log';
 import { admitPayer } from '@cardstack/runtime-common/automation-admission';
+import { automationNotices } from '@cardstack/runtime-common/automation-notices';
+import { automationCredentialNotices } from '../lib/automation-credential-notices.ts';
 import {
   confirmationOf,
   KEY_APPROVAL_REFUSAL_REASONS,
@@ -57,6 +60,7 @@ import {
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   AUTOMATION_ESTIMATE_RESOURCE_TYPE,
+  AUTOMATION_NOTICE_RESOURCE_TYPE,
   AUTOMATION_RESOURCE_TYPE,
   AUTOMATION_ROUTE_AUTOMATION_PARAM,
   AUTOMATION_ROUTE_PATH_PARAM,
@@ -583,6 +587,60 @@ async function estimateFor(
 // cap the card sets, which a switch-on agrees to, and its key approvals
 // (`keyApprovals`): with its payer as payer once it is switched on, and with
 // the caller before. 503 while this process has no prices.
+// `GET /_automation-notices`: the session's own user's automation notices
+// across every realm they write directly, which the app's badges count (see
+// `automation-notices.ts`). The realms come from the user's own permission
+// rows, each checked as every other automation route checks it, so a
+// wildcard row, a policy grant or a bot account never lists one.
+export function handleAutomationNotices(args: CreateRoutesArgs): Handler {
+  return automationHandler(async (ctxt) => {
+    let caller = callerOf(ctxt);
+    let realmURLs = (
+      (await query(args.dbAdapter, [
+        'SELECT realm_url FROM realm_user_permissions WHERE username =',
+        param(caller),
+        'AND write ORDER BY realm_url',
+      ])) as { realm_url: string }[]
+    ).map(({ realm_url }) => realm_url);
+    let data: {
+      type: typeof AUTOMATION_NOTICE_RESOURCE_TYPE;
+      id: string;
+      attributes: Record<string, unknown>;
+    }[] = [];
+    for (let realmURL of realmURLs) {
+      if (
+        !(await isDirectWriter(
+          args.dbAdapter,
+          new URL(realmURL),
+          caller,
+          args.matrixClient.serverName,
+        ))
+      ) {
+        continue;
+      }
+      let rows = await automationsInRealm(
+        args.dbAdapter,
+        ri(args.virtualNetwork.unresolveURL(realmURL)),
+      );
+      let notices = await automationNotices(args.dbAdapter, rows, {
+        viewer: caller,
+        credentialNotices: (run) =>
+          automationCredentialNotices(args.dbAdapter, run),
+      });
+      for (let [automationId, notice] of notices) {
+        if (notice.forViewer) {
+          data.push({
+            type: AUTOMATION_NOTICE_RESOURCE_TYPE,
+            id: args.virtualNetwork.toURLHref(automationId),
+            attributes: { realm: realmURL, ...notice },
+          });
+        }
+      }
+    }
+    await sendJSON(ctxt, 200, { data, meta: { total: data.length } });
+  });
+}
+
 export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let caller = callerOf(ctxt);

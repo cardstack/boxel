@@ -7,6 +7,7 @@ import {
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import {
@@ -31,6 +32,7 @@ import {
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import { stubWindowOpen } from '../helpers/window-open';
 
 const AUTOMATION = `${testRealmURL}automations/nightly`;
 const PLANNED = `${testRealmURL}automations/planned`;
@@ -1600,6 +1602,148 @@ module('Acceptance | automation view', function (hooks) {
     function runText(id: string) {
       return text(`[data-test-automation-run="${id}"]`) ?? '';
     }
+
+    module('notices', function () {
+      function notice(attributes: Record<string, unknown>) {
+        return {
+          audience: 'payer',
+          forViewer: true,
+          run: null,
+          operation: null,
+          credential: null,
+          ...attributes,
+        };
+      }
+
+      test('a notice about a run says what happened and what fixes it, and Show the run opens the run', async function (assert) {
+        list([
+          run('older'),
+          run('failed', {
+            state: 'error',
+            errorReason: 'script-error',
+            errorMessage: 'Cannot read the import file',
+          }),
+        ]);
+        answer = {
+          status: 200,
+          attributes: {
+            ...ACTIVE,
+            state: 'paused',
+            pauseReason: 'repeated-failures',
+            notice: notice({
+              reason: 'repeated-failures',
+              run: {
+                runId: 'failed',
+                reason: 'script-error',
+                message: 'Cannot read the import file',
+                finishedAt: '2030-01-01T08:31:00.000Z',
+              },
+            }),
+          },
+        };
+        await openIsolated();
+        await waitFor('[data-test-automation-notice="repeated-failures"]', {
+          timeout: 10000,
+        });
+        assert
+          .dom('[data-test-automation-notice]')
+          .containsText(
+            'Boxel paused Nightly import after the automation’s runs failed several times in a row.',
+          );
+        assert
+          .dom('[data-test-automation-notice-fix]')
+          .hasText(
+            'The payer fixes what the runs fail on, checks the fix with a Preview, and resumes the automation.',
+          );
+        assert
+          .dom('[data-test-automation-notice-error]')
+          .hasText('Cannot read the import file');
+        assert
+          .dom('[data-test-automation-notice-action]')
+          .doesNotExist('a fix on the card itself opens no secure window');
+        assert
+          .dom('[data-test-automation-runs]')
+          .doesNotExist('Runs is closed');
+
+        await click('[data-test-automation-notice-show-run="failed"]');
+        await waitFor('[data-test-automation-run-detail]', { timeout: 10000 });
+        assert
+          .dom('[data-test-automation-run="failed"]')
+          .exists('the Runs section opens on the run');
+        let opened = document
+          .querySelector('[data-test-automation-run-detail]')
+          ?.closest('li');
+        assert.ok(
+          opened?.querySelector('[data-test-automation-run="failed"]'),
+          'the run the notice is about is the run opened',
+        );
+      });
+
+      test('a key approval notice opens the secure window on the operation the run was refused', async function (assert) {
+        let windowOpen = stubWindowOpen(window);
+        answer = {
+          status: 200,
+          attributes: {
+            ...ACTIVE,
+            state: 'waiting-for-key-approval',
+            notice: notice({
+              reason: 'binding-needs-reapproval',
+              run: {
+                runId: 'refused',
+                reason: 'binding-needs-reapproval',
+                message: 'The declared operation "fetch" was refused',
+                finishedAt: '2030-01-01T08:31:00.000Z',
+              },
+              operation: {
+                name: 'fetch',
+                module: `${testRealmURL}weather`,
+                typeName: 'Weather',
+              },
+            }),
+          },
+        };
+        await openIsolated();
+        await waitFor('[data-test-automation-notice-action="review-changes"]', {
+          timeout: 10000,
+        });
+        assert
+          .dom('[data-test-automation-notice]')
+          .containsText(
+            'Boxel didn’t start a run of Nightly import: the request the operation “fetch” makes changed since the payer approved the operation.',
+          );
+        await click('[data-test-automation-notice-action="review-changes"]');
+        assert.strictEqual(
+          windowOpen.calls.length,
+          1,
+          'the secure window opens',
+        );
+        let opened = new URL(windowOpen.calls[0].url);
+        assert.true(
+          opened.pathname.endsWith('/review-changes'),
+          'on the review-changes page',
+        );
+        let fragment = new URLSearchParams(opened.hash.slice(1));
+        assert.strictEqual(fragment.get('operation'), 'fetch');
+        assert.strictEqual(fragment.get('name'), 'Weather');
+        assert.strictEqual(fragment.get('module'), `${testRealmURL}weather`);
+        assert.strictEqual(fragment.get('realm'), testRealmURL);
+      });
+
+      test('a notice for someone else shows no notice', async function (assert) {
+        answer = {
+          status: 200,
+          attributes: {
+            ...ACTIVE,
+            state: 'waiting-for-credits',
+            viewerIsPayer: false,
+            notice: notice({ reason: 'waiting-for-credits', forViewer: false }),
+          },
+        };
+        await openIsolated();
+        await waitForStatus();
+        assert.dom('[data-test-automation-notice]').doesNotExist();
+      });
+    });
 
     test("a viewer who isn't a direct writer sees no runs", async function (assert) {
       directWriter = false;

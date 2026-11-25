@@ -17,6 +17,9 @@ export interface MenuItemOptions {
   inactive?: boolean;
   label: string;
   postscript?: string;
+  // Rendered after the label, in place of `postscript`, for a mark such as
+  // a count the label doesn't carry.
+  postscriptComponent?: ComponentLike;
   subtext?: string;
   subtextComponent?: ComponentLike;
   tags?: string[];
@@ -36,6 +39,7 @@ export class MenuItem {
   id?: string;
   subtext?: string;
   postscript?: string;
+  postscriptComponent?: ComponentLike;
   subtextComponent?: ComponentLike;
   tags: string[];
   isDivider = false;
@@ -53,6 +57,7 @@ export class MenuItem {
     this.inactive = options.inactive;
     this.subtext = options.subtext;
     this.postscript = options.postscript;
+    this.postscriptComponent = options.postscriptComponent;
     this.subtextComponent = options.subtextComponent;
     this.tags = options.tags || [];
   }

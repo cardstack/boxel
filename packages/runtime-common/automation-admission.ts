@@ -123,6 +123,12 @@ export interface AutomationAdmissionChecks {
 export interface AdmissionRefusal {
   reason: string;
   message: string;
+  // The declared operation the realm refused, and the type it is declared
+  // on, when the refusal is about one. The run's `admission` log line keeps
+  // them, so a notice about the refusal can link to the fix for that
+  // operation.
+  operation?: string;
+  targetType?: { module: string; name: string };
 }
 
 // The codes the spending check refuses a run with, kept in `automations.ts`,
@@ -386,7 +392,11 @@ export async function admitRunOperations(
     ) {
       await keyApprovalEnded(ctx, run);
     }
-    return refuse(refusal.code, operationRefusalMessage(refusal));
+    return {
+      ...refuse(refusal.code, operationRefusalMessage(refusal)),
+      ...(refusal.operation ? { operation: refusal.operation } : {}),
+      ...(refusal.targetType ? { targetType: refusal.targetType } : {}),
+    };
   }
   let spending = await ctx.checks?.admitSpending?.({
     run,

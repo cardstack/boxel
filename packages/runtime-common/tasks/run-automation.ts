@@ -4,6 +4,7 @@ import {
   admitRunIdentity,
   admitRunOperations,
   scriptRefusal,
+  type AdmissionRefusal,
   type AdmittedRunKind,
   type AutomationAdmissionChecks,
 } from '../automation-admission.ts';
@@ -288,13 +289,28 @@ async function attemptRun(
     });
   // A refusal at admission: the run ends with the refusal's code, and its
   // log says admission refused it.
-  let refuse = async (reason: string, message: string) => {
+  let refuse = async (
+    reason: string,
+    message: string,
+    refused: Pick<AdmissionRefusal, 'operation' | 'targetType'> = {},
+  ) => {
     admitted(reason);
     await logRunPlatformLine(dbAdapter, runId, {
       kind: 'admission',
       level: 'error',
       message: `Admission refused the run (${reason}): ${message}`,
-      data: { admitted: false, reason, actsAs: run.actsAs },
+      data: {
+        admitted: false,
+        reason,
+        actsAs: run.actsAs,
+        ...(refused.operation ? { operation: refused.operation } : {}),
+        ...(refused.targetType
+          ? {
+              targetModule: refused.targetType.module,
+              targetName: refused.targetType.name,
+            }
+          : {}),
+      },
     });
     return await fail(reason, message);
   };
@@ -443,7 +459,11 @@ async function attemptRun(
     token,
   });
   if (!operationsAdmitted.ok) {
-    return await refuse(operationsAdmitted.reason, operationsAdmitted.message);
+    return await refuse(
+      operationsAdmitted.reason,
+      operationsAdmitted.message,
+      operationsAdmitted,
+    );
   }
   if (!(await recordAutomationRunAdmitted(dbAdapter, runId, attempt))) {
     log.info(`${tag} left alone: another attempt owns the run, or it ended`);

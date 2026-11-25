@@ -23,6 +23,11 @@ import {
   type AutomationRunResult,
   type AutomationState,
 } from './automations.ts';
+import {
+  automationNotices,
+  type AutomationNotice,
+  type CredentialNotices,
+} from './automation-notices.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
 import {
@@ -99,6 +104,9 @@ export interface AutomationSummaryAttributes {
   lastFinishedAt: string | null;
   // The automation's run in progress, leaving out a Preview, or null.
   currentRun: AutomationSummaryCurrentRun | null;
+  // What tells the realm's direct writers the automation stopped doing its
+  // job, and what fixes it (`automation-notices.ts`), or null.
+  notice: AutomationNotice | null;
 }
 
 export interface AutomationSummaryResource {
@@ -142,6 +150,7 @@ export async function answerAutomationList({
   automationTypeKey,
   viewer,
   listInstances,
+  credentialNotices,
   now = Math.floor(clockNow() / 1000),
 }: {
   dbAdapter: DBAdapter;
@@ -155,6 +164,9 @@ export async function answerAutomationList({
   // Every live instance in the realm whose adoption chain carries
   // `automationTypeKey`.
   listInstances: (typeKey: string) => Promise<IndexedInstanceSource[]>;
+  // Reads who a rejected credential's notice is for; absent where no realm
+  // server can (`automation-notices.ts`).
+  credentialNotices?: CredentialNotices;
   // Unix seconds; the realm's clock when absent.
   now?: number;
 }): Promise<AutomationListAnswer> {
@@ -197,10 +209,14 @@ export async function answerAutomationList({
   let ids = [...entries.keys()];
   // Each read below covers every listed automation at once, so a realm's
   // list costs the same handful of queries however many automations it has.
-  let [lastRuns, currentRuns, spent] = await Promise.all([
+  let [lastRuns, currentRuns, spent, notices] = await Promise.all([
     readLastRunsOf(querier, ids),
     readCurrentRunsOf(querier, ids),
     automationCreditsSinceFor(querier, ids, utcMonthStart(now)),
+    automationNotices(dbAdapter, [...rows.values()], {
+      viewer,
+      credentialNotices,
+    }),
   ]);
   let payerShown = new Map<string, boolean>();
   let data: AutomationSummaryResource[] = [];
@@ -248,6 +264,7 @@ export async function answerAutomationList({
         lastResult: lastRun?.result ?? null,
         lastFinishedAt: lastRun?.finishedAt ?? null,
         currentRun: currentRuns.get(automationId) ?? null,
+        notice: notices.get(automationId) ?? null,
       },
     });
   }

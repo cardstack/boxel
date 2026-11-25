@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 import DotsHorizontal from '@cardstack/boxel-icons/dots';
 import Globe from '@cardstack/boxel-icons/globe';
 import IconX from '@cardstack/boxel-icons/x';
+import { Badge } from '@cardstack/pretui/components/badge';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
@@ -33,6 +34,7 @@ import {
   formatUpdatedTime,
 } from '@cardstack/host/lib/workspace-actions';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
+import type AutomationNoticesService from '@cardstack/host/services/automation-notices';
 import type NetworkService from '@cardstack/host/services/network';
 
 import {
@@ -361,19 +363,33 @@ export default class Workspace extends Component<Signature> {
           </IconButton>
         </div>
         {{! The options menu uses BoxelDropdown: Pret UI's Menu takes items
-            alone, with no room for the dates under them. }}
-        <div class='menu-btn'>
+            alone, with no room for the dates under them. While an
+            automation in the workspace needs the user, the menu's button
+            stays in view with a count on it, and the menu's Realm Settings
+            item carries the same count. }}
+        <div
+          class={{cn 'menu-btn' has-notices=this.automationNoticeCount}}
+          data-test-workspace-automation-notices={{if
+            this.automationNoticeCount
+            this.automationNoticeCount
+          }}
+        >
           <BoxelDropdown @contentClass='workspace-menu-dropdown'>
             <:trigger as |bindings|>
-              <IconButton
-                @label='Options'
-                @appearance='plain'
-                {{bindings}}
-                {{this.workspace.captureMenuTrigger}}
-                data-test-workspace-menu-trigger={{@realmIdentifier}}
+              <Badge
+                @count={{this.automationNoticeCount}}
+                @label={{this.automationNoticeLabel}}
               >
-                <DotsHorizontal class='control-icon' width='16' height='16' />
-              </IconButton>
+                <IconButton
+                  @label='Options'
+                  @appearance='plain'
+                  {{bindings}}
+                  {{this.workspace.captureMenuTrigger}}
+                  data-test-workspace-menu-trigger={{@realmIdentifier}}
+                >
+                  <DotsHorizontal class='control-icon' width='16' height='16' />
+                </IconButton>
+              </Badge>
             </:trigger>
             <:content as |dd|>
               <Menu
@@ -675,6 +691,7 @@ export default class Workspace extends Component<Signature> {
       .workspace:has(:focus-visible:not([data-nav-index]))
         :is(.favorite-btn, .menu-btn),
       .menu-btn:has([aria-expanded='true']),
+      .menu-btn.has-notices,
       .favorite-btn.is-favorited {
         opacity: 1;
         background-color: var(--_workspace-glass);
@@ -1229,6 +1246,19 @@ export default class Workspace extends Component<Signature> {
   </template>
 
   @service declare private network: NetworkService;
+  @service declare private automationNotices: AutomationNoticesService;
+
+  // How many of the user's automation notices are about automations in this
+  // workspace.
+  private get automationNoticeCount() {
+    return this.automationNotices.countFor(this.args.realmIdentifier);
+  }
+
+  private get automationNoticeLabel() {
+    return this.automationNoticeCount === 1
+      ? 'automation needs attention'
+      : 'automations need attention';
+  }
 
   @tracked private isHostDropdownOpen = false;
 

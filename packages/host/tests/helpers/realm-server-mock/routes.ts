@@ -736,6 +736,20 @@ function registerAuthRoutes() {
     });
   }
 
+  // The app reads the user's automation notices when a session starts, for
+  // the dashboard's badges. The mock keeps none, so nothing is badged unless
+  // a test stands in its own listing.
+  registerRealmServerRoute({
+    path: '/_automation-notices',
+    handler: async (req) =>
+      req.method === 'GET'
+        ? new Response(JSON.stringify({ data: [], meta: { total: 0 } }), {
+            status: 200,
+            headers: { 'content-type': 'application/vnd.api+json' },
+          })
+        : null,
+  });
+
   registerRealmServerRoute({
     path: '/_delete-realm',
     handler: async (req, _url, state: RealmServerMockState) => {

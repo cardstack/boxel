@@ -80,6 +80,7 @@ function summary(
       lastResult: null,
       lastFinishedAt: null,
       currentRun: null,
+      notice: null,
       ...attributes,
     },
   };
@@ -269,6 +270,78 @@ module('Acceptance | realm config | Automations', function (hooks) {
         .hasText(
           'Boxel paused the automation because the payer is no longer a realm administrator.',
         );
+    });
+
+    test('an automation that needs the viewer leads the section with a notice whose Show marks the automation', async function (assert) {
+      let notice = (reason: string, forViewer: boolean) => ({
+        reason,
+        audience: 'payer',
+        forViewer,
+        run: null,
+        operation: null,
+        credential: null,
+      });
+      answer = {
+        status: 200,
+        data: [
+          summary(NIGHTLY, {
+            ...(ACTIVE.attributes as Record<string, unknown>),
+            state: 'waiting-for-credits',
+            notice: notice('waiting-for-credits', true),
+          }),
+          summary(WEEKLY, {
+            ...(PAUSED.attributes as Record<string, unknown>),
+            pauseReason: 'repeated-failures',
+            // Another direct writer pays: the notice is the payer's.
+            notice: notice('repeated-failures', false),
+          }),
+        ],
+      };
+      await visitConfig();
+      await waitFor('[data-test-realm-automations-notices]');
+      assert
+        .dom('[data-test-realm-automations-notices]')
+        .containsText('An automation needs attention');
+      assert
+        .dom('[data-test-realm-automations-notice]')
+        .exists({ count: 1 }, 'only the notice for the viewer is listed');
+      assert
+        .dom(`[data-test-realm-automations-notice="${NIGHTLY}"]`)
+        .containsText(
+          'Boxel holds every run of Nightly import because the payer has no credits left.',
+        );
+      assert
+        .dom(
+          `[data-test-realm-automation="${NIGHTLY}"] [data-test-realm-automation-needs-attention]`,
+        )
+        .exists('the automation is marked in the list');
+      assert
+        .dom(
+          `[data-test-realm-automation="${WEEKLY}"] [data-test-realm-automation-needs-attention]`,
+        )
+        .doesNotExist('an automation with no notice for the viewer is not');
+
+      await click(`[data-test-realm-automations-notice-show="${NIGHTLY}"]`);
+      await waitFor(`[data-test-automation-slot-focused="true"]`);
+      assert
+        .dom(`[data-test-automation-slot="${NIGHTLY}"]`)
+        .hasAttribute('aria-current', 'true', 'Show marks the automation');
+
+      answer = {
+        status: 200,
+        data: [
+          summary(NIGHTLY, {
+            ...(ACTIVE.attributes as Record<string, unknown>),
+          }),
+        ],
+      };
+      sendRealmEvent({ eventName: 'automation', automation: NIGHTLY });
+      await waitUntil(
+        () => !document.querySelector('[data-test-realm-automations-notices]'),
+      );
+      assert
+        .dom('[data-test-realm-automations-notices]')
+        .doesNotExist('the notice ends once the automation runs again');
     });
 
     test('sees an empty state when the realm has no automations', async function (assert) {
