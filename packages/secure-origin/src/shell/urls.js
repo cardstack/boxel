@@ -1,4 +1,3 @@
-/* eslint-env browser */
 import {
   PROFILE_PARAM,
   PROFILE_VALUE,

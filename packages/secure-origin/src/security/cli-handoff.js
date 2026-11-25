@@ -1,4 +1,3 @@
-/* eslint-env browser */
 // Handing a sign-in to the CLI waiting on a loopback port. The CLI names its
 // listener with the `port` and `state` query parameters; this module decides
 // whether those name a listener this page may hand a sign-in to, and hands it

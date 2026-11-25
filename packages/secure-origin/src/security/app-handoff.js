@@ -1,4 +1,3 @@
-/* eslint-env browser */
 // Handing a sign-in over to the app. The app sends a signed-out user here
 // with the page to come back to, `return`, in the URL's fragment: a firewall
 // in front of a deployment refuses a query string that names a loopback

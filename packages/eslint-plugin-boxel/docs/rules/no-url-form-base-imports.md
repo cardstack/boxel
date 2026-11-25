@@ -1,4 +1,6 @@
-# Disallow the https://cardstack.com/base/ alias outside the positions that define or recognize it; auto-fix import specifiers to @cardstack/base/ (`@cardstack/boxel/no-url-form-base-imports`)
+# @cardstack/boxel/no-url-form-base-imports
+
+📝 Disallow the https://cardstack.com/base/ alias outside the positions that define or recognize it; auto-fix import specifiers to @cardstack/base/.
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

@@ -6,7 +6,7 @@ import {
 import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-import puppeteer, { type Browser } from 'puppeteer';
+import puppeteer, { type Browser, type LaunchOptions } from 'puppeteer';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
@@ -21,15 +21,45 @@ const log = logger('prerenderer');
 const PUPPETEER_PROFILE_PREFIX = 'puppeteer_dev_chrome_profile-';
 const USER_DATA_MAX_AGE_MS = 60 * 60 * 1000;
 const execFileAsync = promisify(execFile);
+// How long `puppeteer.launch` may take to start Chrome. This is Puppeteer's
+// own default, passed explicitly because a standby creation that launches
+// the browser includes it in its deadline.
+export const BROWSER_LAUNCH_TIMEOUT_MS = 30_000;
 
 export class BrowserManager {
   #browser: Browser | null = null;
   #browserUserDataDir: string | undefined;
+  // A launch that has not finished. Concurrent callers share it, so only one
+  // Chrome starts, and a close waits for it so that the Chrome it starts is
+  // the one that gets closed. Without this, a close that runs during a launch
+  // finds no browser, and the next caller starts a second Chrome that nothing
+  // tracks.
+  #launching: Promise<Browser> | undefined;
+  #launchChrome: (options: LaunchOptions) => Promise<Browser>;
+
+  constructor(options?: {
+    // Replaces `puppeteer.launch`. Tests use it to control when a launch
+    // finishes.
+    launchChrome?: (options: LaunchOptions) => Promise<Browser>;
+  }) {
+    this.#launchChrome =
+      options?.launchChrome ??
+      ((launchOptions) => puppeteer.launch(launchOptions));
+  }
 
   async getBrowser(): Promise<Browser> {
     if (this.#browser) {
       return this.#browser;
     }
+    if (!this.#launching) {
+      this.#launching = this.#launch().finally(() => {
+        this.#launching = undefined;
+      });
+    }
+    return await this.#launching;
+  }
+
+  async #launch(): Promise<Browser> {
     await this.cleanupUserDataDirs();
 
     let launchArgs: string[] = [];
@@ -93,7 +123,8 @@ export class BrowserManager {
       launchArgs.push(`--js-flags=${v8ProfJsFlags()}`);
     }
 
-    this.#browser = await puppeteer.launch({
+    this.#browser = await this.#launchChrome({
+      timeout: BROWSER_LAUNCH_TIMEOUT_MS,
       headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
       ...(launchArgs.length > 0 ? { args: launchArgs } : {}),
       ...(process.env.PUPPETEER_EXECUTABLE_PATH
@@ -432,6 +463,13 @@ export class BrowserManager {
   }
 
   async #closeBrowser(): Promise<void> {
+    if (this.#launching) {
+      try {
+        await this.#launching;
+      } catch (_e) {
+        // A launch that failed left no browser to close.
+      }
+    }
     if (!this.#browser) {
       return;
     }

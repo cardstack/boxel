@@ -5,9 +5,10 @@
 // syntax that vanishes once type annotations are stripped. New code
 // must avoid these so it can run under Node natively.
 //
-// Shared by the root `.eslintrc.js`, `packages/ai-bot/.eslintrc.js`
-// (which is `root: true`), and `packages/catalog/.eslintrc.cjs` (which
-// lifts only the `Decorator` selector for realm-compiled contents).
+// Shared by `eslint/shared.mjs`, which every package that spreads
+// `rootConfig()` gets, and by the card-code packages (`base`, `catalog`,
+// `school-example-realm`), which lift only the `Decorator` selector for
+// realm-compiled code.
 const NO_COMPILATION_REQUIRED_TS_SELECTORS = [
   {
     selector: 'TSEnumDeclaration',

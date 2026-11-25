@@ -55,17 +55,17 @@ import {
   isAutoExecutableTool,
 } from '../lib/tool-auto-execute';
 
+import type MessageTool from '../lib/matrix-classes/message-tool';
+import type { RealmFileEdit } from '../lib/realm-runner/edits';
+import type { RoomResource } from '../resources/room';
+import type { ScriptAsk } from '../tools/run-realm-code';
+import type { EntrySummary } from '../tools/search-entries';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type StoreService from './store';
-import type MessageTool from '../lib/matrix-classes/message-tool';
-import type { RealmFileEdit } from '../lib/realm-runner/edits';
-import type { RoomResource } from '../resources/room';
-import type { ScriptAsk } from '../tools/run-realm-code';
-import type { EntrySummary } from '../tools/search-entries';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
