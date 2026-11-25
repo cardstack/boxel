@@ -229,6 +229,7 @@ import { automationTouchedBy } from './automation-index-hook.ts';
 import {
   automationsInRealm,
   followKeyApprovals,
+  type AutomationReporters,
   type KeyApprovalFollow,
 } from './automations.ts';
 import {
@@ -15480,6 +15481,15 @@ export class Realm {
         // Whom the approvals wait on, as the check answered it; undefined
         // when the automation wasn't checked.
         let awaiting: AwaitedKeyApproval[] | undefined;
+        // Whom the notices it wrote are to be told, once it commits.
+        let noticed: string[] = [];
+        let reporters: AutomationReporters = reportChanges
+          ? {
+              reportRunChange: (runId) => this.reportRunChange(runId),
+              reportAutomationChange: (automation) =>
+                this.reportAutomationChange(automation),
+            }
+          : {};
         let result = await followKeyApprovals(
           this.#dbAdapter,
           automationId,
@@ -15503,26 +15513,26 @@ export class Realm {
               ? { approved: approvals.approved, declaration: read.declaration }
               : undefined;
           },
-          reportChanges
-            ? {
-                reportRunChange: (runId) => this.reportRunChange(runId),
-                reportAutomationChange: (automation) =>
-                  this.reportAutomationChange(automation),
-              }
-            : {},
+          {
+            ...reporters,
+            inTransaction: async (txQuery, done) => {
+              noticed =
+                (await this.#callApi?.writeKeyApprovalNoticesIn?.(txQuery, {
+                  automationId,
+                  automationURL: this.#virtualNetwork.toURLHref(automationId),
+                  realmURL: this.url,
+                  state: done?.automation.state,
+                  awaiting,
+                })) ?? [];
+            },
+          },
         );
         if (result) {
           followed.set(automationId, result);
         }
         // The people the automation waits on, besides its payer, each have a
-        // notice while it waits; its notices end once it stops waiting, or
-        // when its row is gone.
-        await this.#callApi?.followKeyApprovalNotices?.({
-          automationId,
-          automationURL: this.#virtualNetwork.toURLHref(automationId),
-          realmURL: this.url,
-          awaiting,
-        });
+        // notice while it waits, written in the follow's own transaction.
+        this.#callApi?.tellKeyApprovalNoticesChanged?.(noticed);
       } catch (e: any) {
         this.#log.warn(
           `couldn't follow the key approvals of automation ${automationId}: ${e?.message ?? e}`,

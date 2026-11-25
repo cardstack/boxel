@@ -20,7 +20,10 @@ import {
 import type { PublishedFrom } from '../published-realm.ts';
 import { automationAdmission, fillSlots } from '../key-bindings.ts';
 import { checkAutomationKeyApprovals } from '../automation-key-approvals.ts';
-import { followKeyApprovalNotices } from '../automation-key-approval-notices.ts';
+import {
+  tellKeyApprovalNoticesChanged,
+  writeKeyApprovalNoticesIn,
+} from '../automation-key-approval-notices.ts';
 import {
   clearGrantRejection,
   credentialRejected,
@@ -142,8 +145,8 @@ export function createCallApiSender(
               ...args,
               probeIntervalMs,
             }),
-          followKeyApprovalNotices: (args) =>
-            followKeyApprovalNotices(dbAdapter, args),
+          writeKeyApprovalNoticesIn,
+          tellKeyApprovalNoticesChanged,
         }),
     send: async (request, credentials, options) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {

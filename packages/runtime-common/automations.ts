@@ -1252,7 +1252,10 @@ export type KeyApprovalFollow = {
 // landing and an edit that follow each other leave the row on the later one.
 // It answers undefined when the card doesn't read as a declaration, which
 // leaves the row as it is. Returns what it did, or undefined when the
-// automation isn't switched on.
+// automation isn't switched on. `inTransaction` runs last in the same
+// transaction, with the row still locked and what the follow did, so whatever
+// it writes from the check commits with the row and in the order the checks
+// ran.
 export async function followKeyApprovals(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
@@ -1261,50 +1264,77 @@ export async function followKeyApprovals(
   ) => Promise<
     { approved: boolean; declaration: AutomationDeclaration } | undefined
   >,
-  options: AutomationReporters & { now?: number } = {},
+  options: AutomationReporters & {
+    now?: number;
+    inTransaction?: (
+      txQuery: Querier,
+      followed: KeyApprovalFollow | undefined,
+    ) => Promise<void>;
+  } = {},
 ): Promise<KeyApprovalFollow | undefined> {
-  let now = options.now ?? currentUnixSeconds();
   return await withChanges(dbAdapter, options, async (txQuery, changes) => {
-    let row = await selectAutomation(txQuery, automationId, { lock: true });
-    if (!row) {
-      return undefined;
-    }
-    let automation = automationFromRow(row);
-    if (automation.state === 'paused') {
-      return { kind: 'unchanged', automation };
-    }
-    let checked = await check(automation);
-    if (!checked) {
-      return { kind: 'unchanged', automation };
-    }
-    if (checked.approved) {
-      if (automation.state !== 'waiting-for-key-approval') {
-        return { kind: 'unchanged', automation };
-      }
-      let schedule = restartSchedule(checked.declaration, now, automation);
-      let [updated] = await txQuery([
-        'UPDATE automations SET state =',
-        param(schedule.state),
-        ', trigger_runs =',
-        param(JSON.stringify(schedule.triggerRuns)),
-        '::jsonb, next_run =',
-        param(schedule.nextRun),
-        '::timestamptz, updated_at = now() WHERE automation_id =',
-        param(automationId),
-        'RETURNING *',
-      ]);
-      let approved = automationFromRow(updated);
-      changes.automations.push(approved);
-      return { kind: 'approved', automation: approved };
-    }
-    if (!LEAVES_FOR_KEY_APPROVAL.includes(automation.state)) {
-      return { kind: 'unchanged', automation };
-    }
-    return {
-      kind: 'waiting',
-      automation: await toKeyApprovalWait(txQuery, changes, automationId),
-    };
+    let followed = await followLocked(
+      txQuery,
+      changes,
+      automationId,
+      check,
+      options.now ?? currentUnixSeconds(),
+    );
+    await options.inTransaction?.(txQuery, followed);
+    return followed;
   });
+}
+
+async function followLocked(
+  txQuery: Querier,
+  changes: AutomationChanges,
+  automationId: RealmResourceIdentifier,
+  check: (
+    automation: AutomationRow,
+  ) => Promise<
+    { approved: boolean; declaration: AutomationDeclaration } | undefined
+  >,
+  now: number,
+): Promise<KeyApprovalFollow | undefined> {
+  let row = await selectAutomation(txQuery, automationId, { lock: true });
+  if (!row) {
+    return undefined;
+  }
+  let automation = automationFromRow(row);
+  if (automation.state === 'paused') {
+    return { kind: 'unchanged', automation };
+  }
+  let checked = await check(automation);
+  if (!checked) {
+    return { kind: 'unchanged', automation };
+  }
+  if (checked.approved) {
+    if (automation.state !== 'waiting-for-key-approval') {
+      return { kind: 'unchanged', automation };
+    }
+    let schedule = restartSchedule(checked.declaration, now, automation);
+    let [updated] = await txQuery([
+      'UPDATE automations SET state =',
+      param(schedule.state),
+      ', trigger_runs =',
+      param(JSON.stringify(schedule.triggerRuns)),
+      '::jsonb, next_run =',
+      param(schedule.nextRun),
+      '::timestamptz, updated_at = now() WHERE automation_id =',
+      param(automationId),
+      'RETURNING *',
+    ]);
+    let approved = automationFromRow(updated);
+    changes.automations.push(approved);
+    return { kind: 'approved', automation: approved };
+  }
+  if (!LEAVES_FOR_KEY_APPROVAL.includes(automation.state)) {
+    return { kind: 'unchanged', automation };
+  }
+  return {
+    kind: 'waiting',
+    automation: await toKeyApprovalWait(txQuery, changes, automationId),
+  };
 }
 
 // Moves the automation to *waiting for key approval* when `payer` is still

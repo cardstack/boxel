@@ -6,8 +6,10 @@ import {
   separatedByCommas,
   type DBAdapter,
   type Expression,
+  type Querier,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+import type { AutomationState } from '@cardstack/runtime-common/automations';
 import type { AwaitedKeyApproval } from '@cardstack/runtime-common/automation-key-approval';
 import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { SendEvent } from '@cardstack/runtime-common/send-event';
@@ -83,13 +85,89 @@ export async function keyApprovalNoticeSendsSettled(): Promise<void> {
 }
 
 // Brings the automation's notices in step with whom its key approvals wait
-// on. `awaiting` is the check's answer (`checkAutomationKeyApprovals`), or
+// on, in the caller's transaction, with the automation's row locked and its
+// state as the transaction leaves it (`state`; undefined when the row is
+// gone). `awaiting` is the check's answer (`checkAutomationKeyApprovals`), or
 // undefined when the realm couldn't check, which leaves a waiting
-// automation's notices as they are. The automation's row is read, locked, in
-// the same transaction: when it is gone or isn't waiting for key approval,
-// its notices end. Otherwise each recipient's notice holds the operations
-// they are asked about now; a notice that asks about an operation it didn't
-// before is unread again, and a recipient no longer waited on loses theirs.
+// automation's notices as they are. An automation that isn't waiting for key
+// approval loses its notices. Otherwise each recipient's notice holds the
+// operations they are asked about now: a notice that asks about an operation
+// it didn't before is unread again, and a recipient no longer waited on loses
+// theirs. Answers each recipient whose notice was recorded, changed or ended,
+// to tell once the transaction commits (`tellKeyApprovalNoticesChanged`).
+export async function writeKeyApprovalNoticesIn(
+  txQuery: Querier,
+  {
+    automationId,
+    automationURL,
+    realmURL,
+    state,
+    awaiting,
+  }: {
+    automationId: RealmResourceIdentifier;
+    automationURL: string;
+    realmURL: string;
+    state: AutomationState | undefined;
+    awaiting: AwaitedKeyApproval[] | undefined;
+  },
+): Promise<string[]> {
+  let waiting = state === 'waiting-for-key-approval';
+  if (waiting && !awaiting) {
+    return [];
+  }
+  let byRecipient = waiting
+    ? operationsByRecipient(awaiting!)
+    : new Map<string, KeyApprovalNoticeOperation[]>();
+  let changed: string[] = [];
+  for (let [recipient, operations] of byRecipient) {
+    let rows = await txQuery([
+      'INSERT INTO automation_key_approval_notices AS n (automation_id, recipient, automation_url, realm_url, operations) VALUES (',
+      param(automationId),
+      ',',
+      param(recipient),
+      ',',
+      param(automationURL),
+      ',',
+      param(realmURL),
+      ',',
+      param(JSON.stringify(operations)),
+      // A notice that already names every operation it asks about now keeps
+      // whether it was read; one that names a new one is unread again.
+      `::jsonb) ON CONFLICT (automation_id, recipient) DO UPDATE SET
+         operations = EXCLUDED.operations,
+         automation_url = EXCLUDED.automation_url,
+         realm_url = EXCLUDED.realm_url,
+         read_at = CASE WHEN n.operations @> EXCLUDED.operations THEN n.read_at END,
+         updated_at = now()
+       WHERE n.operations IS DISTINCT FROM EXCLUDED.operations
+          OR n.automation_url IS DISTINCT FROM EXCLUDED.automation_url
+          OR n.realm_url IS DISTINCT FROM EXCLUDED.realm_url
+       RETURNING recipient`,
+    ]);
+    if (rows.length > 0) {
+      changed.push(recipient);
+    }
+  }
+  let kept = [...byRecipient.keys()];
+  let ended = await txQuery([
+    'DELETE FROM automation_key_approval_notices WHERE automation_id =',
+    param(automationId),
+    ...(kept.length
+      ? [
+          'AND recipient NOT IN (',
+          ...separatedByCommas(kept.map((recipient) => [param(recipient)])),
+          ')',
+        ]
+      : []),
+    'RETURNING recipient',
+  ] as Expression);
+  return [...changed, ...ended.map((row) => String(row.recipient))];
+}
+
+// `writeKeyApprovalNoticesIn` in a transaction of its own, for a change that
+// made the automation stop waiting outside a follow of its key approvals (a
+// pause): the row is locked and its state read, and the recipients are told
+// once it commits.
 export async function followKeyApprovalNotices(
   dbAdapter: DBAdapter,
   {
@@ -112,56 +190,13 @@ export async function followKeyApprovalNotices(
         param(automationId),
         'FOR UPDATE',
       ]);
-      let waiting = row?.state === 'waiting-for-key-approval';
-      if (waiting && !awaiting) {
-        return [];
-      }
-      let byRecipient = waiting ? operationsByRecipient(awaiting!) : new Map();
-      let changed: string[] = [];
-      for (let [recipient, operations] of byRecipient) {
-        let rows = await txQuery([
-          'INSERT INTO automation_key_approval_notices AS n (automation_id, recipient, automation_url, realm_url, operations) VALUES (',
-          param(automationId),
-          ',',
-          param(recipient),
-          ',',
-          param(automationURL),
-          ',',
-          param(realmURL),
-          ',',
-          param(JSON.stringify(operations)),
-          // A notice that already names every operation it asks about now
-          // keeps whether it was read; one that names a new one is unread
-          // again.
-          `::jsonb) ON CONFLICT (automation_id, recipient) DO UPDATE SET
-             operations = EXCLUDED.operations,
-             automation_url = EXCLUDED.automation_url,
-             realm_url = EXCLUDED.realm_url,
-             read_at = CASE WHEN n.operations @> EXCLUDED.operations THEN n.read_at END,
-             updated_at = now()
-           WHERE n.operations IS DISTINCT FROM EXCLUDED.operations
-              OR n.automation_url IS DISTINCT FROM EXCLUDED.automation_url
-              OR n.realm_url IS DISTINCT FROM EXCLUDED.realm_url
-           RETURNING recipient`,
-        ]);
-        if (rows.length > 0) {
-          changed.push(recipient);
-        }
-      }
-      let kept = [...byRecipient.keys()];
-      let ended = await txQuery([
-        'DELETE FROM automation_key_approval_notices WHERE automation_id =',
-        param(automationId),
-        ...(kept.length
-          ? [
-              'AND recipient NOT IN (',
-              ...separatedByCommas(kept.map((recipient) => [param(recipient)])),
-              ')',
-            ]
-          : []),
-        'RETURNING recipient',
-      ] as Expression);
-      return [...changed, ...ended.map((row) => String(row.recipient))];
+      return await writeKeyApprovalNoticesIn(txQuery, {
+        automationId,
+        automationURL,
+        realmURL,
+        state: row?.state as AutomationState | undefined,
+        awaiting,
+      });
     });
   } catch (error) {
     log.warn(
