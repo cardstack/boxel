@@ -2389,8 +2389,10 @@ module('Acceptance | automation view', function (hooks) {
             .dom('[data-test-automation-notice-action]')
             .doesNotExist('a fix on the card itself opens no secure window');
           assert
-            .dom('[data-test-automation-runs]')
-            .doesNotExist('Runs is closed');
+            .dom(
+              '[data-test-automation-runs-section] [data-test-pretui-section-toggle]',
+            )
+            .hasAttribute('aria-expanded', 'false', 'Runs is closed');
 
           await click('[data-test-automation-notice-show-run="failed"]');
           await waitFor('[data-test-automation-run-detail]', {
@@ -2408,7 +2410,7 @@ module('Acceptance | automation view', function (hooks) {
           );
         });
 
-        test('a key approval notice opens the secure window on the operation the run was refused', async function (assert) {
+        test('a key approval notice opens the secure window’s approve page on the automation itself', async function (assert) {
           let windowOpen = stubWindowOpen(windowMock);
           answer = {
             status: 200,
@@ -2432,18 +2434,15 @@ module('Acceptance | automation view', function (hooks) {
             },
           };
           await openIsolated();
-          await waitFor(
-            '[data-test-automation-notice-action="review-changes"]',
-            {
-              timeout: 10000,
-            },
-          );
+          await waitFor('[data-test-automation-notice-action="approve"]', {
+            timeout: 10000,
+          });
           assert
             .dom('[data-test-automation-notice]')
             .containsText(
               'Boxel didn’t start a run of Nightly import because the request the operation “fetch” makes changed after the payer approved the operation.',
             );
-          await click('[data-test-automation-notice-action="review-changes"]');
+          await click('[data-test-automation-notice-action="approve"]');
           assert.strictEqual(
             windowOpen.calls.length,
             1,
@@ -2451,14 +2450,16 @@ module('Acceptance | automation view', function (hooks) {
           );
           let opened = new URL(windowOpen.calls[0].url);
           assert.true(
-            opened.pathname.endsWith('/review-changes'),
-            'on the review-changes page',
+            opened.pathname.endsWith('/approve'),
+            'on the approve page',
           );
           let fragment = new URLSearchParams(opened.hash.slice(1));
-          assert.strictEqual(fragment.get('operation'), 'fetch');
-          assert.strictEqual(fragment.get('name'), 'Weather');
-          assert.strictEqual(fragment.get('module'), `${testRealmURL}weather`);
-          assert.strictEqual(fragment.get('realm'), testRealmURL);
+          assert.strictEqual(
+            fragment.get('automation'),
+            AUTOMATION,
+            'for the automation itself, which approving ends the wait',
+          );
+          assert.strictEqual(fragment.get('operation'), null);
         });
 
         test('a notice for someone else shows no notice', async function (assert) {
