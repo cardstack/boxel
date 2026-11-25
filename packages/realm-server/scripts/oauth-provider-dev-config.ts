@@ -52,6 +52,11 @@ if (values.new) {
     process.exit(1);
   }
   console.log(JSON.stringify(newConfig(values.kid)));
+} else if (values.kid !== undefined) {
+  // `--kid` alone is a mistyped `--new` invocation. Printing the development
+  // keys instead would hand an operator a key that also lives on disk here.
+  console.error('--kid only goes with --new');
+  process.exit(1);
 } else {
   const configFile = join(
     dirname(fileURLToPath(import.meta.url)),
