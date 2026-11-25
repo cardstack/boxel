@@ -793,12 +793,21 @@ module(basename(import.meta.filename), function () {
     // records `url` on every row, and, unless `html` is false, names `url` in
     // the HTML wherever it names the realm's URL.
     async function renderAgainst(url: string, { html = true } = {}) {
-      let replace = (column: string, cast = '') => [
-        `, ${column} = replace(${column}${cast},`,
+      let replace = (column: string) => [
+        `, ${column} = replace(${column},`,
         param(realmURL.href),
         `,`,
         param(url),
-        cast ? `)::jsonb` : `)`,
+        `)`,
+      ];
+      // Fitted HTML is keyed by the card type's URL, which names the realm's
+      // URL and stays as it is. Only the HTML in each value changes.
+      let replaceValues = (column: string) => [
+        `, ${column} = (SELECT jsonb_object_agg(key, replace(value,`,
+        param(realmURL.href),
+        `,`,
+        param(url),
+        `)) FROM jsonb_each_text(${column}))`,
       ];
       await query(dbAdapter, [
         `UPDATE prerendered_html SET rendered_against_url =`,
@@ -807,7 +816,7 @@ module(basename(import.meta.filename), function () {
           ? [
               ...replace('isolated_html'),
               ...replace('head_html'),
-              ...replace('fitted_html', '::text'),
+              ...replaceValues('fitted_html'),
             ]
           : []),
         `WHERE realm_url =`,
