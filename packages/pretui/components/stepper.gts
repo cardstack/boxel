@@ -170,8 +170,7 @@ export class Stepper extends Component<StepperSignature> {
         .pretui-stepper:has(.pretui-stepper-input:focus-visible) {
           outline: 2px solid transparent;
           outline-offset: 1px;
-          box-shadow:
-            0 0 0 2px var(--primary),
+          box-shadow: 0 0 0 2px var(--primary),
             var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
         }
         .pretui-stepper[data-disabled] {

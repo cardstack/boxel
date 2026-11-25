@@ -40,7 +40,7 @@ The implementation is a native `<input type="number">` flanked by buttons, which
 - **The `−` and `+` buttons are `tabindex="-1"`.** Focus belongs on the field, as in APG; the buttons stay clickable and the arrow keys do the same job, so a Stepper is one Tab stop.
 - **The buttons name the field.** `@label='Quantity'` gives "Decrease Quantity" / "Increase Quantity" and also names the input; `@decrementLabel` and `@incrementLabel` replace a whole name. Without `@label` they read "Decrease" / "Increase".
 - **No `aria-valuetext`**, so "12" is announced where "12 items" or "12 px" is meant.
-- **No accessible name of its own.** `@controlId` lets **Field**/**FormField** wire a `<label for>`; outside those, pass `aria-label`.
+- **The input's name comes from `@label`.** Inside a **Field**/**FormField**, `@controlId` wires its `<label for>` instead. `@label` takes precedence over that `<label for>`, so pass one or the other.
 - **`@disabled` uses the native attribute** on all three elements, removing the whole control from the tab order.
 - **Target size**: the flanking buttons are small by design in a property panel; check them against WCAG **2.5.8**'s 24×24 minimum.
 
