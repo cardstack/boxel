@@ -12,6 +12,7 @@
 //   #realm=<realm URL>&share=<share id>
 //   #card=<card URL>&operation=<name>
 //   #module=<module URL>&name=<export>&realm=<realm URL>&operation=<name>
+//   #automation=<automation card URL>, for an automation's key approvals
 //   …&reason=<text>
 //   #key=<key id>, for a share of one of the user's keys
 //   #reconnect=<key id>, for signing one of the user's connections in again
@@ -34,6 +35,9 @@ export interface OpenedFor {
   reconnect?: string;
   target?: OpenedForTarget;
   operation?: string;
+  // The automation card whose key approvals the approve page gives. The
+  // target is then that card.
+  automation?: string;
   reason?: string;
 }
 
@@ -101,8 +105,11 @@ export function openedFor(hash: string = window.location.hash): OpenedFor {
   let card = url(params.get('card'));
   let module = url(params.get('module'));
   let name = params.get('name') || undefined;
+  let automation = url(params.get('automation'));
   let target: OpenedForTarget | undefined;
-  if (card) {
+  if (automation) {
+    target = { kind: 'instance', url: automation };
+  } else if (card) {
     target = { kind: 'instance', url: card };
   } else if (module && name && realm) {
     target = { kind: 'type', module, name, realm };
@@ -123,9 +130,12 @@ export function openedFor(hash: string = window.location.hash): OpenedFor {
   if (reconnect) {
     result.reconnect = reconnect;
   }
+  if (automation) {
+    result.automation = automation;
+  }
   if (target) {
     result.target = target;
-    let operation = params.get('operation');
+    let operation = automation ? null : params.get('operation');
     if (operation) {
       result.operation = operation;
     }
