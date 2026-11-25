@@ -86,7 +86,10 @@ export default class AiAssistantPanel extends Component<Signature> {
         ...attributes
       >
         {{#if @resizeHandle}}
-          <@resizeHandle class='ai-assistant-panel-resize-handle' />
+          <@resizeHandle
+            class='ai-assistant-panel-resize-handle'
+            data-test-ai-assistant-resize-handle
+          />
         {{/if}}
         <div class='panel-header-container'>
           <header class='panel-header'>

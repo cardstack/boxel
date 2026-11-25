@@ -144,6 +144,7 @@ export default class SubmodeLayout extends Component<Signature> {
     defaultWidth: 30,
     minWidth: 25,
   });
+  @tracked private mainPanelMinWidth = 0;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
   @service declare private keyNotices: KeyNoticesService;
@@ -209,6 +210,17 @@ export default class SubmodeLayout extends Component<Signature> {
     // assistant is designed to read at 320 (narrow), 440 and 680 (wide).
     let aiPanelMinWidthInPixels = Math.min(320, windowWidth);
     this.aiPanelWidths.minWidth = (aiPanelMinWidthInPixels / windowWidth) * 100;
+
+    // The main panel keeps 320px too, so a wide assistant can't squeeze the
+    // dashboard or a stack past where its layout holds. A window too narrow
+    // for both gives the assistant its minimum and the main panel the rest.
+    // Like the assistant's, it holds when the panels lay out and while one is
+    // dragged; narrowing the window alone doesn't apply it.
+    let mainPanelMinWidthInPixels = Math.min(
+      320,
+      windowWidth - aiPanelMinWidthInPixels,
+    );
+    this.mainPanelMinWidth = (mainPanelMinWidthInPixels / windowWidth) * 100;
   };
 
   get operatorModeController(): IndexController {
@@ -490,7 +502,12 @@ export default class SubmodeLayout extends Component<Signature> {
         class='columns'
         as |ResizablePanel ResizeHandle|
       >
-        <ResizablePanel class='main-panel'>
+        <ResizablePanel
+          class='main-panel'
+          @minSize={{this.mainPanelMinWidth}}
+          @collapsible={{false}}
+          data-test-main-panel
+        >
           <div class='submode-layout-top-bar'>
             <IconButton
               @icon={{BoxelIconWithText}}
