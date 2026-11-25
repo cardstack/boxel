@@ -216,7 +216,7 @@ export class Tabs extends Component<TabsSignature> {
           box-shadow: inset 0 -1px var(--border);
           isolation: isolate;
         }
-        /* the mask gradient is alpha only; black is not a colour here */
+        /* the mask gradient is alpha only; black is not a color here */
         .pretui-tabs[data-overflow='scroll'] {
           --_tabs-fade-left: 0px;
           --_tabs-fade-right: 0px;
@@ -264,16 +264,14 @@ export class Tabs extends Component<TabsSignature> {
         }
         /* inset, so a scrolling list never clips it and nothing moves; the
            host's unlayered button focus rule reads its offset from
-           --host-outline-offset. The 1px --foreground stroke inside the ring
-           keeps 3:1 against the surface when --ring is a light hue. The
-           focused tab drops below the SlidingHighlight so the selection
-           underline stays visible over the ring. */
+           --host-outline-offset. The focused tab drops below the
+           SlidingHighlight so the selection underline stays visible over
+           the ring. */
         .pretui-tab:focus-visible {
           --host-outline-offset: -2px;
           z-index: -1;
           outline: 2px solid var(--ring);
           outline-offset: -2px;
-          box-shadow: inset 0 0 0 3px var(--foreground);
         }
         .pretui-tab[data-state='active'] {
           color: var(--foreground);

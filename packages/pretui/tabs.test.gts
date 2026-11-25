@@ -202,7 +202,6 @@ module('Pretui | Tabs', function (hooks) {
     assert.strictEqual(style.outlineStyle, 'solid');
     assert.strictEqual(style.outlineWidth, '2px');
     assert.strictEqual(style.outlineOffset, '-2px', 'the ring sits inside');
-    assert.notStrictEqual(style.boxShadow, 'none', 'with a contrast stroke');
     assert.deepEqual(
       focused.getBoundingClientRect().toJSON(),
       before.toJSON(),
