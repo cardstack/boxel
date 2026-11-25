@@ -108,9 +108,9 @@ const KeyApprovalNotices: TOC<Signature> = <template>
                     in
                     <strong>{{addressOf entry.notice.realm}}</strong>
                     {{#if (approving entry)}}
-                      waits for your approval to send your key.
+                      waits for your approval to use your key.
                     {{else}}
-                      needs a key that no share in the workspace holds.
+                      needs a key that is not currently shared in the workspace.
                     {{/if}}
                   </p>
                   <ul

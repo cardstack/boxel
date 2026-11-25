@@ -872,7 +872,7 @@ module('Integration | key pages', function (hooks) {
         .includesText(
           'The automation “Nightly sync” in realm-server.test/someone/workspace/',
         )
-        .includesText('waits for your approval to send your key.');
+        .includesText('waits for your approval to use your key.');
       assert
         .dom(`${approve} [data-test-key-approval-notice-operation="list"]`)
         .hasText('list sends to https://api.vendor.example/v1/list');
@@ -881,7 +881,9 @@ module('Integration | key pages', function (hooks) {
         .doesNotExist('each entry lists only what it asks about');
       assert
         .dom(share)
-        .includesText('needs a key that no share in the workspace holds.');
+        .includesText(
+          'needs a key that is not currently shared in the workspace.',
+        );
       assert
         .dom(`${share} [data-test-key-approval-notice-operation="post"]`)
         .hasText('post sends to https://hooks.other.example/post');
