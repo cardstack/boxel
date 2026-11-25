@@ -310,6 +310,10 @@ export class StandbyTargetNotReadyError extends Error {}
 // call partway through, so the refill gives up instead of retrying.
 export class StandbyCreationTimeoutError extends Error {}
 
+// `closeAll` abandoned a standby creation in flight. The pool is closing, so
+// the refill ends instead of retrying.
+export class StandbyCreationAbandonedError extends Error {}
+
 // Chrome reconfigures its certificate-verifier service shortly after the
 // browser launches. Asset fetches that are in flight during that window are
 // cancelled with net::ERR_CERT_VERIFIER_CHANGED. It is a transient
@@ -518,6 +522,9 @@ export class PagePool {
   // pass after pass, so "no refill running" may never be observed.
   #refillFailures = 0;
   #creatingStandbys = 0;
+  // One entry per standby creation in flight. `closeAll` calls each to
+  // abandon its creation; see `#createStandby`.
+  #abandonCreations = new Set<() => void>();
   // Tabs an awaited `disposeAffinity` has detached from `#affinityPages`
   // whose close hasn't landed yet. Chrome still holds them, so they stay in
   // the context budget until it lets go.
@@ -1615,7 +1622,18 @@ export class PagePool {
     // `STANDBY_CREATION_RETRIES` standby timeouts plus backoff — long enough
     // for a caller closing the pool in order to shut down to blow its own
     // shutdown budget, leaving the process it was tearing down alive.
+    //
+    // The attempt in flight is abandoned rather than awaited to its end. The
+    // most common reason to close the pool is to restart a browser that has
+    // stopped answering, and a creation on that browser runs until its full
+    // deadline, which would hold the restart past the deadline of the render
+    // that asked for it. An abandoned creation releases its count before the
+    // reset below, and if it finishes later, what it made is closed instead of
+    // joining `#standbys`. See `#createStandby`.
     this.#closeGeneration++;
+    for (let abandon of [...this.#abandonCreations]) {
+      abandon();
+    }
     let ensuring = this.#ensuringStandbys;
     this.#ensuringStandbys = null;
     if (ensuring) {
@@ -2026,7 +2044,10 @@ export class PagePool {
         return await this.#createStandby();
       } catch (e) {
         let message = `Standby creation attempt ${attempt} failed (page pool capacity ${this.#totalContextCount()}/${this.#maxPages + 1}):`;
-        if (isExpectedStandbyTargetNotReadyError(e)) {
+        if (
+          isExpectedStandbyTargetNotReadyError(e) ||
+          e instanceof StandbyCreationAbandonedError
+        ) {
           log.debug(message, e);
         } else {
           log.error(message, e);
@@ -2034,9 +2055,12 @@ export class PagePool {
         // A browser that left a call unanswered past the creation deadline
         // won't answer a retry either, and each retry would hold parked
         // callers for another full deadline. Failing the refill now lets
-        // them throw, which restarts the browser.
+        // them throw, which restarts the browser. An abandoned creation
+        // means the pool is closing, and the backoff before a retry would
+        // only delay the close.
         if (
           e instanceof StandbyCreationTimeoutError ||
+          e instanceof StandbyCreationAbandonedError ||
           attempt >= STANDBY_CREATION_RETRIES
         ) {
           return undefined;
@@ -2056,13 +2080,15 @@ export class PagePool {
   // nothing reporting the refill as failed. Past the deadline the creation is
   // abandoned: the counter is released, the refill fails, and the parked
   // callers steal or throw. A throw from a render makes the Prerenderer
-  // restart the browser. If the abandoned creation finishes later, what it
-  // made is closed and never joins the pool.
+  // restart the browser. `closeAll` abandons a creation in flight the same
+  // way. If an abandoned creation finishes later, what it made is closed and
+  // never joins the pool.
   async #createStandby(): Promise<StandbyEntry> {
     this.#creatingStandbys++;
     let creation = this.#openStandby();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let deadline = new Promise<never>((_, reject) => {
+    let abandon!: () => void;
+    let outcome = new Promise<never>((_, reject) => {
       timer = setTimeout(
         () =>
           reject(
@@ -2072,19 +2098,33 @@ export class PagePool {
           ),
         this.#standbyCreationTimeoutMs,
       );
+      abandon = () =>
+        reject(
+          new StandbyCreationAbandonedError(
+            'Standby creation abandoned because the pool is closing',
+          ),
+        );
     });
+    this.#abandonCreations.add(abandon);
     try {
-      let entry = await Promise.race([creation, deadline]);
+      let entry = await Promise.race([creation, outcome]);
       this.#standbys.add(entry);
       this.#wakeTabWaiters();
       return entry;
     } catch (e) {
-      if (e instanceof StandbyCreationTimeoutError) {
-        log.error(e.message);
+      if (
+        e instanceof StandbyCreationTimeoutError ||
+        e instanceof StandbyCreationAbandonedError
+      ) {
+        if (e instanceof StandbyCreationTimeoutError) {
+          log.error(e.message);
+        } else {
+          log.debug(e.message);
+        }
         creation.then(
           (late) => {
             log.warn(
-              `Abandoned standby creation finished after its deadline; closing pageId=${late.pageId}`,
+              `Abandoned standby creation finished later; closing pageId=${late.pageId}`,
             );
             return this.#closeEntry(late);
           },
@@ -2096,6 +2136,7 @@ export class PagePool {
       throw e;
     } finally {
       clearTimeout(timer);
+      this.#abandonCreations.delete(abandon);
       this.#creatingStandbys--;
     }
   }

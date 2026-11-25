@@ -217,16 +217,6 @@ module(basename(import.meta.filename), function (hooks) {
     result.release();
   });
 
-  // `closeAll` awaiting the in-flight refill is a contract rather than
-  // teardown hygiene, because a caller can be closing the pool in order to
-  // replace the browser under it: the prerender server's host-shell recycle
-  // does exactly that, on a boot where the initial warm is usually still
-  // running. If `closeAll` returned first, the browser would be replaced while
-  // a standby was still being created, and that standby would land in the live
-  // standby set holding a page on a browser that no longer exists — a tab a
-  // later `getPage` can commandeer, and a `#creatingStandbys` decrement below
-  // the zero `closeAll` resets, which under-reports pool occupancy for the
-  // life of the process.
   // The refill takes one generation snapshot and threads it downstream. It has
   // to, because it yields between taking it and reaching the retry loop: a
   // close landing in that window has already bumped the counter, so a second
@@ -295,7 +285,18 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('closeAll waits for an in-flight standby refill and closes what it created', async function (assert) {
+  // A caller can close the pool in order to replace the browser under it: the
+  // prerender server's host-shell recycle does that on a boot where the
+  // initial warm is usually still running, and the restart of a browser that
+  // stopped answering does it while a creation is stuck on that browser. A
+  // standby whose creation finished after the close would land in the live
+  // standby set holding a page on a browser that no longer exists, and its
+  // `#creatingStandbys` decrement would go below the zero `closeAll` resets.
+  // Waiting for the creation to end avoids both, but on a browser that stopped
+  // answering it holds the restart for the full creation deadline. So
+  // `closeAll` abandons the creation: the count is released before the reset,
+  // and whatever the creation makes later is closed.
+  test('closeAll abandons an in-flight standby creation, and closes what it makes later', async function (assert) {
     let gate = makeManualGate();
     let created = 0;
     let closed = 0;
@@ -316,28 +317,28 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(created, 0, 'no context exists yet');
 
-    let closeAllSettled = false;
-    let closeAll = pool.closeAll().then(() => {
-      closeAllSettled = true;
-    });
-    // Everything else `closeAll` does resolves within a few turns of the
-    // event loop against an empty pool, so still-pending here isolates the
-    // await being asserted.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.false(
-      closeAllSettled,
-      'closeAll is still pending while a standby is mid-creation',
+    // The creation is still parked on its browser call, as it is on a
+    // browser that has stopped answering, the usual reason to close the pool.
+    // closeAll must not wait for it.
+    await pool.closeAll();
+    await refill;
+    assert.strictEqual(
+      gate.waiterCount(),
+      1,
+      'closeAll settled while the creation was still waiting on its browser call',
     );
 
+    // The browser call answers after the close. The creation finishes, and
+    // what it made is closed instead of joining the closed pool's standbys.
     gate.unblockAll();
-    await closeAll;
-    await refill;
-
-    assert.true(created > 0, 'the refill created at least one context');
+    await waitUntil(
+      () => created > 0 && closed === created,
+      'the late standby context to be closed',
+    );
     assert.strictEqual(
       closed,
       created,
-      'every context the refill created was closed by closeAll',
+      'every context the abandoned creation made was closed',
     );
   });
 
