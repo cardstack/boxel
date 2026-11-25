@@ -534,6 +534,43 @@ module(basename(import.meta.filename), function (hooks) {
         ],
         'the storage charges written so far, newest first',
       );
+      assert.strictEqual(
+        a.chargeStopped,
+        null,
+        'Boxel charges for the storage of an active automation',
+      );
+    });
+
+    test('a paused automation’s storage says why and since when Boxel stopped charging', async function (assert) {
+      await query(dbAdapter, [
+        'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since) VALUES (',
+        param(rri(automationURL())),
+        ',',
+        param(ri(realm.url)),
+        ',',
+        param(OWNER),
+        ", 'active', '{}'::jsonb, '{}'::jsonb, now())",
+      ]);
+      await dbAdapter.execute(
+        `UPDATE automations SET state = 'paused', pause_reason = 'payer-lost-access' WHERE automation_id = $1`,
+        { bind: [rri(automationURL())] },
+      );
+      await dbAdapter.execute(
+        `UPDATE automation_state_changes SET changed_at = '2026-11-15T10:00:00Z'
+         WHERE automation_id = $1 AND state = 'paused'`,
+        { bind: [rri(automationURL())] },
+      );
+
+      let response = await get(AUTOMATION_STORAGE_PATH, WRITER, {
+        automation: automationURL(),
+      });
+
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.data.attributes.chargeStopped, {
+        state: 'paused',
+        pauseReason: 'payer-lost-access',
+        since: '2026-11-15T10:00:00.000Z',
+      });
     });
 
     test('a payer who shares no grant with the viewer is hidden, and nothing is listed for an automation whose runs created nothing', async function (assert) {

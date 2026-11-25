@@ -1,7 +1,15 @@
 // The daily storage charge (ADR 029): each switched-on automation's payer
 // pays for the files its runs created, at the file storage rate, and for
 // their rows in the index, at the database storage rate, for every day the
-// automation is switched on.
+// automation is active.
+//
+// An automation is active on a day when the automation was `active` at any
+// point in the day, as its `automation_state_changes` history records. A day
+// the automation spent wholly paused, waiting for credits, waiting for key
+// approval or done is neither measured nor charged. The files stay in the
+// realm; only the charge stops. Resuming, the last key approval, credits
+// arriving or a new trigger on a done automation makes the automation active
+// again, and the charge starts again from that day.
 //
 // Each day is priced at what existed that day. Just after a UTC day ends, the
 // job measures each automation's files (see `getAutomationStorage`) and keeps
@@ -16,10 +24,12 @@
 // a retried job writes nothing twice. Its usage records the GB-months of all
 // the days it covers.
 //
-// Removing an automation deletes its `automations` row, so it is no longer
-// measured or charged. Switching it on again starts from that day.
+// Removing an automation deletes its `automations` row and its history, so
+// the automation is no longer measured or charged. Switching the automation
+// on again starts from that day.
 
 import { getAutomationStorage } from './automation-files.ts';
+import type { AutomationPauseReason, AutomationState } from './automations.ts';
 import type { DBAdapter } from './db.ts';
 import { param, query } from './index.ts';
 import {
@@ -41,7 +51,10 @@ export type AutomationStorageChargeOutcome =
   // The span costs less than a credit so far; a later day charges it.
   | 'under-a-credit'
   // The span through the day has been charged.
-  | 'not-due';
+  | 'not-due'
+  // The automation wasn't active at any point in the day, so the day is
+  // neither measured nor charged.
+  | 'stopped';
 
 export interface AutomationStorageCharge {
   automationId: RealmResourceIdentifier;
@@ -59,6 +72,7 @@ interface AutomationToCharge {
   payer: string;
   switched_on_day: string;
   last_charged_day: string | null;
+  active_on_day: boolean;
 }
 
 // Charges the storage of every automation switched on before `day` ended,
@@ -80,7 +94,22 @@ export async function chargeAutomationStorage(
        (SELECT to_char(MAX(l.charge_day), 'YYYY-MM-DD') FROM credits_ledger l
         WHERE l.charge_kind = 'storage' AND l.run_id IS NULL
           AND l.batch_id IS NULL AND l.automation_id = a.automation_id)
-         AS last_charged_day
+         AS last_charged_day,
+       -- Active on the day: active as the day began, or made active during
+       -- the day.
+       (COALESCE((SELECT c.state FROM automation_state_changes c
+                  WHERE c.automation_id = a.automation_id
+                    AND c.changed_at <`,
+    param(`${day}T00:00:00Z`),
+    `::timestamptz
+                  ORDER BY c.changed_at DESC, c.id DESC LIMIT 1), '') = 'active'
+        OR EXISTS (SELECT 1 FROM automation_state_changes c
+                   WHERE c.automation_id = a.automation_id
+                     AND c.state = 'active' AND c.changed_at >=`,
+    param(`${day}T00:00:00Z`),
+    '::timestamptz AND c.changed_at <',
+    param(`${addDays(day, 1)}T00:00:00Z`),
+    `::timestamptz)) AS active_on_day
      FROM automations a WHERE a.switched_on_at <`,
     param(`${addDays(day, 1)}T00:00:00Z`),
     '::timestamptz ORDER BY a.automation_id',
@@ -116,6 +145,12 @@ async function chargeOne(
       : automation.switched_on_day;
   if (firstDay > day) {
     return { automationId, outcome: 'not-due' };
+  }
+  // A day the automation wasn't active gets no measurement, so no span ever
+  // charges the day, and the days before the day wait for the next active
+  // day's charge.
+  if (!automation.active_on_day) {
+    return { automationId, outcome: 'stopped' };
   }
   // A day is measured once: a duplicate or retried job finds its row and
   // skips the measurement. Two jobs measuring at once both insert, and the
@@ -189,6 +224,48 @@ async function chargeOne(
     usage,
   });
   return { ...span, outcome };
+}
+
+// Why, and since when, an automation's storage isn't charged: the
+// automation's current state when that state isn't `active`, with its pause
+// reason, and when the automation last left `active`. Null for an active
+// automation, and for one with no history. The day the automation left
+// `active` is still charged; the charge stops from the next day the
+// automation spends wholly stopped.
+export interface StorageChargeStopped {
+  state: Exclude<AutomationState, 'active'>;
+  pauseReason: AutomationPauseReason | null;
+  since: string;
+}
+
+export async function storageChargeStopped(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+): Promise<StorageChargeStopped | null> {
+  let [latest] = (await query(dbAdapter, [
+    `SELECT c.state, c.pause_reason,
+       (SELECT MIN(s.changed_at) FROM automation_state_changes s
+        WHERE s.automation_id = c.automation_id
+          -- Every change after the automation last became active.
+          AND NOT EXISTS (SELECT 1 FROM automation_state_changes l
+            WHERE l.automation_id = s.automation_id AND l.state = 'active'
+              AND (l.changed_at, l.id) >= (s.changed_at, s.id))) AS since
+     FROM automation_state_changes c WHERE c.automation_id =`,
+    param(automationId),
+    'ORDER BY c.changed_at DESC, c.id DESC LIMIT 1',
+  ])) as unknown as {
+    state: AutomationState;
+    pause_reason: AutomationPauseReason | null;
+    since: string | Date | null;
+  }[];
+  if (!latest || latest.state === 'active' || latest.since == null) {
+    return null;
+  }
+  return {
+    state: latest.state,
+    pauseReason: latest.pause_reason,
+    since: new Date(latest.since).toISOString(),
+  };
 }
 
 // The UTC day before `now`, as YYYY-MM-DD: the most recent day that has ended.

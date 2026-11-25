@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import {
   DAYS_PER_AVERAGE_MONTH,
+  storageChargeStopped,
   getAutomationRun,
   getAutomationStorage,
   isAutomationRunId,
@@ -1254,7 +1255,9 @@ async function storageCharges(
 // file the automation's runs created that still exists, with its bytes on
 // disk and in the index, and the daily charge: what a day of that storage
 // costs at this server's prices (`dailyCredits`, before rounding, or null
-// without prices) and the storage charges written so far. A switched-on
+// without prices), the storage charges written so far, and, while the
+// automation isn't active, why and since when Boxel isn't charging for the
+// storage (`chargeStopped`, see `storageChargeStopped`). A switched-on
 // automation's payer pays the charge, and is shown under ADR 011 (see
 // `shownIdentity`).
 export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
@@ -1290,9 +1293,12 @@ export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
       fileBytes: files.reduce((sum, file) => sum + file.fileBytes, 0),
       indexBytes: files.reduce((sum, file) => sum + file.indexBytes, 0),
     };
-    let payer = row
-      ? await shownIdentity(args.dbAdapter, caller, row.payer)
-      : null;
+    let [payer, chargeStopped] = row
+      ? await Promise.all([
+          shownIdentity(args.dbAdapter, caller, row.payer),
+          storageChargeStopped(args.dbAdapter, automationId),
+        ])
+      : [null, null];
     let pricing = currentPricing();
     let dailyCredits = pricing
       ? exactMeteredCredits(
@@ -1325,6 +1331,7 @@ export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
           dailyCredits,
           pricingVersion: pricing?.version ?? null,
           charges,
+          chargeStopped,
         },
       },
     });
