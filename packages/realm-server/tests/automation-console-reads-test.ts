@@ -556,8 +556,10 @@ module(basename(import.meta.filename), function (hooks) {
         { bind: [rri(automationURL())] },
       );
       await dbAdapter.execute(
-        `UPDATE automation_state_changes SET changed_at = '2026-11-15T10:00:00Z'
-         WHERE automation_id = $1 AND state = 'paused'`,
+        `UPDATE automation_state_changes
+         SET changed_at = CASE state WHEN 'paused' THEN '2026-11-15T10:00:00Z'::timestamptz
+                                     ELSE '2026-11-14T08:00:00Z'::timestamptz END
+         WHERE automation_id = $1`,
         { bind: [rri(automationURL())] },
       );
 

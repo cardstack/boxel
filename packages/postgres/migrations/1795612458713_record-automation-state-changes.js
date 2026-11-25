@@ -1,10 +1,11 @@
 // `automation_state_changes` is the history of each switched-on automation's
 // state: one row each time the automation is switched on, and one each time
 // its `state` or `pause_reason` takes a different value. `changed_at` is when
-// the change was written. The daily storage charge reads the history to tell
-// the days an automation was active from the days it was paused, waiting or
-// done, and the storage route reads it to say since when, and why, a stopped
-// automation's storage isn't charged.
+// the change was written: the wall clock, not the transaction's start, so two
+// changes in one transaction keep their order. The daily storage charge reads
+// the history to tell the days an automation was active from the days it was
+// paused, waiting or done, and the storage route reads it to say since when,
+// and why, a stopped automation's storage isn't charged.
 //
 // A trigger on `automations` writes the rows, so every path that switches an
 // automation on or moves its state is recorded, whichever code or migration
@@ -38,8 +39,10 @@ exports.up = (pgm) => {
       IF TG_OP = 'INSERT'
          OR NEW.state IS DISTINCT FROM OLD.state
          OR NEW.pause_reason IS DISTINCT FROM OLD.pause_reason THEN
-        INSERT INTO automation_state_changes (automation_id, state, pause_reason)
-          VALUES (NEW.automation_id, NEW.state, NEW.pause_reason);
+        INSERT INTO automation_state_changes
+            (automation_id, state, pause_reason, changed_at)
+          VALUES (NEW.automation_id, NEW.state, NEW.pause_reason,
+                  clock_timestamp());
       END IF;
       RETURN NULL;
     END
