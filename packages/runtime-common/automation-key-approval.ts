@@ -89,11 +89,17 @@ export interface OperationKeyApproval {
 // fill it: the one its binding sends, or, with no binding, each active share
 // the approver named by `canApprove` owns. A share's `owner` is the Matrix id
 // of the key's owner, whom a route shows only as ADR 011 lets its caller see
-// them (null otherwise).
+// them (null otherwise). A `suspended` share is resumed or swapped by its
+// owner before anyone can approve the slot.
 export interface MissingKeyApproval {
   slot: string;
   canApprove: KeyApprover;
-  shares?: { id: string; label: string; owner: string | null }[];
+  shares?: {
+    id: string;
+    label: string;
+    owner: string | null;
+    suspended?: true;
+  }[];
 }
 
 // A person other than the payer whom an automation's missing approval waits
