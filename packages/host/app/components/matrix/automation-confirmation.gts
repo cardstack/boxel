@@ -76,7 +76,7 @@ export default class AutomationConfirmationView extends Component<Signature> {
             value:
               confirmation.call === 'realm.automations.preview'
                 ? 'Nothing. A Preview shows what the run would save.'
-                : 'What the run writes, to the workspace',
+                : 'Everything the run writes, to the workspace',
           },
           { key: 'Payer', value: 'You. Boxel charges the run to you.' },
         );
@@ -111,7 +111,7 @@ export default class AutomationConfirmationView extends Component<Signature> {
             {{#if shown.confirmation.problem}}
               <Alert
                 @tone='danger'
-                @title='Boxel can’t show the automation, so the run will refuse it'
+                @title='Boxel can’t show the automation, so the run will refuse the call'
                 data-test-automation-confirmation-problem
               >{{shown.confirmation.problem}}</Alert>
             {{else}}
