@@ -94,7 +94,7 @@ function iso(offset: number) {
 // an assertion on date wording.
 function pinnedAt() {
   let zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return `now pinned at ${NOW.toISOString()} (${NOW.toString()}, zone ${zone}); page clock reads ${clock.now().toISOString()}`;
+  return `now pinned at ${NOW.toISOString()} (${NOW.toString()}, zone ${zone})`;
 }
 
 function connection(
