@@ -1474,7 +1474,13 @@ module(basename(import.meta.filename), function (hooks) {
         'the payer’s own key is nobody else’s to approve',
       );
 
-      await approveOwnKey(OWNER, batch.automation.version);
+      let approved = await approveOperation(
+        OWNER,
+        'list',
+        { keyId: key.id },
+        { id: cardURL(KEYED), version: batch.automation.version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
       await reachesState(KEYED, 'active');
       let again = await request
         .post('/_key-bindings/batch')
