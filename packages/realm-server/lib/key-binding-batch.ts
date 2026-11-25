@@ -415,20 +415,28 @@ async function automationApprovalBatch(
   { automation, operations }: AutomationBatchRequest,
 ): Promise<ApprovalBatch> {
   let { dbAdapter, definitionLookup, virtualNetwork } = deps;
-  let resolved = await resolveWindowRequest(deps, user, {
-    target: { kind: 'instance', url: automation as RealmResourceIdentifier },
-  });
-  let { realm, realmName } = resolved;
-  let { codeRef, instanceURL, definition } = resolved.target!;
-  let realmURL = new URL(realm.url);
-  let cardURL = instanceURL!.href.replace(/\.json$/, '');
+  // The automation is found by its row, and the caller must be able to read
+  // the realm the row names. An automation that isn't switched on, and one in
+  // a realm the caller can't read, answer alike. The card's own definition
+  // isn't read: the batch is the operations the automation declares.
+  let notFound = () =>
+    new UserKeyError(404, 'no switched-on automation by that name');
+  let cardURL = virtualNetwork
+    .toURLHref(automation as RealmResourceIdentifier)
+    .replace(/\.json$/, '');
   let automationId = rri(virtualNetwork.unresolveURL(cardURL));
   let row = await getAutomation(dbAdapter, automationId);
-  if (!row || virtualNetwork.toURLHref(row.realm) !== realmURL.href) {
-    throw new UserKeyError(
-      404,
-      'the automation is not switched on in this realm',
-    );
+  if (!row) {
+    throw notFound();
+  }
+  let { realm, realmName } = await resolveWindowRequest(deps, user, {
+    realm: row.realm as unknown as RealmResourceIdentifier,
+  }).catch((e) => {
+    throw e instanceof UserKeyError && e.status === 404 ? notFound() : e;
+  });
+  let realmURL = new URL(realm.url);
+  if (virtualNetwork.toURLHref(row.realm) !== realmURL.href) {
+    throw notFound();
   }
   let read = await readRunDeclaration({
     dbAdapter,
@@ -595,11 +603,9 @@ async function automationApprovalBatch(
   }
   return completeBatch(dbAdapter, user, collected, {
     realm: { url: realm.url, name: realmName },
-    card: {
-      name: definition.displayName ?? codeRef.name,
-      module: codeRef.module,
-      exportName: codeRef.name,
-    },
+    // An automation's batch names each operation's own card definition
+    // (`BatchOperation.card`); the batch's `card` names the automation.
+    card: { name: 'Automation', module: cardURL, exportName: 'Automation' },
     instance: null,
     review: false,
     automation: {
