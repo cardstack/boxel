@@ -1,4 +1,4 @@
-import { click, settled, waitFor } from '@ember/test-helpers';
+import { click, settled, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
@@ -26,9 +26,14 @@ import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 import type * as HrefToModule from '@cardstack/base/href-to';
 
 // The realm's routes, as its routes endpoint answers them: one route that
-// serves authors at `path`.
+// serves authors at `path`, a redirect to it, and a redirect out of the
+// realm.
 function routesServingAuthorsAt(path: string): readonly HostRoute[] {
-  let rules: RawHostRoutingRule[] = [{ path, card: './Author/:id' }];
+  let rules: RawHostRoutingRule[] = [
+    { path, card: './Author/:id' },
+    { path: '/writers/:id', redirectTo: path },
+    { path: '/elsewhere', redirectTo: 'https://example.com/elsewhere' },
+  ];
   let { routes, warnings } = validateHostRoutes(rules, {
     realmURL: new URL(testRealmURL),
     lookupType: () => undefined,
@@ -47,7 +52,17 @@ module('Acceptance | interact submode | routed links', function (hooks) {
   // answered here, so a test controls what the app reads, and when.
   let authorsPath: string;
   let routesReads: number;
+  // While set, a request for Jane waits for it, so a test can change the
+  // stacks while a click's lookup is under way.
+  let janeRequestGate: Promise<void> | undefined;
   let serveRoutes = async (request: Request) => {
+    if (request.url === `${testRealmURL}Author/jane` && janeRequestGate) {
+      await janeRequestGate;
+      return null;
+    }
+    if (request.url === `${testRealmURL}Author/broken`) {
+      return new Response('the realm failed', { status: 500 });
+    }
     if (request.url !== `${testRealmURL}_host-routes`) {
       return null;
     }
@@ -72,11 +87,11 @@ module('Acceptance | interact submode | routed links', function (hooks) {
   // such click and stops it there.
   let leftToBrowser: string[];
   let stopNavigation = (event: MouseEvent) => {
-    if (event.defaultPrevented) {
+    let anchor = (event.target as Element).closest('a[href]');
+    if (event.defaultPrevented || !anchor) {
       return;
     }
-    let anchor = (event.target as Element).closest('[data-test-link]');
-    leftToBrowser.push(anchor?.getAttribute('data-test-link') ?? '');
+    leftToBrowser.push(anchor.getAttribute('data-test-link') ?? '');
     event.preventDefault();
   };
   let link = (name: string) => `[data-test-link="${name}"]`;
@@ -130,6 +145,18 @@ module('Acceptance | interact submode | routed links', function (hooks) {
             data-test-link='missing'
             href='{{this.realm}}people/nobody'
           >Missing</a>
+          <a
+            data-test-link='redirect'
+            href='{{this.realm}}writers/jane'
+          >Redirect</a>
+          <a
+            data-test-link='elsewhere'
+            href='{{this.realm}}elsewhere'
+          >Elsewhere</a>
+          <a
+            data-test-link='broken'
+            href='{{this.realm}}people/broken'
+          >Broken</a>
         </template>
       };
     }
@@ -138,6 +165,7 @@ module('Acceptance | interact submode | routed links', function (hooks) {
     // same routes as the app.
     authorsPath = '/people/:id';
     routesReads = 0;
+    janeRequestGate = undefined;
     getService('network').virtualNetwork.mount(serveRoutes, { prepend: true });
 
     await setupAcceptanceTestRealm({
@@ -147,6 +175,12 @@ module('Acceptance | interact submode | routed links', function (hooks) {
         'Author/jane.json': {
           data: {
             attributes: { name: 'Jane' },
+            meta: { adoptsFrom: { module: '../blog', name: 'Author' } },
+          },
+        },
+        'Author/joe.json': {
+          data: {
+            attributes: { name: 'Joe' },
             meta: { adoptsFrom: { module: '../blog', name: 'Author' } },
           },
         },
@@ -171,9 +205,14 @@ module('Acceptance | interact submode | routed links', function (hooks) {
     linkHrefTo = undefined;
   });
 
-  async function openPost() {
+  async function openPost(
+    otherStacks: { id: string; format: 'isolated' }[][] = [],
+  ) {
     await visitOperatorMode({
-      stacks: [[{ id: `${testRealmURL}Post/hello`, format: 'isolated' }]],
+      stacks: [
+        [{ id: `${testRealmURL}Post/hello`, format: 'isolated' }],
+        ...otherStacks,
+      ],
     });
     // The link has its routed address once the app has read the routes.
     await waitFor(`${link('routed')}[href="${testRealmURL}people/jane"]`);
@@ -242,5 +281,98 @@ module('Acceptance | interact submode | routed links', function (hooks) {
     );
     assert.dom(`[data-test-operator-mode-stack="0"] ${author}`).exists();
     assert.deepEqual(leftToBrowser, []);
+  });
+  test('an index that changes no route source does not read the routes again', async function (assert) {
+    await openPost();
+    let readsBefore = routesReads;
+
+    getService('message-service').relayRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: [`${testRealmURL}Author/jane`],
+      realmURL: testRealmURL,
+    });
+    await settled();
+
+    assert.strictEqual(routesReads, readsBefore);
+  });
+
+  test('a click whose stack item closes before its card is known is dropped', async function (assert) {
+    await openPost();
+    let release!: () => void;
+    janeRequestGate = new Promise((resolve) => (release = resolve));
+
+    // Not the test helpers' click, which waits until the app settles, and
+    // the app waits for the lookup.
+    (document.querySelector(link('routed')) as HTMLElement).click();
+    (
+      document.querySelector(
+        `[data-test-operator-mode-stack="0"] [data-test-close-button]`,
+      ) as HTMLElement
+    ).click();
+    await waitUntil(() => !document.querySelector(post));
+    release();
+    await settled();
+
+    assert.dom(author).doesNotExist('no card opened for the closed item');
+    assert.deepEqual(leftToBrowser, []);
+  });
+
+  test('a routed link outside the stacks opens its card in the right-most stack', async function (assert) {
+    await openPost([
+      [{ id: `${testRealmURL}Author/jane`, format: 'isolated' }],
+    ]);
+    let pageURL = window.location.href;
+    let outside = document.createElement('a');
+    outside.setAttribute('data-test-link', 'outside');
+    outside.href = `${testRealmURL}people/joe`;
+    outside.textContent = 'Joe';
+    document.querySelector('#ember-testing')!.append(outside);
+
+    try {
+      await click(link('outside'));
+    } finally {
+      outside.remove();
+    }
+
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Author/joe"]`,
+      )
+      .exists();
+    assert.deepEqual(leftToBrowser, [], 'the app took the click');
+    assert.strictEqual(window.location.href, pageURL, 'no page load');
+  });
+
+  test('a redirect inside the realm is followed in the app', async function (assert) {
+    await openPost();
+    let pageURL = window.location.href;
+
+    await click(link('redirect'));
+
+    assert.dom(`[data-test-operator-mode-stack="0"] ${author}`).exists();
+    assert.deepEqual(leftToBrowser, []);
+    assert.strictEqual(window.location.href, pageURL, 'no page load');
+  });
+
+  test('a redirect out of the realm is loaded by the browser', async function (assert) {
+    await openPost();
+
+    await click(link('elsewhere'));
+
+    assert.strictEqual(window.location.href, 'https://example.com/elsewhere');
+  });
+
+  test('a failed lookup keeps the app where it is and shows the failure', async function (assert) {
+    await openPost();
+    let pageURL = window.location.href;
+
+    await click(link('broken'));
+
+    assert.strictEqual(window.location.href, pageURL, 'no page load');
+    assert.deepEqual(leftToBrowser, []);
+    assert
+      .dom(`[data-test-operator-mode-stack="0"] [data-test-card-error]`)
+      .exists('the card whose load failed shows its failure');
   });
 });

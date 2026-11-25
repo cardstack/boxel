@@ -132,6 +132,15 @@ interface CardToDelete {
   isFile?: boolean;
 }
 
+// The instance id of the stack item an event happened in, if any.
+function stackItemOf(event: Event): string | undefined {
+  let origin = event.composedPath()[0] ?? event.target;
+  return origin instanceof Element
+    ? (origin.closest('[data-stack-item]')?.getAttribute('data-stack-item') ??
+        undefined)
+    : undefined;
+}
+
 export default class InteractSubmode extends Component {
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
@@ -158,30 +167,31 @@ export default class InteractSubmode extends Component {
     | ReturnType<getCardCollection>
     | undefined;
 
-  // While interact mode shows, links get routed addresses from the open
-  // realm's routes, and a plain click on a link to a routed address opens
-  // the card that address resolves to in the stack the link is in, with no
-  // page load, as a page load of the address would serve it. A link that
-  // resolves to no card (a redirect, a path no route serves, a failed
-  // lookup) is loaded by the browser. Any other click keeps the browser's
-  // default: see `lib/link-clicks`.
+  // While interact mode shows, every link in the app gets a routed address
+  // from the open realm's routes, so a plain click on a link to a routed
+  // address, anywhere on the page, opens the card the address resolves to,
+  // with no page load, as a page load of the address would serve it. The
+  // card opens in the stack the link is in, or in the right-most stack for
+  // a link outside the stacks, such as in a modal or the search sheet. A
+  // redirect inside the realm is followed in the app. A lookup that fails
+  // keeps the app where it is, and opens the card whose load failed when
+  // there is one, which shows the failure. The browser loads a redirect out
+  // of the realm and an address no route serves. Any other click keeps the
+  // browser's default: see `lib/link-clicks`.
   private followRoutedLinks = modifier((element: HTMLElement) => {
     let stopShowing = this.hostRouteLinks.showInteractMode();
+    let page = element.ownerDocument;
     let onClick = (event: MouseEvent) => {
       let url = plainLinkClickURL(event);
       if (!url || !this.hostRouteLinks.holdsRoutesFor(url)) {
         return;
       }
-      let stackIndex = this.stackIndexOf(event);
-      if (stackIndex === undefined) {
-        return;
-      }
       event.preventDefault();
-      void this.followRoutedLink(url, stackIndex);
+      void this.followRoutedLink(url, stackItemOf(event));
     };
-    element.addEventListener('click', onClick);
+    page.addEventListener('click', onClick);
     return () => {
-      element.removeEventListener('click', onClick);
+      page.removeEventListener('click', onClick);
       stopShowing();
     };
   });
@@ -190,33 +200,40 @@ export default class InteractSubmode extends Component {
   // follows before its card is known is dropped.
   private routedLinkFollows = 0;
 
-  private async followRoutedLink(url: URL, stackIndex: number) {
+  // `stackItem` is the instance id of the stack item the link is in, if
+  // any. The stacks can change while the address resolves, so the stack is
+  // found again after that: when the item was closed, or another realm was
+  // opened, the click is dropped.
+  private async followRoutedLink(url: URL, stackItem: string | undefined) {
     let follow = ++this.routedLinkFollows;
-    let cardHref = await this.hostRouteLinks.cardAtAddress(url);
-    if (follow !== this.routedLinkFollows || this.isDestroying) {
+    let realm = this.operatorModeStateService.openRealmURL;
+    let target = await this.hostRouteLinks.followAddress(url);
+    if (
+      !target ||
+      follow !== this.routedLinkFollows ||
+      this.isDestroying ||
+      this.isDestroyed ||
+      this.operatorModeStateService.openRealmURL !== realm
+    ) {
       return;
     }
-    if (!cardHref) {
-      window.location.assign(url.href);
+    if (target.kind === 'load') {
+      window.location.assign(target.href);
       return;
     }
-    this.viewCard(stackIndex, cardHref, 'isolated');
-  }
-
-  // The stack the card an event happened in is on.
-  private stackIndexOf(event: Event): number | undefined {
-    let origin = event.composedPath()[0] ?? event.target;
-    let instanceId =
-      origin instanceof Element
-        ? origin.closest('[data-stack-item]')?.getAttribute('data-stack-item')
-        : undefined;
-    if (!instanceId) {
-      return undefined;
+    if (!target.cardHref) {
+      return;
     }
-    let index = this.stacks.findIndex((stack) =>
-      stack.some((item) => item.instanceId === instanceId),
-    );
-    return index === -1 ? undefined : index;
+    let stackIndex =
+      stackItem === undefined
+        ? this.rightMostStackIndex
+        : this.stacks.findIndex((stack) =>
+            stack.some((item) => item.instanceId === stackItem),
+          );
+    if (stackIndex === -1) {
+      return;
+    }
+    this.viewCard(stackIndex, target.cardHref, 'isolated');
   }
 
   @action private handleEscape(event: KeyboardEvent) {
