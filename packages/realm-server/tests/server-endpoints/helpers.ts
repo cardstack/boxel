@@ -17,12 +17,51 @@ import {
   type RealmFixtureName,
 } from '../helpers/index.ts';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { randomBytes } from 'node:crypto';
+import { sha256Hex } from '../../lib/oauth-provider/objects.ts';
+import { oauthIssuer } from '../../lib/oauth-provider/registry.ts';
 import {
   testOAuthProviderConfig,
   testOAuthSecureOriginURL,
 } from '../helpers/oauth-provider.ts';
 
 export const testRealmURL = new URL(`http://127.0.0.1:${testPort(4445)}/test/`);
+
+// A Boxel API access token for `user`, as the OAuth provider stores one, on a
+// grant of its own (for a suite started with `oauthProvider: true`).
+export async function insertBoxelApiAccessToken(
+  dbAdapter: PgAdapter,
+  user: string,
+  scope = 'boxel:read boxel:write',
+): Promise<{ token: string; grantId: string }> {
+  let boxelApi = oauthIssuer(testRealmURL.origin);
+  let [{ id: userId }] = (await dbAdapter.execute(
+    `INSERT INTO users (matrix_user_id) VALUES ($1)
+       ON CONFLICT (matrix_user_id)
+       DO UPDATE SET matrix_user_id = EXCLUDED.matrix_user_id
+       RETURNING id`,
+    { bind: [user] },
+  )) as { id: string }[];
+  let grantId = randomBytes(16).toString('base64url');
+  let token = randomBytes(32).toString('base64url');
+  await dbAdapter.execute(
+    `INSERT INTO oauth_provider_grants
+       (id, user_id, client_id, resources, renewing, expires_at)
+       VALUES ($1, $2::uuid, 'boxel-cli', $3::jsonb, false,
+               now() + interval '1 hour')`,
+    {
+      bind: [grantId, userId, JSON.stringify({ [boxelApi]: scope.split(' ') })],
+    },
+  );
+  await dbAdapter.execute(
+    `INSERT INTO oauth_provider_tokens
+       (id_hash, kind, grant_id, resource, scope, payload, expires_at)
+       VALUES (decode($1, 'hex'), 'AccessToken', $2, $3, $4, '{}'::jsonb,
+               now() + interval '10 minutes')`,
+    { bind: [sha256Hex(token), grantId, boxelApi, scope] },
+  );
+  return { token, grantId };
+}
 
 export type ServerEndpointsTestContext = {
   testRealm: Realm;

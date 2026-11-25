@@ -10,7 +10,9 @@
 //
 // While the global is set, the host reads and writes the tab's sessions here
 // and nowhere else, and drops them, with the realms that hold them, before
-// the run answers.
+// the run answers. The one exception is a tab token, which the tab gives its
+// auth service worker for the one request the worker asks about
+// (`heldOAuthTabTokens` in the host).
 export const inMemorySessionsGlobal = '__boxelInMemorySessions';
 
 export function inMemorySessions(): Record<string, string> | undefined {

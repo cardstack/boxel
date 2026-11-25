@@ -13807,13 +13807,13 @@ export class Realm {
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}): ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e?.constructor?.name === 'JsonWebTokenError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}): ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }

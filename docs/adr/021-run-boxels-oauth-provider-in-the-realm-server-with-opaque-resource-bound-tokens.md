@@ -17,7 +17,12 @@ scope:
   - packages/realm-server/lib/oauth-tab-token.ts
   - packages/realm-server/handlers/handle-run-command.ts
   - packages/realm-server/handlers/handle-capture.ts
+  - packages/realm-server/handlers/handle-search.ts
+  - packages/runtime-common/jobs/capture.ts
   - packages/runtime-common/tasks/capture.ts
+  - packages/host/app/utils/realm-sessions.ts
+  - packages/host/app/utils/auth-service-worker-registration.ts
+  - packages/host/public/auth-service-worker.js
   - packages/realm-server/prerender/affinity.ts
   - packages/realm-server/prerender/page-pool.ts
   - packages/realm-server/prerender/render-runner.ts
@@ -223,8 +228,10 @@ request with no credential lacks. A tab token for work that only reads, such as
 a capture, MUST allow reading only, whatever its grant allows. A realm-server
 route MUST refuse a tab token, except the federated reads a tab makes through
 `multiRealmAuthorization`. The tab MUST hold nothing but its tab tokens,
-and those only in memory, and MUST NOT share a browser context with any other
-render's tab. Its tab, page and browser context MUST NOT pass to another
+and those only in memory. It MAY give one to its browser context's auth
+service worker for the one request the worker asks about, so its images draw,
+and the worker MUST NOT keep it. The tab MUST NOT share a browser context with
+any other render's tab. Its tab, page and browser context MUST NOT pass to another
 render, nor be taken from one, even when the prerender pool has no fresh tab
 to give.
 

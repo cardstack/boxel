@@ -99,6 +99,9 @@ never asked about `isSessionRevoked`: disconnecting the app or revoking the
 user's OAuth grants ends it on its next call. Its tab holds it in memory only,
 on an affinity of its own (`<key>#oauth:...`, `isOAuthTabAffinityKey`), and the
 page pool never moves such a tab to another affinity, or gives it another's.
+The tab answers its auth service worker's ask for a token with one for that
+request only (`forThisRequestOnly`), which the worker uses and doesn't keep, so
+a private realm's images draw; a run's tab gives the worker nothing.
 
 A **run token** is what an automation run's calls carry (ADR 026;
 `packages/runtime-common/run-token.ts` and `packages/realm-server/lib/run-token.ts`).

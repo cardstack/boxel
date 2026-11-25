@@ -2,12 +2,13 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
-import { randomBytes } from 'node:crypto';
 import { realmSecretSeed, insertUser } from '../helpers/index.ts';
 import { endGrant } from '../../lib/oauth-provider/grants.ts';
-import { sha256Hex } from '../../lib/oauth-provider/objects.ts';
-import { oauthIssuer } from '../../lib/oauth-provider/registry.ts';
-import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
+import {
+  insertBoxelApiAccessToken,
+  setupServerEndpointsTest,
+  testRealmURL,
+} from './helpers.ts';
 
 // A realm-defined command that persists a card through SaveCardCommand and
 // reports whether the save threw, so a test can tell a failed save apart from
@@ -403,43 +404,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       oauthProvider: true,
     });
 
-    const BOXEL_API = oauthIssuer(testRealmURL.origin);
-
-    // An access token as the provider stores one, on a grant of its own.
-    async function oauthToken(
-      user: string,
-      scope = 'boxel:read boxel:write',
-    ): Promise<{ token: string; grantId: string }> {
-      let [{ id: userId }] = (await context.dbAdapter.execute(
-        `INSERT INTO users (matrix_user_id) VALUES ($1)
-           ON CONFLICT (matrix_user_id)
-           DO UPDATE SET matrix_user_id = EXCLUDED.matrix_user_id
-           RETURNING id`,
-        { bind: [user] },
-      )) as { id: string }[];
-      let grantId = randomBytes(16).toString('base64url');
-      let token = randomBytes(32).toString('base64url');
-      await context.dbAdapter.execute(
-        `INSERT INTO oauth_provider_grants
-           (id, user_id, client_id, resources, renewing, expires_at)
-           VALUES ($1, $2::uuid, 'boxel-cli', $3::jsonb, false,
-                   now() + interval '1 hour')`,
-        {
-          bind: [
-            grantId,
-            userId,
-            JSON.stringify({ [BOXEL_API]: scope.split(' ') }),
-          ],
-        },
-      );
-      await context.dbAdapter.execute(
-        `INSERT INTO oauth_provider_tokens
-           (id_hash, kind, grant_id, resource, scope, payload, expires_at)
-           VALUES (decode($1, 'hex'), 'AccessToken', $2, $3, $4, '{}'::jsonb,
-                   now() + interval '10 minutes')`,
-        { bind: [sha256Hex(token), grantId, BOXEL_API, scope] },
-      );
-      return { token, grantId };
+    function oauthToken(user: string, scope?: string) {
+      return insertBoxelApiAccessToken(context.dbAdapter, user, scope);
     }
 
     function runCommand(
