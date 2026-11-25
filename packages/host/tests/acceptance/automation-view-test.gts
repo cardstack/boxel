@@ -186,6 +186,7 @@ type Answer = { status: number; attributes?: Record<string, unknown> };
 module('Acceptance | automation view', function (hooks) {
   let answer: Answer;
   let asked: string[];
+  let askedKeyApprovals: boolean[];
   let realm: Realm;
 
   setupApplicationTest(hooks);
@@ -232,6 +233,7 @@ module('Acceptance | automation view', function (hooks) {
     // route answers; by default, that the viewer isn't a direct writer.
     answer = { status: 200 };
     asked = [];
+    askedKeyApprovals = [];
     getService('network').virtualNetwork.mount(
       async (request: Request) => {
         let url = new URL(request.url);
@@ -239,6 +241,7 @@ module('Acceptance | automation view', function (hooks) {
           return null;
         }
         asked.push(url.searchParams.get('automation') ?? '');
+        askedKeyApprovals.push(url.searchParams.get('keyApprovals') === 'true');
         if (answer.status !== 200) {
           return new Response(JSON.stringify({ errors: [] }), {
             status: answer.status,
@@ -3156,6 +3159,364 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('dialog[open] [data-test-automation-switch-on-screen]')
         .exists('the screen stays open');
+    });
+  });
+  module('key approvals', function (hooks) {
+    let opened: string[];
+
+    hooks.beforeEach(function () {
+      opened = [];
+      let secureWindow = getService('secure-window');
+      secureWindow.open = (url: string) => {
+        opened.push(url);
+        return 'opened';
+      };
+    });
+
+    const INBOX_MODULE = `${testRealmURL}inbox`;
+    const ME = '@testuser:localhost';
+    const COLLEAGUE = '@colleague:localhost';
+
+    function operationWith(operation: string, slots: object[]) {
+      return {
+        operation,
+        targetType: { module: INBOX_MODULE, name: 'Inbox' },
+        state: 'missing',
+        slots,
+      };
+    }
+
+    function withApprovals(
+      operations: object[],
+      { approved = false, state = 'waiting-for-key-approval' } = {},
+    ) {
+      return {
+        ...ACTIVE,
+        state,
+        nextRun: null,
+        keyApprovals: { approved, operations },
+      };
+    }
+
+    // The fragment of the secure window URL the view opened, as a record.
+    function openedFor(url: string) {
+      return Object.fromEntries(
+        new URLSearchParams(new URL(url).hash.slice(1)),
+      );
+    }
+
+    function slotText(slot: string) {
+      return text(`[data-test-automation-key-approval-slot="${slot}"]`);
+    }
+
+    test('the isolated view asks for key approvals, and the fitted view does not', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      await openIsolated();
+      await waitForStatus();
+      assert.true(
+        askedKeyApprovals.every(Boolean),
+        'every status read of the isolated view asks for key approvals',
+      );
+      askedKeyApprovals = [];
+      await openFormat('fitted');
+      await settled();
+      assert.false(
+        askedKeyApprovals.some(Boolean),
+        'the fitted view, which lists in the console, checks no approvals',
+      );
+    });
+
+    test('all approved: each key names its owner and when the owner approved the automation', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: withApprovals(
+          [
+            {
+              ...operationWith('list', [
+                {
+                  slot: 'userKey',
+                  kind: 'userKey',
+                  state: 'approved',
+                  key: { name: 'Vendor key' },
+                  viewerIsKeyOwner: true,
+                  keyOwner: ME,
+                  approvedAt: '2030-01-01T09:00:00.000Z',
+                },
+              ]),
+              state: 'approved',
+            },
+            {
+              ...operationWith('shared', [
+                {
+                  slot: 'apiKey',
+                  kind: 'apiKey',
+                  state: 'approved',
+                  share: { id: 'share-1', label: 'Team vendor' },
+                  viewerIsKeyOwner: false,
+                  keyOwner: COLLEAGUE,
+                  approvedAt: '2030-01-02T09:00:00.000Z',
+                },
+              ]),
+              state: 'approved',
+            },
+          ],
+          { approved: true, state: 'active' },
+        ),
+      };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approvals]', { timeout: 10000 });
+      assert
+        .dom('[data-test-automation-key-approval-state="approved"]')
+        .exists({ count: 2 });
+      assert.true(
+        slotText('userKey')?.includes(
+          'You approved the automation’s use of the key “Vendor key”.',
+        ),
+        slotText('userKey'),
+      );
+      assert.true(
+        slotText('apiKey')?.includes(
+          `${COLLEAGUE} approved the automation’s use of the shared key “Team vendor”.`,
+        ),
+        slotText('apiKey'),
+      );
+      assert
+        .dom('[data-test-automation-key-approval-since]')
+        .exists({ count: 2 });
+      assert.dom('[data-test-automation-key-approval-fix]').doesNotExist();
+    });
+
+    test('waiting on the viewer: the approve button opens the secure window for the automation', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: withApprovals([
+          operationWith('list', [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'waiting',
+              viewerIsKeyOwner: true,
+              keyOwner: ME,
+              fix: 'approve',
+            },
+          ]),
+        ]),
+      };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approval-fix="approve"]', {
+        timeout: 10000,
+      });
+      assert.true(
+        slotText('userKey')?.includes(
+          'Boxel runs the automation once you approve the automation’s use of the key.',
+        ),
+        slotText('userKey'),
+      );
+      await click('[data-test-automation-key-approval-fix="approve"]');
+      await waitUntil(() => opened.length > 0, { timeout: 10000 });
+      assert.true(opened[0].includes('/approve'), opened[0]);
+      assert.deepEqual(openedFor(opened[0]), { automation: AUTOMATION });
+    });
+
+    test('waiting on someone else: the row names who acts, only under ADR 011, and offers no link', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: withApprovals([
+          operationWith('shared', [
+            {
+              slot: 'apiKey',
+              kind: 'apiKey',
+              state: 'waiting',
+              share: { id: 'share-1', label: 'Team vendor' },
+              viewerIsKeyOwner: false,
+              keyOwner: COLLEAGUE,
+              actor: 'key-owner',
+            },
+          ]),
+          operationWith('list', [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'waiting',
+              viewerIsKeyOwner: false,
+              keyOwner: null,
+              actor: 'key-owner',
+            },
+          ]),
+        ]),
+      };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approvals]', { timeout: 10000 });
+      assert.true(
+        slotText('apiKey')?.includes(
+          `Boxel runs the automation once ${COLLEAGUE} approves the automation’s use of the shared key “Team vendor”.`,
+        ),
+        slotText('apiKey'),
+      );
+      assert.true(
+        slotText('userKey')?.includes(
+          'Boxel runs the automation once the key’s owner approves the automation’s use of the key.',
+        ),
+        'a key owner the viewer shares no realm grant with goes unnamed',
+      );
+      assert.dom('[data-test-automation-key-approval-fix]').doesNotExist();
+    });
+
+    test('needs reapproval, a suspended share, a rejected key and no share each link to the page that fixes them', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: withApprovals([
+          operationWith('list', [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'needs-reapproval',
+              key: { name: 'Vendor key' },
+              viewerIsKeyOwner: true,
+              keyOwner: ME,
+              fix: 'review-changes',
+            },
+          ]),
+          operationWith('shared', [
+            {
+              slot: 'apiKey',
+              kind: 'apiKey',
+              state: 'share-suspended',
+              share: { id: 'share-1', label: 'Team vendor' },
+              viewerIsKeyOwner: false,
+              keyOwner: COLLEAGUE,
+              fix: 'swap-key',
+            },
+          ]),
+          operationWith('rejected', [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'key-rejected',
+              key: { name: 'Old key' },
+              viewerIsKeyOwner: true,
+              keyOwner: ME,
+              approvedAt: '2030-01-01T09:00:00.000Z',
+              fix: 'replace-key',
+            },
+          ]),
+          operationWith('unshared', [
+            {
+              slot: 'apiKey',
+              kind: 'apiKey',
+              state: 'no-share',
+              viewerIsKeyOwner: false,
+              keyOwner: null,
+              fix: 'share-key',
+            },
+          ]),
+        ]),
+      };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approvals]', { timeout: 10000 });
+      let expected: [string, string, Record<string, string>][] = [
+        [
+          'review-changes',
+          '/review-changes',
+          {
+            module: INBOX_MODULE,
+            name: 'Inbox',
+            realm: testRealmURL,
+            operation: 'list',
+          },
+        ],
+        ['swap-key', '/swap-key', { realm: testRealmURL, share: 'share-1' }],
+        [
+          'replace-key',
+          '/replace-key',
+          {
+            module: INBOX_MODULE,
+            name: 'Inbox',
+            realm: testRealmURL,
+            operation: 'rejected',
+          },
+        ],
+        ['share-key', '/share-key', { realm: testRealmURL }],
+      ];
+      for (let [fix, page, fragment] of expected) {
+        opened = [];
+        await click(`[data-test-automation-key-approval-fix="${fix}"]`);
+        await waitUntil(() => opened.length > 0, { timeout: 10000 });
+        assert.true(opened[0].includes(page), `${fix}: ${opened[0]}`);
+        assert.deepEqual(openedFor(opened[0]), fragment, fix);
+      }
+      for (let state of [
+        'needs-reapproval',
+        'share-suspended',
+        'key-rejected',
+        'no-share',
+      ]) {
+        assert
+          .dom(`[data-test-automation-key-approval-state="${state}"]`)
+          .exists(state);
+      }
+      assert
+        .dom('[data-test-automation-key-approval="shared"]')
+        .includesText(
+          'Someone suspended the shared key “Team vendor”. A realm administrator swaps in another key.',
+        );
+    });
+
+    test('an approval that lands updates the section without a reload', async function (assert) {
+      let waiting = withApprovals([
+        operationWith('list', [
+          {
+            slot: 'userKey',
+            kind: 'userKey',
+            state: 'waiting',
+            viewerIsKeyOwner: true,
+            keyOwner: ME,
+            fix: 'approve',
+          },
+        ]),
+      ]);
+      answer = { status: 200, attributes: waiting };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approval-state="waiting"]', {
+        timeout: 10000,
+      });
+
+      answer = {
+        status: 200,
+        attributes: withApprovals(
+          [
+            {
+              ...operationWith('list', [
+                {
+                  slot: 'userKey',
+                  kind: 'userKey',
+                  state: 'approved',
+                  viewerIsKeyOwner: true,
+                  keyOwner: ME,
+                  approvedAt: '2030-01-01T09:00:00.000Z',
+                },
+              ]),
+              state: 'approved',
+            },
+          ],
+          { approved: true, state: 'active' },
+        ),
+      };
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(testRealmURL, ME),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'automation',
+          automation: AUTOMATION,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+      await waitFor('[data-test-automation-key-approval-state="approved"]', {
+        timeout: 10000,
+      });
+      assert.dom('[data-test-automation-key-approval-fix]').doesNotExist();
+      assert.dom('[data-test-automation-state="On"]').exists();
     });
   });
 });
