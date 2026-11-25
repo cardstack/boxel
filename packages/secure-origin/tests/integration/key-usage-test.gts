@@ -433,7 +433,9 @@ module('Integration | key usage and limits', function (hooks) {
                   destination: 'https://api.openweathermap.org/data/2.5/',
                   state: 'active',
                   rejectedAt: null,
-                  lastForbiddenAt: '2026-11-02T09:00:00.000Z',
+                  // Midday on Nov 2 in the browser's time zone, the zone the page
+                  // formats dates in, so it reads "Nov 2" in any zone.
+                  lastForbiddenAt: new Date(2026, 10, 2, 12).toISOString(),
                 },
                 {
                   id: 'grant-2',

@@ -35,6 +35,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import { AGENT_KINDS, usesCodingAgent } from './agent-kinds';
+import { aiStarterPrompt } from './ai-starter-prompt';
 import { sortByUpdatedAtDesc } from './workspace-layout';
 
 import type { MenuEntry } from '@cardstack/pretui/internal/menu';
@@ -431,7 +432,9 @@ export default class GetStarted extends Component<Signature> {
   }
 
   @action private async askBoxelAi() {
-    await this.aiAssistantPanelService.openNewSession();
+    await this.aiAssistantPanelService.openNewSessionWithPrompt(
+      aiStarterPrompt(this.realm, this.operatorModeStateService),
+    );
   }
 
   <template>

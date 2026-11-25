@@ -4,7 +4,7 @@ import { module, test } from 'qunit';
 import { render, waitFor } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { CURRENT_RELEASE, PretUISpec } from './pretui-component';
-import { loadDemo } from './demo-locations';
+import { loadDemo, siblingHref } from './demo-locations';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Isolated = PretUISpec.isolated as any;
@@ -146,12 +146,43 @@ module('Pretui | PretUISpec', function (hooks) {
     }
   });
 
-  test('the breadcrumb names the kit without linking to a catalog card this package does not ship', async function (assert) {
+  test('the breadcrumb links the kit and the category to their overviews', async function (assert) {
     let model = specModel('Button');
     await render(<template><Isolated @model={{model}} /></template>);
-    assert.dom('[data-test-pretui-spec-crumb]').containsText('Pret UI');
     assert
-      .dom('[data-test-pretui-spec-crumb] button')
-      .doesNotExist('no navigation to a card that is not here');
+      .dom('[data-test-pretui-spec-crumb]')
+      .hasAttribute('aria-label', 'Breadcrumb');
+    assert
+      .dom('[data-test-pretui-spec-crumb] li:nth-child(1) a')
+      .hasText('Pret UI')
+      .hasAttribute('href', siblingHref('./showcase/overview-all'));
+    assert
+      .dom('[data-test-pretui-spec-crumb] li:nth-child(2) a')
+      .hasText('Actions')
+      .hasAttribute('href', siblingHref('./showcase/overview-actions'));
+    assert
+      .dom('[data-test-pretui-spec-crumb] li:nth-child(3)')
+      .hasText('Button')
+      .hasAttribute('aria-current', 'page');
+    assert
+      .dom('[data-test-pretui-spec-crumb] li:nth-child(3) a')
+      .doesNotExist();
+  });
+
+  test('a category the showcase does not know stays plain text', async function (assert) {
+    let model = specModel('Button', { category: 'Elsewhere' });
+    await render(<template><Isolated @model={{model}} /></template>);
+    assert
+      .dom('[data-test-pretui-spec-crumb] li:nth-child(2)')
+      .hasText('Elsewhere');
+    assert
+      .dom('[data-test-pretui-spec-crumb] li:nth-child(2) a')
+      .doesNotExist();
+  });
+
+  test('the page has no provenance panel', async function (assert) {
+    let model = specModel('Button');
+    await render(<template><Isolated @model={{model}} /></template>);
+    assert.dom('.page').doesNotContainText('Provenance');
   });
 });

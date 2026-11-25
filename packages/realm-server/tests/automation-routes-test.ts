@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { randomUUID } from 'crypto';
+import { createHmac, randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -26,6 +26,7 @@ import {
 } from '@cardstack/runtime-common/automations';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
+import { MAX_WEBHOOK_PAYLOAD_CHARS } from '@cardstack/runtime-common/automation-run-command';
 import {
   appendRunLog,
   type RunLogLine,
@@ -276,6 +277,7 @@ module(basename(import.meta.filename), function (hooks) {
           { kind: 'webhook', label: 'deliveries', webhookPath: HOOK_PATH },
         ],
       }),
+      [`${HOOKED}-script.js`]: `return 'ok';`,
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -395,7 +397,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function keyWriteTicket(
     user: string,
-    action: 'add' | 'share',
+    action: 'add' | 'share' | 'delete',
     { keyId = null }: { keyId?: string | null } = {},
   ) {
     return (
@@ -408,12 +410,12 @@ module(basename(import.meta.filename), function (hooks) {
     ).ticket;
   }
 
-  // Adds a key of `user`'s own.
-  async function addKey(user: string) {
+  // Adds a key of `user`'s own, named `name`.
+  async function addKey(user: string, name = 'vendor') {
     return await addUserKey(dbAdapter, secretsKeyring(), {
       owner: user,
-      name: 'vendor',
-      value: `sk-${user.slice(1, 12)}-routes-key`,
+      name,
+      value: `sk-${user.slice(1, 12)}-${name}-routes-key`,
       ticket: await keyWriteTicket(user, 'add'),
     });
   }
@@ -596,25 +598,6 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(batched.credits > plain.credits);
     });
 
-    test('the estimate says webhook triggers start no runs, for a card with one', async function (assert) {
-      let hooked = await request
-        .get(AUTOMATION_SWITCH_ON_PATH)
-        .query({ realm: realm.url, automation: cardURL(HOOKED) })
-        .set('Authorization', auth(OWNER));
-      assert.strictEqual(hooked.status, 200, hooked.text);
-      assert.deepEqual(
-        hooked.body.data.attributes.notices.map(
-          ({ code }: { code: string }) => code,
-        ),
-        ['webhook-triggers-start-no-runs'],
-      );
-      let daily = await request
-        .get(AUTOMATION_SWITCH_ON_PATH)
-        .query({ realm: realm.url, automation: cardURL() })
-        .set('Authorization', auth(OWNER));
-      assert.deepEqual(daily.body.data.attributes.notices, []);
-    });
-
     test('a caller who is not a direct writer is refused', async function (assert) {
       let response = await request
         .get(AUTOMATION_SWITCH_ON_PATH)
@@ -674,7 +657,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test("switch-on refuses a webhook trigger naming a webhook the realm can't use, and says webhook triggers start no runs once on", async function (assert) {
+    test("switch-on refuses a webhook trigger naming a webhook the realm can't use", async function (assert) {
       let switchOnHooked = () =>
         post(
           AUTOMATION_SWITCH_ON_PATH,
@@ -697,7 +680,7 @@ module(basename(import.meta.filename), function (hooks) {
       let foreign = await switchOnHooked();
       assert.strictEqual(foreign.status, 422, foreign.text);
       assert.ok(
-        foreign.text.includes('doesn’t belong to a workspace administrator'),
+        foreign.text.includes('doesn’t belong to a realm administrator'),
         foreign.text,
       );
       assert.strictEqual(
@@ -719,10 +702,6 @@ module(basename(import.meta.filename), function (hooks) {
         on.status,
         201,
         `another direct writer's webhook is the realm's: ${on.text}`,
-      );
-      assert.deepEqual(
-        on.body.meta.notices.map(({ code }: { code: string }) => code),
-        ['webhook-triggers-start-no-runs'],
       );
     });
 
@@ -807,6 +786,285 @@ module(basename(import.meta.filename), function (hooks) {
         { id: 'http://127.0.0.1:4444/another-realm/automation/daily' },
       );
       assert.strictEqual(response.status, 400, response.text);
+    });
+  });
+
+  module('webhook deliveries', function (hooks) {
+    // The incoming webhook the hooked automation's trigger names, made by a
+    // direct writer who isn't the payer.
+    const SECRET = 'writer-secret';
+
+    hooks.beforeEach(async function () {
+      await insertIncomingWebhookRow(dbAdapter, {
+        username: WRITER,
+        webhookPath: HOOK_PATH,
+        signingSecret: SECRET,
+      });
+    });
+
+    async function switchOnHooked() {
+      await fund(OWNER);
+      await switchOn(OWNER, HOOKED);
+    }
+
+    async function deliver(deliveryId: string, payload: unknown) {
+      let body = JSON.stringify(payload);
+      let signature =
+        'sha256=' +
+        createHmac('sha256', SECRET).update(body, 'utf8').digest('hex');
+      return await request
+        .post(`/_webhooks/${HOOK_PATH}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Delivery', deliveryId)
+        .send(body);
+    }
+
+    async function runsOfHooked(): Promise<AutomationRun[]> {
+      let rows = (await dbAdapter.execute(
+        `SELECT id FROM automation_runs WHERE automation_id = $1 ORDER BY created_at`,
+        { bind: [automationId(HOOKED)] },
+      )) as { id: string }[];
+      return (await Promise.all(
+        rows.map(({ id }) => getAutomationRun(dbAdapter, id)),
+      )) as AutomationRun[];
+    }
+
+    test('a delivery starts a run of the webhook trigger with the payload, acting as the payer', async function (assert) {
+      await switchOnHooked();
+      let payload = { action: 'opened', number: 7 };
+      let response = await deliver('delivery-1', payload);
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 1);
+
+      let [run, ...others] = await runsOfHooked();
+      assert.strictEqual(others.length, 0, 'one run');
+      assert.strictEqual(run.trigger, 'deliveries', 'the webhook trigger');
+      assert.strictEqual(
+        run.slot,
+        'delivery:delivery-1',
+        "the slot is the delivery's id",
+      );
+      assert.strictEqual(
+        run.actsAs,
+        OWNER,
+        "it acts as the payer, not the webhook's owner",
+      );
+      let [job] = (await dbAdapter.execute(
+        `SELECT args FROM jobs WHERE args->>'dedupeKey' = $1`,
+        {
+          bind: [
+            `automation:${automationId(HOOKED)}:deliveries:delivery:delivery-1`,
+          ],
+        },
+      )) as { args: { commandInput: Record<string, unknown> } }[];
+      assert.deepEqual(
+        job?.args.commandInput.webhookPayload,
+        payload,
+        "the run's job carries the payload",
+      );
+      let ranAs = await ended(run.id);
+      assert.strictEqual(
+        ranAs.state,
+        'complete',
+        `it runs (${ranAs.errorReason}: ${ranAs.errorMessage})`,
+      );
+    });
+
+    test('a delivery whose body is too large starts a run that ends saying so, without the body', async function (assert) {
+      await switchOnHooked();
+      let payload = { blob: 'x'.repeat(MAX_WEBHOOK_PAYLOAD_CHARS) };
+      let response = await deliver('delivery-too-large', payload);
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 1);
+
+      let [run] = await runsOfHooked();
+      let [job] = (await dbAdapter.execute(
+        `SELECT args FROM jobs WHERE args->>'dedupeKey' = $1`,
+        {
+          bind: [
+            `automation:${automationId(HOOKED)}:deliveries:delivery:delivery-too-large`,
+          ],
+        },
+      )) as { args: { commandInput: Record<string, unknown> } }[];
+      assert.strictEqual(
+        job?.args.commandInput.webhookPayload,
+        undefined,
+        "the run's job doesn't carry the body",
+      );
+      assert.strictEqual(
+        job?.args.commandInput.webhookPayloadChars,
+        JSON.stringify(payload).length,
+        "the run's job carries the body's length",
+      );
+      let ranAs = await ended(run.id);
+      assert.strictEqual(ranAs.state, 'error');
+      assert.strictEqual(ranAs.errorReason, 'webhook-payload-too-large');
+    });
+
+    test('a redelivery joins the run the first delivery started', async function (assert) {
+      await switchOnHooked();
+      let first = await deliver('delivery-2', { attempt: 1 });
+      assert.strictEqual(first.body.automationRunsStarted, 1, first.text);
+      let again = await deliver('delivery-2', { attempt: 2 });
+      assert.strictEqual(again.status, 200, again.text);
+      assert.strictEqual(again.body.automationRunsStarted, 0);
+      let runs = await runsOfHooked();
+      assert.strictEqual(runs.length, 1, 'no second run');
+      await ended(runs[0].id);
+      let late = await deliver('delivery-2', { attempt: 3 });
+      assert.strictEqual(late.body.automationRunsStarted, 0, late.text);
+      assert.strictEqual(
+        (await runsOfHooked()).length,
+        1,
+        'a redelivery after the run ended starts nothing either',
+      );
+    });
+
+    test('a paused automation takes no delivery', async function (assert) {
+      await switchOnHooked();
+      let paused = await post(
+        AUTOMATION_PAUSE_PATH,
+        OWNER,
+        {},
+        { id: cardURL(HOOKED) },
+      );
+      assert.strictEqual(paused.status, 200, paused.text);
+      let response = await deliver('delivery-3', { paused: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
+    });
+
+    test('a delivery to a webhook whose owner lost write pauses the automation and starts no run', async function (assert) {
+      await switchOnHooked();
+      await dbAdapter.execute(
+        `DELETE FROM realm_user_permissions WHERE username = $1 AND realm_url = $2`,
+        { bind: [WRITER, realm.url] },
+      );
+      let response = await deliver('delivery-4', { foreign: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
+      let automation = await getAutomation(dbAdapter, automationId(HOOKED));
+      assert.strictEqual(automation?.state, 'paused');
+      assert.strictEqual(automation?.pauseReason, 'webhook-owner-lost-access');
+    });
+
+    test('an automation switched on before its snapshot recorded webhooks takes a delivery its card names', async function (assert) {
+      await switchOnHooked();
+      await dbAdapter.execute(
+        `UPDATE automations SET caps_snapshot = caps_snapshot - 'webhookPaths' WHERE automation_id = $1`,
+        { bind: [automationId(HOOKED)] },
+      );
+      let response = await deliver('delivery-6', { legacy: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 1);
+      let [run] = await runsOfHooked();
+      assert.strictEqual(run?.slot, 'delivery:delivery-6');
+      await ended(run.id);
+    });
+
+    test('an automation that is off takes no delivery', async function (assert) {
+      let response = await deliver('delivery-5', { off: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), []);
+    });
+
+    // Makes every automation take of a delivery fail, by refusing the run
+    // row the take inserts, for the length of `fn`.
+    async function whileRunsAreRefused(fn: () => Promise<void>) {
+      await dbAdapter.execute(
+        `CREATE OR REPLACE FUNCTION refuse_automation_run() RETURNS trigger AS $$
+         BEGIN RAISE EXCEPTION 'the test refuses every automation run'; END
+         $$ LANGUAGE plpgsql`,
+      );
+      await dbAdapter.execute(
+        `CREATE TRIGGER refuse_automation_run BEFORE INSERT ON automation_runs
+         FOR EACH ROW EXECUTE FUNCTION refuse_automation_run()`,
+      );
+      try {
+        await fn();
+      } finally {
+        await dbAdapter.execute(
+          `DROP TRIGGER IF EXISTS refuse_automation_run ON automation_runs`,
+        );
+        await dbAdapter.execute(
+          `DROP FUNCTION IF EXISTS refuse_automation_run()`,
+        );
+      }
+    }
+
+    test('a delivery with the sender’s id that no automation could take, and that enqueued no command, answers 500', async function (assert) {
+      await switchOnHooked();
+      await whileRunsAreRefused(async () => {
+        let response = await deliver('delivery-7', { refused: true });
+        assert.strictEqual(
+          response.status,
+          500,
+          'the sender delivers it again',
+        );
+      });
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
+      let again = await deliver('delivery-7', { refused: false });
+      assert.strictEqual(again.status, 200, again.text);
+      assert.strictEqual(
+        again.body.automationRunsStarted,
+        1,
+        'the redelivery starts the run',
+      );
+      await ended((await runsOfHooked())[0].id);
+    });
+
+    test('a delivery with no id from the sender answers 200 when no automation could take it', async function (assert) {
+      await switchOnHooked();
+      let body = JSON.stringify({ unnamed: true });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', SECRET).update(body, 'utf8').digest('hex');
+      await whileRunsAreRefused(async () => {
+        let response = await request
+          .post(`/_webhooks/${HOOK_PATH}`)
+          .set('Content-Type', 'application/json')
+          .set('X-Hub-Signature-256', signature)
+          .send(body);
+        assert.strictEqual(
+          response.status,
+          200,
+          'a redelivery would get a new id and start a second run, so the sender is not asked to deliver again',
+        );
+        assert.strictEqual(response.body.automationRunsStarted, 0);
+      });
+    });
+
+    test('a delivery that enqueued a command answers 200 when no automation could take it', async function (assert) {
+      await switchOnHooked();
+      let [webhook] = (await dbAdapter.execute(
+        `SELECT id FROM incoming_webhooks WHERE webhook_path = $1`,
+        { bind: [HOOK_PATH] },
+      )) as { id: string }[];
+      await dbAdapter.execute(
+        `INSERT INTO webhook_commands (id, incoming_webhook_id, command, command_filter, created_at, updated_at)
+         VALUES ($1, $2, $3, NULL, NOW(), NOW())`,
+        {
+          bind: [
+            randomUUID(),
+            webhook.id,
+            'http://test-realm/commands/process-github-event',
+          ],
+        },
+      );
+      await whileRunsAreRefused(async () => {
+        let response = await deliver('delivery-8', { withCommand: true });
+        assert.strictEqual(
+          response.status,
+          200,
+          'a redelivery would enqueue the command twice, so the sender is not asked to deliver again',
+        );
+        assert.strictEqual(response.body.commandsExecuted, 1);
+        assert.strictEqual(response.body.automationRunsStarted, 0);
+      });
     });
   });
 
@@ -1444,6 +1702,269 @@ module(basename(import.meta.filename), function (hooks) {
         { refusal: null, operations: 1 },
         'a run started by hand needs no automation approval',
       );
+    });
+
+    // The automations the realm sends an `automation` event for while `act`
+    // runs, as their realm's direct writers receive it.
+    async function automationEventsDuring(act: () => Promise<unknown>) {
+      let sent: string[] = [];
+      let original = realm.broadcastAutomationEvent;
+      realm.broadcastAutomationEvent = async (event) => {
+        sent.push(event.automation);
+        return await original.call(realm, event);
+      };
+      try {
+        await act();
+      } finally {
+        realm.broadcastAutomationEvent = original;
+      }
+      return sent;
+    }
+
+    async function approvalRowsOf(path: string) {
+      return await dbAdapter.execute(
+        `SELECT binding_id, approved_by, version_key, updated_at FROM automation_key_approvals WHERE automation_id = $1 ORDER BY binding_id`,
+        { bind: [automationId(path)] },
+      );
+    }
+
+    test('an edit and its revert leave the automation active, with nobody asked to approve it again', async function (assert) {
+      await switchOnApproved();
+      let approvals = await approvalRowsOf(KEYED);
+      await realm.write(`${KEYED}-script.js`, `return 'changed';`);
+      await reachesState(KEYED, 'waiting-for-key-approval');
+      await realm.write(`${KEYED}-script.js`, `return 'ok';`);
+      let row = await reachesState(KEYED, 'active');
+      assert.notStrictEqual(row.nextRun, null, 'its schedule starts again');
+      assert.deepEqual(
+        await approvalRowsOf(KEYED),
+        approvals,
+        'the approval its key owner gave matches again, unchanged',
+      );
+      assert.true((await keyApprovalsOf(KEYED)).approved);
+    });
+
+    test('an edit that adds an operation needing a key to an automation with no approval moves it to waiting for key approval at once', async function (assert) {
+      let switchedOn = await switchOn(OWNER, DAILY);
+      assert.strictEqual(switchedOn.body.data.attributes.state, 'active');
+      await realm.write(
+        `${DAILY}.json`,
+        automationFixture({
+          operations: [{ type: INBOX, names: ['list'] }],
+          path: DAILY,
+          triggers: [
+            {
+              kind: 'cron',
+              label: 'daily',
+              expression: '0 9 * * *',
+              timeZone: 'UTC',
+            },
+          ],
+        })[`${DAILY}.json`],
+      );
+      let row = await reachesState(DAILY, 'waiting-for-key-approval');
+      assert.strictEqual(row.nextRun, null);
+      let [{ n }] = await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS n FROM automation_runs WHERE automation_id = $1`,
+        { bind: [automationId(DAILY)] },
+      );
+      assert.strictEqual(n, 0, 'no run had to be refused to move it');
+      assert.deepEqual(operationStates(await keyApprovalsOf(DAILY)), [
+        {
+          operation: 'list',
+          state: 'missing',
+          missing: [{ slot: 'userKey', canApprove: 'payer' }],
+        },
+      ]);
+    });
+
+    test('deleting a key sends an automation event for each automation it moved to waiting for key approval', async function (assert) {
+      await switchOnApproved();
+      let [{ key_id: keyId }] = await dbAdapter.execute(
+        `SELECT b.key_id FROM automation_key_approvals a JOIN key_bindings b ON b.id = a.binding_id WHERE a.automation_id = $1`,
+        { bind: [automationId(KEYED)] },
+      );
+      let sent = await automationEventsDuring(async () => {
+        let deleted = await request
+          .delete(`/_user-keys/${keyId}`)
+          .set('Authorization', auth(OWNER))
+          .set('Content-Type', 'application/json')
+          .send({
+            meta: {
+              ticket: await keyWriteTicket(OWNER, 'delete', {
+                keyId: keyId as string,
+              }),
+            },
+          });
+        assert.strictEqual(deleted.status, 204, deleted.text);
+      });
+      assert.deepEqual(sent, [automationId(KEYED)]);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'waiting-for-key-approval',
+      );
+    });
+
+    test('removing a grant sends an automation event for each automation it moved to waiting for key approval', async function (assert) {
+      await switchOnApproved();
+      let [{ grant_id: grantId }] = await dbAdapter.execute(
+        `SELECT b.grant_id FROM automation_key_approvals a JOIN key_bindings b ON b.id = a.binding_id WHERE a.automation_id = $1`,
+        { bind: [automationId(KEYED)] },
+      );
+      let sent = await automationEventsDuring(async () => {
+        let removed = await request
+          .delete(`/_user-key-grants/${grantId}`)
+          .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+          .set('Origin', secureOriginURL.origin);
+        assert.strictEqual(removed.status, 200, removed.text);
+      });
+      assert.deepEqual(sent, [automationId(KEYED)]);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'waiting-for-key-approval',
+      );
+    });
+
+    test('deleting a key sends an automation event for a paused automation its bindings served, which keeps its pause', async function (assert) {
+      await switchOnApproved();
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(KEYED) }))
+          .status,
+        200,
+      );
+      let [{ key_id: keyId }] = await dbAdapter.execute(
+        `SELECT b.key_id FROM automation_key_approvals a JOIN key_bindings b ON b.id = a.binding_id WHERE a.automation_id = $1`,
+        { bind: [automationId(KEYED)] },
+      );
+      let sent = await automationEventsDuring(async () => {
+        let deleted = await request
+          .delete(`/_user-keys/${keyId}`)
+          .set('Authorization', auth(OWNER))
+          .set('Content-Type', 'application/json')
+          .send({
+            meta: {
+              ticket: await keyWriteTicket(OWNER, 'delete', {
+                keyId: keyId as string,
+              }),
+            },
+          });
+        assert.strictEqual(deleted.status, 204, deleted.text);
+      });
+      assert.deepEqual(
+        sent,
+        [automationId(KEYED)],
+        'its approvals changed, so an open console reads it again',
+      );
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'paused',
+      );
+    });
+
+    test('approving a slot again with another key sends an automation event for the automation whose approval it ended', async function (assert) {
+      await switchOnApproved();
+      let other = await addKey(OWNER, 'vendor-backup');
+      let sent = await automationEventsDuring(async () => {
+        let approved = await approveOperation(OWNER, 'list', {
+          keyId: other.id,
+        });
+        assert.strictEqual(approved.status, 201, approved.text);
+      });
+      assert.deepEqual(sent, [automationId(KEYED)]);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'waiting-for-key-approval',
+        'its approval was given for the key the binding sent before',
+      );
+    });
+
+    // Switches the shared automation on with WRITER's share approved for it,
+    // and answers the share.
+    async function switchOnShared() {
+      let share = await shareOwnKey(WRITER);
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      let approved = await approveOperation(
+        WRITER,
+        'shared',
+        { shareId: share.id },
+        { id: cardURL(SHARED), version: shown.version },
+      );
+      if (approved.status !== 201) {
+        throw new Error(
+          `approving shared answered ${approved.status}: ${approved.text}`,
+        );
+      }
+      await reachesState(SHARED, 'active');
+      return share;
+    }
+
+    test('unsharing a key sends an automation event for each automation its share’s bindings served, and moves it to waiting for key approval', async function (assert) {
+      let share = await switchOnShared();
+      let sent = await automationEventsDuring(async () => {
+        let unshared = await request
+          .delete(`/_key-shares/${share.id}`)
+          .set('Authorization', auth(WRITER));
+        assert.strictEqual(unshared.status, 204, unshared.text);
+      });
+      assert.deepEqual(sent, [automationId(SHARED)]);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SHARED)))?.state,
+        'waiting-for-key-approval',
+      );
+    });
+
+    test('swapping a key into a share sends an automation event for each automation whose approval of its bindings the swap ended', async function (assert) {
+      let share = await switchOnShared();
+      let suspended = await request
+        .post(`/_key-shares/${share.id}/suspend`)
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(suspended.status, 200, suspended.text);
+      let key = await addKey(OWNER);
+      let ticket = (
+        await mintKeyWriteTicket(dbAdapter, OWNER, {
+          action: 'swap',
+          keyId: key.id,
+          realmURL: null,
+          shareId: share.id,
+        })
+      ).ticket;
+      let sent = await automationEventsDuring(async () => {
+        let swapped = await request
+          .post(`/_key-shares/${share.id}/swap`)
+          .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+          .set('Origin', secureOriginURL.origin)
+          .set('Content-Type', 'application/json')
+          .send({
+            data: { type: 'key-share', attributes: { keyId: key.id } },
+            meta: { ticket },
+          });
+        assert.strictEqual(swapped.status, 200, swapped.text);
+      });
+      assert.deepEqual(sent, [automationId(SHARED)]);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SHARED)))?.state,
+        'waiting-for-key-approval',
+        'the approval was given for the key the share held before',
+      );
+    });
+
+    test('a revert written with no realm events runs the automation again and sends no automation event', async function (assert) {
+      await switchOnApproved();
+      await realm.write(`${KEYED}-script.js`, `return 'changed';`);
+      await reachesState(KEYED, 'waiting-for-key-approval');
+      await realm.incrementalIndexing();
+      let sent = await automationEventsDuring(async () => {
+        await realm.write(`${KEYED}-script.js`, `return 'ok';`, {
+          broadcastRealmEvents: false,
+        });
+        await realm.incrementalIndexing();
+      });
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'active',
+        'the realm’s check moved the row once the pass landed',
+      );
+      assert.deepEqual(sent, [], 'and reported nothing');
     });
 
     test('removing the automation removes its approvals', async function (assert) {

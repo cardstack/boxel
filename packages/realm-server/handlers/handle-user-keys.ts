@@ -1,5 +1,5 @@
 import type Koa from 'koa';
-import { logger, param, SupportedMimeType } from '@cardstack/runtime-common';
+import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import {
   sendResponseForError,
   setContextResponse,
@@ -26,10 +26,7 @@ import {
 } from '../lib/user-key-grants.ts';
 import { listOwnSharedRealms, type SharedRealm } from '../lib/key-shares.ts';
 import { registrableDomain } from '../lib/secure-window.ts';
-import {
-  automationsServedBy,
-  followServedAutomations,
-} from '../lib/automation-key-approvals.ts';
+import { followEndedKeyApprovals } from '../lib/automation-key-approvals.ts';
 import {
   addOAuthClient,
   describeOAuthKeys,
@@ -466,25 +463,13 @@ export function handleDeleteUserKey(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let body = await readJSON(ctxt);
-    let id = ctxt.params.keyId;
     // The key's own bindings are revoked with it.
-    let served = UUID_PATTERN.test(id)
-      ? await automationsServedBy(dbAdapter, [
-          'SELECT id FROM key_bindings WHERE key_id =',
-          param(id),
-          '::uuid AND approved_by =',
-          param(owner),
-        ])
-      : [];
-    await deleteUserKey(dbAdapter, {
+    let affected = await deleteUserKey(dbAdapter, {
       owner,
-      id,
+      id: ctxt.params.keyId,
       ticket: ticketOf(body),
     });
-    await followServedAutomations(args, served);
+    await followEndedKeyApprovals(args, affected);
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

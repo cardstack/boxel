@@ -8,6 +8,7 @@ import {
   getAutomationRun,
   insertPermissions,
   query,
+  recordAIBatch,
   recordAutomationRunCommitted,
   ri,
   rri,
@@ -562,6 +563,63 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  test("a lost batch follow-up is enqueued again with its batch's input, due at the batch's deadline", async function (assert) {
+    await switchOn();
+    await recordAIBatch(dbAdapter, {
+      batchId: 'batch_1',
+      runId: (
+        await createAutomationRun(dbAdapter, {
+          automationId: AUTOMATION,
+          realm: REALM,
+          trigger: 'hourly',
+          slot: NOON_SLOT,
+          actsAs: OWNER,
+        })
+      ).id,
+      actsAs: OWNER,
+      realm: REALM,
+      automationId: AUTOMATION,
+      model: 'openai/gpt-4.1-mini',
+      requestCount: 2,
+      estimatedUsd: 0.01,
+      runAIReservation: 'reservation-1',
+      reservedCredits: 2,
+      deadline: new Date('2026-11-10T12:05:00.000Z'),
+      expiresAt: null,
+      state: 'in_progress',
+    });
+    let followUp = await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger: 'batch',
+      slot: 'batch_1',
+      actsAs: OWNER,
+    });
+    await query(dbAdapter, [
+      `UPDATE automation_runs SET state = 'complete' WHERE trigger = 'hourly'`,
+    ]);
+    await madeAt(NOON);
+
+    let outcomes = (await reconcile(NOON + 10 * 60)).lostRuns;
+
+    let outcome = outcomes.find((o) => 'runId' in o && o.runId === followUp.id);
+    assert.strictEqual(
+      outcome?.kind,
+      'requeued',
+      'no trigger on the card names it, and it is still enqueued',
+    );
+    let [job] = (await queuedRuns()).filter(
+      (queued) => queued.input.runId === followUp.id,
+    );
+    assert.strictEqual(job.dedupeKey, `automation:${AUTOMATION}:batch:batch_1`);
+    assert.deepEqual(job.input, {
+      runId: followUp.id,
+      scheduledAt: '2026-11-10T12:05:00.000Z',
+      dryRun: false,
+      triggerKind: 'batch',
+    });
+  });
+
   test("a paused automation's lost run is ended, not enqueued again", async function (assert) {
     await switchOn();
     await tick(NOON + 30);
@@ -578,6 +636,38 @@ module(basename(import.meta.filename), function (hooks) {
       JOB_LOST_REASON,
     );
     assert.strictEqual((await queuedRuns()).length, 1, 'no job is added');
+  });
+
+  test("a webhook delivery's lost run is ended, not enqueued again without its payload, even when its card can't be read", async function (assert) {
+    await switchOn();
+    // The card can't be read when reconcile runs, so only the run's slot says
+    // the run is a delivery's.
+    card = { ok: false, message: 'the card failed to index' };
+    let run = await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger: 'deliveries',
+      slot: 'delivery:delivery-lost',
+      actsAs: OWNER,
+    });
+    // Made past the grace, and reconciled before the hourly trigger's first
+    // slot, so the pass has only the lost run to handle.
+    await madeAt(SWITCHED_ON - 5 * 60);
+    let [outcome] = (await reconcile(SWITCHED_ON + 30)).lostRuns;
+    assert.strictEqual(outcome.kind, 'ended');
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, run.id))?.errorReason,
+      JOB_LOST_REASON,
+    );
+    assert.deepEqual(
+      (await queuedRuns()).filter(
+        ({ dedupeKey }) =>
+          dedupeKey ===
+          `automation:${AUTOMATION}:deliveries:delivery:delivery-lost`,
+      ),
+      [],
+      'no job is made again',
+    );
   });
 
   test('a lost run whose trigger is gone from the card is ended', async function (assert) {

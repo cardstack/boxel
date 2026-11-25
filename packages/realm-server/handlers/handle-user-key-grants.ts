@@ -1,5 +1,5 @@
 import type Koa from 'koa';
-import { fetchRealmPermissions, param, rri } from '@cardstack/runtime-common';
+import { fetchRealmPermissions, rri } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import type { CreateRoutesArgs } from '../routes.ts';
@@ -16,10 +16,7 @@ import {
   type UserKeyGrant,
 } from '../lib/user-key-grants.ts';
 import { UserKeyError } from '../lib/user-keys.ts';
-import {
-  automationsServedBy,
-  followServedAutomations,
-} from '../lib/automation-key-approvals.ts';
+import { followEndedKeyApprovals } from '../lib/automation-key-approvals.ts';
 import {
   keysHandler,
   mayMintKeyWriteTicket,
@@ -176,24 +173,12 @@ export function handleRemoveUserKeyGrant(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let via = await secureClientOf(ctxt, args);
-    let grantId = ctxt.params.grantId;
-    let served = UUID_PATTERN.test(grantId)
-      ? await automationsServedBy(args.dbAdapter, [
-          'SELECT id FROM key_bindings WHERE grant_id =',
-          param(grantId),
-          '::uuid AND approved_by =',
-          param(owner),
-        ])
-      : [];
-    let { revokedBindings } = await removeGrant(args.dbAdapter, {
+    let { revokedBindings, affected } = await removeGrant(args.dbAdapter, {
       owner,
-      grantId,
+      grantId: ctxt.params.grantId,
       via,
     });
-    await followServedAutomations(args, served);
+    await followEndedKeyApprovals(args, affected);
     await sendJSON(ctxt, 200, { meta: { revokedBindings } });
   });
 }
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

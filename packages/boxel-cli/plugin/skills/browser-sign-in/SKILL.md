@@ -25,7 +25,7 @@ When the user wants a browser signed in, run `boxel browse` for them. Don't hand
 | Local or custom host                  | `boxel browse [card-path] --profile <id> --host-url https://localhost:<port>/` |
 | Rate-limited                          | add `--wait`                                                           |
 
-`boxel profile list` shows the profiles; match an account the user names ("my test account") to its ID there, and pass `--profile` even when it is the active one. A staging profile is `@<user>:stack.cards`, with realm server `https://realms-staging.stack.cards/`; a production one is `@<user>:boxel.ai`, with `https://app.boxel.ai/`. Without `--host-url`, the token is redeemed on the profile's realm-server origin (`https://localhost:4200/` for standard local dev).
+`boxel profile list` shows the profiles; match an account the user names ("my test account") to its ID there, and pass `--profile` even when it is the active one. Pick a profile whose sign-in is Matrix: one signed in with OAuth (`boxel profile add --oauth`) has no Matrix login token to give the browser, and `browse` refuses it. A staging profile is `@<user>:stack.cards`, with realm server `https://realms-staging.stack.cards/`; a production one is `@<user>:boxel.ai`, with `https://app.boxel.ai/`. Without `--host-url`, the token is redeemed on the profile's realm-server origin (`https://localhost:4200/` for standard local dev).
 
 The browser that opens is the user's default browser, not one you drive. You can't see it, so a clean exit ("Opening <host> as <id>") is all the confirmation you get: tell the user which account should be signed in and to say if the page shows otherwise.
 

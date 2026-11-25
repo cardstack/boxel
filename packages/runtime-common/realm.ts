@@ -170,6 +170,7 @@ import {
   readRawHostRoutingRules,
   realmConfigCardURL,
   validateHostRoutes,
+  HOST_ROUTES_RETRY_AFTER_SECONDS,
   HostRoutesReadError,
   type HostRoutesValidation,
   type RawHostRoutingRule,
@@ -225,6 +226,12 @@ import {
   recordAutomationRunCredentialRefusal,
 } from './automation-runs.ts';
 import { readJobEvent, runChangeReporter } from './automation-run-events.ts';
+import { automationTouchedBy } from './automation-index-hook.ts';
+import {
+  automationsInRealm,
+  followKeyApprovals,
+  type KeyApprovalFollow,
+} from './automations.ts';
 import {
   automationChangeReporter,
   type ChangedAutomation,
@@ -1367,6 +1374,8 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   the whole realm at once: every type it holds, every file's modification
 //   time, and every card's indexing state. A grant reaches a card, not the
 //   realm.
+// - `_host-routes` answers the realm's whole validated route tree, which is
+//   as visible as the realm and names no one card.
 // - `_dependencies`, `_card-dependencies` and `_lint` analyze the realm's
 //   modules for code mode, which a caller works in only with the realm's own
 //   read.
@@ -3412,6 +3421,10 @@ export class Realm {
   // broadcast. The updater's own record of the pass ends when the pass lands,
   // which is before that broadcast, so `incrementalIndexing()` folds these in.
   #landingsAfterAnswer = new Set<Promise<void>>();
+  // Key-approval checks of the automations a landed pass touched
+  // (`#followAutomationKeyApprovalsAfterPass`), each held until it settles,
+  // so `incrementalIndexing()` folds them in like the pass that started them.
+  #automationFollowsAfterPass = new Set<Promise<void>>();
   // One line per card read that arrives while incremental indexing is
   // pending — see drainRequestersOwnIndexing for the outcome grammar.
   #readGateLog = logger('realm:read-index-gate');
@@ -3988,6 +4001,14 @@ export class Realm {
         '/_indexing-errors',
         SupportedMimeType.JSONAPI,
         this.indexingErrors.bind(this),
+        ACL_ONLY,
+      )
+      // The realm's validated host routes, which answer for the whole realm
+      // at once, so they are answered on the realm ACL alone too.
+      .get(
+        '/_host-routes',
+        SupportedMimeType.JSON,
+        this.hostRoutes.bind(this),
         ACL_ONLY,
       )
       .get(
@@ -4632,12 +4653,17 @@ export class Realm {
   // broadcast of its index event.
   incrementalIndexing(): Promise<void> | undefined {
     let updating = this.#realmIndexUpdater.incrementalIndexing();
-    if (this.#landingsAfterAnswer.size === 0) {
+    if (
+      this.#landingsAfterAnswer.size === 0 &&
+      this.#automationFollowsAfterPass.size === 0
+    ) {
       return updating;
     }
-    return Promise.all([updating, ...this.#landingsAfterAnswer]).then(
-      () => undefined,
-    );
+    return Promise.all([
+      updating,
+      ...this.#landingsAfterAnswer,
+      ...this.#automationFollowsAfterPass,
+    ]).then(() => undefined);
   }
 
   // Holds a pass its write stopped waiting for until it has landed and been
@@ -4881,6 +4907,7 @@ export class Realm {
     let sharedPass: SharedIndexPass | undefined;
     let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
     let stageCursor = opts?.stageCursor;
+    let touchedByPass = changes.map(({ url }) => url.href);
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
@@ -4923,7 +4950,11 @@ export class Realm {
         invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
         sharedPass = meta.sharedPass;
+        touchedByPass.push(...invalidatedURLs.map((url) => url.href));
       },
+    });
+    this.#followAutomationKeyApprovalsAfterPass(touchedByPass, {
+      reportChanges: opts?.broadcastRealmEvents !== false,
     });
 
     return {
@@ -4986,6 +5017,7 @@ export class Realm {
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
     let sharedPass: SharedIndexPass | undefined;
+    let touchedByPass = changes.map(({ url }) => url.href);
     let { settled } = await this.#realmIndexUpdater.enqueueChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
@@ -5009,6 +5041,7 @@ export class Realm {
         invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
         sharedPass = meta.sharedPass;
+        touchedByPass.push(...invalidatedURLs.map((url) => url.href));
       },
       onSettled: async () => {
         if (opts.onSettled) {
@@ -5036,6 +5069,14 @@ export class Realm {
         );
       },
     });
+    settled.then(
+      () =>
+        this.#followAutomationKeyApprovalsAfterPass(touchedByPass, {
+          reportChanges: opts.broadcastRealmEvents !== false,
+        }),
+      // A failed pass is the caller's to handle, through `settled`.
+      () => undefined,
+    );
 
     return { settled };
   }
@@ -15413,6 +15454,138 @@ export class Realm {
     });
   }
 
+  // Brings each automation's state in step with its key approvals
+  // (`followKeyApprovals`), checked in this realm with the automation's card
+  // as indexed and its payer as the row names them: one waiting for key
+  // approval whose approvals all match runs again, and one that would run
+  // with an approval missing waits. Each automation follows on its own, so
+  // one that fails is logged and the rest still follow. Returns what each
+  // did, keyed by automation id; nothing when this realm can't check. Each
+  // change is reported to the realm's direct writers (`job` and `automation`
+  // events) unless `reportChanges` is false.
+  async followAutomationKeyApprovals(
+    automationIds: readonly RealmResourceIdentifier[],
+    { reportChanges = true }: { reportChanges?: boolean } = {},
+  ): Promise<Map<string, KeyApprovalFollow>> {
+    let followed = new Map<string, KeyApprovalFollow>();
+    if (!this.#callApi?.checkAutomationKeyApprovals) {
+      return followed;
+    }
+    for (let automationId of automationIds) {
+      try {
+        let result = await followKeyApprovals(
+          this.#dbAdapter,
+          automationId,
+          async (automation) => {
+            let read = await readRunDeclaration({
+              dbAdapter: this.#dbAdapter,
+              definitionLookup: this.#definitionLookup,
+              virtualNetwork: this.#virtualNetwork,
+              automationId,
+            });
+            if (!read.ok) {
+              return undefined;
+            }
+            let approvals = await this.checkAutomationKeyApprovals({
+              automationId,
+              declaration: read.declaration,
+              payer: automation.payer,
+            });
+            return approvals
+              ? { approved: approvals.approved, declaration: read.declaration }
+              : undefined;
+          },
+          reportChanges
+            ? {
+                reportRunChange: (runId) => this.reportRunChange(runId),
+                reportAutomationChange: (automation) =>
+                  this.reportAutomationChange(automation),
+              }
+            : {},
+        );
+        if (result) {
+          followed.set(automationId, result);
+        }
+      } catch (e: any) {
+        this.#log.warn(
+          `couldn't follow the key approvals of automation ${automationId}: ${e?.message ?? e}`,
+        );
+      }
+    }
+    return followed;
+  }
+
+  // Once an index pass this realm started has landed, follows the key
+  // approvals of each automation whose card or script the pass touched
+  // (`touched`, the file URLs it visited, deleted or invalidated), with the
+  // card and script as the pass indexed them. The worker's index hook has
+  // brought the row in step with the card; this is the check the worker
+  // can't make, as it reads no operation definitions. A paused automation is
+  // left alone. A pass whose writer asked for no realm events
+  // (`WriteOptions.broadcastRealmEvents`) still moves the rows, and reports
+  // none of the changes (`reportChanges`).
+  //
+  // It runs once the pass has landed, beside the write that started it
+  // rather than in its way: the check looks up the operations' definitions,
+  // which can mean rendering a module, so the write doesn't wait for it, and
+  // a failure is logged and leaves that write a success.
+  // `incrementalIndexing()` holds it until it settles, so whoever waits for
+  // the realm's indexing to settle sees its result. No read it makes waits on
+  // this realm's indexing: a definition lookup reads a realm this server
+  // mounts as the prerender user, whose requests skip the read-your-writes
+  // gate.
+  #followAutomationKeyApprovalsAfterPass(
+    touched: readonly string[],
+    { reportChanges }: { reportChanges: boolean },
+  ): void {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !this.#callApi?.checkAutomationKeyApprovals ||
+      touched.length === 0
+    ) {
+      return;
+    }
+    let tracked = this.#followTouchedAutomations(touched, { reportChanges });
+    this.#automationFollowsAfterPass.add(tracked);
+    void tracked.finally(() =>
+      this.#automationFollowsAfterPass.delete(tracked),
+    );
+  }
+
+  async #followTouchedAutomations(
+    touched: readonly string[],
+    { reportChanges }: { reportChanges: boolean },
+  ): Promise<void> {
+    try {
+      let automations = (
+        await automationsInRealm(
+          this.#dbAdapter,
+          ri(this.#virtualNetwork.unresolveURL(this.url)),
+        )
+      ).filter(({ state }) => state !== 'paused');
+      if (automations.length === 0) {
+        return;
+      }
+      let touchedBy = automationTouchedBy({
+        dbAdapter: this.#dbAdapter,
+        definitionLookup: this.#definitionLookup,
+        virtualNetwork: this.#virtualNetwork,
+        touched,
+      });
+      let followed: RealmResourceIdentifier[] = [];
+      for (let { automationId } of automations) {
+        if (await touchedBy(automationId)) {
+          followed.push(automationId);
+        }
+      }
+      await this.followAutomationKeyApprovals(followed, { reportChanges });
+    } catch (e: any) {
+      this.#log.warn(
+        `couldn't follow the key approvals of the automations an index pass touched in ${this.url}: ${e?.message ?? e}`,
+      );
+    }
+  }
+
   // The automation's version with `payer` as its payer, its card read as
   // `declaration` and its script as this realm holds it now: what a key's
   // owner approves (`automation-key-approval.ts`). Undefined when the script
@@ -21437,6 +21610,62 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
+  // The realm's validated host route tree, as `getHostRoutes` gives it and
+  // as a host page gets it in `hostDynamicRoutes`, so a reader resolves a
+  // path or works out an address without validating anything again. It is
+  // the tree the realm's last index validated and stored, and reading it
+  // never waits for a type's definition. That tree can lack routes the next
+  // index restores: an index written before the index stored the tree is
+  // validated with no types, so each field-match route and the routes under
+  // it are dropped, and a stored tree with `retryTypeReads` dropped a route
+  // whose type read may pass. In both cases a read starts an index of
+  // realm.json that stores the whole tree. Nothing runs the HTML visits that
+  // read the smaller tree again when that tree is stored; the ADR 036
+  // remediation file lists this. The validation's warnings are for the
+  // server's log, not for a reader.
+  //
+  // When the index can't be read, this answers 503 with `Retry-After`, as a
+  // page does, never an empty tree: a reader would take that for a realm
+  // with no routes.
+  private async hostRoutes(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let routes: HostRoutesValidation['routes'];
+    try {
+      ({ routes } = await this.getHostRoutes());
+    } catch (e) {
+      if (!(e instanceof HostRoutesReadError)) {
+        throw e;
+      }
+      this.#log.warn(`${this.url}_host-routes answers 503: ${e.message}`);
+      return createResponse({
+        body: 'Service Unavailable',
+        init: {
+          status: 503,
+          headers: {
+            'content-type': 'text/plain',
+            'retry-after': HOST_ROUTES_RETRY_AFTER_SECONDS,
+            'cache-control': 'no-store',
+          },
+        },
+        requestContext,
+      });
+    }
+    return createResponse({
+      body: JSON.stringify({ routes }),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          // The tree changes when the realm is indexed, and carries no
+          // validator a cache could ask with.
+          'cache-control': 'no-store',
+        },
       },
       requestContext,
     });

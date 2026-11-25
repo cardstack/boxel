@@ -7,6 +7,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
   closeServer,
+  grafanaSecret,
   insertUser,
   realmSecretSeed,
   setupDB,
@@ -706,6 +707,58 @@ module(basename(import.meta.filename), function (hooks) {
         withOAuthProviderSecretsLabeled('/_oauth-provider/connections'),
         '/_oauth-provider/connections',
         'the list names no grant',
+      );
+    });
+  });
+
+  module("revoking the user's sessions", function () {
+    test('ends their connections on the next call, and a connection made afterwards works', async function (assert) {
+      let who = await user();
+      let first = await connect(who);
+      assert.true(await reaches(first.tokens.access_token), 'precondition');
+
+      let revoked = await supertest(server!)
+        .post(
+          `/_grafana-revoke-user-sessions?user=${encodeURIComponent(who.matrixId)}`,
+        )
+        .set('Host', OAUTH_TEST_SERVER_URL.host)
+        .set('Authorization', `Bearer ${grafanaSecret}`);
+      assert.strictEqual(revoked.status, 200, revoked.text);
+
+      assert.false(
+        await reaches(first.tokens.access_token),
+        'the next call is refused',
+      );
+      let refreshed = await refreshOAuthTokens(
+        server!,
+        first.clientId,
+        first.tokens.refresh_token!,
+      );
+      assert.strictEqual(refreshed.status, 400, 'the refresh is refused');
+      assert.strictEqual(refreshed.body.error, 'invalid_grant');
+
+      // The user signs in again. A session is revoked when it was issued
+      // before the revocation's instant, in whole seconds, so the new one is
+      // issued once the clock has passed it. `connect` runs a whole flow
+      // through the authorize page: a flow that skipped consent wouldn't
+      // reach the interaction route, and `startOAuthFlow` would throw.
+      let { revokedAt } = revoked.body as { revokedAt: number };
+      while (Math.floor(Date.now() / 1000) < revokedAt) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      let again = {
+        ...who,
+        session: await secureSessionAuth(db, who.matrixId),
+      };
+      let second = await connect(again, { clientId: first.clientId });
+      assert.true(
+        await reaches(second.tokens.access_token),
+        "the new connection's token works",
+      );
+      assert.deepEqual(
+        (await listed(again)).map(({ id }) => id),
+        [second.grantId],
+        'Connected apps lists only the new connection',
       );
     });
   });

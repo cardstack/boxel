@@ -17,6 +17,7 @@ import {
 } from './automation-spend.ts';
 import {
   automationsInRealm,
+  lastDeclaredLabels,
   type AutomationPauseReason,
   type AutomationRow,
   type AutomationRunResult,
@@ -232,7 +233,7 @@ export async function answerAutomationList({
         pauseReason: row?.pauseReason ?? null,
         triggers: instance
           ? cardTriggers(attributes)
-          : Object.keys(row?.triggerRuns ?? {}).map((label) => ({
+          : lastDeclaredLabels(row?.triggerRuns ?? {}).map((label) => ({
               label,
               kind: null,
             })),

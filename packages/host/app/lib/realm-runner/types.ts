@@ -38,6 +38,7 @@ export type RealmRunnerCallMethod =
   | 'web.search'
   | 'web.read'
   | 'resolve'
+  | 'resolve.batch'
   | 'transform'
   | 'activity'
   | 'plan'

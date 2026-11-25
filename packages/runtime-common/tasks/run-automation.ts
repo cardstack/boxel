@@ -16,13 +16,17 @@ import {
   AUTOMATION_COMMAND,
   AUTOMATION_TAB_GRACE_MS,
   automationRunDedupeKey,
+  isWebhookDeliverySlot,
   isAutomationScriptOutcome,
+  MAX_WEBHOOK_PAYLOAD_CHARS,
   scriptErrorText,
+  WEBHOOK_PAYLOAD_TOO_LARGE_REASON,
 } from '../automation-run-command.ts';
 import type { ReportAutomationChange } from '../automation-change-events.ts';
 import type { ReportRunChange } from '../automation-run-events.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
 import { pauseAfterRepeatedFailures } from '../automations.ts';
+import { JOB_LOST_REASON } from '../automation-reconcile.ts';
 import { logRunPlatformLine } from '../automation-run-log.ts';
 import {
   automationRunLogTag,
@@ -306,6 +310,30 @@ async function attemptRun(
     );
   }
 
+  // A delivery whose body was too large to send to the tab ends its run
+  // before anything else, so a redelivery of the same body ends the same way.
+  if (input.webhookPayloadChars !== undefined) {
+    return await fail(
+      WEBHOOK_PAYLOAD_TOO_LARGE_REASON,
+      `The webhook delivery's body is ${input.webhookPayloadChars} characters, more than the ${MAX_WEBHOOK_PAYLOAD_CHARS} a run takes, so the script didn't run`,
+    );
+  }
+
+  // A webhook delivery's run needs the delivery's payload, which only its
+  // job carries. A job without one (made again by something other than the
+  // delivery) would run the script on nothing, so the run ends as lost, as
+  // reconcile ends a webhook run whose job is gone.
+  if (
+    input.triggerKind === undefined &&
+    isWebhookDeliverySlot(run.slot) &&
+    input.webhookPayload === undefined
+  ) {
+    return await fail(
+      JOB_LOST_REASON,
+      "The webhook delivery's run has no payload in its job, so it didn't start",
+    );
+  }
+
   let realmURL = ensureTrailingSlash(ctx.virtualNetwork.toURLHref(run.realm));
   let [limits, declaration] = await Promise.all([
     readRunLimits({ ...ctx, automationId: run.automationId }),
@@ -461,6 +489,7 @@ async function attemptRun(
     },
     secondsCap: remainingMs / 1000,
     endsAt: new Date(deadline).toISOString(),
+    batchDeadlineMinutes: declaration.declaration.batchDeadlineMinutes,
   };
 
   let outcome: AutomationScriptOutcome;

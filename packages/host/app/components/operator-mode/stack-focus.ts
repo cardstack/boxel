@@ -142,12 +142,31 @@ function handBackFocus(operatorModeStateService: OperatorModeStateService) {
   let stack = left
     .map(({ stack }) => stack)
     .find((stack) => stacks.includes(stack) && stack.length > 0);
-  let target = stack
-    ? stack[stack.length - 1]
-    : operatorModeStateService.mostRecentlyInteractedTopItem();
-  if (target) {
+  focusStackItem(
+    stack
+      ? stack[stack.length - 1]
+      : operatorModeStateService.mostRecentlyInteractedTopItem(),
+  );
+}
+
+// The stacks are inert while the dashboard covers them, so a card that opens
+// under it can't take focus. As the dashboard closes, focus that went with
+// it goes to the top card Escape acts on, when the submode shows the stacks.
+export function focusTopCardIfFocusLost(
+  operatorModeStateService: OperatorModeStateService,
+) {
+  schedule('afterRender', () => {
+    if (focusedElement()) {
+      return;
+    }
+    focusStackItem(operatorModeStateService.mostRecentlyInteractedTopItem());
+  });
+}
+
+function focusStackItem(item: StackItem | undefined) {
+  if (item) {
     focusIfConnected(
-      document.querySelector(`[data-stack-item="${target.instanceId}"]`),
+      document.querySelector(`[data-stack-item="${item.instanceId}"]`),
     );
   }
 }

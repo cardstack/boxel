@@ -7,6 +7,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   AUTOMATION_COMMAND,
   automationRunDedupeKey,
+  webhookDeliverySlot,
   createAutomationRun,
   getAutomationRun,
   logger,
@@ -130,12 +131,17 @@ module(basename(import.meta.filename), function (hooks) {
   async function newRun({
     dryRun = false,
     trigger = 'manual',
-  }: { dryRun?: boolean; trigger?: string } = {}): Promise<AutomationRun> {
+    slot = randomUUID(),
+  }: {
+    dryRun?: boolean;
+    trigger?: string;
+    slot?: string;
+  } = {}): Promise<AutomationRun> {
     return await createAutomationRun(dbAdapter, {
       automationId: rri(`${realm.url}${TEST_AUTOMATION_PATH}`),
       realm: ri(realm.url),
       trigger,
-      slot: randomUUID(),
+      slot,
       actsAs: OWNER,
       dryRun,
     });
@@ -373,6 +379,11 @@ module(basename(import.meta.filename), function (hooks) {
       Date.parse(input.endsAt),
       started + 300_000,
       "the tab is told when the run's time limit passes, counted from its start",
+    );
+    assert.strictEqual(
+      input.batchDeadlineMinutes,
+      60,
+      "the tab is told the card's batch deadline, for a batch whose script sets none",
     );
     assert.deepEqual(input.automation.trigger, {
       label: 'manual',
@@ -733,6 +744,26 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(after?.commitStartedAt, null);
     }
     assert.strictEqual(await readFile('out/mismatch.txt'), undefined);
+  });
+
+  test("a webhook delivery's run whose job carries no payload runs nothing and ends as lost", async function (assert) {
+    let run = await newRun({
+      trigger: 'deliveries',
+      slot: webhookDeliverySlot('delivery-without-payload'),
+    });
+    let calls: TabCall[] = [];
+    let result = await attempt(
+      run,
+      stubTab(calls, { answer: { state: 'complete' } }),
+      { input: { triggerKind: undefined } },
+    );
+    assert.strictEqual(calls.length, 0, 'no tab was asked to run anything');
+    assert.strictEqual(result.state, 'error');
+    assert.strictEqual(result.reason, 'job-lost');
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, run.id))?.errorReason,
+      'job-lost',
+    );
   });
 
   // The run's identity, with credits to pay for its run.
