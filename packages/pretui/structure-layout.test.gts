@@ -540,7 +540,7 @@ module('Pretui | structure-layout | Collapsible', function (hooks) {
     assert.strictEqual(
       getComputedStyle(closed!).overflow,
       'hidden',
-      'the closed and animating panel still clips',
+      `the closed and animating panel still clips (closed=${getComputedStyle(closed!).overflow} open=${getComputedStyle(open!).overflow})`,
     );
   });
 
