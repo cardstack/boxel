@@ -766,8 +766,13 @@ export interface RequestSnapshot {
 // Why a slot needs approving: `new`, never approved or no longer usable;
 // `changed`, its request changed since it was approved; `automations-only`,
 // approved and unchanged, but for automations only (answered only when the
-// batch is asked for with `interactive`).
-export type BatchSlotStatus = 'new' | 'changed' | 'automations-only';
+// batch is asked for with `interactive`); `automation`, approved and
+// unchanged, but not yet for the automation an automation's batch is for.
+export type BatchSlotStatus =
+  | 'new'
+  | 'changed'
+  | 'automations-only'
+  | 'automation';
 
 // One credential slot of an operation in a batch: why it needs approving, the
 // request it would approve and its fingerprint, and what it was last approved
@@ -788,6 +793,10 @@ export interface BatchSlot {
 
 export interface BatchOperation {
   name: string;
+  // In an automation's batch, which spans card definitions: the definition
+  // the operation is on, and the key the batch names the operation by.
+  card?: { name: string; module: string; exportName: string };
+  key?: string;
   label: string;
   method: string;
   path: string;
@@ -835,6 +844,9 @@ export interface ApprovalBatch {
   card: { name: string; module: string; exportName: string };
   instance: string | null;
   review: boolean;
+  // An automation's batch: the automation card, and the version of the
+  // automation shown, which the confirmation names back.
+  automation?: { id: string; version: string };
   groups: { destination: DestinationDisplay; operations: BatchOperation[] }[];
   // Operations left for after this confirmation, which takes at most so many
   // slots.
@@ -860,16 +872,21 @@ export type BatchFillers = Record<
 
 export async function approvalBatch(
   config: Config,
-  request: {
-    target: NonNullable<WindowContextRequest['target']>;
-    review: boolean;
-    // Also answer operations approved for automations only.
-    interactive?: boolean;
-    // The operations an approval covers, by name, when it covers only some
-    // of the batch's: `fillers` then weigh only these. The batch still holds
-    // every operation.
-    operations?: string[];
-  },
+  request:
+    | {
+        target: NonNullable<WindowContextRequest['target']>;
+        review: boolean;
+        // Also answer operations approved for automations only.
+        interactive?: boolean;
+        // The operations an approval covers, by name, when it covers only
+        // some of the batch's: `fillers` then weigh only these. The batch
+        // still holds every operation.
+        operations?: string[];
+      }
+    // An automation's batch: every key approval the switched-on automation
+    // (its card) is missing that the user can give. `operations` names
+    // operations by their `key`.
+    | { automation: string; operations?: string[] },
 ): Promise<ApprovalBatch> {
   let json = await authorizedRequest(config, '_key-bindings/batch', {
     body: { data: { type: 'key-binding-batch', attributes: request } },
@@ -904,11 +921,16 @@ export async function approveOperations(
     operations,
     interactive = false,
     dailyBudgets,
+    automation,
   }: {
     realm: string;
     operations: OperationApproval[];
     interactive?: boolean;
     dailyBudgets?: Record<string, number>;
+    // The automation the approval is for, and the version of it shown: the
+    // realm server records the approval for that automation, and refuses
+    // the confirmation when the automation changed since.
+    automation?: { id: string; version: string };
   },
 ): Promise<void> {
   await authorizedRequest(config, '_key-bindings', {
@@ -922,6 +944,7 @@ export async function approveOperations(
           ...(dailyBudgets && Object.keys(dailyBudgets).length > 0
             ? { dailyBudgets }
             : {}),
+          ...(automation ? { automation } : {}),
         },
       },
     },

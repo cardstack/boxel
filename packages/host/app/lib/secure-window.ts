@@ -9,6 +9,9 @@ import { pageURL, withFragment } from './secure-sign-in';
 // definition that needs the user's approval in one confirmation, and its
 // review-changes mode the same for the ones whose request changed since they
 // were approved; the caller names only the one operation it is blocked on.
+// Opened for a switched-on automation, approve mode approves every key
+// approval the automation is missing that the user can give, across the card
+// types its operations are on, for that automation.
 // Its share-limits mode is where the owner of a share's key changes the
 // share's limits, which the app's session may not. Its connected-apps mode
 // lists the apps connected to the user's Boxel account, the other way from
@@ -81,6 +84,7 @@ export type SecureWindowRequest =
       target: SecureWindowTarget;
       reason?: string;
     }
+  | { mode: 'approve'; automation: string; reason?: string }
   // The page that can disconnect apps from the account shows nothing its
   // opener wrote, so this mode carries no reason.
   | { mode: 'connected-apps' };
@@ -115,6 +119,8 @@ export function secureWindowURL(request: SecureWindowRequest): string {
   } else if (request.mode === 'swap-key' || request.mode === 'share-limits') {
     fragment.realm = request.realm;
     fragment.share = request.share;
+  } else if ('automation' in request) {
+    fragment.automation = request.automation;
   } else {
     let target = 'target' in request ? request.target : undefined;
     if (target?.kind === 'instance') {

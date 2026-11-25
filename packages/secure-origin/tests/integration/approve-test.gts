@@ -463,6 +463,138 @@ module('Integration | approve pages', function (hooks) {
     assert.deepEqual(navigations, [{ how: 'close' }], 'the window closes');
   });
 
+  test("opened for an automation, the page approves the automation's missing key approvals across card types in one confirmation", async function (assert) {
+    const AUTOMATION = `${REALM}Automation/nightly`;
+    const ISSUES = `${REALM}issues`;
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: withFillers(
+              batch({
+                card: {
+                  name: 'Automation',
+                  module: '@cardstack/catalog/automation/automation',
+                  exportName: 'Automation',
+                },
+                automation: { id: AUTOMATION, version: 'v1.40' },
+                groups: [
+                  {
+                    destination: {
+                      href: GRAPHQL,
+                      host: 'api.github.com',
+                      path: '/graphql/',
+                      registrableDomain: 'github.com',
+                    },
+                    operations: [
+                      operation('listPRs', 'List your open pull requests', {
+                        card: {
+                          name: 'PR Inbox',
+                          module: MODULE,
+                          exportName: 'Inbox',
+                        },
+                        key: `${MODULE}#Inbox/listPRs`,
+                      }),
+                      operation('listIssues', 'List issues', {
+                        card: {
+                          name: 'Issues',
+                          module: ISSUES,
+                          exportName: 'Issues',
+                        },
+                        key: `${ISSUES}#Issues/listIssues`,
+                        status: 'automation',
+                        slots: [
+                          {
+                            slot: 'userKey',
+                            key: 'userKey',
+                            status: 'automation',
+                            snapshot: snapshot('{"query":"listIssues"}'),
+                            fingerprint: 'fp-listIssues',
+                            approved: {
+                              snapshot: snapshot('{"query":"listIssues"}'),
+                              keyId: 'key-gh',
+                              shareId: null,
+                              interactive: false,
+                            },
+                          },
+                        ],
+                      }),
+                    ],
+                  },
+                ],
+              }),
+            ),
+          },
+        }),
+    });
+    visitShell(
+      `approve#${new URLSearchParams({
+        automation: AUTOMATION,
+        reason: 'To turn on the automation',
+      })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+
+    assert.deepEqual(
+      requests.find((r) => r.path === '_key-bindings/batch')?.body.data
+        .attributes,
+      { automation: AUTOMATION },
+      'the page asks for the automation’s batch, naming no operation',
+    );
+    assert.deepEqual(
+      requests.find((r) => r.path === '_secure-window/context')?.body.data
+        .attributes,
+      { target: { kind: 'instance', url: AUTOMATION } },
+      'and reads the automation card as what the page is for',
+    );
+    assert
+      .dom('[data-test-approve-automation-intro]')
+      .includesText(
+        'Boxel makes the calls exactly as shown on every scheduled run of the automation',
+      );
+    assert.deepEqual(
+      [...document.querySelectorAll('[data-test-approve-card-type]')].map((e) =>
+        e.textContent?.trim(),
+      ),
+      ['on PR Inbox', 'on Issues'],
+      'each operation names the card type the operation is on',
+    );
+    assert
+      .dom(
+        '[data-test-approve-operation="listIssues"] [data-test-approve-for-automation]',
+      )
+      .hasText('New for the automation');
+    assert
+      .dom('[data-test-pretui-radio-option="automations"] input')
+      .isChecked('the choice starts on the scheduled runs');
+    await click('[data-test-approve-save]');
+    await settled();
+
+    let [approval] = approvals();
+    assert.deepEqual(
+      approval.automation,
+      { id: AUTOMATION, version: 'v1.40' },
+      'the confirmation names the automation and the version shown',
+    );
+    assert.notOk(approval.interactive, 'for the scheduled runs only');
+    assert.deepEqual(
+      approval.operations.map((o: { codeRef: unknown; operation: string }) => [
+        o.operation,
+        o.codeRef,
+      ]),
+      [
+        ['listPRs', { module: MODULE, name: 'Inbox' }],
+        ['listIssues', { module: ISSUES, name: 'Issues' }],
+      ],
+      'each operation on the card type the operation is on',
+    );
+    assert
+      .dom('[data-test-approve-done-automation]')
+      .includesText('on every scheduled run, without asking you again');
+  });
+
   test('an unticked operation is left out, and a group with none ticked asks for no grant', async function (assert) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);

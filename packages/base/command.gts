@@ -273,6 +273,9 @@ export class OpenSecureWindowInput extends CardDef {
   @field realm = contains(StringField);
   @field share = contains(StringField);
   @field operation = contains(StringField);
+  // The `approve` mode's automation card: the window approves every key
+  // approval the switched-on automation is missing that the user can give.
+  @field automation = contains(StringField);
   @field reason = contains(StringField);
 }
 
