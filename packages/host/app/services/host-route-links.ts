@@ -28,6 +28,7 @@ import { scopedRenderContext } from '@cardstack/runtime-common/render-context';
 
 import { currentRenderScope } from '@cardstack/host/lib/gc-card-store';
 import { visitorHostRouteLookups } from '@cardstack/host/lib/host-route-lookups';
+import { plainLinkClickURL } from '@cardstack/host/lib/link-clicks';
 import { duringPrerenderHeaders } from '@cardstack/host/lib/prerender-fetch-headers';
 
 import type HostModeService from './host-mode-service';
@@ -89,15 +90,15 @@ type RenderGlobals = {
 // - In an HTML visit, the realm's routes endpoint. The stored HTML carries
 //   the address on the realm's own URL.
 //
-// - In interact mode, the routes endpoint of the realm currently open (the
-//   workspace the stacks show). A click on a routed address opens its card
-//   in the stack (see `followAddress`). The app reads the routes when
-//   interact mode shows, and again after each index of the realm that
-//   changes realm.json or a module, so a change to the routes or to a route
-//   type reaches the app. Until a first read lands, links keep card URLs.
+// - In interact mode and code mode, the routes endpoint of the realm
+//   currently open (the workspace the stacks show, or the realm of the open
+//   file). A click on a routed address opens its card in the app (see
+//   `followRoutedLinks`). The app reads the routes when one of the two modes
+//   shows, and again after each index of the realm that changes realm.json
+//   or a module, so a change to the routes or to a route type reaches the
+//   app. Until a first read lands, links keep card URLs.
 //
-// In code mode and host submode there are no routes, and links keep card
-// URLs.
+// In host submode there are no routes, and links keep card URLs.
 //
 // The endpoint serves the routes the realm's last index validated and
 // stored, so nothing here validates them again. That tree can lack routes
@@ -170,21 +171,22 @@ export default class HostRouteLinksService
   // `hrefTo` wrote, on the realm's URL, matches it.
   private linkedCards = new Map<string, string>();
 
-  // How many interact mode views are shown; see `showInteractMode`. Not
-  // tracked: `interactModeChanges` tells the links when it changed.
-  private interactModeViews = 0;
-  @tracked private interactModeChanges = 0;
-  // In interact mode: the routes of the last read of a realm's endpoint
-  // that got an answer. `undefined` routes: the realm has none. They stay in
-  // use while the next read is under way, after it fails, and while
-  // interact mode doesn't show, so links keep their addresses meanwhile.
+  // How many views that follow routed links are shown (interact mode, code
+  // mode); see `followRoutedLinks`. Not tracked: `linkViewChanges` tells
+  // the links when it changed.
+  private linkViews = 0;
+  @tracked private linkViewChanges = 0;
+  // In such a view: the routes of the last read of a realm's endpoint that
+  // got an answer. `undefined` routes: the realm has none. They stay in use
+  // while the next read is under way, after it fails, and while no such
+  // view shows, so links keep their addresses meanwhile.
   // Written only when a read settles, never during a render, and only when
   // the routes changed, so a read that finds the same routes renders no link
   // again.
   @tracked private appRoutes:
     | { realmURL: string; routes: HostRouteLinkRoutes | undefined }
     | undefined;
-  // The realm whose routes the app reads while interact mode shows: the
+  // The realm whose routes the app reads while such a view shows: the
   // realm open there. `read` is the number of the read under way. A read
   // that settles after another took its place is dropped.
   private appRoutesWatch:
@@ -213,35 +215,79 @@ export default class HostRouteLinksService
     super.willDestroy();
   }
 
-  // Called while interact mode shows, so that links get routed addresses
-  // from the open realm's routes. Returns the function to call when it no
+  // Called while a view of the open realm shows (interact mode, code
+  // mode). Until the returned function is called, every link in the app
+  // gets a routed address from the open realm's routes, and a plain click
+  // on a link to a routed address, anywhere on `page`, opens the card the
+  // address resolves to, with no page load, as a page load of the address
+  // would serve it. The view says how, in `follower`.
+  //
+  // A redirect inside the realm is followed in the app. A lookup that fails
+  // keeps the app where it is, and opens the card whose load failed when
+  // there is one, which shows the failure. A redirect out of the realm and
+  // an address no route serves go to the view's `load`. Any other click
+  // keeps the browser's default: see `lib/link-clicks`.
+  //
+  // A click is dropped when another click follows it before its card is
+  // known, when another realm was opened meanwhile, and when the view no
   // longer shows.
-  showInteractMode(): () => void {
-    this.interactModeViews++;
-    this.noteInteractModeChange();
+  followRoutedLinks(page: Document, follower: RoutedLinkFollower): () => void {
+    let follows = 0;
     let shown = true;
+    let follow = async (url: URL, open: (cardHref: string) => void) => {
+      let mine = ++follows;
+      let realm = this.operatorModeStateService.openRealmURL;
+      let target = await this.followAddress(url);
+      if (
+        !target ||
+        !shown ||
+        mine !== follows ||
+        this.isDestroying ||
+        this.isDestroyed ||
+        this.operatorModeStateService.openRealmURL !== realm
+      ) {
+        return;
+      }
+      if (target.kind === 'load') {
+        follower.load(target.href);
+      } else if (target.cardHref) {
+        open(target.cardHref);
+      }
+    };
+    let onClick = (event: MouseEvent) => {
+      let url = plainLinkClickURL(event);
+      if (!url || !this.holdsRoutesFor(url)) {
+        return;
+      }
+      event.preventDefault();
+      void follow(url, follower.opener(event));
+    };
+    page.addEventListener('click', onClick);
+    this.linkViews++;
+    this.noteLinkViewChange();
     return () => {
       if (shown) {
         shown = false;
-        this.interactModeViews--;
-        this.noteInteractModeChange();
+        page.removeEventListener('click', onClick);
+        this.linkViews--;
+        this.noteLinkViewChange();
       }
     };
   }
 
   // The caller is a modifier, inside a render that links may have read in,
-  // so the links render again in a later microtask. Once interact mode no
-  // longer shows, the app stops reading the routes, and it reads them again
-  // when interact mode shows again.
-  private noteInteractModeChange() {
+  // so the links render again in a later microtask. Once no view that
+  // follows routed links shows, the app stops reading the routes, and it
+  // reads them again when one shows again.
+  private noteLinkViewChange() {
     void Promise.resolve().then(() => {
       if (this.isDestroying || this.isDestroyed) {
         return;
       }
-      if (this.interactModeViews === 0) {
+      if (this.linkViews === 0) {
         this.stopWatchingAppRoutes();
       }
-      this.interactModeChanges++;
+      this.linkViewChanges++;
     });
   }
 
@@ -330,14 +376,14 @@ export default class HostRouteLinksService
       return fromPage;
     }
     if (!this.inHTMLVisit) {
-      return this.interactModeRoutes();
+      return this.openRealmRoutes();
     }
     if (scopedRenderContext()) {
       // This tab renders a card for its own index, and a link can't tell
       // whether it renders for that or for someone looking at the app. It
       // takes the visit's routes, and also reads the app's, so that a link
       // in the app renders again once they change.
-      void this.interactModeRoutes();
+      void this.openRealmRoutes();
     }
     let realmURL = this.visitedRealmURL();
     return realmURL ? this.routesOfRealm(realmURL) : undefined;
@@ -471,11 +517,12 @@ export default class HostRouteLinksService
     }
   }
 
-  // In interact mode, the routes of the realm currently open, or
-  // `undefined` while they are read, and outside interact mode.
-  private interactModeRoutes(): HostRouteLinkRoutes | undefined {
-    void this.interactModeChanges;
-    let realmURL = this.interactModeRealmURL();
+  // While a view that follows routed links shows, the routes of the realm
+  // currently open, or `undefined` while they are read. `undefined` when no
+  // such view shows.
+  private openRealmRoutes(): HostRouteLinkRoutes | undefined {
+    void this.linkViewChanges;
+    let realmURL = this.openRealmURL();
     if (!realmURL) {
       return undefined;
     }
@@ -486,9 +533,10 @@ export default class HostRouteLinksService
     return held?.realmURL === realmURL ? held.routes : undefined;
   }
 
-  // While interact mode shows, the URL of the realm open there.
-  private interactModeRealmURL(): string | undefined {
-    if (this.interactModeViews === 0) {
+  // While a view that follows routed links shows, the URL of the realm
+  // open there.
+  private openRealmURL(): string | undefined {
+    if (this.linkViews === 0) {
       return undefined;
     }
     let realm = this.operatorModeStateService.openRealmURL;
@@ -552,8 +600,8 @@ export default class HostRouteLinksService
     watch.read = undefined;
     if ('failure' in result) {
       // The routes held so far stay in use. The app reads them again after
-      // the realm's next index that may change them, and when interact mode
-      // shows again.
+      // the realm's next index that may change them, and when a view that
+      // follows routed links shows again.
       return;
     }
     let held = this.appRoutes;
@@ -563,7 +611,7 @@ export default class HostRouteLinksService
     this.appRoutes = { realmURL, routes: result.routes };
   }
 
-  // In interact mode, what a click on a routed address does, worked out
+  // What a click on a routed address does in the app, worked out
   // with the same resolver and lookups a page load of the address runs, as
   // the signed-in user (ADR 036 §1.4). Only for an address in the open
   // realm, whose routes the app holds; see `holdsRoutesFor`. `undefined`
@@ -628,7 +676,7 @@ export default class HostRouteLinksService
     return { kind: 'failed', cardHref: undefined };
   }
 
-  // Whether a URL is in the realm open in interact mode, whose routes the
+  // Whether a URL is in the realm open in the app, whose routes the
   // app holds, and that has any: a URL a click may follow with
   // `followAddress`.
   holdsRoutesFor(url: URL): boolean {
@@ -640,7 +688,7 @@ export default class HostRouteLinksService
     let routes = held?.routes;
     if (
       !routes ||
-      held?.realmURL !== this.interactModeRealmURL() ||
+      held?.realmURL !== this.openRealmURL() ||
       routes.routes.length === 0 ||
       url.origin !== routes.realmURL.origin ||
       !url.pathname.startsWith(routes.realmURL.pathname)
@@ -747,10 +795,20 @@ function routesReadFailure(message: string, status: number): CardError {
   return error;
 }
 
+// How a view opens what a click on a routed address leads to; see
+// `followRoutedLinks`.
+export interface RoutedLinkFollower {
+  // Called at the click. Returns what opens the card once the address has
+  // resolved, so the view can note where the click happened.
+  opener(event: MouseEvent): (cardHref: string) => void;
+  // Has the browser load a URL the app can't show.
+  load(href: string): void;
+}
+
 // How many redirects a click on a routed address follows in the app.
 const MAX_REDIRECT_HOPS = 5;
 
-// What a click on a routed address in interact mode does.
+// What a click on a routed address does in the app.
 export type RoutedAddressFollow =
   // Open this card.
   | { kind: 'card'; cardHref: string }

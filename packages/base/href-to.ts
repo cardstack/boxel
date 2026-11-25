@@ -24,8 +24,8 @@
 //
 // A link gets its routed address wherever the realm has routes, whether or
 // not a host URL serves the realm: on a page served on a host URL, in the
-// HTML stored for the realm, and in interact mode, from the routes of the
-// realm open there. In code mode and host submode, a link keeps the card's
+// HTML stored for the realm, and in interact mode and code mode, from the
+// routes of the realm open there. In host submode, a link keeps the card's
 // own URL for now, as when no route fits.
 //
 // The address is on the realm's own URL. A link into another realm keeps

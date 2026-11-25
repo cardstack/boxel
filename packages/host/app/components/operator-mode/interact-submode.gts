@@ -57,7 +57,6 @@ import {
   type Filter,
 } from '@cardstack/runtime-common';
 
-import { plainLinkClickURL } from '@cardstack/host/lib/link-clicks';
 import {
   detectStackItemTypeForTarget,
   takesFileDeleteRoute,
@@ -167,74 +166,33 @@ export default class InteractSubmode extends Component {
     | ReturnType<getCardCollection>
     | undefined;
 
-  // While interact mode shows, every link in the app gets a routed address
-  // from the open realm's routes, so a plain click on a link to a routed
-  // address, anywhere on the page, opens the card the address resolves to,
-  // with no page load, as a page load of the address would serve it. The
-  // card opens in the stack the link is in, or in the right-most stack for
-  // a link outside the stacks, such as in a modal or the search sheet. A
-  // redirect inside the realm is followed in the app. A lookup that fails
-  // keeps the app where it is, and opens the card whose load failed when
-  // there is one, which shows the failure. The browser loads a redirect out
-  // of the realm and an address no route serves. Any other click keeps the
-  // browser's default: see `lib/link-clicks`.
-  private followRoutedLinks = modifier((element: HTMLElement) => {
-    let stopShowing = this.hostRouteLinks.showInteractMode();
-    let page = element.ownerDocument;
-    let onClick = (event: MouseEvent) => {
-      let url = plainLinkClickURL(event);
-      if (!url || !this.hostRouteLinks.holdsRoutesFor(url)) {
-        return;
-      }
-      event.preventDefault();
-      void this.followRoutedLink(url, stackItemOf(event));
-    };
-    page.addEventListener('click', onClick);
-    return () => {
-      page.removeEventListener('click', onClick);
-      stopShowing();
-    };
-  });
-
-  // Counts the routed links followed, so a click that another click
-  // follows before its card is known is dropped.
-  private routedLinkFollows = 0;
-
-  // `stackItem` is the instance id of the stack item the link is in, if
-  // any. The stacks can change while the address resolves, so the stack is
-  // found again after that: when the item was closed, or another realm was
-  // opened, the click is dropped.
-  private async followRoutedLink(url: URL, stackItem: string | undefined) {
-    let follow = ++this.routedLinkFollows;
-    let realm = this.operatorModeStateService.openRealmURL;
-    let target = await this.hostRouteLinks.followAddress(url);
-    if (
-      !target ||
-      follow !== this.routedLinkFollows ||
-      this.isDestroying ||
-      this.isDestroyed ||
-      this.operatorModeStateService.openRealmURL !== realm
-    ) {
-      return;
-    }
-    if (target.kind === 'load') {
-      window.location.assign(target.href);
-      return;
-    }
-    if (!target.cardHref) {
-      return;
-    }
-    let stackIndex =
-      stackItem === undefined
-        ? this.rightMostStackIndex
-        : this.stacks.findIndex((stack) =>
-            stack.some((item) => item.instanceId === stackItem),
-          );
-    if (stackIndex === -1) {
-      return;
-    }
-    this.viewCard(stackIndex, target.cardHref, 'isolated');
-  }
+  // While interact mode shows, a plain click on a link to a routed address
+  // opens its card in the stack the link is in, or in the right-most stack
+  // for a link outside the stacks, such as in a modal or the search sheet.
+  // The browser loads an address the app can't show. See
+  // `HostRouteLinksService.followRoutedLinks`.
+  private followRoutedLinks = modifier((element: HTMLElement) =>
+    this.hostRouteLinks.followRoutedLinks(element.ownerDocument, {
+      // The stacks can change while the address resolves, so the stack is
+      // found again after that: when the link's stack item was closed, the
+      // click is dropped.
+      opener: (event) => {
+        let stackItem = stackItemOf(event);
+        return (cardHref) => {
+          let stackIndex =
+            stackItem === undefined
+              ? this.rightMostStackIndex
+              : this.stacks.findIndex((stack) =>
+                  stack.some((item) => item.instanceId === stackItem),
+                );
+          if (stackIndex !== -1) {
+            this.viewCard(stackIndex, cardHref, 'isolated');
+          }
+        };
+      },
+      load: (href) => window.location.assign(href),
+    }),
+  );
 
   @action private handleEscape(event: KeyboardEvent) {
     // A modal owns Escape regardless of where focus is.

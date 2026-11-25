@@ -375,4 +375,51 @@ module('Acceptance | interact submode | routed links', function (hooks) {
       .dom(`[data-test-operator-mode-stack="0"] [data-test-card-error]`)
       .exists('the card whose load failed shows its failure');
   });
+
+  module('in code mode', function () {
+    async function openPostFile() {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}Post/hello.json`,
+      });
+      // The link in the preview has its routed address once the app has
+      // read the routes.
+      await waitFor(`${link('routed')}[href="${testRealmURL}people/jane"]`);
+      await settled();
+    }
+
+    test("a click on a routed link in the preview opens its card's file, with no page load", async function (assert) {
+      await openPostFile();
+      let pageURL = window.location.href;
+
+      await click(link('routed'));
+
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}Author/jane.json`);
+      assert.deepEqual(leftToBrowser, [], 'the app took the click');
+      assert.strictEqual(window.location.href, pageURL, 'no page load');
+    });
+
+    test('a link to an address that resolves to no card opens in a new tab', async function (assert) {
+      await openPostFile();
+      let pageURL = window.location.href;
+      let opened: string[] = [];
+      window.open = ((url?: string | URL) => {
+        opened.push(String(url));
+        return null;
+      }) as typeof window.open;
+      let href = (document.querySelector(link('missing')) as HTMLAnchorElement)
+        .href;
+
+      await click(link('missing'));
+
+      assert.deepEqual(opened, [href], 'the address opened in a new tab');
+      assert.deepEqual(leftToBrowser, [], 'the app took the click');
+      assert.strictEqual(window.location.href, pageURL, 'no page load');
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}Post/hello.json`, 'the file stays open');
+    });
+  });
 });
