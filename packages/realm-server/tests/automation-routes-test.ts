@@ -2913,14 +2913,22 @@ module(basename(import.meta.filename), function (hooks) {
         'the viewer learns which share the slot sends, not whose key it holds',
       );
 
-      // A grant that names both of them in another realm is enough.
+      // A share's owner is named as the realm's key-share listings name
+      // them: a grant naming both of them in another realm isn't enough.
       await insertPermissions(
         dbAdapter,
         new URL('http://127.0.0.1:4444/automation-routes-elsewhere/'),
         { [WRITER]: ['read'], [OWNER]: ['read'] },
       );
       [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
-      assert.strictEqual(slots[0].keyOwner, WRITER);
+      assert.strictEqual(slots[0].keyOwner, null);
+      await insertPermissions(dbAdapter, realmURL, { [WRITER]: ['read'] });
+      [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.strictEqual(
+        slots[0].keyOwner,
+        WRITER,
+        'a row of the automation’s realm naming the share’s owner names them',
+      );
     });
 
     test('an approval that lands while another is still missing tells the realm’s direct writers', async function (assert) {

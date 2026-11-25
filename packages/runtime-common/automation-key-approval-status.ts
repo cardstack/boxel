@@ -5,8 +5,11 @@
 //
 // A slot the viewer can fix names the secure window page that fixes it
 // (`fix`). A slot someone else must fix says who (`actor`): the key's owner,
-// named by Matrix id only as ADR 011 §1.2 lets the viewer see them
-// (`shownIdentity`), or a realm administrator. Every viewer of the route is a
+// or a realm administrator. The key's owner is named by Matrix id only as
+// ADR 011 lets the viewer see them: a share's owner when a permission row of
+// the automation's realm names both of them, as the realm's key-share
+// listings name a share's owner; a personal key's owner, who is the payer, as
+// the route names the payer (`shownIdentity`). Every viewer of the route is a
 // realm administrator, so a fix any realm administrator can make is always
 // the viewer's.
 
@@ -94,11 +97,14 @@ export async function keyApprovalStatus(
   },
 ): Promise<AutomationKeyApprovalStatus> {
   let shown = new Map<string, Promise<string | null>>();
-  let show = (person: string) => {
-    let known = shown.get(person);
+  let show = (person: string, { share }: { share: boolean }) => {
+    let key = `${share}\n${person}`;
+    let known = shown.get(key);
     if (!known) {
-      known = shownIdentity(dbAdapter, viewer, person);
-      shown.set(person, known);
+      known = share
+        ? namedInRealm(dbAdapter, realmURL, viewer, person)
+        : shownIdentity(dbAdapter, viewer, person);
+      shown.set(key, known);
     }
     return known;
   };
@@ -130,7 +136,7 @@ async function slotStatus(
     viewerOwnsAShare,
   }: {
     viewer: string;
-    show: (person: string) => Promise<string | null>;
+    show: (person: string, kind: { share: boolean }) => Promise<string | null>;
     viewerOwnsAShare: () => Promise<boolean>;
   },
 ): Promise<SlotKeyApprovalStatus> {
@@ -144,7 +150,9 @@ async function slotStatus(
       : {}),
     ...(slot.key && viewerIsKeyOwner ? { key: { name: slot.key.name } } : {}),
     viewerIsKeyOwner,
-    keyOwner: slot.keyOwner ? await show(slot.keyOwner) : null,
+    keyOwner: slot.keyOwner
+      ? await show(slot.keyOwner, { share: slot.kind === 'apiKey' })
+      : null,
     ...(slot.approvedAt ? { approvedAt: slot.approvedAt } : {}),
   };
   let byKeyOwner = (fix: KeyApprovalFix): SlotKeyApprovalStatus =>
@@ -171,6 +179,30 @@ async function slotStatus(
     case 'no-share':
       return { ...status, fix: 'share-key' };
   }
+}
+
+// `person` as `viewer` may see them in the realm at `realmURL`: the viewer
+// themselves, or a person whom a permission row of the realm names beside a
+// row naming the viewer (ADR 011 §1.1, §1.2).
+async function namedInRealm(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  viewer: string,
+  person: string,
+): Promise<string | null> {
+  if (person === viewer) {
+    return person;
+  }
+  let rows = await query(dbAdapter, [
+    'SELECT DISTINCT username FROM realm_user_permissions WHERE realm_url =',
+    param(realmURL),
+    'AND username IN (',
+    param(viewer),
+    ',',
+    param(person),
+    ')',
+  ]);
+  return rows.length === 2 ? person : null;
 }
 
 async function ownsAShare(
