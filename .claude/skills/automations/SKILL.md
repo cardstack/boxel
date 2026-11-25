@@ -2276,9 +2276,10 @@ its _key approvals_ module for the step below).
 the caller as payer before switch-on), and the screen lists each declared
 operation with its state: _Approved_, _You approve_ (a `payer` slot),
 _Another person approves_ (naming the share's label and owner, or "The owner
-of the key" when the owner is null), _No key shared_ (`nobody-yet`, with
-**Share a key**, which opens the secure window's `share-key` page for the
-realm) or _Unavailable_ (the refusal's detail). When the switch-on (or resume)
+of the key" when the owner is null), _No key shared_ (`nobody-yet`: the screen can't turn the
+automation on, and its primary button becomes **Share a key**, which opens the
+secure window's `share-key` page for the realm and reads the route again when
+the page regains focus) or _Unavailable_ (the refusal's detail). When the switch-on (or resume)
 answer's `meta.keyApprovals` isn't approved, the screen stays open on the
 automation's wait. If any missing slot is the payer's, the screen opens the
 secure window at once with the `open-secure-window` tool's
