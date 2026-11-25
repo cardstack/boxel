@@ -669,6 +669,34 @@ export class MyCard extends CardDef {}
       );
     });
 
+    test('keeps an eslint-disable comment for a rule that is off', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'disable-directive.gts')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const anything: any = 1;
+
+export class MyCard extends CardDef {}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.ok(
+        responseJson.output.includes(
+          '// eslint-disable-next-line @typescript-eslint/no-explicit-any',
+        ),
+        `the directive is kept: ${responseJson.output}`,
+      );
+    });
+
     test('an import used only inside <template> is not treated as unused', async function (assert) {
       let response = await request
         .post('/_lint')

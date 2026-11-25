@@ -159,7 +159,7 @@ module.exports = {
   },
 
   create(context) {
-    const sourceCode = context.sourceCode || context.getSourceCode();
+    const sourceCode = context.sourceCode;
 
     // Every scope inside `fn`, including its own. Their references are every
     // identifier the function reads or calls, at any depth. A starter in a
@@ -264,9 +264,7 @@ module.exports = {
     }
 
     function scopeOf(node) {
-      return sourceCode.getScope
-        ? sourceCode.getScope(node)
-        : context.getScope();
+      return sourceCode.getScope(node);
     }
 
     // The helper in `names` a call invokes, if any: `helper(...)`,

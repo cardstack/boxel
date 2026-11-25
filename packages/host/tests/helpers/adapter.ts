@@ -328,7 +328,6 @@ export class TestRealmAdapter implements RealmAdapter {
     let chunks: Uint8Array[] = [];
     let size = 0;
     try {
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         let { done, value } = await reader.read();
         if (done || value === undefined) break;

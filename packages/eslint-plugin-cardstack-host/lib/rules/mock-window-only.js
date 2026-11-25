@@ -24,8 +24,8 @@ module.exports = {
         if (
           node.object.type === 'Identifier' &&
           node.object.name === 'localStorage' &&
-          !context
-            .getAncestors()
+          !context.sourceCode
+            .getAncestors(node)
             .some(
               (ancestor) =>
                 ancestor.type === 'MemberExpression' &&
@@ -42,7 +42,7 @@ module.exports = {
               if (!importAdded) {
                 fixes.unshift(
                   fixer.insertTextBefore(
-                    context.getSourceCode().ast.body[0],
+                    context.sourceCode.ast.body[0],
                     "import window from 'ember-window-mock';\n",
                   ),
                 );

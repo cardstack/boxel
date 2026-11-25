@@ -1,4 +1,6 @@
-# Disallow environment-specific realm URLs in code; use the registered prefixes like @cardstack/catalog/ instead (`@cardstack/boxel/no-literal-realm-urls`)
+# @cardstack/boxel/no-literal-realm-urls
+
+📝 Disallow environment-specific realm URLs in code; use the registered prefixes like @cardstack/catalog/ instead.
 
 🔧 This rule is automatically fixable by the [`--fix` CLI option](https://eslint.org/docs/latest/user-guide/command-line-interface#--fix).
 

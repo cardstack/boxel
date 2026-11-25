@@ -1,4 +1,6 @@
-# Enforce use of window mock localStorage (`@cardstack/host/mock-window-only`)
+# @cardstack/host/mock-window-only
+
+📝 Enforce use of window mock localStorage.
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

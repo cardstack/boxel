@@ -1,5 +1,3 @@
-/* eslint-env node */
-
 // Prints the OAuth provider's configuration, BOXEL_OAUTH_CONFIG: cookie keys
 // and a signing key set.
 //

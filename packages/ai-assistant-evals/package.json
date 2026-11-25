@@ -32,6 +32,7 @@
     "@types/node": "catalog:",
     "concurrently": "catalog:",
     "ember-template-lint": "catalog:",
+    "eslint": "catalog:",
     "jsonwebtoken": "catalog:",
     "typescript": "catalog:"
   },

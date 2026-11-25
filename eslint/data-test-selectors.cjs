@@ -8,9 +8,9 @@
 // deleting a test selector would silently change production. Either way, use a
 // plain `data-*` attribute for things you actually select on.
 //
-// Shared by the root `.eslintrc.js` and by packages whose own config is
-// `root: true` (e.g. `packages/host`, `packages/boxel-ui`), which do not
-// inherit the root config and so must re-declare these selectors themselves.
+// Shared by `rootConfig()` in `eslint/shared.mjs` and by packages whose config
+// does not spread it (e.g. `packages/host`, `packages/boxel-ui`), which must
+// re-declare these selectors themselves.
 const DATA_TEST_MESSAGE =
   "Don't select on `data-test-*`: it's a test-only attribute (host builds strip it in production; card code keeps it but coupling to a test hook is fragile). Use a plain `data-*` attribute (e.g. `[data-foo]`) for functional selectors.";
 
