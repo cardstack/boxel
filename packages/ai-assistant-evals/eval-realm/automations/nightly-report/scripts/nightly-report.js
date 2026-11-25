@@ -1,3 +1,4 @@
+/* global realm */
 realm.progress.plan(['Count open tasks', 'Write report']);
 realm.progress.milestone('Count open tasks');
 const found = await realm.cards.search({
