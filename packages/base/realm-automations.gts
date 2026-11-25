@@ -280,21 +280,21 @@ export function automationNoticeText(
     case 'waiting-for-key-approval':
       return {
         happened: `Boxel has paused every run of ${name} until each key’s owner approves the automation.`,
-        fix: 'Each key’s owner should approve the automation in the secure window, and then Boxel runs the automation once the last approval lands.',
+        fix: 'Each key’s owner should approve the automation, and then Boxel runs the automation once the last approval lands.',
       };
     case 'binding-not-approved':
       return {
         happened: operation
           ? `Boxel didn’t start a run of ${name} because nobody approved ${operation} for the automation.`
           : `Boxel didn’t start a run of ${name} because nobody approved one of the automation’s operations for the automation.`,
-        fix: 'The payer should approve the automation in the secure window, and then Boxel runs the automation once the approval lands.',
+        fix: 'The payer should approve the automation, and then Boxel runs the automation once the approval lands.',
       };
     case 'binding-needs-reapproval':
       return {
         happened: operation
           ? `Boxel didn’t start a run of ${name} because ${operation} now sends a different request than the one the payer approved.`
           : `Boxel didn’t start a run of ${name} because one of the automation’s operations now sends a different request than the one the payer approved.`,
-        fix: 'The payer should review the change, and then approve the automation again in the secure window.',
+        fix: 'The payer should review the change, and then approve the automation again.',
       };
     case 'share-suspended':
       return {
@@ -308,7 +308,7 @@ export function automationNoticeText(
         happened: operation
           ? `Boxel didn’t start a run of ${name} because the approval of a key that ${operation} needs has ended.`
           : `Boxel didn’t start a run of ${name} because the approval of a key that the automation needs has ended.`,
-        fix: 'The key’s owner should approve the automation again in the secure window.',
+        fix: 'The key’s owner should approve the automation again.',
       };
     case 'waiting-for-credits':
       return {
@@ -346,7 +346,7 @@ function credentialFix(notice: AutomationNotice): string {
     case 'fix-share':
       return 'A realm administrator should resume the share, or swap a working key into the share.';
     default:
-      return 'The payer should reconnect the account in the secure window.';
+      return 'The payer should reconnect the account.';
   }
 }
 
