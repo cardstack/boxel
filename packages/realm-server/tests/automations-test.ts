@@ -1659,6 +1659,7 @@ module(basename(import.meta.filename), function () {
           ...CAPS,
           dailyCredits: null,
           batchedAI: false,
+          webhookPaths: [],
         };
         assert.strictEqual(
           capsRaisedAbove(snapshot, {
@@ -2592,16 +2593,32 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(paused?.pauseReason, 'webhook-changed');
         });
 
-        test('a snapshot that predates the webhook record pauses for no webhook', async function (assert) {
+        test('a snapshot without webhookPaths agreed to no webhook, so the webhook its card names pauses the automation', async function (assert) {
           await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
           await dbAdapter.execute(
             `UPDATE automations SET caps_snapshot = caps_snapshot - 'webhookPaths'`,
           );
-          let result = await sync(
-            indexed({ triggers: webhookCard(OUTSIDER_WEBHOOK) }),
+          assert.deepEqual(
+            (await getAutomation(dbAdapter, AUTOMATION))?.capsSnapshot
+              .webhookPaths,
+            [],
+            'the snapshot reads as agreeing to no webhook',
           );
-          assert.strictEqual(result?.kind, 'recomputed');
+          let result = await sync(
+            indexed({ triggers: webhookCard(OWNER_WEBHOOK) }),
+          );
+          assert.strictEqual(result?.kind, 'paused');
+          assert.strictEqual(result?.automation.pauseReason, 'webhook-changed');
+        });
+
+        test('a snapshot without webhookPaths leaves an automation whose card names no webhook running', async function (assert) {
+          await switchOn();
+          await dbAdapter.execute(
+            `UPDATE automations SET caps_snapshot = caps_snapshot - 'webhookPaths'`,
+          );
+          let result = await sync(indexed());
           assert.strictEqual(result?.automation.state, 'active');
+          assert.strictEqual(result?.automation.pauseReason, null);
         });
 
         test('an automation paused for an invalid declaration whose fixed card names another webhook pauses for the webhook', async function (assert) {
