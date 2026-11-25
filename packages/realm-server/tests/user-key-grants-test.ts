@@ -619,7 +619,7 @@ module(basename(import.meta.filename), function () {
           grantId: removed.id,
           via: 'window',
         }),
-        { revokedBindings: [] },
+        { revokedBindings: [], affected: [] },
       );
       await assert.rejects(
         openGrantForSending(dbAdapter, keyring, {

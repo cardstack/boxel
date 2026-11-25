@@ -225,6 +225,12 @@ import {
   recordAutomationRunCredentialRefusal,
 } from './automation-runs.ts';
 import { readJobEvent, runChangeReporter } from './automation-run-events.ts';
+import { automationTouchedBy } from './automation-index-hook.ts';
+import {
+  automationsInRealm,
+  followKeyApprovals,
+  type KeyApprovalFollow,
+} from './automations.ts';
 import {
   automationChangeReporter,
   type ChangedAutomation,
@@ -3412,6 +3418,10 @@ export class Realm {
   // broadcast. The updater's own record of the pass ends when the pass lands,
   // which is before that broadcast, so `incrementalIndexing()` folds these in.
   #landingsAfterAnswer = new Set<Promise<void>>();
+  // Key-approval checks of the automations a landed pass touched
+  // (`#followAutomationKeyApprovalsAfterPass`), each held until it settles,
+  // so `incrementalIndexing()` folds them in like the pass that started them.
+  #automationFollowsAfterPass = new Set<Promise<void>>();
   // One line per card read that arrives while incremental indexing is
   // pending — see drainRequestersOwnIndexing for the outcome grammar.
   #readGateLog = logger('realm:read-index-gate');
@@ -4632,12 +4642,17 @@ export class Realm {
   // broadcast of its index event.
   incrementalIndexing(): Promise<void> | undefined {
     let updating = this.#realmIndexUpdater.incrementalIndexing();
-    if (this.#landingsAfterAnswer.size === 0) {
+    if (
+      this.#landingsAfterAnswer.size === 0 &&
+      this.#automationFollowsAfterPass.size === 0
+    ) {
       return updating;
     }
-    return Promise.all([updating, ...this.#landingsAfterAnswer]).then(
-      () => undefined,
-    );
+    return Promise.all([
+      updating,
+      ...this.#landingsAfterAnswer,
+      ...this.#automationFollowsAfterPass,
+    ]).then(() => undefined);
   }
 
   // Holds a pass its write stopped waiting for until it has landed and been
@@ -4881,6 +4896,7 @@ export class Realm {
     let sharedPass: SharedIndexPass | undefined;
     let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
     let stageCursor = opts?.stageCursor;
+    let touchedByPass = changes.map(({ url }) => url.href);
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
@@ -4923,7 +4939,11 @@ export class Realm {
         invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
         sharedPass = meta.sharedPass;
+        touchedByPass.push(...invalidatedURLs.map((url) => url.href));
       },
+    });
+    this.#followAutomationKeyApprovalsAfterPass(touchedByPass, {
+      reportChanges: opts?.broadcastRealmEvents !== false,
     });
 
     return {
@@ -4986,6 +5006,7 @@ export class Realm {
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
     let sharedPass: SharedIndexPass | undefined;
+    let touchedByPass = changes.map(({ url }) => url.href);
     let { settled } = await this.#realmIndexUpdater.enqueueChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
@@ -5009,6 +5030,7 @@ export class Realm {
         invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
         sharedPass = meta.sharedPass;
+        touchedByPass.push(...invalidatedURLs.map((url) => url.href));
       },
       onSettled: async () => {
         if (opts.onSettled) {
@@ -5036,6 +5058,14 @@ export class Realm {
         );
       },
     });
+    settled.then(
+      () =>
+        this.#followAutomationKeyApprovalsAfterPass(touchedByPass, {
+          reportChanges: opts.broadcastRealmEvents !== false,
+        }),
+      // A failed pass is the caller's to handle, through `settled`.
+      () => undefined,
+    );
 
     return { settled };
   }
@@ -15411,6 +15441,138 @@ export class Realm {
       payer,
       script,
     });
+  }
+
+  // Brings each automation's state in step with its key approvals
+  // (`followKeyApprovals`), checked in this realm with the automation's card
+  // as indexed and its payer as the row names them: one waiting for key
+  // approval whose approvals all match runs again, and one that would run
+  // with an approval missing waits. Each automation follows on its own, so
+  // one that fails is logged and the rest still follow. Returns what each
+  // did, keyed by automation id; nothing when this realm can't check. Each
+  // change is reported to the realm's direct writers (`job` and `automation`
+  // events) unless `reportChanges` is false.
+  async followAutomationKeyApprovals(
+    automationIds: readonly RealmResourceIdentifier[],
+    { reportChanges = true }: { reportChanges?: boolean } = {},
+  ): Promise<Map<string, KeyApprovalFollow>> {
+    let followed = new Map<string, KeyApprovalFollow>();
+    if (!this.#callApi?.checkAutomationKeyApprovals) {
+      return followed;
+    }
+    for (let automationId of automationIds) {
+      try {
+        let result = await followKeyApprovals(
+          this.#dbAdapter,
+          automationId,
+          async (automation) => {
+            let read = await readRunDeclaration({
+              dbAdapter: this.#dbAdapter,
+              definitionLookup: this.#definitionLookup,
+              virtualNetwork: this.#virtualNetwork,
+              automationId,
+            });
+            if (!read.ok) {
+              return undefined;
+            }
+            let approvals = await this.checkAutomationKeyApprovals({
+              automationId,
+              declaration: read.declaration,
+              payer: automation.payer,
+            });
+            return approvals
+              ? { approved: approvals.approved, declaration: read.declaration }
+              : undefined;
+          },
+          reportChanges
+            ? {
+                reportRunChange: (runId) => this.reportRunChange(runId),
+                reportAutomationChange: (automation) =>
+                  this.reportAutomationChange(automation),
+              }
+            : {},
+        );
+        if (result) {
+          followed.set(automationId, result);
+        }
+      } catch (e: any) {
+        this.#log.warn(
+          `couldn't follow the key approvals of automation ${automationId}: ${e?.message ?? e}`,
+        );
+      }
+    }
+    return followed;
+  }
+
+  // Once an index pass this realm started has landed, follows the key
+  // approvals of each automation whose card or script the pass touched
+  // (`touched`, the file URLs it visited, deleted or invalidated), with the
+  // card and script as the pass indexed them. The worker's index hook has
+  // brought the row in step with the card; this is the check the worker
+  // can't make, as it reads no operation definitions. A paused automation is
+  // left alone. A pass whose writer asked for no realm events
+  // (`WriteOptions.broadcastRealmEvents`) still moves the rows, and reports
+  // none of the changes (`reportChanges`).
+  //
+  // It runs once the pass has landed, beside the write that started it
+  // rather than in its way: the check looks up the operations' definitions,
+  // which can mean rendering a module, so the write doesn't wait for it, and
+  // a failure is logged and leaves that write a success.
+  // `incrementalIndexing()` holds it until it settles, so whoever waits for
+  // the realm's indexing to settle sees its result. No read it makes waits on
+  // this realm's indexing: a definition lookup reads a realm this server
+  // mounts as the prerender user, whose requests skip the read-your-writes
+  // gate.
+  #followAutomationKeyApprovalsAfterPass(
+    touched: readonly string[],
+    { reportChanges }: { reportChanges: boolean },
+  ): void {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !this.#callApi?.checkAutomationKeyApprovals ||
+      touched.length === 0
+    ) {
+      return;
+    }
+    let tracked = this.#followTouchedAutomations(touched, { reportChanges });
+    this.#automationFollowsAfterPass.add(tracked);
+    void tracked.finally(() =>
+      this.#automationFollowsAfterPass.delete(tracked),
+    );
+  }
+
+  async #followTouchedAutomations(
+    touched: readonly string[],
+    { reportChanges }: { reportChanges: boolean },
+  ): Promise<void> {
+    try {
+      let automations = (
+        await automationsInRealm(
+          this.#dbAdapter,
+          ri(this.#virtualNetwork.unresolveURL(this.url)),
+        )
+      ).filter(({ state }) => state !== 'paused');
+      if (automations.length === 0) {
+        return;
+      }
+      let touchedBy = automationTouchedBy({
+        dbAdapter: this.#dbAdapter,
+        definitionLookup: this.#definitionLookup,
+        virtualNetwork: this.#virtualNetwork,
+        touched,
+      });
+      let followed: RealmResourceIdentifier[] = [];
+      for (let { automationId } of automations) {
+        if (await touchedBy(automationId)) {
+          followed.push(automationId);
+        }
+      }
+      await this.followAutomationKeyApprovals(followed, { reportChanges });
+    } catch (e: any) {
+      this.#log.warn(
+        `couldn't follow the key approvals of the automations an index pass touched in ${this.url}: ${e?.message ?? e}`,
+      );
+    }
   }
 
   // The automation's version with `payer` as its payer, its card read as
