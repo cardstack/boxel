@@ -122,7 +122,7 @@ The server MUST put the validated route tree into the page's host config
 as `hostDynamicRoutes`. For a dynamically routed page it
 MUST also add a serve rule for exactly the requested path to
 `hostRoutingMap`. A realm MUST also serve its validated route tree from a
-read-only endpoint, which HTML visits and interact mode read once per
+read-only endpoint, which HTML visits, interact mode and code mode read once per
 realm and again after the realm is indexed. The endpoint MUST answer only a
 visitor who can read the realm. A reader MUST NOT validate the tree again.
 The tree, each `where` included, is as visible as the realm, so a route MUST
