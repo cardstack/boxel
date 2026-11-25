@@ -1274,7 +1274,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a missing approval another key owner must give, and one the payer gives for their own share', async function (assert) {
-      await shareOwnKey(WRITER);
+      let writers = await shareOwnKey(WRITER);
       let response = await switchOn(OWNER, SHARED);
       assert.strictEqual(
         response.body.data.attributes.state,
@@ -1284,22 +1284,194 @@ module(basename(import.meta.filename), function (hooks) {
         {
           operation: 'shared',
           state: 'missing',
-          missing: [{ slot: 'apiKey', canApprove: 'another-key-owner' }],
+          missing: [
+            {
+              slot: 'apiKey',
+              canApprove: 'another-key-owner',
+              shares: [
+                {
+                  id: writers.id,
+                  label: 'Vendor automation-routes-writer',
+                  owner: WRITER,
+                },
+              ],
+            },
+          ],
         },
       ]);
 
-      await shareOwnKey(OWNER);
+      let owners = await shareOwnKey(OWNER);
       assert.deepEqual(
         operationStates(await keyApprovalsOf(SHARED)),
         [
           {
             operation: 'shared',
             state: 'missing',
-            missing: [{ slot: 'apiKey', canApprove: 'payer' }],
+            missing: [
+              {
+                slot: 'apiKey',
+                canApprove: 'payer',
+                shares: [
+                  {
+                    id: owners.id,
+                    label: 'Vendor automation-routes-owner',
+                    owner: OWNER,
+                  },
+                ],
+              },
+            ],
           },
         ],
         'a share whose key the payer owns is the payer’s to approve',
       );
+    });
+
+    test('a share’s owner is named only to a caller ADR 011 lets see them', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      await dbAdapter.execute(
+        `UPDATE key_shares SET owner = $1 WHERE id = $2`,
+        { bind: [OUTSIDER, share.id] },
+      );
+      let [missing] = (await keyApprovalsOf(SHARED)).operations[0].missing;
+      assert.strictEqual(missing.canApprove, 'another-key-owner');
+      assert.deepEqual(
+        missing.shares,
+        [
+          {
+            id: share.id,
+            label: 'Vendor automation-routes-writer',
+            owner: null,
+          },
+        ],
+        'the share is named, its owner is not',
+      );
+    });
+
+    test('an automation’s approval batch holds the missing approvals the caller can give, and the confirmation makes the automation active', async function (assert) {
+      let shown = (await switchOn(OWNER, KEYED)).body.meta.keyApprovals;
+      let key = await addKey(OWNER);
+      let authorization = await secureSessionAuth(dbAdapter, OWNER);
+      let asked = await request
+        .post('/_key-bindings/batch')
+        .set('Authorization', authorization)
+        .set('Content-Type', 'application/vnd.api+json')
+        .send({
+          data: {
+            type: 'key-binding-batch',
+            attributes: { automation: cardURL(KEYED) },
+          },
+        });
+      assert.strictEqual(asked.status, 200, asked.text);
+      let batch = asked.body.data.attributes;
+      assert.deepEqual(batch.automation, {
+        id: cardURL(KEYED),
+        version: shown.version,
+      });
+      let operations = batch.groups.flatMap(
+        (g: { operations: unknown[] }) => g.operations,
+      );
+      assert.deepEqual(
+        operations.map(
+          (o: {
+            name: string;
+            key: string;
+            card: { exportName: string };
+            slots: { slot: string; status: string }[];
+          }) => [
+            o.name,
+            o.card.exportName,
+            o.slots.map((s) => `${s.slot}:${s.status}`),
+          ],
+        ),
+        [['list', 'Inbox', ['userKey:new']]],
+        'the operation the automation is missing, on its own card type',
+      );
+      assert.deepEqual(batch.fillers.automations.userKey, [key.id]);
+
+      let other = await request
+        .post('/_key-bindings/batch')
+        .set('Authorization', await secureSessionAuth(dbAdapter, WRITER))
+        .set('Content-Type', 'application/vnd.api+json')
+        .send({
+          data: {
+            type: 'key-binding-batch',
+            attributes: { automation: cardURL(KEYED) },
+          },
+        });
+      assert.strictEqual(other.status, 200, other.text);
+      assert.deepEqual(
+        other.body.data.attributes.groups,
+        [],
+        'the payer’s own key is nobody else’s to approve',
+      );
+
+      await approveOwnKey(OWNER, batch.automation.version);
+      await reachesState(KEYED, 'active');
+      let again = await request
+        .post('/_key-bindings/batch')
+        .set('Authorization', authorization)
+        .set('Content-Type', 'application/vnd.api+json')
+        .send({
+          data: {
+            type: 'key-binding-batch',
+            attributes: { automation: cardURL(KEYED) },
+          },
+        });
+      assert.deepEqual(
+        again.body.data.attributes.groups,
+        [],
+        'nothing is left once the approval lands',
+      );
+    });
+
+    test('a binding approved without naming the automation is in the automation’s batch as approved for cards, not yet for the automation', async function (assert) {
+      let key = await addKey(OWNER);
+      let approved = await approveOperation(OWNER, 'list', { keyId: key.id });
+      assert.strictEqual(approved.status, 201, approved.text);
+      await switchOn(OWNER, KEYED);
+      let asked = await request
+        .post('/_key-bindings/batch')
+        .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+        .set('Content-Type', 'application/vnd.api+json')
+        .send({
+          data: {
+            type: 'key-binding-batch',
+            attributes: { automation: cardURL(KEYED) },
+          },
+        });
+      assert.strictEqual(asked.status, 200, asked.text);
+      let [operation] = asked.body.data.attributes.groups[0].operations;
+      assert.strictEqual(operation.status, 'automation');
+      assert.strictEqual(operation.slots[0].approved.keyId, key.id);
+    });
+
+    test('an automation that is not switched on has no approval batch', async function (assert) {
+      let asked = await request
+        .post('/_key-bindings/batch')
+        .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+        .set('Content-Type', 'application/vnd.api+json')
+        .send({
+          data: {
+            type: 'key-binding-batch',
+            attributes: { automation: cardURL(KEYED) },
+          },
+        });
+      assert.strictEqual(asked.status, 404, asked.text);
+      let mixed = await request
+        .post('/_key-bindings/batch')
+        .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+        .set('Content-Type', 'application/vnd.api+json')
+        .send({
+          data: {
+            type: 'key-binding-batch',
+            attributes: {
+              automation: cardURL(KEYED),
+              target: { kind: 'instance', url: cardURL(KEYED) },
+            },
+          },
+        });
+      assert.strictEqual(mixed.status, 400, mixed.text);
     });
 
     test('an {{apiKey}} slot with no share in the realm can be approved by nobody yet', async function (assert) {
