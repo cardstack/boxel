@@ -129,7 +129,6 @@ export class Stepper extends Component<StepperSignature> {
       </button>
       <input
         id={{@controlId}}
-        aria-label={{if @label @label}}
         class='pretui-stepper-input'
         type='number'
         value={{this.value}}

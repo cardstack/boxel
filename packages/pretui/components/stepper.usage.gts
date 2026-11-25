@@ -89,7 +89,7 @@ class StepperUsage extends Component {
         />
         <Args.String
           @name='label'
-          @description='The field name. The buttons read Decrease <label> and Increase <label>, and the input takes it as its accessible name.'
+          @description='The field name. The buttons read Decrease <label> and Increase <label>. Name the input itself with a label wired through controlId.'
         />
         <Args.String
           @name='decrementLabel'

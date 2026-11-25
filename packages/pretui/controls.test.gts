@@ -286,7 +286,6 @@ module('Pretui | React-dialect aliases — controls', function (hooks) {
       ['Decrease Seats', 'Add a seat'],
       'a caller can override a name',
     );
-    assert.dom('input', qty).hasAttribute('aria-label', 'Quantity');
     for (let b of qty!.querySelectorAll('button')) {
       assert.strictEqual(
         b.getAttribute('tabindex'),
