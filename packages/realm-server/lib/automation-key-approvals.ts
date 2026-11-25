@@ -336,14 +336,23 @@ async function slotKeyApproval(
     if (kind === 'userKey') {
       return { slot, kind, state: 'waiting', keyOwner: payer };
     }
-    let [share] = await query(dbAdapter, [
-      'SELECT id FROM key_shares WHERE realm_url = ',
+    // The owner of a share's key approves the slot with that share. When
+    // every share in the realm holds one person's key, that person is the
+    // one who acts.
+    let owners = await query(dbAdapter, [
+      'SELECT DISTINCT owner FROM key_shares WHERE realm_url = ',
       param(realmURL),
-      " AND state = 'active' AND key_id IS NOT NULL LIMIT 1",
+      " AND state = 'active' AND key_id IS NOT NULL",
     ]);
-    return share
-      ? { slot, kind, state: 'waiting', keyOwner: null }
-      : { slot, kind, state: 'no-share', keyOwner: null };
+    if (owners.length === 0) {
+      return { slot, kind, state: 'no-share', keyOwner: null };
+    }
+    return {
+      slot,
+      kind,
+      state: 'waiting',
+      keyOwner: owners.length === 1 ? String(owners[0].owner) : null,
+    };
   }
   let keyOwner = binding.share_id
     ? (binding.share_owner ?? binding.approved_by)

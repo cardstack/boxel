@@ -128,8 +128,9 @@ export interface SlotKeyApproval {
   state: SlotKeyApprovalState;
   // The Matrix id of the person who acts for the slot: the owner of the key
   // its binding sends (the binding's approver, or the share's key owner),
-  // the payer for an unbound `{{userKey}}` slot, and null when no one person
-  // can (an unbound `{{apiKey}}` slot).
+  // the payer for an unbound `{{userKey}}` slot, the one owner of every
+  // share in the realm for an unbound `{{apiKey}}` slot, and null when no
+  // one person can.
   keyOwner: string | null;
   // The share the binding sends, for an `{{apiKey}}` slot.
   share?: { id: string; label: string; state: string };

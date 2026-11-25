@@ -25,6 +25,10 @@ import {
   waitForKeyApproval,
 } from '@cardstack/runtime-common/automations';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
+import type {
+  AutomationKeyApprovalStatus,
+  SlotKeyApprovalStatus,
+} from '@cardstack/runtime-common/automation-key-approval-status';
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
 import { MAX_WEBHOOK_PAYLOAD_CHARS } from '@cardstack/runtime-common/automation-run-command';
 import {
@@ -50,6 +54,7 @@ import {
   createAutomationRunToken,
   ensureTestUser,
   insertIncomingWebhookRow,
+  createJWT,
   realmSecretSeed,
   ROOMY_AUTOMATION_CAPS,
   setupPermissionedRealmCached,
@@ -124,6 +129,9 @@ const SHARED = 'automation/shared';
 // An automation declaring the keyed operation first, then one the Inbox
 // doesn't define.
 const KEYED_THEN_MISSING = 'automation/keyed-then-missing';
+// An automation declaring the keyed operation and the shared one, so one
+// approval can land while the other is still missing.
+const KEYED_AND_SHARED = 'automation/keyed-and-shared';
 
 // The keyed automation's card and script, as the realm starts with them.
 function keyedFixture() {
@@ -192,6 +200,19 @@ module(basename(import.meta.filename), function (hooks) {
         ],
       }),
       [`${SHARED}-script.js`]: `return 'ok';`,
+      ...automationFixture({
+        operations: [{ type: INBOX, names: ['list', 'shared'] }],
+        path: KEYED_AND_SHARED,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${KEYED_AND_SHARED}-script.js`]: `return 'ok';`,
       ...automationFixture({
         operations: [{ type: INBOX, names: ['list', 'nowhere'] }],
         path: KEYED_THEN_MISSING,
@@ -1979,6 +2000,355 @@ module(basename(import.meta.filename), function (hooks) {
         { bind: [automationId(KEYED)] },
       );
       assert.strictEqual(n, 0);
+    });
+  });
+
+  module('key approvals on the automation status', function (hooks) {
+    hooks.beforeEach(function () {
+      configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+    });
+    hooks.afterEach(function () {
+      resetOutbound();
+    });
+
+    // The automation's key approvals as `viewer`, a direct writer, reads
+    // them on its card's status.
+    async function statusKeyApprovals(
+      path: string,
+      viewer = OWNER,
+      { ask = true }: { ask?: boolean } = {},
+    ) {
+      let query = new URLSearchParams({ automation: cardURL(path) });
+      if (ask) {
+        query.set('keyApprovals', 'true');
+      }
+      let response = await request
+        .get(`${new URL(realm.url).pathname}_automation-status?${query}`)
+        .set('Accept', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, viewer, ['read', 'write'])}`,
+        );
+      if (response.status !== 200) {
+        throw new Error(
+          `the status answered ${response.status}: ${response.text}`,
+        );
+      }
+      return response.body.data.attributes.keyApprovals;
+    }
+
+    // Each slot of each operation, without the time it was approved.
+    function slotsOf(keyApprovals: AutomationKeyApprovalStatus): {
+      operation: string;
+      slots: (Omit<SlotKeyApprovalStatus, 'approvedAt' | 'share'> & {
+        share?: string;
+      })[];
+    }[] {
+      return keyApprovals.operations.map(({ operation, slots }) => ({
+        operation,
+        slots: slots.map(({ approvedAt: _approvedAt, share, ...slot }) => ({
+          ...slot,
+          ...(share ? { share: share.label } : {}),
+        })),
+      }));
+    }
+
+    async function approveSharedFor(path: string, version: string) {
+      let share = await shareOwnKey(WRITER);
+      let approved = await approveOperation(
+        WRITER,
+        'shared',
+        { shareId: share.id },
+        { id: cardURL(path), version },
+      );
+      if (approved.status !== 201) {
+        throw new Error(
+          `approving shared answered ${approved.status}: ${approved.text}`,
+        );
+      }
+      return share;
+    }
+
+    async function automationEventsDuring(act: () => Promise<unknown>) {
+      let sent: string[] = [];
+      let original = realm.broadcastAutomationEvent;
+      realm.broadcastAutomationEvent = async (event) => {
+        sent.push(event.automation);
+        return await original.call(realm, event);
+      };
+      try {
+        await act();
+      } finally {
+        realm.broadcastAutomationEvent = original;
+      }
+      return sent;
+    }
+
+    test('the status carries key approvals only when asked, and only for a switched-on automation', async function (assert) {
+      assert.strictEqual(
+        await statusKeyApprovals(KEYED),
+        undefined,
+        'an automation that is off has no payer to check approvals for',
+      );
+      await switchOn(OWNER, KEYED);
+      assert.strictEqual(
+        await statusKeyApprovals(KEYED, OWNER, { ask: false }),
+        undefined,
+        'a status read that does not ask checks nothing',
+      );
+      assert.false((await statusKeyApprovals(KEYED)).approved);
+    });
+
+    test('every key approved: each slot names its key and when its owner approved the automation', async function (assert) {
+      let shown = (await switchOn(OWNER, KEYED)).body.meta.keyApprovals;
+      let key = await addKey(OWNER, 'Vendor key');
+      let approved = await approveOperation(
+        OWNER,
+        'list',
+        { keyId: key.id },
+        { id: cardURL(KEYED), version: shown.version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      await reachesState(KEYED, 'active');
+      let keyApprovals = await statusKeyApprovals(KEYED);
+      assert.true(keyApprovals.approved);
+      assert.deepEqual(slotsOf(keyApprovals), [
+        {
+          operation: 'list',
+          slots: [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'approved',
+              key: { name: 'Vendor key' },
+              viewerIsKeyOwner: true,
+              keyOwner: OWNER,
+            },
+          ],
+        },
+      ]);
+      let [{ updated_at }] = await dbAdapter.execute(
+        `SELECT updated_at FROM automation_key_approvals WHERE automation_id = $1`,
+        { bind: [automationId(KEYED)] },
+      );
+      assert.strictEqual(
+        keyApprovals.operations[0].slots[0].approvedAt,
+        new Date(updated_at as string).toISOString(),
+        'the slot says when the key’s owner approved the automation',
+      );
+      assert.deepEqual(
+        slotsOf(await statusKeyApprovals(KEYED, WRITER))[0].slots[0],
+        {
+          slot: 'userKey',
+          kind: 'userKey',
+          state: 'approved',
+          viewerIsKeyOwner: false,
+          keyOwner: OWNER,
+        },
+        'a personal key’s name is shown to its owner alone',
+      );
+    });
+
+    test('an approval waiting on the viewer links the viewer to the approve page', async function (assert) {
+      await switchOn(OWNER, KEYED);
+      assert.deepEqual(slotsOf(await statusKeyApprovals(KEYED)), [
+        {
+          operation: 'list',
+          slots: [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'waiting',
+              viewerIsKeyOwner: true,
+              keyOwner: OWNER,
+              fix: 'approve',
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('an approval waiting on someone else names who acts, and links only the key’s owner', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      assert.deepEqual(
+        slotsOf(await statusKeyApprovals(SHARED, OWNER)),
+        [
+          {
+            operation: 'shared',
+            slots: [
+              {
+                slot: 'apiKey',
+                kind: 'apiKey',
+                state: 'waiting',
+                viewerIsKeyOwner: false,
+                keyOwner: WRITER,
+                actor: 'key-owner',
+              },
+            ],
+          },
+        ],
+        'the payer is told the share’s owner approves, and gets no link',
+      );
+      assert.deepEqual(
+        slotsOf(await statusKeyApprovals(SHARED, WRITER))[0].slots[0],
+        {
+          slot: 'apiKey',
+          kind: 'apiKey',
+          state: 'waiting',
+          viewerIsKeyOwner: true,
+          keyOwner: WRITER,
+          fix: 'approve',
+        },
+        'the share’s owner gets the approve link',
+      );
+    });
+
+    test('an approved share names the share and its owner', async function (assert) {
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      await approveSharedFor(SHARED, shown.version);
+      await reachesState(SHARED, 'active');
+      assert.deepEqual(slotsOf(await statusKeyApprovals(SHARED)), [
+        {
+          operation: 'shared',
+          slots: [
+            {
+              slot: 'apiKey',
+              kind: 'apiKey',
+              state: 'approved',
+              share: 'Vendor automation-routes-writer',
+              viewerIsKeyOwner: false,
+              keyOwner: WRITER,
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('a binding that needs reapproval links its key’s owner to review the changes', async function (assert) {
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      await approveSharedFor(SHARED, shown.version);
+      await dbAdapter.execute(
+        `UPDATE key_bindings SET state = 'needs-reapproval' WHERE realm_url = $1 AND operation_name = 'shared'`,
+        { bind: [realmURL.href] },
+      );
+      let [ownerView] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.deepEqual(
+        [ownerView.slots[0].state, ownerView.slots[0].actor],
+        ['needs-reapproval', 'key-owner'],
+      );
+      let [writerView] = slotsOf(await statusKeyApprovals(SHARED, WRITER));
+      assert.deepEqual(
+        [writerView.slots[0].state, writerView.slots[0].fix],
+        ['needs-reapproval', 'review-changes'],
+      );
+    });
+
+    test('a suspended share links any realm administrator to swap a key in', async function (assert) {
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      let share = await approveSharedFor(SHARED, shown.version);
+      let suspended = await request
+        .post(`/_key-shares/${share.id}/suspend`)
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(suspended.status, 200, suspended.text);
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.deepEqual(
+        [slots[0].state, slots[0].share, slots[0].fix],
+        ['share-suspended', 'Vendor automation-routes-writer', 'swap-key'],
+      );
+    });
+
+    test('a rejected key keeps its approval and links its owner to replace the key', async function (assert) {
+      let shown = (await switchOn(OWNER, KEYED)).body.meta.keyApprovals;
+      let key = await addKey(OWNER);
+      let approved = await approveOperation(
+        OWNER,
+        'list',
+        { keyId: key.id },
+        { id: cardURL(KEYED), version: shown.version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      await dbAdapter.execute(
+        `UPDATE user_key_grants SET state = 'rejected', last_probe_at = now() WHERE key_id = $1`,
+        { bind: [key.id] },
+      );
+      let keyApprovals = await statusKeyApprovals(KEYED);
+      let [slot] = keyApprovals.operations[0].slots;
+      assert.deepEqual(
+        [slot.state, slot.fix, typeof slot.approvedAt],
+        ['key-rejected', 'replace-key', 'string'],
+      );
+      assert.true(
+        keyApprovals.approved,
+        'a rejected key ends no approval, so the automation is still approved',
+      );
+    });
+
+    test('an {{apiKey}} slot with no share links any realm administrator to share a key', async function (assert) {
+      await switchOn(OWNER, SHARED);
+      assert.deepEqual(slotsOf(await statusKeyApprovals(SHARED)), [
+        {
+          operation: 'shared',
+          slots: [
+            {
+              slot: 'apiKey',
+              kind: 'apiKey',
+              state: 'no-share',
+              viewerIsKeyOwner: false,
+              keyOwner: null,
+              fix: 'share-key',
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('a key’s owner who shares no realm grant with the viewer is not named (ADR 011)', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      await dbAdapter.execute(
+        `DELETE FROM realm_user_permissions WHERE username = $1 AND realm_url = $2`,
+        { bind: [WRITER, realm.url] },
+      );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.deepEqual(
+        [slots[0].keyOwner, slots[0].actor],
+        [null, 'key-owner'],
+        'the viewer learns a key’s owner acts, not who',
+      );
+    });
+
+    test('an approval that lands while another is still missing tells the realm’s direct writers', async function (assert) {
+      let shown = (await switchOn(OWNER, KEYED_AND_SHARED)).body.meta
+        .keyApprovals;
+      let key = await addKey(OWNER);
+      let sent = await automationEventsDuring(async () => {
+        let approved = await approveOperation(
+          OWNER,
+          'list',
+          { keyId: key.id },
+          { id: cardURL(KEYED_AND_SHARED), version: shown.version },
+        );
+        assert.strictEqual(approved.status, 201, approved.text);
+      });
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED_AND_SHARED)))?.state,
+        'waiting-for-key-approval',
+        'the shared operation still waits',
+      );
+      assert.true(
+        sent.includes(automationId(KEYED_AND_SHARED)),
+        `an automation event names the automation: ${JSON.stringify(sent)}`,
+      );
+      assert.deepEqual(
+        slotsOf(await statusKeyApprovals(KEYED_AND_SHARED)).map(
+          ({ operation, slots }) => [operation, slots[0].state],
+        ),
+        [
+          ['list', 'approved'],
+          ['shared', 'no-share'],
+        ],
+      );
     });
   });
 
