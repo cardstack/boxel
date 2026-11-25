@@ -892,6 +892,9 @@ class RealmFsSession {
   readonly createdWorkspaces: string[] = [];
   // Workspaces deleted by this run, in order.
   readonly deletedWorkspaces: string[] = [];
+  // Automation runs this run started and automations it switched on, in
+  // order, one line each.
+  readonly automationActions: string[] = [];
   // Workspaces this run deleted that do not exist again: a later create at
   // the same URL takes the URL out.
   readonly goneWorkspaces = new Set<string>();
@@ -2022,7 +2025,16 @@ class RealmFsSession {
             `${call} names its automation card by a literal path in the script, such as ${call}('automations/Automation/daily-digest.json'), so the person sees that card's triggers, estimate and monthly cap before the run starts. ${String(args[0])} is not named that way`,
           );
         }
-        return await this.automations.start(call, cardURL);
+        let started = (await this.automations.start(call, cardURL)) as {
+          run?: string;
+          state?: string;
+        };
+        this.automationActions.push(
+          call === 'realm.automations.switchOn'
+            ? `switchOn ${cardURL} ${started.state ?? ''}`.trim()
+            : `${method.slice('automations.'.length)} ${cardURL} run ${started.run ?? ''}`.trim(),
+        );
+        return started;
       }
       case 'automations.readRun': {
         let runId = args[0];
@@ -3804,6 +3816,11 @@ function failureReport(session: RealmFsSession, error: unknown): string {
   if (session.createdWorkspaces.length > 0) {
     report += ` Workspaces already created by this run: ${session.createdWorkspaces.join(', ')}`;
   }
+  // An automation run started or an automation switched on spends, so
+  // name each, so a retry does not start or switch it on again.
+  if (session.automationActions.length > 0) {
+    report += ` Automation actions this run already took: ${session.automationActions.join('; ')}`;
+  }
   // A delete cannot be undone, so the model must know it happened.
   if (session.deletedWorkspaces.length > 0) {
     report += ` Workspaces already deleted by this run: ${session.deletedWorkspaces.join(', ')}`;
@@ -4013,6 +4030,23 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'realm.activity({ message, current, total }) (current is 1-based into the ' +
     'plan; add count and of for progress inside a step, e.g. page 3 of 5), ' +
     'can create workspaces with realm.workspaces.create, ' +
+    "can read an Automation card's estimate, monthly cap and key approvals " +
+    'with realm.automations.estimate(path), and, once the person asks for ' +
+    'it in the chat, can Preview the automation with ' +
+    'realm.automations.preview(path), run it once now with ' +
+    'realm.automations.runNow(path), or switch it on with ' +
+    'realm.automations.switchOn(path), which makes the person its payer (a ' +
+    'one-time run is a once trigger on the card, then a switch-on). Name the ' +
+    'card by a literal path in each of those three calls: the run waits for ' +
+    "the person's click on a panel that shows the card's triggers, Boxel's " +
+    'estimate and the monthly cap, and refuses a card the panel did not ' +
+    'show. preview and runNow answer { run, state }; read the run with ' +
+    'realm.automations.readRun(run) once it finishes. switchOn answers ' +
+    '{ state, nextRun, keyApprovals: { forYou, byOthers, needShare } }: the ' +
+    'secure window opens for the approvals in forYou; tell the person who ' +
+    'must approve each one in byOthers, that a realm administrator must ' +
+    'share a key for each operation in needShare, and that the automation ' +
+    'runs nothing until every approval lands. ' +
     'can change the skills and model of this room with room.*, can read ' +
     "the user's plan, credit balance and this room's spend with " +
     'room.credits(), and can ' +
@@ -4643,6 +4677,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       ),
       createdWorkspaces: [...session.createdWorkspaces],
       deletedWorkspaces: [...session.deletedWorkspaces],
+      automationActions: [...session.automationActions],
       indexActions: [...session.indexActions],
       activity: [...fixActivity, ...session.activity, ...summaryLines],
       scriptFixes,

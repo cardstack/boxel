@@ -9,6 +9,7 @@ import {
 
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
 import { provide } from 'ember-provide-consume-context';
 
 import { module, test } from 'qunit';
@@ -36,7 +37,11 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
-import { setupRealmServerEndpoints } from '../../helpers';
+import {
+  createJWT,
+  setupRealmServerEndpoints,
+  testRealmSecretSeed,
+} from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -83,6 +88,22 @@ module('Integration | Component | RoomMessage', function (hooks) {
       route: '_catalog-realms',
       getResponse: async () =>
         new Response(JSON.stringify({ data: [] }), { status: 200 }),
+    },
+    // The estimate a gate reads for an automation the script switches on.
+    {
+      route: '_automation-switch-on',
+      getResponse: async () =>
+        Response.json({
+          data: {
+            type: 'automation-estimate',
+            id: 'http://test-realm/automations/sale-end',
+            attributes: {
+              switchedOn: false,
+              monthlyCredits: 25,
+              estimate: { credits: 3, perRun: { totalCredits: 3 } },
+            },
+          },
+        }),
     },
   ]);
 
@@ -666,6 +687,127 @@ module('Integration | Component | RoomMessage', function (hooks) {
         `[data-test-tool-call-id="invalid-call"] [data-test-tool-call-click-reason="realm.workspaces.delete"]`,
       )
       .exists('a call that offers Try Anyway still says what the click allows');
+  });
+
+  test('a script that switches an automation on asks the reader to confirm the trigger, the estimate and the monthly cap', async function (assert) {
+    const realmURL = 'http://test-realm/automations/';
+    getService('realm').getOrCreateRealmResource(
+      realmURL,
+      createJWT(
+        {
+          user: '@testuser:localhost',
+          realm: realmURL,
+          sessionRoom: 'boxel-session-room-id',
+          permissions: ['read', 'write'],
+          realmServerURL: 'http://test-realm/',
+        },
+        '1d',
+        testRealmSecretSeed,
+      ),
+      { exact: true },
+    );
+    getService('network').virtualNetwork.mount(
+      async (request: Request) =>
+        request.url === `${realmURL}sale-end`
+          ? Response.json({
+              data: {
+                type: 'card',
+                id: `${realmURL}sale-end`,
+                attributes: {
+                  cardInfo: { name: 'End the sale' },
+                  triggers: [
+                    {
+                      kind: 'once',
+                      label: 'end-sale',
+                      date: '2030-01-02',
+                      time: '15:00',
+                      timeZone: 'America/Chicago',
+                    },
+                  ],
+                  caps: { monthlyCredits: 25 },
+                },
+              },
+            })
+          : null,
+      { prepend: true },
+    );
+    let toolService = getService('tool-service');
+    let confirmed: { id: string; confirmations: any[] }[] = [];
+    toolService.confirmAutomations = (id, confirmations) =>
+      confirmed.push({ id, confirmations });
+    let denied: string[] = [];
+    toolService.denyTool = (tool: MessageTool) => {
+      denied.push(tool.id!);
+      return Promise.resolve();
+    };
+
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 2,
+      minutesAgoForUpdated: 1,
+      messageContent: 'Switching the automation on.',
+    });
+    let scenario = testScenario as any;
+    scenario.getActiveLLMModeForMessage = () => 'act';
+    scenario.isDisplayingCode = () => false;
+    scenario.monacoSDK = { editor: { getEditors: () => [] } };
+    scenario.message.agentId = getService('matrix-service').agentId;
+    scenario.message.tools = [
+      new MessageTool(
+        scenario.message,
+        {
+          id: 'switch-on',
+          name: 'run-realm-code_abcd',
+          arguments: {
+            attributes: {
+              realm: realmURL,
+              code: `return await realm.automations.switchOn('sale-end.json');`,
+            },
+          },
+        },
+        undefined,
+        'event-1',
+        true,
+        'Run',
+        'ready',
+        undefined,
+        this.owner,
+        undefined,
+        {
+          neverAutoExecutesFor:
+            RunRealmCodeTool.neverAutoExecutesFor.bind(RunRealmCodeTool),
+          clickReasonsFor: RunRealmCodeTool.clickReasonsFor,
+        },
+      ),
+    ];
+    await renderRoomMessageComponent(testScenario);
+
+    let gate =
+      '[data-test-tool-call-id="switch-on"] [data-test-tool-call-approval]';
+    let confirmation = `${gate} [data-test-automation-confirmation="realm.automations.switchOn"]`;
+    await waitUntil(() => document.querySelector(confirmation));
+    assert.dom(confirmation).containsText('Switch on End the sale');
+    assert
+      .dom(confirmation)
+      .containsText(
+        'Once, Wednesday, January 2, 2030 at 3:00 PM CST (America/Chicago)',
+      );
+    assert.dom(confirmation).containsText('About 3 credits a month');
+    assert.dom(confirmation).containsText('25 credits');
+    assert
+      .dom(`${gate} [data-test-pretui-tool-gate-action="apply"]`)
+      .hasText('Confirm');
+    assert
+      .dom(`${gate} [data-test-pretui-tool-gate-action="always"]`)
+      .doesNotExist('a standing yes never covers a switch-on');
+    assert.true(
+      scenario.message.tools[0].neverAutoExecutes,
+      'act mode does not run the switch-on without the click',
+    );
+
+    await click(`${gate} [data-test-pretui-tool-gate-action="deny"]`);
+    assert.deepEqual(denied, ['switch-on'], 'Deny declines the call');
+    assert.deepEqual(confirmed, [], 'a denied call confirms nothing');
   });
 
   test('a message carrying only bot-executed tool calls is marked bot-tools-only', async function (assert) {
