@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 143300,
+      "bytes": 143185,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -2014,11 +2014,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/8b33a854de.css"
+          "module": "src/shell/keys/9042e19054.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/9042e19054.css"
+          "module": "src/shell/keys/924ac1f9e1.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2099,7 +2099,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 625807,
+      "bytes": 622597,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2542,7 +2542,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/keys.ts",
-          "size": 9132
+          "size": 9080
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2642,7 +2642,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approval-batch.ts",
-          "size": 9445
+          "size": 9208
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2652,7 +2652,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 45564
+          "size": 42235
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2787,7 +2787,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/opened-for.ts",
-          "size": 2762
+          "size": 2569
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2842,7 +2842,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/usage-summary.gts",
-          "size": 11042
+          "size": 11133
         },
         {
           "package": "@cardstack/secure-origin",

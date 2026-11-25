@@ -291,6 +291,8 @@ the request. `fillSlots` checks, per slot, in this order:
 | Its share, if any, is `active`                                                       | `share-suspended`              | 409    |
 | `state` isn't `needs-reapproval` and the fingerprint matches                         | `binding-needs-reapproval`     | 409    |
 | Interactive invocation needs `interactive`                                           | `interactive-use-not-approved` | 403    |
+| A run of an automation's triggers needs an automation approval matching the run      | `key-approval-ended`           | 409    |
+| A Preview or Run now needs a key its starter owns, `interactive`, or that approval   | `interactive-use-not-approved` | 403    |
 | A caller who isn't signed in needs the share's key to allow anonymous use            | `anonymous-use-not-approved`   | 401    |
 | A grant is set, opens, and belongs to the binding's key (or the share's current key) | `binding-not-approved`         | 409    |
 | The grant isn't `rejected`, unless this call claims its probe                        | `credential-rejected`          | 424    |
@@ -316,8 +318,8 @@ it carries a user session (a browser card, the AI assistant, the CLI). A
 `_operations` request carrying the payer's session to `realm.handleAutomation`,
 which records that request object and runs it through the ordinary
 authorization; the `callApi` arm then runs with `callApiMode: 'automation'`.
-Any active binding serves an automation. Only one approved `interactive` serves
-an interactive call, which also counts against the key's or share's limits
+An automation call is served by an active binding as its run allows (below).
+Only one approved `interactive` serves an interactive call, which also counts against the key's or share's limits
 (`chargeInteractiveCall`; see the `key-limits` skill).
 
 The approve page says what interactive use exposes before it is allowed.
@@ -346,8 +348,16 @@ missing or no longer matching refuses the run `key-approval-ended` and moves
 the automation to waiting for key approval. Revoking or removing a binding
 removes its automation approvals, and so does moving it to another share or
 key (`writeApproval`, `moveShareBindingsIn`) unless the same confirmation
-approves those automations again. The call itself (`fillSlots`) doesn't read
-automation approvals. The `automations` skill's _Key approvals_ section has
+approves those automations again. Each call of the run (`fillSlots`) checks it
+too, against the version the run's attempt recorded on its row
+(`automation_runs.version_key`; `runApprovalOf`), so a binding revoked
+mid-run serves none of the run's later calls, refused `key-approval-ended`
+(409). A Preview or a Run now acts as the person who started it: a slot is
+filled only from a key that person owns, a binding approved `interactive`, or
+an automation approval matching the recorded version with them as payer; any
+other binding refuses it `interactive-use-not-approved` (403). An automation
+call that names no run is checked as a trigger's run no approval matches.
+`automationAdmission` given a `runId` holds each slot to the same rule. The `automations` skill's _Key approvals_ section has
 the version, who can approve, and the states.
 
 ## Anonymous use
