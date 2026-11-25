@@ -1979,8 +1979,9 @@ export async function notifyRealmIndexUpdated(
 // answered 202 once the check has started, without waiting for it: the pass's
 // job holds the realm's exclusive index lane, so its writers would wait
 // behind the check's definition lookups. `Realm.incrementalIndexing()` holds
-// the check until it settles. Like every `POST`, it takes a direct writer of
-// the realm.
+// the check until it settles. Like every `POST`, it takes a caller the realm
+// ACL grants write, which includes the realm's own user (the worker asks as
+// it); it doesn't ask `isDirectWriter`, which counts no bot account.
 export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
   '/_follow-automation-key-approvals';
 
