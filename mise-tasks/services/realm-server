@@ -131,10 +131,10 @@ fi
 # index yet waits for its boot index before the next realm starts, so on a
 # fresh database (CI without the index cache) the boot indexes run in this
 # order. Each also spawns a prerender-html job that a worker runs to
-# completion, and a later realm's boot index waits whenever every worker
-# (WORKER_ALL_PRIORITY_COUNT, 1 by default) is inside such a pass, so a large
-# realm delays the realms after it. pretui, the largest, goes last so the
-# realms test stacks wait on are not queued behind its index or its HTML pass.
+# completion. The system-index worker (WORKER_SYSTEM_INDEX_COUNT) takes the
+# next realm's boot index while that HTML pass runs, so a later realm waits on
+# the boot indexes before it, not on their HTML. pretui, the largest, goes last
+# so the realms test stacks wait on are not queued behind its index.
 LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   NODE_ENV=development \
   NODE_NO_WARNINGS=1 \

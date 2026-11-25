@@ -369,7 +369,12 @@ async function retryTransientIndexFailures({
         ),
       });
       enqueued += urls.length;
-      retried.push(...urls);
+      for (let url of urls) {
+        if (retried.length >= LOGGED_RETRY_URLS_MAX) {
+          break;
+        }
+        retried.push(url);
+      }
     } catch (error: any) {
       log.error(
         `${jobLabel} prerender-html reconcile: failed to enqueue the index retry of ${urls.length} url(s) in ${realmURL}`,
@@ -380,9 +385,9 @@ async function retryTransientIndexFailures({
   log.info(
     `${jobLabel} prerender-html reconcile: enqueued index retries of ${enqueued} url(s) whose visits failed transiently` +
       (retried.length
-        ? `: ${retried.slice(0, LOGGED_RETRY_URLS_MAX).join(', ')}` +
-          (retried.length > LOGGED_RETRY_URLS_MAX
-            ? ` and ${retried.length - LOGGED_RETRY_URLS_MAX} more`
+        ? `: ${retried.join(', ')}` +
+          (enqueued > retried.length
+            ? ` and ${enqueued - retried.length} more`
             : '')
         : ''),
   );

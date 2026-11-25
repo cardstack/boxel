@@ -56,7 +56,9 @@ echo "Starting services..."
 # The readiness line below reports this count alongside the time taken, so a
 # change here is measurable against the previous run rather than guessed at.
 # Raising it trades against the runner's four vCPUs and the prerender page
-# pool the index drives, so it does not scale indefinitely.
+# pool the index drives, so it does not scale indefinitely. The system-index
+# worker env-vars.sh starts runs alongside them and takes only index jobs, so
+# the readiness line reports both counts.
 #
 # The override is its own variable, and it is assigned unconditionally.
 # `WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-2}"` looks
@@ -137,10 +139,10 @@ else
   READINESS_STATUS=$?
 fi
 READINESS_ELAPSED=$(( $(date +%s) - READINESS_START ))
-READINESS_TOOK="$((READINESS_ELAPSED / 60))m$((READINESS_ELAPSED % 60))s (budget $((READINESS_TIMEOUT_MS / 60000))m, workers=${WORKER_ALL_PRIORITY_COUNT:-1})"
+READINESS_TOOK="$((READINESS_ELAPSED / 60))m$((READINESS_ELAPSED % 60))s (budget $((READINESS_TIMEOUT_MS / 60000))m, workers=${WORKER_ALL_PRIORITY_COUNT:-1} all-priority + ${WORKER_SYSTEM_INDEX_COUNT:-0} system-index)"
 
 if [ "$READINESS_STATUS" -ne 0 ]; then
-  echo "::error title=Realm readiness timed out::Gave up after ${READINESS_TOOK}. The boot index is serial behind the all-priority workers; raise READINESS_TIMEOUT_MS or CACHE_INDEX_WORKER_COUNT. Not WORKER_ALL_PRIORITY_COUNT — this task overwrites it."
+  echo "::error title=Realm readiness timed out::Gave up after ${READINESS_TOOK}. The boot index is serial behind the system-index and all-priority workers; raise READINESS_TIMEOUT_MS or CACHE_INDEX_WORKER_COUNT. Not WORKER_ALL_PRIORITY_COUNT — this task overwrites it."
   exit "$READINESS_STATUS"
 fi
 

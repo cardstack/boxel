@@ -542,7 +542,8 @@ function familyKey(alias: 'j'): string {
 // Whether a row's priority is in the user-initiated tier rather than the
 // system tier (see the tier table in runtime-common's queue.ts). The
 // high-priority worker pool floors at the bottom of the user-initiated tier, so
-// only the all-priority pool can claim a system-tier job.
+// a system-tier job is claimed only by the all-priority pool or, for an index
+// job, by a system-index worker where one runs.
 function isUserInitiatedTier(alias: JobsAlias): string {
   return `(${alias}.priority >= ${userInitiatedPrerenderHtmlPriority})`;
 }
