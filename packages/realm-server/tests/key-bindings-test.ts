@@ -340,6 +340,7 @@ module(basename(import.meta.filename), function (hooks) {
             (
               await createAutomationRunToken(dbAdapter, realm, user, {
                 automation: TEST_AUTOMATION_PATH,
+                approveBindings: true,
               })
             ).token
           }`,
@@ -460,11 +461,16 @@ module(basename(import.meta.filename), function (hooks) {
     let definition =
       (await realm.operationCore.definitionLookup.lookupDefinition(INBOX))!
         .operations!.list;
+    let { run } = await createAutomationRunToken(dbAdapter, realm, OWNER, {
+      automation: TEST_AUTOMATION_PATH,
+      approveBindings: true,
+    });
     let lookup = {
       type: { module: String(INBOX.module), name: INBOX.name },
       operation: 'list',
       caller: OWNER,
       mode: 'automation' as const,
+      runId: run.id,
       request: definition.callApi!,
     };
     let filled = await fillSlots(dbAdapter, () => keyring, {

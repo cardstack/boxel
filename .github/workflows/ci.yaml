@@ -974,6 +974,12 @@ jobs:
         if: matrix.shardIndex == 1
         run: pnpm test:compact-synapse-db
         working-directory: packages/matrix
+      - name: Run synapse-data-dir unit tests
+        # Builds a repository with a linked worktree in a temp directory. Needs
+        # nothing running, so once on shard 1.
+        if: matrix.shardIndex == 1
+        run: pnpm test:synapse-data-dir
+        working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
         run: |
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
