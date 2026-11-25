@@ -1,6 +1,7 @@
 import {
   hostRoutingMapFromRoutes,
   validateHostRoutes,
+  withoutRoutesOnNonPublicTypes,
   type HostRoute,
   type HostRouteTypeInfo,
   type HostRouteWarning,
@@ -1125,6 +1126,38 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.notOk(
         looked.includes('../other-workspace/site'),
         'a module reached by a relative path is not looked up',
+      );
+    },
+  'withoutRoutesOnNonPublicTypes: drops the field-match routes it picks, and the routes under them':
+    async (assert) => {
+      let validation = validate([
+        fieldMatch('/posts/:slug', 'Post', { slug: ':slug' }),
+        fieldMatch(
+          '/cities/:city',
+          'City',
+          { slug: ':city' },
+          {
+            routes: [fieldMatch('/:venue', 'Venue', { slug: ':venue' })],
+          },
+        ),
+      ]);
+      assert.deepEqual(paths(validation.routes), [
+        '/posts/:slug',
+        '/cities/:city',
+        '/cities/:city/:venue',
+      ]);
+      let { routes, warnings } = withoutRoutesOnNonPublicTypes(
+        validation,
+        (route) => route.type.name === 'City',
+      );
+      assert.deepEqual(paths(routes), ['/posts/:slug']);
+      assert.deepEqual(codes(warnings), [
+        { code: 'non-public-type', path: '/cities/:city', dropped: true },
+      ]);
+      assert.strictEqual(
+        withoutRoutesOnNonPublicTypes(validation, () => false),
+        validation,
+        'a tree with nothing to drop is served as it is',
       );
     },
   'validateHostRoutes: a link to a type the parent descends from counts':

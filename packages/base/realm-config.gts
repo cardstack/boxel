@@ -431,11 +431,21 @@ export class RouteTypeField extends CodeRefField {
 }
 
 // Whether `module`, resolved against the id of the realm's RealmConfig card
-// (realm.json, at the realm root), is outside the realm.
+// (realm.json, at the realm root), is outside the realm. A realm served
+// under a prefix has an id that isn't a URL (`@cardstack/catalog/realm`);
+// its RealmConfig card is at the realm root all the same, so the module is
+// resolved against a stand-in URL one level deep, where a path that leaves
+// the root stays outside it.
 function leavesRealm(module: string, configId: string): boolean {
+  let base: URL;
   try {
-    let realmRoot = new URL('.', configId).href;
-    return !new URL(module, configId).href.startsWith(realmRoot);
+    base = new URL(configId);
+  } catch {
+    base = new URL('https://realm.invalid/root/realm');
+  }
+  try {
+    let realmRoot = new URL('.', base).href;
+    return !new URL(module, base).href.startsWith(realmRoot);
   } catch {
     return false;
   }

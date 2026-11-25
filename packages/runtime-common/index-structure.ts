@@ -265,9 +265,10 @@ export interface StoredHostRoutes extends HostRoutesValidation {
   // Set on a tree validated with a route's type held to the routing realm
   // or a realm that a visitor who isn't signed in can read, and with a
   // relative type module that leaves the realm kept as written. A tree
-  // without it may route on a type outside the realm that this rule drops,
-  // so a read of the routes starts an index of realm.json, and its `types`
-  // don't stand in for a read that may pass.
+  // without it may hold a type outside the realm that this rule drops, so
+  // its `types` don't stand in for a read that may pass. A read of the
+  // routes drops a route on a type whose realm isn't public, with or
+  // without it (`Realm.getHostRoutes`).
   typeRealmsChecked?: true;
 }
 

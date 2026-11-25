@@ -88,6 +88,10 @@ const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 // How long after a realm starts an index of realm.json to store its host
 // routes, or to read a route type again, it may start another one.
 const HOST_ROUTES_INDEX_INTERVAL_MS = 60_000;
+// How long a read of the host routes trusts what another realm said about
+// whether a visitor who isn't signed in may read it
+// (`#routesOnNonPublicTypesDropped`).
+const HOST_ROUTE_TYPE_REALM_CHECK_MS = 60_000;
 
 // The cache directive a card+json response carries when a declared `output`
 // projected its body.
@@ -167,9 +171,11 @@ import type { HostRoutingRule } from './host-routing-validation.ts';
 import {
   hostRouteTypeRefs,
   hostRoutingMapFromRoutes,
+  readModuleRealmAccess,
   readRawHostRoutingRules,
   realmConfigCardURL,
   validateHostRoutes,
+  withoutRoutesOnNonPublicTypes,
   HOST_ROUTES_RETRY_AFTER_SECONDS,
   HostRoutesReadError,
   type HostRoute,
@@ -3643,6 +3649,22 @@ export class Realm {
   // running (`#indexRealmConfigForHostRoutes`).
   #hostRoutesIndexStartedAt: number | undefined;
   #hostRoutesIndexRunning = false;
+  // Whether the realm of each type module in another realm that a
+  // field-match route names isn't public, as that realm last said, and when
+  // it was asked (`#typeRealmIsNotPublic`).
+  #typeRealmChecks = new Map<
+    string,
+    { askedAt: number; notPublic: Promise<boolean> }
+  >();
+  // The host routes last served: the stored tree they came from, the type
+  // modules dropped from it, and the routes left.
+  #servedHostRoutes:
+    | {
+        stored: HostRoutesValidation;
+        dropped: string;
+        served: HostRoutesValidation;
+      }
+    | undefined;
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -21619,8 +21641,9 @@ export class Realm {
   // The realm's validated host route tree, as `getHostRoutes` gives it and
   // as a host page gets it in `hostDynamicRoutes`, so a reader resolves a
   // path or works out an address without validating anything again. It is
-  // the tree the realm's last index validated and stored, and reading it
-  // never waits for a type's definition. That tree can lack routes the next
+  // the tree the realm's last index validated and stored, less any route on
+  // a type whose realm has since stopped being public, and reading it never
+  // waits for a type's definition. That tree can lack routes the next
   // index restores: an index written before the index stored the tree is
   // validated with no types, so each field-match route and the routes under
   // it are dropped, and a stored tree with `retryTypeReads` dropped a route
@@ -22611,8 +22634,15 @@ export class Realm {
   // couldn't be read then was dropped with a `type-unavailable` warning.
   // Kept until the next index. When the index can't be read, this rejects
   // with a `HostRoutesReadError`, and nothing is kept: an empty tree would
-  // read as a realm with no routes.
+  // read as a realm with no routes. A route on a type in another realm that
+  // has since stopped being public is left out (`#routesOnNonPublicTypesDropped`).
   async getHostRoutes(): Promise<HostRoutesValidation> {
+    return await this.#routesOnNonPublicTypesDropped(
+      await this.#storedHostRoutes(),
+    );
+  }
+
+  async #storedHostRoutes(): Promise<HostRoutesValidation> {
     let cached = this.#cachedHostRoutes;
     if (cached) {
       return await cached;
@@ -22649,14 +22679,6 @@ export class Realm {
         // indexed, and its route was dropped. Nothing else may index this
         // realm for a long time, so an index of realm.json reads it again.
         this.#indexRealmConfigForHostRoutes();
-      } else if (
-        !stored.typeRealmsChecked &&
-        this.#routesOnTypeOutsideRealm(stored.routes)
-      ) {
-        // A tree validated before a route's type was held to this realm or
-        // a public one may route on a type that rule drops. An index of
-        // realm.json validates it again.
-        this.#indexRealmConfigForHostRoutes();
       }
       return { routes: stored.routes, warnings: stored.warnings };
     }
@@ -22674,13 +22696,84 @@ export class Realm {
     });
   }
 
-  #routesOnTypeOutsideRealm(routes: readonly HostRoute[]): boolean {
-    return routes.some(
-      (route) =>
-        (route.kind === 'field-match' &&
-          !route.type.module.startsWith(this.url)) ||
-        this.#routesOnTypeOutsideRealm(route.routes),
+  // The routes are public, and a field-match route carries its type's
+  // module and the fields it matches. The index drops a route on a type in
+  // another realm that a visitor who isn't signed in can't read, but that
+  // realm may stop being public after the index, and a tree stored before
+  // the index checked this doesn't hold the check. So the realm of each
+  // such type is asked again when the routes are read, at most once every
+  // `HOST_ROUTE_TYPE_REALM_CHECK_MS`, and a route whose type's realm isn't
+  // public is dropped with a `non-public-type` warning. A realm that can't
+  // be asked, or that doesn't answer as a realm, keeps the routes the index
+  // validated.
+  async #routesOnNonPublicTypesDropped(
+    stored: HostRoutesValidation,
+  ): Promise<HostRoutesValidation> {
+    let modules = new Set<string>();
+    let visit = (routes: readonly HostRoute[]) => {
+      for (let route of routes) {
+        if (
+          route.kind === 'field-match' &&
+          !this.paths.inRealm(this.#virtualNetwork.toURL(route.type.module))
+        ) {
+          modules.add(route.type.module);
+        }
+        visit(route.routes);
+      }
+    };
+    visit(stored.routes);
+    let notPublic = new Set<string>();
+    await Promise.all(
+      [...modules].map(async (module) => {
+        if (await this.#typeRealmIsNotPublic(module)) {
+          notPublic.add(module);
+        }
+      }),
     );
+    let dropped = [...notPublic].sort().join('\n');
+    let served = this.#servedHostRoutes;
+    if (served?.stored === stored && served.dropped === dropped) {
+      return served.served;
+    }
+    let result = withoutRoutesOnNonPublicTypes(stored, (route) =>
+      notPublic.has(route.type.module),
+    );
+    this.#servedHostRoutes = { stored, dropped, served: result };
+    return result;
+  }
+
+  // Whether the realm of `module`, in another realm, isn't one a visitor who
+  // isn't signed in may read, as its answer to a `HEAD` without credentials
+  // says (`readModuleRealmAccess`). Asked again once the last answer is
+  // older than `HOST_ROUTE_TYPE_REALM_CHECK_MS`. When the request fails, the
+  // last answer stands, and without one the route is kept.
+  #typeRealmIsNotPublic(module: string): Promise<boolean> {
+    let now = Date.now();
+    let last = this.#typeRealmChecks.get(module);
+    if (last && now - last.askedAt < HOST_ROUTE_TYPE_REALM_CHECK_MS) {
+      return last.notPublic;
+    }
+    let notPublic = (async () => {
+      try {
+        let access = await readModuleRealmAccess(
+          (href, init) => this.#virtualNetwork.fetch(href, init),
+          this.#virtualNetwork.toURL(module),
+        );
+        return (
+          access === 'refused' ||
+          (typeof access === 'object' &&
+            access.realmURL.href !== this.url &&
+            !access.publicReadable)
+        );
+      } catch (e) {
+        this.#log.warn(
+          `could not ask the realm of ${module}, a host route type of ${this.url}, whether it is public: ${e}`,
+        );
+        return last ? await last.notPublic : false;
+      }
+    })();
+    this.#typeRealmChecks.set(module, { askedAt: now, notPublic });
+    return notPublic;
   }
 
   // Starts an index of realm.json, which stores the host routes with the

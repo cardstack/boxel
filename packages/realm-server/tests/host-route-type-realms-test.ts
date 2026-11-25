@@ -204,9 +204,10 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(warning?.dropped);
   });
 
-  test('a tree stored before types were held to public realms is validated again by an index of realm.json', async function (assert) {
-    // A tree as an index without the rule stored it: no mark, and a route
-    // on the private realm's type.
+  // Stores the site's tree with one more route, on the private realm's
+  // type, as an index would have stored it when that realm was public, or
+  // before the index held types to public realms (without the mark).
+  async function storeRouteOnPrivateType({ marked }: { marked: boolean }) {
     let [row] = (await db.execute(
       `SELECT rm.value FROM realm_meta rm
        JOIN realm_generations rg
@@ -219,7 +220,6 @@ module(basename(import.meta.filename), function (hooks) {
       typeof row?.value === 'string' ? JSON.parse(row.value) : row?.value
     ) as { hostRoutes: Record<string, any> };
     let { typeRealmsChecked, ...hostRoutes } = value.hostRoutes;
-    assert.true(typeRealmsChecked, 'the index marks the trees it validates');
     let shared = hostRoutes.routes.find(
       (r: { fullPath: string }) => r.fullPath === '/shared/:slug',
     );
@@ -229,6 +229,7 @@ module(basename(import.meta.filename), function (hooks) {
         ...shared,
         path: '/private/:slug',
         fullPath: '/private/:slug',
+        position: [hostRoutes.routes.length + 10],
         type: { module: `${PRIVATE}secret`, name: 'Secret' },
       },
     ];
@@ -237,25 +238,41 @@ module(basename(import.meta.filename), function (hooks) {
     );
     await db.execute(
       `UPDATE realm_meta SET value = jsonb_set(value, '{hostRoutes}', $2::jsonb) WHERE realm_url = $1`,
-      { bind: [SITE, JSON.stringify(hostRoutes)] },
+      {
+        bind: [
+          SITE,
+          JSON.stringify(
+            marked ? { ...hostRoutes, typeRealmsChecked } : hostRoutes,
+          ),
+        ],
+      },
     );
     site.clearRealmIndexCaches();
-    site.__testOnlyAllowHostRoutesIndexNow();
+  }
 
-    // The read serves the stored tree and starts an index of realm.json.
-    assert.true(
-      (await site.getHostRoutes()).routes.some(
-        (r) => r.fullPath === '/private/:slug',
-      ),
-    );
-    await site.incrementalIndexing();
-
+  async function assertPrivateRouteDropped(assert: Assert) {
     let { routes, warnings } = await site.getHostRoutes();
-    assert.notOk(routes.some((r) => r.fullPath === '/private/:slug'));
-    assert.strictEqual(
-      warningFor(warnings, '/private/:slug')?.code,
-      'non-public-type',
+    assert.notOk(
+      routes.some((r) => r.fullPath === '/private/:slug'),
+      'the route is not served',
     );
+    let warning = warningFor(warnings, '/private/:slug');
+    assert.strictEqual(warning?.code, 'non-public-type');
+    assert.true(warning?.dropped);
+    assert.true(
+      routes.some((r) => r.fullPath === '/shared/:slug'),
+      'a route on a public type is still served',
+    );
+  }
+
+  test('a stored route on a type whose realm is no longer public is not served', async function (assert) {
+    await storeRouteOnPrivateType({ marked: true });
+    await assertPrivateRouteDropped(assert);
+  });
+
+  test('a tree stored before types were held to public realms does not serve a route on a type in a realm that is not public', async function (assert) {
+    await storeRouteOnPrivateType({ marked: false });
+    await assertPrivateRouteDropped(assert);
   });
 
   test('a type in a realm anyone may read, named by its full URL, is kept', async function (assert) {

@@ -40,6 +40,7 @@ import {
 import {
   hostRouteTypeInfo,
   hostRouteTypeRefs,
+  readModuleRealmAccess,
   readRawHostRoutingRules,
   realmConfigCardURL,
   typeLookupKey,
@@ -1839,24 +1840,18 @@ export class IndexRunner {
     // (`@cardstack/base/…`) is in its prefix form, which isn't a URL.
     let url = this.#virtualNetwork.toURL(moduleURL);
     if (!this.#realmPaths.inRealm(url)) {
-      let response = await this.#virtualNetwork.fetch(url.href, {
-        method: 'HEAD',
-      });
-      let header = response.headers.get('x-boxel-realm-url');
-      if (response.status >= 500) {
-        throw new Error(`${moduleURL} answered ${response.status}`);
-      }
-      if (response.status === 401 || response.status === 403) {
+      let access = await readModuleRealmAccess(
+        (href, init) => this.#virtualNetwork.fetch(href, init),
+        url,
+      );
+      if (access === 'refused') {
         return 'not-public';
       }
-      if (!response.ok || !header) {
+      if (access === 'not-found') {
         return 'not-found';
       }
-      realmURL = new URL(header);
-      if (
-        realmURL.href !== this.#realmURL.href &&
-        response.headers.get('x-boxel-realm-public-readable') !== 'true'
-      ) {
+      realmURL = access.realmURL;
+      if (realmURL.href !== this.#realmURL.href && !access.publicReadable) {
         return 'not-public';
       }
     }

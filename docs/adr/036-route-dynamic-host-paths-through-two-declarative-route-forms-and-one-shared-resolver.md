@@ -97,6 +97,9 @@ validated tree is public, so a field match's type MUST be in the routing
 realm or in a realm that a visitor who isn't signed in can read, such as the
 base or the catalog realm. Validation MUST drop a route whose type is in
 another realm that such a visitor can't read, without reading the type. A
+realm may stop being public after the index, so a read of the routes MUST
+ask each such realm again, at most a minute after its last answer, and MUST
+drop a route whose type's realm says it isn't public. A
 type in another realm MUST be named by its full URL: validation MUST drop a
 route whose type module is a relative path that leaves the realm. A
 type that can't be read (a module error, a missing export, a render

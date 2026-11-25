@@ -191,8 +191,8 @@ export function hostRouteTypeRefs(
   let visit = (list: readonly RawHostRoutingRule[]) => {
     for (let rule of list) {
       let ref = asCodeRef(rule.type);
-      // A relative module here left the realm (see `isRelativeTypeModule`);
-      // its route is dropped without a read.
+      // A relative module here left the realm, or couldn't be resolved
+      // (see `isRelativeTypeModule`); its route is dropped without a read.
       if (
         ref &&
         !isRelativeTypeModule(ref.module) &&
@@ -369,8 +369,9 @@ export type HostRouteWarningCode =
   | 'card-pattern-missing-param'
   // `type` isn't a code ref.
   | 'invalid-type'
-  // `type` names its module by a relative path that leaves the realm. A
-  // module in another realm is named by its full URL.
+  // `type` names its module by a relative path that leaves the realm, or
+  // that the index couldn't resolve against it. A module in another realm
+  // is named by its full URL.
   | 'cross-realm-type-path'
   // `type` is in another realm that a visitor who isn't signed in can't
   // read.
@@ -512,6 +513,91 @@ export function hasUnavailableRoutes(
   validation: HostRoutesValidation,
 ): boolean {
   return validation.warnings.some((w) => w.code === 'type-unavailable');
+}
+
+// What a realm's discovery answer to a `HEAD` on one of its modules, sent
+// without credentials, says about the module's realm. A realm answers that
+// request from anyone, with the identity headers, also when it is private:
+// `'not-found'` when no realm answers for the module, `'refused'` when the
+// request is refused, else the realm and whether a visitor who isn't signed
+// in may read it (`X-Boxel-Realm-Public-Readable`). Throws when the request
+// fails or the server answers with a 5xx, which may pass.
+export type ModuleRealmAccess =
+  | { realmURL: URL; publicReadable: boolean }
+  | 'refused'
+  | 'not-found';
+
+export async function readModuleRealmAccess(
+  fetch: (url: string, init: RequestInit) => Promise<Response>,
+  moduleURL: URL,
+): Promise<ModuleRealmAccess> {
+  let response = await fetch(moduleURL.href, { method: 'HEAD' });
+  if (response.status >= 500) {
+    throw new Error(`${moduleURL.href} answered ${response.status}`);
+  }
+  if (response.status === 401 || response.status === 403) {
+    return 'refused';
+  }
+  let header = response.headers.get('x-boxel-realm-url');
+  if (!response.ok || !header) {
+    return 'not-found';
+  }
+  return {
+    realmURL: new URL(header),
+    publicReadable:
+      response.headers.get('x-boxel-realm-public-readable') === 'true',
+  };
+}
+
+// `validation` without the field-match routes `drop` picks, and the routes
+// under them, with a `non-public-type` warning for each route dropped. The
+// same object when `drop` picks none.
+export function withoutRoutesOnNonPublicTypes(
+  validation: HostRoutesValidation,
+  drop: (route: HostFieldMatchRoute) => boolean,
+): HostRoutesValidation {
+  let dropped: HostFieldMatchRoute[] = [];
+  let filter = (routes: readonly HostRoute[]): HostRoute[] =>
+    routes.flatMap((route): HostRoute[] => {
+      if (route.kind === 'field-match' && drop(route)) {
+        dropped.push(route);
+        return [];
+      }
+      let children = filter(route.routes);
+      return children.length === route.routes.length &&
+        children.every((child, i) => child === route.routes[i])
+        ? [route]
+        : [{ ...route, routes: children }];
+    });
+  let routes = filter(validation.routes);
+  if (dropped.length === 0) {
+    return validation;
+  }
+  let under = (position: readonly number[]) =>
+    dropped.some(
+      (route) =>
+        position.length >= route.position.length &&
+        route.position.every((index, i) => position[i] === index),
+    );
+  return {
+    routes,
+    warnings: [
+      ...validation.warnings.filter((w) => !under(w.position)),
+      ...dropped.map(
+        (route): HostRouteWarning => ({
+          code: 'non-public-type',
+          message: nonPublicTypeMessage(route.type),
+          position: route.position,
+          path: route.fullPath,
+          dropped: true,
+        }),
+      ),
+    ],
+  };
+}
+
+function nonPublicTypeMessage(type: ResolvedCodeRef): string {
+  return `type ${type.name} from ${type.module} is in another realm that a visitor who is not signed in cannot read`;
 }
 
 export interface ValidateHostRoutesOptions {
@@ -919,7 +1005,7 @@ class Validator {
       if (isRelativeTypeModule(type.module)) {
         return drop(
           'cross-realm-type-path',
-          `type module ${type.module} is a relative path that leaves this realm; name a module in another realm by its full URL`,
+          `type module ${type.module} is a relative path that leaves this realm, or that could not be resolved against it; name a module in another realm by its full URL`,
         );
       }
       let found = this.options.lookupType(type);
@@ -930,10 +1016,7 @@ class Validator {
         );
       }
       if (found === 'not-public') {
-        return drop(
-          'non-public-type',
-          `type ${type.name} from ${type.module} is in another realm that a visitor who is not signed in cannot read`,
-        );
+        return drop('non-public-type', nonPublicTypeMessage(type));
       }
       typeInfo = found;
       if (!typeInfo || !typeInfo.isCardType) {
@@ -1510,7 +1593,8 @@ function asCodeRef(value: unknown): ResolvedCodeRef | undefined {
 
 // The search document holds a route's type module resolved against
 // realm.json, except for a relative module that leaves the realm, which it
-// holds as written (`RouteTypeField` in the base realm's realm-config).
+// holds as written (`RouteTypeField` in the base realm's realm-config). A
+// module that couldn't be resolved is also held as written.
 function isRelativeTypeModule(module: string): boolean {
   return module.startsWith('.') || module.startsWith('/');
 }

@@ -121,6 +121,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 
+  test('withoutRoutesOnNonPublicTypes: drops the field-match routes it picks, and the routes under them', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
   test('validateHostRoutes: a link to a type the parent descends from counts', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
