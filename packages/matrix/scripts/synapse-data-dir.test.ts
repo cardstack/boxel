@@ -4,7 +4,10 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'fs';
 import { after, test } from 'node:test';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { sharedSynapseDataDir } from '../../../scripts/synapse-data-dir.js';
+import {
+  sharedSynapseDataDir,
+  synapseDataDir,
+} from '../../../scripts/synapse-data-dir.js';
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'synapse-data-dir-')));
 after(() => rmSync(scratch, { recursive: true, force: true }));
@@ -50,11 +53,43 @@ test('a directory outside git uses its own directory', () => {
   );
 });
 
-test('a bare repository uses the directory given', () => {
+test('worktrees of a bare repository share a directory in it', () => {
   let bare = join(scratch, 'bare.git');
-  git(scratch, 'init', '--quiet', '--bare', bare);
-  assert.equal(
-    sharedSynapseDataDir(bare),
-    join(bare, 'packages', 'matrix', 'synapse-data'),
-  );
+  git(scratch, 'clone', '--quiet', '--bare', main, bare);
+  let first = join(scratch, 'bare-first');
+  let second = join(scratch, 'bare-second');
+  git(bare, 'worktree', 'add', '--quiet', '--detach', first);
+  git(bare, 'worktree', 'add', '--quiet', '--detach', second);
+  let shared = join(bare, 'boxel-synapse-data');
+  assert.equal(sharedSynapseDataDir(first), shared);
+  assert.equal(sharedSynapseDataDir(second), shared);
+});
+
+test("environment mode uses the checkout's own directory for the slug", () => {
+  let previous = process.env.BOXEL_ENVIRONMENT;
+  process.env.BOXEL_ENVIRONMENT = 'Feature/Thing';
+  try {
+    assert.equal(
+      synapseDataDir(worktree),
+      join(worktree, 'packages', 'matrix', 'synapse-data-feature-thing'),
+    );
+  } finally {
+    if (previous === undefined) {
+      delete process.env.BOXEL_ENVIRONMENT;
+    } else {
+      process.env.BOXEL_ENVIRONMENT = previous;
+    }
+  }
+});
+
+test('outside environment mode uses the shared directory', () => {
+  let previous = process.env.BOXEL_ENVIRONMENT;
+  delete process.env.BOXEL_ENVIRONMENT;
+  try {
+    assert.equal(synapseDataDir(worktree), expected);
+  } finally {
+    if (previous !== undefined) {
+      process.env.BOXEL_ENVIRONMENT = previous;
+    }
+  }
 });

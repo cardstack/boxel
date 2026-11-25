@@ -58,11 +58,7 @@ import {
 } from 'fs';
 import { join, resolve } from 'path';
 import yaml from 'yaml';
-import {
-  getEnvironmentSlug,
-  isEnvironmentMode,
-} from '../support/environment-config.ts';
-import { sharedSynapseDataDir } from '../../../scripts/synapse-data-dir.js';
+import { synapseDataDir } from '../../../scripts/synapse-data-dir.js';
 
 const TABLE = 'device_lists_changes_in_room';
 const CURSOR_TABLE = 'device_lists_changes_converted_stream_position';
@@ -74,11 +70,7 @@ let backup = !args.includes('--no-backup');
 let keepBackup = args.includes('--keep-backup');
 let dataDir = process.env.SYNAPSE_DATA_DIR
   ? resolve(process.env.SYNAPSE_DATA_DIR)
-  : resolve(
-      isEnvironmentMode()
-        ? `./synapse-data-${getEnvironmentSlug()}`
-        : sharedSynapseDataDir(),
-    );
+  : synapseDataDir();
 let dbPath = join(dataDir, 'db', 'homeserver.db');
 
 function fail(message: string): never {
