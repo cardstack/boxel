@@ -1087,11 +1087,11 @@ sent to the run record. The pieces live in `packages/host/app/lib/realm-runner/`
 | Downloads and deletes | `fs.download`, `fs.delete`                                                            | no                                                                                                                                                                                                              |
 | Web, images, capture  | `web.search`, `web.read`, `images.generate`, `capture`                                | no                                                                                                                                                                                                              |
 | Session and UI        | `room.*`, `ui.*`, `workspaces.*`, `index.*`, `plan`, `ask`, `operations.capabilities` | no                                                                                                                                                                                                              |
-| Transforms            | `transform`                                                                           | no; interactive surface only                                                                                                                                                                                    |
+| Transforms            | `transform`                                                                           | yes; in the run's transform worker in the tab, outside QuickJS and outside the queue of realm calls (_`realm.transform` in a run_)                                                                              |
 
 The unit test `realm-runner-surfaces-test.ts` pins `AUTOMATION_METHODS` and
 fails when a method on it reaches anything but a realm read, a staged write,
-an operation, the model, progress or the console. Adding a method, or moving
+an operation, the model, a transform, progress or the console. Adding a method, or moving
 one between surfaces, changes that test in review. The interactive surface's
 guest has `realm` and `room`, and no `console` or `progress`.
 
@@ -1101,7 +1101,8 @@ How a method differs from the interactive surface:
   interactive surface only creates, and edits through `fs.replace`. A write
   of the content the file already holds is reported as unchanged.
 - **No interactive per-run limits**: no 20-file, 200-card-update,
-  200-operation or 3-`resolve` limit. The card's caps take their place, and
+  200-operation, 3-`resolve` or 100-`transform` limit (a run has at most 8
+  transforms waiting at once instead). The card's caps take their place, and
   the realm server counts each against the run row (_Declared operations and
   the per-run caps_).
 - **A limit on file content held**: a run keeps every file it reads, every
@@ -1203,12 +1204,57 @@ the runner's own timer stops one that waits past it. Either way
 of N s (its seconds cap)`. A script error rejects with `RealmScriptError`,
 which names the script's line.
 
+### `realm.transform` in a run
+
+`realm.transform(input, program, { params?, spelling? })` runs one BXL
+program over JSON the script hands it, under BXL's `transform` profile, as
+on the interactive surface: `RealmTransformer` in
+`packages/host/app/lib/realm-runner/transform.ts` starts the run's transform
+worker in the prerender tab on the first call, and ends it with the run. The
+program never runs inside QuickJS.
+
+- **Per call**, the interactive surface's limits hold: a program of at most
+  16 KiB, at most 1 MB of input and params and 1 MB of output, BXL's step and
+  output limits, and 10 s of time. BXL stops a program at its time; one that
+  stalls outside BXL's metering ends the worker 5 s later, every call waiting
+  on it rejects, and the next call starts a new worker. Either way the call
+  rejects in the script, which can catch it and go on.
+- **Per run**, nothing counts the calls (the interactive surface allows
+  100): `AUTOMATION_TRANSFORM_LIMITS.calls` is `Infinity`, and the run's
+  time limit bounds them (ADR 031 §1.4). The bytes they move in and out
+  together are bounded at `MAX_TRANSFORM_BYTES_PER_RUN` (10 MB), as on the
+  interactive surface. At most `MAX_TRANSFORMS_IN_FLIGHT` (8) calls wait for
+  the worker at once, and a call past that is refused: the worker runs one
+  program at a time, and each waiting call holds its program and input in a
+  tab other runs share, so a script that starts calls without awaiting them
+  can't queue them without bound. Their time is part of the tab time the run
+  is charged.
+- **Outside the queue**: a transform touches no file, so it neither waits
+  behind the run's queued realm calls nor holds them up. The run's `idle` waits
+  for it too.
+- **One log line per run**: no realm server sees a transform, so the tab
+  reports them. The transformer tallies every call (one refused before it
+  reaches the worker too), the calls that failed, the time their programs ran
+  in the worker (from the worker's start of each, in ms), and the bytes of
+  input and params sent and of output answered. As the run settles,
+  `runAutomationScript` records one `{ kind: 'transform', at, calls, failed,
+ms, inBytes, outBytes }` event when the script made any call, before the
+  error line of a run that fails. The realm server stores it as a `script`
+  line of kind `transform`, `Transforms: N calls, F failed, T ms`, with the
+  tally in `data`. A line per call would go around the run's notification
+  cap, and a script that transforms in a loop would push its own console and
+  milestone lines out of the log. BXL reports no step count, so the line has
+  none.
+
+Author guidance for writing a transform in an automation is boxel-skills'
+`automation-authoring` skill.
+
 ### Progress and redaction
 
 The run's progress goes to the `RunProgressSink` the caller passes, one
 `RunProgressEvent` at a time, in the order the script made them: `activity`
 lines, the milestone `plan`, each `milestone` reached, the `task`s reported
-inside one, and `console` lines with their level and script line (a value that isn't a
+inside one, one `transform` line as the run settles (_`realm.transform` in a run_, above), and `console` lines with their level and script line (a value that isn't a
 string is shown as JSON, an `Error` as `Name: message`; a line past 10,000
 characters is cut and says how many it lost). Each event's time is `at`.
 
@@ -1253,13 +1299,13 @@ realm server's log for Loki. The code is
 
 ### Where the lines come from
 
-| `source`   | `kind`                                                      | Written by                                                                                                                                                                                                                                 |
-| ---------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `script`   | `console`, `activity`, `plan`, `milestone`, `task`, `error` | the run's tab: `RunLogSink` (`packages/host/app/lib/realm-runner/run-log-sink.ts`) sends the progress sink's events to the realm's `POST /_run-log` with the run token                                                                     |
-| `platform` | `call-api`                                                  | `callApiOperation`, through the run's `CallApiRunMeter.logCall`: operation, method, destination with query values masked, status, time and size, or why it was refused                                                                     |
-| `platform` | `resolve`                                                   | `_request-forward`, for a forward that carried the run's token: model, status, time and cost                                                                                                                                               |
-| `platform` | `commit`                                                    | `/_run-commit`: the files saved, or the refusal's code and detail                                                                                                                                                                          |
-| `platform` | `finish`                                                    | `finishAutomationRun`, `abandonAutomationRun` and `cancelAutomationRun`, once the row changes: how the run ended, with the row's `error_reason` and `error_message` (a cap that ended it, a time limit, a script error) or who canceled it |
+| `source`   | `kind`                                                                   | Written by                                                                                                                                                                                                                                 |
+| ---------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `script`   | `console`, `activity`, `plan`, `milestone`, `task`, `transform`, `error` | the run's tab: `RunLogSink` (`packages/host/app/lib/realm-runner/run-log-sink.ts`) sends the progress sink's events to the realm's `POST /_run-log` with the run token                                                                     |
+| `platform` | `call-api`                                                               | `callApiOperation`, through the run's `CallApiRunMeter.logCall`: operation, method, destination with query values masked, status, time and size, or why it was refused                                                                     |
+| `platform` | `resolve`                                                                | `_request-forward`, for a forward that carried the run's token: model, status, time and cost                                                                                                                                               |
+| `platform` | `commit`                                                                 | `/_run-commit`: the files saved, or the refusal's code and detail                                                                                                                                                                          |
+| `platform` | `finish`                                                                 | `finishAutomationRun`, `abandonAutomationRun` and `cancelAutomationRun`, once the row changes: how the run ended, with the row's `error_reason` and `error_message` (a cap that ended it, a time limit, a script error) or who canceled it |
 
 `RunLogSink` implements `FlushableRunProgressSink`. It sends a batch of at
 most `RUN_LOG_MAX_BATCH_LINES` (500) events and `RUN_LOG_MAX_BATCH_BYTES`
@@ -1469,7 +1515,7 @@ A milestone lasts until the next one starts, or until the run ends (`finished_at
 
 `realm.progress.count(done, total)` records nothing. The surface keeps the method, so a script written for counts runs on, and the run's first call logs one `warn` console line that names `realm.progress.task`. A `count` line from a tab whose host still sends one is stored in the log and recorded on no milestone.
 
-A realm server that reads no `task` line refuses a whole batch that carries one with a 400. A deploy publishes the host before the realm servers roll, so a tab can reach such a server mid-rollout. `RunLogSink` then sends the batch again without its tasks, and the run's later batches leave tasks out, so the run's milestones and console lines still land.
+A realm server that reads no `task` line, or no `transform` line, refuses a whole batch that carries one with a 400. A deploy publishes the host before the realm servers roll, so a tab can reach such a server mid-rollout. `RunLogSink` then sends the batch again without its `transform` line, and then without its tasks if the realm server refuses it again, and the run's later batches leave out each kind the realm server refused, so the run's milestones and console lines still land.
 
 **Reading them.** `readRunMilestones(dbAdapter, runId)` answers a run's `plan`, its `milestones` in order (`name`, `planned`, `startedAt`, `endedAt`, `ms`, and `tasks`, each `{ text, at }` in the order reported), `current` (the milestone a running run is in), `ahead` (the plan's milestones it hasn't reached), `failedIn` (for a run that ended with an error, the milestone it was in), `dropped` and `tasksDropped`. `readLastRunMilestones(dbAdapter, automationId)` answers the same for the automation's last run that started and has ended, leaving Previews out: what the card shows, through `_automation-status`'s `lastRun`. `readRunMilestonesFor` reads a page of runs in three queries.
 
@@ -1743,7 +1789,7 @@ A run row opens to the run's timeline (`RunDetail` in the catalog's `automation/
 2. **Times on the timeline**, every one in the viewer's own time zone (`runClock`), which one muted line at the top of the opened run names, so no time repeats the zone. Admission says when the run started and how long the run waited (the listed run's `createdAt` to `startedAt`); each milestone, how long the milestone took or has run; the commit, how long the commit took (`timings.commitMs`). The row where an ended run ended (the commit, or the milestone or step the run failed or stopped in) adds when the run finished or ended and how long the run took in all. A Preview that completes marks the commit **Skipped**, since a Preview saves nothing. A run that ended with no attempt ever started (canceled while waiting, or ended as `job-lost`) has no `step`; its Admission reads stopped or failed, saying the run ended before Boxel started the run. Each milestone also says how long the milestone took on the automation's run before this one ("Last run took …"), read from one run: the next older run on the page shown that started and ended, isn't a Preview, and isn't a run admission refused (which never ran the script), matched by name. The ones still ahead say so too.
 3. **Five tabs**:
    - **Log**: the run's log lines, oldest first, with the latest 200 shown and a button that shows 500 earlier ones at a time, each with its time, level, where the line came from (the script, or Boxel for a platform line), the message and the script line it points at. A segmented control picks the least severe level to show (Errors, Warnings, Info, All), and each choice shows that level and every more severe one, as log filters do; each option counts the lines it shows. The report's `log.byLevel` counts only lines that store a level, while the route's `level` filter reads a line with none as `info`, so the card counts info as `log.lines` less the log, warn and error counts. Changing the level reads the log again from the start with `level` set to that level and the more severe ones. The lines the log's cap refused (`dropped`) are counted above the lines.
-   - **Calls**: the run's `callApi` calls (operation, method and masked destination, the vendor's status or `Refused` / `Failed` when the call has a `code` instead, time to the millisecond and size) and the AI requests it resolved (model, status, the tokens read and written, time). The `resolve` log line carries `inputTokens` and `outputTokens` from the provider's `usage` (`tokensOf` in `handle-request-forward.ts`), and the report serves them; the line records no cost, in its message or its `data`, and no console route serves one (ADR 049 §1.4): an end user sees what AI costs only as the credits Boxel charged, on the Cost tab. The automation surface has no `transform`, so no transform call shows.
+   - **Calls**: the run's `callApi` calls (operation, method and masked destination, the vendor's status or `Refused` / `Failed` when the call has a `code` instead, time to the millisecond and size) and the AI requests it resolved (model, status, the tokens read and written, time). The `resolve` log line carries `inputTokens` and `outputTokens` from the provider's `usage` (`tokensOf` in `handle-request-forward.ts`), and the report serves them; the line records no cost, in its message or its `data`, and no console route serves one (ADR 049 §1.4): an end user sees what AI costs only as the credits Boxel charged, on the Cost tab. A transform runs in the tab, so no platform line logs it; the Log tab shows the run's one `transform` line.
    - **Writes**: the files a complete Preview staged with their sizes, or the paths a Run now or a trigger's run saved; a Preview a later Preview replaced says so. A run whose log reached the cap before the commit line counts the files and names none.
    - **Cost**: an itemized receipt (Pret UI `StatementTable`), one line per charge kind (`run`, `ai`, `batched_ai`, `run_indexing`, and any other kind as _Other charges_) and a total that is the sum of the lines. The `run_indexing` charge lands once the commit's index pass completes, which can be after the run ends, and the tab says so; a running run's AI credits held for answers to come show below the receipt, not in it. **Storage** is no run's charge, so the tab shows it apart: the files the run saved that still exist and their size, the files the automation's runs keep in all, and what a day of their storage costs (`dailyCredits` from `/_automation-storage`, which the server prices as the daily storage charge, margin included), with the rules of _The daily storage charge_ in the `pricing` skill spelled out for the person: charged daily to the payer while the automation is switched on, paused or done included, until the automation is removed or the files deleted, in whole credits once the days add up to one, and never for a Preview. A change to those rules changes this copy too.
    - **Limits**: one row per per-run limit the card sets (`RUN_LIMITS`: outside calls, data received, saves, AI requests, AI spending, run time), each with what the run used of the limit (`cost.callApiCalls`, `callApiResponseBytes`, `writes`, `resolveCalls`, `aiCreditsSpent`, and `timings.runMs` or the time since a running run started) and a bar, colored as the near-limit and at-limit warnings elsewhere on the card are (`LIMIT_NEAR_SHARE`). A limit the card leaves unset reads as no limit, and a limit of 0 as none allowed. The rows measure against the card's own `caps`, as the card's last-run limits do.
@@ -2206,8 +2252,9 @@ returning the lines. The attributes:
   `inputTokens`, `outputTokens`), one per `call-api` or `resolve` platform
   line, with the line's `seq` and `at`. Neither the report nor
   `/_automation-run-log` serves an AI request's cost, and the log route drops
-  a `costInUsd` from a stored line's `data` (ADR 049 §1.4). The automation surface has no `transform`, so a
-  run makes no transform calls;
+  a `costInUsd` from a stored line's `data` (ADR 049 §1.4). A transform runs in the tab
+  and has no platform line; the run's one `transform` script line tallies its
+  transforms;
 - `writes`: `count` (the row's `writes`), plus `staged` and
   `stagedReplacedBy` for a complete Preview and `committed` for a run whose
   commit landed, as `stagedFiles`, `stagedFilesReplacedBy` and

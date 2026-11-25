@@ -4,8 +4,8 @@ import type { RealmRunnerCallMethod, RealmRunnerSurface } from './types';
 // is judged by this (ADR 025 §1.4): an automation run may only read its own
 // realm, stage writes that land in one batch after the script finishes, call
 // operations (a `callApi` reaches the network only through one), ask the
-// model through `resolve`, and report its progress and console lines to the
-// run record.
+// model through `resolve`, reshape JSON through `transform`, and report its
+// progress and console lines to the run record.
 export type RealmRunnerMethodReach =
   // reads the run's realm
   | 'realm-read'
@@ -166,6 +166,7 @@ export const AUTOMATION_METHODS: ReadonlySet<RealmRunnerCallMethod> =
     'operations.invokeBatchOperation',
     'resolve',
     'resolve.batch',
+    'transform',
     'activity',
     'progress.plan',
     'progress.milestone',

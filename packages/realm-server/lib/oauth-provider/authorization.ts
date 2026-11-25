@@ -14,7 +14,10 @@
 //
 // A request that passes goes to the library, which starts an interaction and
 // sends the browser to the interaction route, which hands it to the secure
-// origin's authorize page.
+// origin's authorize page. Boxel's checks refuse every parameter, and every
+// value, the library would refuse itself, since the library sends such an
+// error to the redirect URI. Should one get past them all the same, a
+// middleware around the library sends it to the error page instead.
 
 import type Koa from 'koa';
 import type Provider from 'oidc-provider';
@@ -84,6 +87,15 @@ type Query = Record<string, string | string[] | undefined>;
 interface Refusal {
   error: string;
   reason: AuthorizationRefusalReason;
+  // What an `unsupported-parameter` refusal refused: parameters by name, or
+  // prompts. The client chose them, so a log line shows them only through
+  // `unsupportedForLogs`.
+  unsupported?: Unsupported[];
+}
+
+interface Unsupported {
+  kind: 'parameter' | 'prompt';
+  value: string;
 }
 
 // The parts of the library's client that Boxel's own routes read.
@@ -91,6 +103,8 @@ export interface LibraryClient {
   clientId: string;
   clientName?: string;
   grantTypes?: readonly string[];
+  // The scopes the client registered, space-separated, when it named any.
+  scope?: string;
   redirectUriAllowed(value: string): boolean;
 }
 
@@ -133,6 +147,28 @@ export async function findClient(
   }
 }
 
+// A request's query as the library reads it: its Koa parses with
+// `URLSearchParams`, which reads every pair, while the realm server's Koa
+// parses with `node:querystring`, which stops after 1,000. Boxel's checks
+// read this instead of `ctxt.query`, so a parameter can't hide from them
+// behind padding the library reads past.
+function queryAsTheLibraryReadsIt(querystring: string): Query {
+  let params = new URLSearchParams(querystring);
+  let query: Query = {};
+  for (let name of new Set(params.keys())) {
+    let values = params.getAll(name);
+    // Defined rather than assigned, so a name such as `__proto__` is a
+    // parameter like any other.
+    Object.defineProperty(query, name, {
+      value: values.length === 1 ? values[0] : values,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  return query;
+}
+
 // Stands for a parameter that may appear once but appeared more often.
 const REPEATED = Symbol('repeated');
 
@@ -157,6 +193,39 @@ function many(query: Query, name: string): string[] {
   return Array.isArray(value) ? value : [value];
 }
 
+// The parameters a request may carry: the ones Boxel reads, and `prompt`,
+// whose `login` and `consent` change nothing, since consent shows on every
+// flow and sign-in happens on the secure origin either way, so a client that
+// sends one isn't refused for it. The confirmation code is one Boxel reads:
+// the check on it below says which clients must send it and refuses it from
+// every other.
+// The library refuses some others itself, such as a request object, a
+// response mode or an ID token hint, and others it reads, such as `max_age`
+// and `nonce`, belong to OpenID, which the provider doesn't serve.
+const ACCEPTED_PARAMETERS: ReadonlySet<string> = new Set([
+  'client_id',
+  'response_type',
+  'redirect_uri',
+  'scope',
+  'state',
+  'resource',
+  'code_challenge',
+  'code_challenge_method',
+  'prompt',
+  CONFIRMATION_CODE_PARAM,
+]);
+
+// The prompts the library supports besides `none`, which is refused on its
+// own. Consent is shown on every flow whichever is asked for.
+const ACCEPTED_PROMPTS: ReadonlySet<string> = new Set(['login', 'consent']);
+
+// A PKCE challenge as RFC 7636 §4.2 spells one, which the library checks.
+const PKCE_CHALLENGE = /^[A-Za-z0-9._~-]{43,128}$/;
+
+// A scope list as RFC 6749 §3.3 spells one, single spaces between scopes,
+// which the library checks.
+const SCOPE_LIST = /^[\x21\x23-\x5B\x5D-\x7E]+(?: [\x21\x23-\x5B\x5D-\x7E]+)*$/;
+
 function isAllowedAt(
   resource: OAuthResource,
   clientId: string,
@@ -166,10 +235,11 @@ function isAllowedAt(
 }
 
 // Boxel's checks on a request, after the rate limit and with the session
-// cookie already dropped: its shape, its resources, whether the client may use
-// them, and its scopes (ADR 021 §1.3, §1.4). Answers the resources the
-// request is for, or why it is refused. A request from a client the library
-// doesn't know is handed on, since the library refuses it itself.
+// cookie already dropped: its parameters, its shape, its resources, whether
+// the client may use them, and its scopes (ADR 021 §1.3, §1.4, §1.8).
+// Answers the resources the request is for, or why it is refused. A request
+// from a client the library doesn't know is handed on, since the library
+// refuses it itself, and can't send that error to the client.
 export function checkAuthorizationRequest(
   query: Query,
   {
@@ -185,6 +255,18 @@ export function checkAuthorizationRequest(
   | { refused: false; resources: OAuthResource[]; fromScopes: boolean }
   | { refused: false; unknownClient: true }
   | ({ refused: true } & Refusal) {
+  // Parameters.
+  let unsupported = Object.keys(query).filter(
+    (name) => !ACCEPTED_PARAMETERS.has(name),
+  );
+  if (unsupported.length > 0) {
+    return refuse(
+      'invalid_request',
+      'unsupported-parameter',
+      unsupported.map((value) => ({ kind: 'parameter', value })),
+    );
+  }
+
   // Shape.
   let responseType = single(query, 'response_type');
   let challenge = single(query, 'code_challenge');
@@ -209,19 +291,37 @@ export function checkAuthorizationRequest(
   if (responseType !== 'code') {
     return refuse('unsupported_response_type', 'unsupported-response-type');
   }
-  if (!challenge || challengeMethod !== 'S256') {
+  if (
+    !challenge ||
+    challengeMethod !== 'S256' ||
+    !PKCE_CHALLENGE.test(challenge)
+  ) {
     return refuse('invalid_request', 'pkce-required');
   }
+  let prompts = prompt === undefined ? [] : prompt.split(' ');
   // Consent is shown on every flow, so a flow that may not show anything can
   // never finish.
-  if (prompt?.split(' ').includes('none')) {
+  if (prompts.includes('none')) {
     return refuse('invalid_request', 'prompt-none');
+  }
+  let unsupportedPrompts = prompts.filter(
+    (value) => !ACCEPTED_PROMPTS.has(value),
+  );
+  if (unsupportedPrompts.length > 0) {
+    return refuse(
+      'invalid_request',
+      'unsupported-parameter',
+      unsupportedPrompts.map((value) => ({ kind: 'prompt', value })),
+    );
+  }
+  if (scopeParam !== undefined && !SCOPE_LIST.test(scopeParam)) {
+    return refuse('invalid_request', 'malformed');
   }
 
   if (!client) {
     return { refused: false, unknownClient: true };
   }
-  let scopes = (scopeParam ?? '').split(' ').filter(Boolean);
+  let scopes = scopeParam === undefined ? [] : scopeParam.split(' ');
   if (scopes.includes('openid')) {
     return refuse('invalid_scope', 'openid');
   }
@@ -303,14 +403,79 @@ export function checkAuthorizationRequest(
   ) {
     return refuse('invalid_scope', 'missing-scope');
   }
+  // A client that registered its scopes may ask only for those.
+  if (client.scope !== undefined) {
+    let registered = client.scope.split(' ');
+    if (scopes.some((scope) => !registered.includes(scope))) {
+      return refuse('invalid_scope', 'unregistered-scope');
+    }
+  }
   return { refused: false, resources, fromScopes };
 }
 
 function refuse(
   error: string,
   reason: AuthorizationRefusalReason,
+  unsupported?: Unsupported[],
 ): { refused: true } & Refusal {
-  return { refused: true, error, reason };
+  return unsupported
+    ? { refused: true, error, reason, unsupported }
+    : { refused: true, error, reason };
+}
+
+// A parameter name or prompt a log line may show as it is. Anything else
+// the client sent shows as `other`, since it can carry anything, a token
+// included.
+const PLAIN_NAME = /^[a-z][a-z0-9_]{0,31}$/;
+const MAX_UNSUPPORTED_IN_LOGS = 10;
+
+// How a log line names what an `unsupported-parameter` refusal refused, so a
+// real client that sends a parameter Boxel doesn't accept can be told from
+// its logs.
+function unsupportedForLogs(unsupported: readonly Unsupported[]): string {
+  let names = [
+    ...new Set(
+      unsupported.map(({ kind, value }) => {
+        let shown = PLAIN_NAME.test(value) ? value : 'other';
+        return kind === 'prompt' ? `prompt=${shown}` : shown;
+      }),
+    ),
+  ];
+  let shown = names.slice(0, MAX_UNSUPPORTED_IN_LOGS).join(', ');
+  let more = names.length - MAX_UNSUPPORTED_IN_LOGS;
+  return more > 0 ? `${shown} and ${more} more` : shown;
+}
+
+// Stores a refused request's error and answers its reference. The redirect
+// URI and state are kept, for "Return", only when the client is valid and
+// registered that redirect URI.
+async function storeRefusal(
+  dbAdapter: DBAdapter,
+  {
+    error,
+    reason,
+    client,
+    query,
+  }: Refusal & { client: LibraryClient | undefined; query: Query },
+): Promise<string> {
+  let redirectUri = single(query, 'redirect_uri');
+  let state = single(query, 'state');
+  let returnable =
+    client !== undefined &&
+    typeof redirectUri === 'string' &&
+    state !== REPEATED &&
+    client.redirectUriAllowed(redirectUri);
+  return await storeAuthorizationError(dbAdapter, {
+    error,
+    reason,
+    ...(client ? { clientId: client.clientId } : {}),
+    ...(returnable
+      ? {
+          redirectUri: redirectUri as string,
+          ...(typeof state === 'string' ? { state } : {}),
+        }
+      : {}),
+  });
 }
 
 // The handler for `GET` on the authorization endpoint. `next` hands the
@@ -361,7 +526,7 @@ export function authorizationHandler({
     // the library remembered would sign this flow in as whoever it names.
     dropCookies(ctxt, sessionCookies);
 
-    let query = ctxt.query as Query;
+    let query = queryAsTheLibraryReadsIt(ctxt.querystring);
     let clientId = single(query, 'client_id');
     let client =
       clientId === REPEATED ? undefined : await findClient(provider, clientId);
@@ -381,26 +546,14 @@ export function authorizationHandler({
       preRegistered,
     });
     if (check.refused) {
-      let redirectUri = single(query, 'redirect_uri');
-      let state = single(query, 'state');
-      let returnable =
-        client !== undefined &&
-        typeof redirectUri === 'string' &&
-        state !== REPEATED &&
-        client.redirectUriAllowed(redirectUri);
       log.info(
-        `authorization refused: ${check.reason} (${check.error}), client ${client ? clientIdForLogs(client.clientId) : 'unknown'}`,
+        `authorization refused: ${check.reason} (${check.error})${check.unsupported ? `: ${unsupportedForLogs(check.unsupported)}` : ''}, client ${client ? clientIdForLogs(client.clientId) : 'unknown'}`,
       );
-      let reference = await storeAuthorizationError(dbAdapter, {
+      let reference = await storeRefusal(dbAdapter, {
         error: check.error,
         reason: check.reason,
-        ...(client ? { clientId: client.clientId } : {}),
-        ...(returnable
-          ? {
-              redirectUri: redirectUri as string,
-              ...(typeof state === 'string' ? { state } : {}),
-            }
-          : {}),
+        client,
+        query,
       });
       return navigate(ctxt, errorPageURL(secureOriginURL, reference));
     }
@@ -511,6 +664,72 @@ export function renderLibraryError({
     });
     navigate(ctx, errorPageURL(secureOriginURL, reference));
   };
+}
+
+// An OAuth error code as the library spells one.
+const OAUTH_ERROR_CODE = /^[a-z_]{1,64}$/;
+
+// Runs around the library's routing (`provider.use`). On the authorization
+// endpoint the library answers by sending the browser to the interaction
+// route, or to Boxel's error page through `renderError`. Any other answer
+// sends the browser to the client's redirect URI with an error Boxel's checks
+// didn't foresee, or skips the interaction: it goes to Boxel's error page
+// instead, which offers "Return" as it does for a refusal (ADR 021 §1.8).
+export function keepAuthorizationErrorsOnBoxelsPage({
+  dbAdapter,
+  secureOriginURL,
+  issuer,
+}: {
+  dbAdapter: DBAdapter;
+  secureOriginURL: URL;
+  issuer: string;
+}) {
+  let interactionRoute = `${issuer}${OAUTH_INTERACTION_PATH}/`;
+  let errorPage = `${authorizePageURL(secureOriginURL).href}?`;
+  return async function keepErrorsOnBoxelsPage(
+    ctx: KoaContextWithOIDC,
+    next: () => Promise<void>,
+  ) {
+    await next();
+    if (ctx.oidc?.route !== 'authorization') {
+      return;
+    }
+    let location = ctx.response.get('Location');
+    if (
+      location.startsWith(interactionRoute) ||
+      location.startsWith(errorPage)
+    ) {
+      return;
+    }
+    let error = libraryErrorIn(location);
+    let client = ctx.oidc.client as LibraryClient | undefined;
+    // Boxel's checks before the library are meant to refuse whatever the
+    // library would, so this is a check missing from them.
+    log.warn(
+      `authorization error from the library kept from the client: ${error}, client ${client ? clientIdForLogs(client.clientId) : 'unknown'}`,
+    );
+    let reference = await storeRefusal(dbAdapter, {
+      error,
+      reason: 'library',
+      client,
+      query: ctx.query as Query,
+    });
+    navigate(ctx, errorPageURL(secureOriginURL, reference));
+  };
+}
+
+// The error a library redirect carries in its query, or `server_error` when
+// it carries none Boxel can read.
+function libraryErrorIn(location: string): string {
+  try {
+    let error = new URL(location).searchParams.get('error');
+    if (error && OAUTH_ERROR_CODE.test(error)) {
+      return error;
+    }
+  } catch {
+    // Not a URL: no redirect at all.
+  }
+  return 'server_error';
 }
 
 // `GET /_oauth-provider/interaction/:uid`: the library sends the browser here
