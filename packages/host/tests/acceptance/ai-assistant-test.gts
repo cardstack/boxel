@@ -1,5 +1,6 @@
 import {
   click,
+  doubleClick,
   fillIn,
   find,
   waitFor,
@@ -3789,40 +3790,154 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
   });
 
-  test('the ai assistant panel cannot be dragged so wide that the main panel is narrower than 320px', async function (assert) {
-    widenApp();
-    window.localStorage.removeItem('ai-assistant-panel-width');
-    await openAssistantOnIndex();
-
+  // Drags the assistant's resize handle to `offset` pixels from the app's
+  // left edge.
+  async function dragAssistantHandleTo(offset: number) {
     let resizeHandle = find('[data-test-ai-assistant-resize-handle]')!;
     let { x, y } = resizeHandle.getBoundingClientRect();
     let left = find('[data-test-submode-layout]')!.getBoundingClientRect().x;
     await triggerEvent(resizeHandle, 'pointerdown', { clientX: x, clientY: y });
     await triggerEvent(resizeHandle, 'pointermove', {
-      clientX: left + 10,
+      clientX: left + offset,
       clientY: y,
     });
     await triggerEvent(resizeHandle, 'pointerup');
+  }
 
-    let mainWidth = find('[data-test-main-panel]')!.getBoundingClientRect()
-      .width;
+  function mainPanelWidth() {
+    return find('[data-test-main-panel]')!.getBoundingClientRect().width;
+  }
+
+  test('dragging the ai assistant panel wide leaves the main panel at least 320px wide, or collapses it', async function (assert) {
+    widenApp();
+    window.localStorage.removeItem('ai-assistant-panel-width');
+    await openAssistantOnIndex();
+
+    await dragAssistantHandleTo(400);
+    let width = mainPanelWidth();
     assert.ok(
-      Math.abs(mainWidth - 320) < 1,
-      `the main panel stops at 320px (${mainWidth.toFixed(1)}px)`,
+      width >= 320,
+      `a drag that leaves the main panel wider than 320px keeps it open (${width.toFixed(1)}px)`,
+    );
+    assert.ok(
+      width < 420,
+      `the main panel follows the drag (${width.toFixed(1)}px)`,
+    );
+
+    await dragAssistantHandleTo(10);
+    width = mainPanelWidth();
+    assert.ok(
+      width < 1,
+      `a drag past 320px collapses the main panel (${width.toFixed(1)}px)`,
     );
   });
 
-  test('a saved ai assistant panel width that would leave the main panel narrower than 320px is capped', async function (assert) {
+  test('double-clicking the ai assistant resize handle collapses the main panel, and double-clicking again restores its width', async function (assert) {
+    widenApp();
+    window.localStorage.removeItem('ai-assistant-panel-width');
+    await openAssistantOnIndex();
+
+    let startWidth = mainPanelWidth();
+    assert.ok(startWidth > 400, `the main panel starts wide (${startWidth}px)`);
+
+    await doubleClick('[data-test-ai-assistant-resize-handle]');
+    let collapsedWidth = mainPanelWidth();
+    assert.ok(
+      collapsedWidth < 1,
+      `the main panel collapses (${collapsedWidth.toFixed(1)}px)`,
+    );
+    assert
+      .dom('[data-test-main-panel]')
+      .hasAttribute('inert', '', 'the collapsed main panel is out of reach');
+
+    await doubleClick('[data-test-ai-assistant-resize-handle]');
+    let restoredWidth = mainPanelWidth();
+    assert.ok(
+      Math.abs(restoredWidth - startWidth) < 1,
+      `the main panel is back to ${startWidth.toFixed(1)}px (${restoredWidth.toFixed(1)}px)`,
+    );
+    assert
+      .dom('[data-test-main-panel]')
+      .doesNotHaveAttribute('inert', 'the reopened main panel is reachable');
+  });
+
+  test('a saved ai assistant panel width that would leave the main panel narrower than 320px opens it at 320px', async function (assert) {
     widenApp();
     window.localStorage.setItem('ai-assistant-panel-width', '95');
     await openAssistantOnIndex();
 
-    let mainWidth = find('[data-test-main-panel]')!.getBoundingClientRect()
-      .width;
+    let width = mainPanelWidth();
     assert.ok(
-      Math.abs(mainWidth - 320) < 1,
-      `the main panel is capped at 320px (${mainWidth.toFixed(1)}px)`,
+      Math.abs(width - 320) < 1,
+      `the main panel opens at 320px (${width.toFixed(1)}px)`,
     );
+  });
+
+  test('with no saved width, a window too narrow for the ai assistant panel’s default width keeps the main panel open', async function (assert) {
+    // About 350px across once the test container scales it.
+    testingRoot?.style.setProperty('width', '700px');
+    window.localStorage.removeItem('ai-assistant-panel-width');
+    await openAssistantOnIndex();
+
+    let layoutWidth = find(
+      '[data-test-submode-layout]',
+    )!.getBoundingClientRect().width;
+    assert.ok(
+      layoutWidth < 371,
+      `the app is narrower than the assistant's default width (${layoutWidth.toFixed(1)}px)`,
+    );
+    let width = mainPanelWidth();
+    assert.ok(width > 0, `the main panel stays open (${width.toFixed(1)}px)`);
+    let saved = window.localStorage.getItem('ai-assistant-panel-width');
+    assert.notStrictEqual(saved, null, 'the width is saved');
+    assert.ok(
+      Number(saved) < 99.99,
+      `the saved width is not the whole window (${saved})`,
+    );
+  });
+
+  test('reopening the ai assistant panel opens it at the width saved since the page loaded', async function (assert) {
+    widenApp();
+    window.localStorage.setItem('ai-assistant-panel-width', '100');
+    await openAssistantOnIndex();
+    assert.ok(mainPanelWidth() < 1, 'the main panel opens collapsed');
+
+    await dragAssistantHandleTo(400);
+    let draggedWidth = mainPanelWidth();
+    assert.ok(
+      draggedWidth >= 320,
+      `the drag opens the main panel (${draggedWidth.toFixed(1)}px)`,
+    );
+
+    await click('[data-test-close-ai-assistant]');
+    await click('[data-test-open-ai-assistant]');
+    let reopenedWidth = mainPanelWidth();
+    assert.ok(
+      Math.abs(reopenedWidth - draggedWidth) < 1,
+      `the main panel keeps the dragged width (${reopenedWidth.toFixed(1)}px)`,
+    );
+  });
+
+  test('on a window too narrow for both panels, the ai assistant panel’s width is not saved', async function (assert) {
+    // About 300px across once the test container scales it.
+    testingRoot?.style.setProperty('width', '600px');
+    window.localStorage.setItem('ai-assistant-panel-width', '40');
+    await openAssistantOnIndex();
+
+    assert.strictEqual(
+      window.localStorage.getItem('ai-assistant-panel-width'),
+      '40',
+      'the width saved on a wider window is kept',
+    );
+  });
+
+  test('a saved ai assistant panel width of the whole window opens with the main panel collapsed', async function (assert) {
+    widenApp();
+    window.localStorage.setItem('ai-assistant-panel-width', '100');
+    await openAssistantOnIndex();
+
+    let width = mainPanelWidth();
+    assert.ok(width < 1, `the main panel is collapsed (${width.toFixed(1)}px)`);
   });
 
   test('creates new session with settings even when empty new session exists', async function (assert) {
