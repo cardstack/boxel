@@ -2099,7 +2099,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 622432,
+      "bytes": 622436,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2616,8 +2616,13 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/connected-apps/clock.ts",
+          "size": 112
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/connected-apps/connected-apps-page.gts",
-          "size": 16477
+          "size": 16432
         },
         {
           "package": "@cardstack/secure-origin",

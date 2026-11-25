@@ -12,6 +12,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
 import { navigation } from '../../src/shell/navigation.js';
+import { clock } from '../../src/shell/connected-apps/clock.ts';
 import ConnectedAppsPage from '../../src/shell/connected-apps/connected-apps-page.gts';
 import {
   setupMockServers,
@@ -79,8 +80,21 @@ const UNKNOWN = {
   standIn: 'unknown',
 };
 
+// The page's clock is pinned to midday in the browser's time zone, and every
+// date the server lists is an offset from it. The page counts calendar days
+// in that zone, so "2 hours ago" and "5 minutes ago" fall on the same day
+// whatever zone and time of day the tests run in.
+const NOW = new Date(2026, 5, 15, 12, 0, 0);
+
 function iso(offset: number) {
-  return new Date(Date.now() + offset).toISOString();
+  return new Date(NOW.getTime() + offset).toISOString();
+}
+
+// The pinned time and the zone the page counts days in, for the message of
+// an assertion on date wording.
+function pinnedAt() {
+  let zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return `now pinned at ${NOW.toISOString()} (${NOW.toString()}, zone ${zone}); page clock reads ${clock.now().toISOString()}`;
 }
 
 function connection(
@@ -127,6 +141,7 @@ module('Integration | connected apps', function (hooks) {
   setupPageAddress(hooks);
   let servers = setupMockServers(hooks);
   let original = { ...navigation };
+  let originalNow = clock.now;
   let closed = 0;
   // What the server lists now; a disconnect takes the connection out.
   let listed: ReturnType<typeof connection>[];
@@ -137,11 +152,13 @@ module('Integration | connected apps', function (hooks) {
       closed++;
     };
     listed = [];
+    clock.now = () => new Date(NOW);
     localStorage.removeItem(STORAGE_KEY);
   });
 
   hooks.afterEach(function () {
     Object.assign(navigation, original);
+    clock.now = originalNow;
     localStorage.removeItem(STORAGE_KEY);
   });
 
@@ -245,10 +262,10 @@ module('Integration | connected apps', function (hooks) {
       .hasText('Boxel workspaces · Read and change');
     assert
       .dom(`${row('grant-claude-new')} [data-test-connection-last-used]`)
-      .hasText('Last used 2 hours ago');
+      .hasText('Last used 2 hours ago', pinnedAt());
     assert
       .dom(`${row('grant-claude-old')} [data-test-connection-last-used]`)
-      .hasText('Last used 5 days ago');
+      .hasText('Last used 5 days ago', pinnedAt());
     assert
       .dom(`${row('grant-chatgpt')} [data-test-connection-access]`)
       .hasText('Read');
@@ -269,10 +286,10 @@ module('Integration | connected apps', function (hooks) {
       .hasText('Never used');
     assert
       .dom(`${row('grant-agent')} [data-test-connection-connected]`)
-      .hasText('Connected today');
+      .hasText('Connected today', pinnedAt());
     assert
       .dom(`${row('grant-agent')} [data-test-connection-ends]`)
-      .hasText('Ends in 55 min');
+      .hasText('Ends in 55 min', pinnedAt());
     assert.dom('[data-test-connection-disconnect]').exists({ count: 4 });
   });
 
