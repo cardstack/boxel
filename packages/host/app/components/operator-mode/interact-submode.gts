@@ -78,10 +78,6 @@ import OperatorModeStack from './stack';
 
 import SubmodeLayout from './submode-layout';
 
-import type { NewFileOptions } from './new-file-button';
-
-import type { StackItemComponentAPI } from './stack-item';
-
 import type CardService from '../../services/card-service';
 import type FileUploadService from '../../services/file-upload';
 import type LoaderService from '../../services/loader-service';
@@ -93,6 +89,8 @@ import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
 import type { SearchResultKind } from '../../utils/search/types';
+import type { NewFileOptions } from './new-file-button';
+import type { StackItemComponentAPI } from './stack-item';
 import type {
   CardContext,
   CardDef,

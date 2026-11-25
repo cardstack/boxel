@@ -77,12 +77,11 @@ import Selector from './detail-panel-selector';
 
 import { selectorItemFunc } from './detail-panel-selector';
 
+import type { ModuleAnalysis } from '../../resources/module-contents';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type { FileType, NewFileType } from './create-file-modal';
 import type { SelectorItem } from './detail-panel-selector';
 
-import type { ModuleAnalysis } from '../../resources/module-contents';
-
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 interface Signature {

@@ -1401,7 +1401,6 @@ let bxlMutation: Promise<BxlMutationModule> | undefined;
 
 function loadBxlMutation(): Promise<BxlMutationModule> {
   // The cast is what keeps the specifier opaque to TypeScript; see above.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   bxlMutation ??= import('@cardstack/bxl/mutation' as string).then(
     (module) => module as BxlMutationModule,
   );

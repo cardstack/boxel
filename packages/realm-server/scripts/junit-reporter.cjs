@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-env node */
 'use strict';
 
 // QUnit JUnit XML reporter for CI.
@@ -11,9 +10,9 @@
 // When used as a --require module, this attaches alongside the default console
 // reporter so you get both terminal output and a JUnit file.
 
-const fs = require('node:fs'); // eslint-disable-line @typescript-eslint/no-var-requires
-const path = require('node:path'); // eslint-disable-line @typescript-eslint/no-var-requires
-const QUnit = require('qunit'); // eslint-disable-line @typescript-eslint/no-var-requires
+const fs = require('node:fs');
+const path = require('node:path');
+const QUnit = require('qunit');
 
 const outputFile =
   process.env.JUNIT_OUTPUT_FILE ||

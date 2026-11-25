@@ -2,8 +2,11 @@ const rule = require('../../../lib/rules/no-css-position-fixed');
 const RuleTester = require('eslint').RuleTester;
 
 const ruleTester = new RuleTester({
-  parser: require.resolve('ember-eslint-parser'),
-  parserOptions: { ecmaVersion: 2022, sourceType: 'module' },
+  languageOptions: {
+    parser: require('ember-eslint-parser'),
+    ecmaVersion: 2022,
+    sourceType: 'module',
+  },
 });
 ruleTester.run('no-css-position-fixed', rule, {
   valid: [
@@ -63,7 +66,6 @@ ruleTester.run('no-css-position-fixed', rule, {
       `,
       errors: [
         {
-          type: 'GlimmerTextNode',
           message: rule.meta.messages['no-css-position-fixed'],
         },
       ],
@@ -81,7 +83,6 @@ ruleTester.run('no-css-position-fixed', rule, {
       `,
       errors: [
         {
-          type: 'GlimmerTextNode',
           message: rule.meta.messages['no-css-position-fixed'],
         },
       ],
@@ -99,7 +100,6 @@ ruleTester.run('no-css-position-fixed', rule, {
       `,
       errors: [
         {
-          type: 'GlimmerTextNode',
           message: rule.meta.messages['no-css-position-fixed'],
         },
       ],
@@ -120,11 +120,9 @@ ruleTester.run('no-css-position-fixed', rule, {
       `,
       errors: [
         {
-          type: 'GlimmerTextNode',
           message: rule.meta.messages['no-css-position-fixed'],
         },
         {
-          type: 'GlimmerTextNode',
           message: rule.meta.messages['no-css-position-fixed'],
         },
       ],

@@ -17,9 +17,9 @@ import { localId as localIdSymbol, rri } from '@cardstack/runtime-common';
 import type CardService from '@cardstack/host/services/card-service';
 import type RealmService from '@cardstack/host/services/realm';
 
+import type { RenderedCardForOverlayActions } from '../../resources/element-tracker';
 import type { CardDefOrId } from './stack-item';
 
-import type { RenderedCardForOverlayActions } from '../../resources/element-tracker';
 import type { CardDef, Format, ViewCardFn } from '@cardstack/base/card-api';
 import type { MiddlewareState, ReferenceElement } from '@floating-ui/dom';
 

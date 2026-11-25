@@ -18,7 +18,12 @@ read). The counters are the shared rate-limit store (see the
 - **Interactive `callApi` calls only**: an invocation carrying a user's
   session — a card in the browser, the AI assistant, the CLI. An automation (a
   run the realm server makes as its payer, `Realm.handleAutomation`) counts
-  against nothing; it is bounded by its schedule's payer and caps.
+  against nothing; it is bounded by its schedule's payer and caps. The one
+  exception is a Preview's or a Run now's slot served only because its binding
+  is approved for interactive use (the person who started it doesn't own the
+  key and no automation approval names them as payer): it counts as the
+  interactive call it stands in for (`servedAsInteractive` in
+  `lib/key-bindings.ts`).
 - **Against the share or the key filling each slot.** An `{{apiKey}}` slot
   counts against the share it is filled from; a `{{userKey}}` slot against
   the caller's own key. A binding carries no limits. A call whose two slots

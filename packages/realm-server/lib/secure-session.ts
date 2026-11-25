@@ -47,6 +47,7 @@ import {
 import { revokeUserOAuthGrants } from './oauth-provider/grants.ts';
 import { GOOGLE_CALLBACK_PATH } from './secure-origin.ts';
 import { ensureSessionRoom } from './session-room.ts';
+import { withWorkspaceListLock } from './workspace-list.ts';
 import type { SignInLimiter } from './sign-in-limiter.ts';
 
 // A session signed in on the secure origin: the credential that minting a key
@@ -1386,12 +1387,15 @@ async function setUpFirstSignIn(
         }
       }
     }
-    await appendRealmToUserAccountData({
-      matrixURL: deps.matrixClient.matrixURL,
-      userId: user,
-      userAccessToken: accessToken,
-      realmURL,
-    });
+    await withWorkspaceListLock(deps.dbAdapter, user, (signal) =>
+      appendRealmToUserAccountData({
+        matrixURL: deps.matrixClient.matrixURL,
+        userId: user,
+        userAccessToken: accessToken,
+        realmURL,
+        signal,
+      }),
+    );
   });
   await ensureLoggedIn(deps.matrixClient);
   await ensureSessionRoom(deps, user, registrationToken);

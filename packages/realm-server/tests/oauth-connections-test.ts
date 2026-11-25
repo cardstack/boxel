@@ -373,6 +373,7 @@ module(basename(import.meta.filename), function (hooks) {
       user,
       {
         automation: TEST_AUTOMATION_PATH,
+        approveBindings: true,
       },
     );
     let response = (await realm.handleAutomation(
@@ -407,6 +408,7 @@ module(basename(import.meta.filename), function (hooks) {
       user,
       {
         automation: TEST_AUTOMATION_PATH,
+        approveBindings: true,
       },
     );
     let response = (await realm.handleAutomation(

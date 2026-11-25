@@ -92,6 +92,19 @@ function read(
     .set('Authorization', `Bearer ${token}`);
 }
 
+function editList(
+  server: Server,
+  token: string,
+  attributes: { add?: unknown; remove?: unknown },
+) {
+  return supertest(server)
+    .patch('/_user-realms')
+    .set('Accept', SupportedMimeType.JSONAPI)
+    .set('Content-Type', 'application/json')
+    .set('Authorization', `Bearer ${token}`)
+    .send(JSON.stringify({ data: { type: 'user-realms', attributes } }));
+}
+
 async function registryHas(dbAdapter: PgAdapter, realmURL: string) {
   let rows = (await dbAdapter.execute(
     `SELECT url FROM realm_registry WHERE url = $1`,
@@ -455,6 +468,147 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         sessionToken(user.userId),
       );
       assert.strictEqual(response.status, 503, response.text);
+    });
+  });
+
+  // Every edit rewrites the whole list, and Matrix account data has no
+  // compare-and-set, so the realm server holds each user's account-data lock
+  // around its edits: two that overlap must both stay on the list. Concurrent
+  // PATCH edits overlap reliably and are what shows the lock at work; a
+  // create or delete spends most of its time on the realm, so its list edit
+  // rarely meets another's, and those tests check the outcome rather than the
+  // lock. The lock itself, its deadline included, is tested in
+  // realm-advisory-locks-test.
+  module('overlapping edits of one user’s list', function (hooks) {
+    let context = setupServer(hooks, `${import.meta.filename}#overlap`);
+
+    test('two OAuth creates at once both end on the list', async function (assert) {
+      let owner = await registerListUser('list-two-creates');
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE]);
+      let token = await boxelApiToken(
+        context.dbAdapter,
+        owner.userId,
+        BOXEL_API,
+      );
+
+      let [first, second] = await Promise.all([
+        createRealm(context.server, token, `first-${uuidv4()}`),
+        createRealm(context.server, token, `second-${uuidv4()}`),
+      ]);
+      assert.strictEqual(first.status, 202, first.text);
+      assert.strictEqual(second.status, 202, second.text);
+      let list = (await workspaceListOf(owner)) as string[];
+      assert.deepEqual(
+        [...list].sort(),
+        [OTHER_WORKSPACE, first.body.data.id, second.body.data.id].sort(),
+        'both new workspaces are on the list, and the rest stays',
+      );
+    });
+
+    test('an OAuth delete and create at once leave the list right', async function (assert) {
+      let owner = await registerListUser('list-delete-create');
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE]);
+      let token = await boxelApiToken(
+        context.dbAdapter,
+        owner.userId,
+        BOXEL_API,
+      );
+      let doomed = await createRealm(
+        context.server,
+        token,
+        `doomed-${uuidv4()}`,
+      );
+      assert.strictEqual(doomed.status, 202, doomed.text);
+
+      let [deleted, created] = await Promise.all([
+        deleteRealm(context.server, token, doomed.body.data.id),
+        createRealm(context.server, token, `kept-${uuidv4()}`),
+      ]);
+      assert.strictEqual(deleted.status, 204, deleted.text);
+      assert.strictEqual(created.status, 202, created.text);
+      assert.deepEqual(await workspaceListOf(owner), [
+        OTHER_WORKSPACE,
+        created.body.data.id,
+      ]);
+    });
+
+    test('PATCH /_user-realms edits made at once all land', async function (assert) {
+      let owner = await registerListUser('list-patches');
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE]);
+      let token = sessionToken(owner.userId);
+      let realms = Array.from(
+        { length: 6 },
+        (_, i) => `https://elsewhere.example/someone/added-${i}/`,
+      );
+
+      let responses = await Promise.all(
+        realms.map((realm) =>
+          editList(context.server, token, { add: [realm] }),
+        ),
+      );
+      for (let [i, response] of responses.entries()) {
+        assert.strictEqual(response.status, 200, response.text);
+        assert.deepEqual(response.body.data.attributes, {
+          added: [realms[i]],
+          removed: [],
+        });
+      }
+      let list = (await workspaceListOf(owner)) as string[];
+      assert.deepEqual(
+        [...list].sort(),
+        [OTHER_WORKSPACE, ...realms].sort(),
+        'every realm is on the list',
+      );
+    });
+
+    test('PATCH /_user-realms adds and removes, and says what it changed', async function (assert) {
+      let owner = await registerListUser('list-patch');
+      let kept = 'https://elsewhere.example/someone/kept/';
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE, kept]);
+      let token = sessionToken(owner.userId);
+      let added = 'https://elsewhere.example/someone/added/';
+
+      let response = await editList(context.server, token, {
+        add: [added, kept],
+        remove: [OTHER_WORKSPACE, 'https://elsewhere.example/never/listed/'],
+      });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.data.attributes, {
+        added: [added],
+        removed: [OTHER_WORKSPACE],
+      });
+      assert.deepEqual(await workspaceListOf(owner), [kept, added]);
+    });
+
+    test('PATCH /_user-realms refuses an edit it can’t make', async function (assert) {
+      let owner = await registerListUser('list-bad-patch');
+      let token = sessionToken(owner.userId);
+      for (let attributes of [
+        {},
+        { add: 'https://elsewhere.example/one/' },
+        { add: ['not a url'] },
+        { add: ['ftp://elsewhere.example/one/'] },
+        {
+          add: ['https://elsewhere.example/one/'],
+          remove: ['https://elsewhere.example/one/'],
+        },
+      ]) {
+        let response = await editList(context.server, token, attributes);
+        assert.strictEqual(
+          response.status,
+          400,
+          `${JSON.stringify(attributes)}: ${response.text}`,
+        );
+      }
+    });
+
+    test('PATCH /_user-realms answers 404 for a user this server keeps no list for', async function (assert) {
+      let response = await editList(
+        context.server,
+        sessionToken('@someone:elsewhere.example'),
+        { add: [OTHER_WORKSPACE] },
+      );
+      assert.strictEqual(response.status, 404, response.text);
     });
   });
 });
