@@ -39,7 +39,11 @@
 //    When the run acts as the automation's payer, losing direct write, a
 //    revocation and an account that can't sign in also pause the automation
 //    with `payer-lost-access`, so its later slots don't each fail the same
-//    way. A direct writer resumes it and becomes the payer.
+//    way. A direct writer resumes it and becomes the payer. A batch's
+//    follow-up refused that way is held by the pause rather than ended, and
+//    so is one whose key-approval refusal (step 4) moved the automation to
+//    waiting: `runAutomationAttempt` checks the automation once the refusal
+//    has paused it or made it wait.
 // 3. The script parses (`script-error`). The card and the script file are
 //    read before this, by the attempt.
 // 4. Every operation the card declares passes `automationAdmission` as the

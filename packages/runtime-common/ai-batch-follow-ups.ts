@@ -322,7 +322,12 @@ async function startFollowUp(
       },
     );
     if (!created && run.state !== 'pending') {
-      await recordFollowUp(txQuery, batchId, run.id);
+      // A held follow-up that a job enqueued before the hold has just
+      // taken keeps its hold: that job's admission holds it again, or it
+      // runs as the batch's identity and the hold clears once it ends.
+      if (!(batch.held && run.state === 'running')) {
+        await recordFollowUp(txQuery, batchId, run.id);
+      }
       return { kind: 'found' as const, run };
     }
     if (!created) {

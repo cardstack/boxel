@@ -35,8 +35,8 @@
 //   A batch's follow-up whose automation is paused or waiting for key
 //   approval is held instead, never ended (`holdAutomationFollowUpRuns`, ADR
 //   030 §1.5): a pause holds it, and the tick starts it again once the
-//   automation is active. A follow-up its batch records as held has no job by
-//   design, so the search for lost runs passes over it.
+//   automation is active. A follow-up its batch records as held waits for
+//   the tick, not for a job, so the search for lost runs passes over it.
 //
 //   A webhook delivery's run is ended too, never enqueued again: its
 //   delivery's payload lived only in its job, so a job made again would run
@@ -541,7 +541,8 @@ function noLiveJob(): string[] {
 }
 
 // The run, aliased `r`, isn't a batch's follow-up its batch records as held:
-// one that waits, with no job, for its automation to be active again.
+// one that waits for its automation to be active again, when the tick
+// enqueues its job again, whatever job of it is or isn't still queued.
 function notHeld(): string[] {
   return [
     'NOT EXISTS (SELECT 1 FROM ai_batches b WHERE',

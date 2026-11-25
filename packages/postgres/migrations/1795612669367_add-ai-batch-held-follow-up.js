@@ -3,11 +3,13 @@
 // the person who resumed.
 //
 // On `ai_batches`:
-// - `follow_up_held_at` is when a pause, or a wait for a key approval, held
-//   the batch's follow-up run: the run stays pending with no job, and nothing
-//   ends it. It is set on a batch whose `follow_up_run_id` names a run, and
-//   cleared once that run's job is enqueued again. The partial index serves
-//   the search for held follow-ups whose automation is active again.
+// - `follow_up_held_at` is when a pause, a wait for a key approval, or the
+//   follow-up's own admission held the batch's follow-up run: the run stays
+//   pending, and nothing ends it or starts it until its automation is active
+//   again. A job enqueued before the hold may still be queued for it, and its
+//   admission holds the run again. It is cleared once the run's job is
+//   enqueued again, or the run is found ended. The partial index serves the
+//   search for held follow-ups whose automation is active again.
 // - `follow_up_acts_as` is the Matrix user id the follow-up acts as, and is
 //   billed to, once a resume lands after the batch was submitted: the person
 //   who resumed. A batch with none has its follow-up act as `acts_as`, the

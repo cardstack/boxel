@@ -45,6 +45,7 @@ import {
   msBetween,
 } from './automation-run-telemetry.ts';
 import type { AutomationOperationDeclaration } from './automation-declaration.ts';
+import { heldFollowUpSlot } from './automation-run-command.ts';
 import type { AutomationVersionKey } from './automation-key-approval.ts';
 import type { DBAdapter } from './db.ts';
 import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
@@ -1011,8 +1012,11 @@ export const FOLLOW_UP_HELD_REASON = 'follow-up-held';
 // makes a new pending run of the same batch in its place, which the batch
 // then names. The ended run keeps what it used, so it is charged to the
 // identity it acted as, never to whoever a resume makes the follow-up's
-// identity later. Its slot gains a suffix naming it, which frees the batch's
-// slot for the new run: the follow-up's slot is always its batch's id.
+// identity later: the attempt that ran it charges it once it is done, and a
+// retry of that attempt's job does if the attempt stopped first. Its slot
+// gains a suffix naming it (`heldFollowUpSlot`), which frees the batch's slot
+// for the new run, the follow-up's slot always being its batch's id; its
+// job's dedupe key still matches it.
 async function replaceHeldFollowUp(
   querier: Querier,
   run: AutomationRun,
@@ -1021,7 +1025,7 @@ async function replaceHeldFollowUp(
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), error_reason =",
     param(FOLLOW_UP_HELD_REASON),
     ', slot =',
-    param(`${run.slot}:held:${run.id}`),
+    param(heldFollowUpSlot(run.slot, run.id)),
     'WHERE id =',
     param(run.id),
     'RETURNING *',

@@ -434,6 +434,29 @@ module(basename(import.meta.filename), function (hooks) {
 
   // Asserts that the run ended at admission with `reason`, before its tab
   // was asked anything.
+  // The follow-up was refused for `reason`, which paused its automation, and
+  // the pause held it: it never ran, and its batch waits for a resume.
+  async function assertHeldFor(
+    assert: Assert,
+    run: AutomationRun,
+    result: Awaited<ReturnType<typeof attempt>>,
+    calls: RunCommandArgs[],
+    reason: string,
+  ) {
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    assert.strictEqual(calls.length, 0, 'the script never ran');
+    assert.deepEqual(
+      (await admissionLines(run.id)).map((line) => line.data?.reason),
+      [reason],
+      'the run’s log says admission held it, and why',
+    );
+    let [batch] = await query(dbAdapter, [
+      'SELECT follow_up_held_at FROM ai_batches WHERE batch_id =',
+      param(run.slot),
+    ]);
+    assert.notStrictEqual(batch.follow_up_held_at, null);
+  }
+
   async function assertRefused(
     assert: Assert,
     run: AutomationRun,
@@ -815,7 +838,9 @@ module(basename(import.meta.filename), function (hooks) {
     await revokeSessionsAt(OWNER, submittedAt + 60);
     calls = [];
     result = await attempt(late, { triggerKind: 'batch', calls });
-    await assertRefused(assert, late, result, calls, 'session-revoked');
+    // The payer's revocation pauses the automation, and the pause holds the
+    // follow-up rather than ending it.
+    await assertHeldFor(assert, late, result, calls, 'session-revoked');
   });
 
   test('a held follow-up acts as, and is billed to, the direct writer who resumed, on their authority from the resume', async function (assert) {
@@ -915,7 +940,7 @@ module(basename(import.meta.filename), function (hooks) {
       triggerKind: 'batch',
       calls,
     });
-    await assertRefused(assert, again, result, calls, 'session-revoked');
+    await assertHeldFor(assert, again, result, calls, 'session-revoked');
   });
 
   test('a follow-up whose batch a resume gave another identity is held, so it starts again acting as them', async function (assert) {
@@ -943,6 +968,67 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       (await admissionLines(followUp.id)).map((line) => line.data?.reason),
       ['follow-up-identity-changed'],
+    );
+  });
+
+  test('a follow-up refused because its payer lost access is held by the pause that refusal makes, not ended', async function (assert) {
+    let automation = await switchOn(CLEAN);
+    let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    let followUp = await batchFollowUp(submitting);
+    await revokeSessionsAt(OWNER, automation.scheduledSince + 60);
+
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(followUp, { triggerKind: 'batch', calls });
+
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    assert.strictEqual(calls.length, 0, 'the script never ran');
+    let paused = await getAutomation(dbAdapter, automationId(CLEAN));
+    assert.deepEqual(
+      [paused?.state, paused?.pauseReason],
+      ['paused', 'payer-lost-access'],
+    );
+    let [batch] = await query(dbAdapter, [
+      'SELECT follow_up_run_id, follow_up_held_at FROM ai_batches WHERE batch_id =',
+      param(followUp.slot),
+    ]);
+    assert.notStrictEqual(batch.follow_up_held_at, null, 'the batch is held');
+    let current = (await getAutomationRun(
+      dbAdapter,
+      String(batch.follow_up_run_id),
+    ))!;
+    assert.deepEqual(
+      [current.slot, current.state],
+      [followUp.slot, 'pending'],
+      'a pending follow-up of the batch waits for a resume',
+    );
+  });
+
+  test('a follow-up whose key approval ended is held by the wait it starts, not ended', async function (assert) {
+    await switchOn(CLEAN);
+    let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    let followUp = await batchFollowUp(submitting);
+
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(followUp, {
+      triggerKind: 'batch',
+      calls,
+      realmAdmission: () =>
+        admissionAnswer({
+          code: 'key-approval-ended',
+          detail: 'the approval no longer matches',
+        }),
+    });
+
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    assert.strictEqual(calls.length, 0, 'the script never ran');
+    assert.strictEqual(
+      (await getAutomation(dbAdapter, automationId(CLEAN)))?.state,
+      'waiting-for-key-approval',
+    );
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, followUp.id))?.state,
+      'pending',
+      'the follow-up waits with the automation',
     );
   });
 

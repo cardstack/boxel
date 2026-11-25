@@ -878,6 +878,11 @@ return 'done';`);
     assert.strictEqual(result.batchId, 'batch_1');
     assert.strictEqual(result.requests, 2);
     assert.strictEqual(result.milestone, 'classify tickets');
+    assert.strictEqual(
+      result.firstPass,
+      'before the batch',
+      'the follow-up pass reads what the first pass staged',
+    );
     assert.false(Number.isNaN(Date.parse(result.deadline)));
     assert.deepEqual(
       events
@@ -998,6 +1003,7 @@ return 'done';`);
       );
       return {
         followUp: true,
+        firstPass: await realm.fs.readText('out/first.txt'),
         label: automation.trigger.label,
         id: batch.id,
         late: batch.late,
