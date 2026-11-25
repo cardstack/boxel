@@ -5,7 +5,6 @@ import {
   MAX_TRANSFORM_OUTPUT_BYTES,
   TRANSFORM_MAX_OUTPUTS,
   TRANSFORM_MAX_STEPS,
-  TRANSFORM_TIMEOUT_MS,
 } from './transform-limits';
 
 import type {
@@ -25,7 +24,7 @@ const worker = globalThis as unknown as {
 const encoder = new TextEncoder();
 
 worker.onmessage = async (event: MessageEvent<TransformWorkerRequest>) => {
-  let { id, input, source, params, syntax } = event.data;
+  let { id, input, source, params, syntax, timeoutMs } = event.data;
   try {
     // Programs run one at a time, so a call's time starts here and not when
     // it was posted: the time it waited behind other calls is not its own.
@@ -39,10 +38,7 @@ worker.onmessage = async (event: MessageEvent<TransformWorkerRequest>) => {
         syntax,
         libraries,
         runtimeLimits: {
-          maxMillis: Math.max(
-            TRANSFORM_TIMEOUT_MS - (Date.now() - startedAt),
-            1,
-          ),
+          maxMillis: Math.max(timeoutMs - (Date.now() - startedAt), 1),
           maxSteps: TRANSFORM_MAX_STEPS,
           maxOutputs: TRANSFORM_MAX_OUTPUTS,
           maxOutputBytes: MAX_TRANSFORM_OUTPUT_BYTES,

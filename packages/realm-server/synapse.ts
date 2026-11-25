@@ -127,6 +127,15 @@ export class MatrixHttpError extends Error {
   }
 }
 
+// The admin's own login failed. Its status is the login's, never an answer
+// about the user an admin request was for.
+export class MatrixAdminLoginError extends MatrixHttpError {}
+
+// How long the admin's password login may take. The login is shared by every
+// request in the process (`getMatrixAdminToken`), so one that hangs would
+// hold them all.
+const ADMIN_LOGIN_TIMEOUT_MS = 10_000;
+
 // Log in as a matrix admin user via the standard password-login endpoint and
 // return the resulting access token. The token is later used to drive synapse
 // admin endpoints (notably the per-user admin-impersonation login below).
@@ -153,10 +162,12 @@ export async function loginAsMatrixAdmin({
       password: adminPassword,
       device_id: SERVER_MATRIX_DEVICE_ID,
     }),
+    signal: AbortSignal.timeout(ADMIN_LOGIN_TIMEOUT_MS),
   });
   if (!response.ok) {
-    throw new Error(
+    throw new MatrixAdminLoginError(
       `matrix admin login for "${adminUsername}" failed: HTTP ${response.status} ${await response.text()}`,
+      response.status,
     );
   }
   let body = (await response.json()) as { access_token: string };
@@ -171,10 +182,12 @@ export async function adminImpersonateUser({
   matrixURL,
   adminAccessToken,
   userId,
+  signal,
 }: {
   matrixURL: URL;
   adminAccessToken: string;
   userId: string;
+  signal?: AbortSignal;
 }): Promise<string> {
   let response = await fetch(
     `${matrixURL.href}_synapse/admin/v1/users/${encodeURIComponent(userId)}/login`,
@@ -185,6 +198,7 @@ export async function adminImpersonateUser({
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({}),
+      signal,
     },
   );
   if (!response.ok) {
@@ -282,16 +296,23 @@ export async function impersonateAsMatrixAdmin({
   adminUsername,
   adminPassword,
   userId,
+  signal,
 }: {
   matrixURL: URL;
   adminUsername: string;
   adminPassword: string;
   userId: string;
+  signal?: AbortSignal;
 }): Promise<string> {
   let admin = { matrixURL, adminUsername, adminPassword };
   let adminAccessToken = await getMatrixAdminToken(admin);
   try {
-    return await adminImpersonateUser({ matrixURL, adminAccessToken, userId });
+    return await adminImpersonateUser({
+      matrixURL,
+      adminAccessToken,
+      userId,
+      signal,
+    });
   } catch (e) {
     if (!(e instanceof MatrixHttpError && e.status === 401)) {
       throw e;
@@ -303,6 +324,7 @@ export async function impersonateAsMatrixAdmin({
         stale: adminAccessToken,
       }),
       userId,
+      signal,
     });
   }
 }
@@ -314,19 +336,101 @@ export async function impersonateAsMatrixAdmin({
 export async function logoutMatrixAccessToken({
   matrixURL,
   accessToken,
+  signal,
 }: {
   matrixURL: URL;
   accessToken: string;
+  signal?: AbortSignal;
 }): Promise<void> {
   let response = await fetch(`${matrixURL.href}_matrix/client/v3/logout`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal,
   });
   if (!response.ok && response.status !== 401) {
     throw new Error(
       `matrix logout failed: HTTP ${response.status} ${await response.text()}`,
     );
   }
+}
+
+export interface MatrixAdmin {
+  matrixURL: URL;
+  adminUsername: string;
+  adminPassword: string;
+}
+
+// How long logging out an impersonation token may take. It runs whatever
+// the work it ended did, including after that work's own deadline passed.
+const LOGOUT_TIMEOUT_MS = 5_000;
+
+// Runs `fn` with an access token for `userId` minted through the admin API,
+// and logs that token out afterwards, whatever `fn` did. Undefined when the
+// Matrix server has no such account; a failure of the admin's own login is
+// thrown, never read as that. A failed logout is passed to `onLogoutError`
+// rather than thrown, so it never changes `fn`'s outcome. `signal` ends the
+// minting when it aborts; `fn` is handed it to end its own requests.
+export async function withImpersonatedUser<T>(
+  admin: MatrixAdmin,
+  userId: string,
+  fn: (accessToken: string) => Promise<T>,
+  onLogoutError: (e: unknown) => void,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<T | undefined> {
+  let accessToken: string;
+  try {
+    accessToken = await impersonateAsMatrixAdmin({ ...admin, userId, signal });
+  } catch (e: any) {
+    if (
+      !(e instanceof MatrixAdminLoginError) &&
+      (e?.status === 404 || e?.status === 400)
+    ) {
+      return undefined;
+    }
+    throw e;
+  }
+  try {
+    return await fn(accessToken);
+  } finally {
+    await logoutMatrixAccessToken({
+      matrixURL: admin.matrixURL,
+      accessToken,
+      signal: AbortSignal.timeout(LOGOUT_TIMEOUT_MS),
+    }).catch(onLogoutError);
+  }
+}
+
+// The display name of `userId` as the admin API reports it: null when the
+// account has none, undefined when the Matrix server has no such account.
+export async function fetchDisplayName(
+  admin: MatrixAdmin,
+  userId: string,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<string | null | undefined> {
+  let path = `_synapse/admin/v2/users/${encodeURIComponent(userId)}`;
+  let request = async (adminAccessToken: string) =>
+    await fetch(new URL(path, admin.matrixURL), {
+      headers: { Authorization: `Bearer ${adminAccessToken}` },
+      signal,
+    });
+  let adminAccessToken = await getMatrixAdminToken(admin);
+  let response = await request(adminAccessToken);
+  if (response.status === 401) {
+    response = await request(
+      await getMatrixAdminToken({ ...admin, stale: adminAccessToken }),
+    );
+  }
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw new MatrixHttpError(
+      `matrix admin user lookup for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
+      response.status,
+    );
+  }
+  let { displayname } = (await response.json()) as { displayname?: unknown };
+  return typeof displayname === 'string' && displayname ? displayname : null;
 }
 
 // Append a single realm URL to a user's `app.boxel.realms` account_data,
@@ -351,11 +455,13 @@ export async function appendRealmToUserAccountData({
   userId,
   userAccessToken,
   realmURL,
+  signal,
 }: {
   matrixURL: URL;
   userId: string;
   userAccessToken: string;
   realmURL: string;
+  signal?: AbortSignal;
 }): Promise<{ alreadyPresent: boolean }> {
   return appendStringToUserAccountDataArray({
     matrixURL,
@@ -364,6 +470,7 @@ export async function appendRealmToUserAccountData({
     eventType: APP_BOXEL_REALMS_EVENT_TYPE,
     arrayKey: 'realms',
     value: realmURL,
+    signal,
   });
 }
 
@@ -405,11 +512,13 @@ export async function removeRealmFromUserAccountData({
   userId,
   userAccessToken,
   realmURL,
+  signal,
 }: {
   matrixURL: URL;
   userId: string;
   userAccessToken: string;
   realmURL: string;
+  signal?: AbortSignal;
 }): Promise<{ wasPresent: boolean }> {
   return removeStringFromUserAccountDataArray({
     matrixURL,
@@ -418,6 +527,7 @@ export async function removeRealmFromUserAccountData({
     eventType: APP_BOXEL_REALMS_EVENT_TYPE,
     arrayKey: 'realms',
     value: realmURL,
+    signal,
   });
 }
 
@@ -428,6 +538,7 @@ async function removeStringFromUserAccountDataArray({
   eventType,
   arrayKey,
   value,
+  signal,
 }: {
   matrixURL: URL;
   userId: string;
@@ -435,6 +546,7 @@ async function removeStringFromUserAccountDataArray({
   eventType: string;
   arrayKey: string;
   value: string;
+  signal?: AbortSignal;
 }): Promise<{ wasPresent: boolean }> {
   let firstAttemptWasPresent: boolean | undefined;
   for (let attempt = 1; attempt <= APPEND_REALM_MAX_ATTEMPTS; attempt++) {
@@ -443,6 +555,7 @@ async function removeStringFromUserAccountDataArray({
       userId,
       userAccessToken,
       eventType,
+      signal,
     );
     let entries = Array.isArray(existing[arrayKey])
       ? (existing[arrayKey] as unknown[]).filter(
@@ -456,15 +569,23 @@ async function removeStringFromUserAccountDataArray({
       return { wasPresent: firstAttemptWasPresent ?? false };
     }
     firstAttemptWasPresent = true;
-    await putAccountData(matrixURL, userId, userAccessToken, eventType, {
-      ...existing,
-      [arrayKey]: entries.filter((entry) => entry !== value),
-    });
+    await putAccountData(
+      matrixURL,
+      userId,
+      userAccessToken,
+      eventType,
+      {
+        ...existing,
+        [arrayKey]: entries.filter((entry) => entry !== value),
+      },
+      signal,
+    );
     let verified = await fetchAccountData(
       matrixURL,
       userId,
       userAccessToken,
       eventType,
+      signal,
     );
     let verifiedEntries = Array.isArray(verified[arrayKey])
       ? (verified[arrayKey] as unknown[]).filter(
@@ -487,6 +608,7 @@ async function appendStringToUserAccountDataArray({
   eventType,
   arrayKey,
   value,
+  signal,
 }: {
   matrixURL: URL;
   userId: string;
@@ -494,6 +616,7 @@ async function appendStringToUserAccountDataArray({
   eventType: string;
   arrayKey: string;
   value: string;
+  signal?: AbortSignal;
 }): Promise<{ alreadyPresent: boolean }> {
   let firstAttemptAlreadyPresent: boolean | undefined;
   for (let attempt = 1; attempt <= APPEND_REALM_MAX_ATTEMPTS; attempt++) {
@@ -502,6 +625,7 @@ async function appendStringToUserAccountDataArray({
       userId,
       userAccessToken,
       eventType,
+      signal,
     );
     let entries = Array.isArray(existing[arrayKey])
       ? (existing[arrayKey] as unknown[]).filter(
@@ -517,16 +641,24 @@ async function appendStringToUserAccountDataArray({
       return { alreadyPresent: firstAttemptAlreadyPresent ?? true };
     }
     firstAttemptAlreadyPresent = false;
-    await putAccountData(matrixURL, userId, userAccessToken, eventType, {
-      ...existing,
-      [arrayKey]: [...entries, value],
-    });
+    await putAccountData(
+      matrixURL,
+      userId,
+      userAccessToken,
+      eventType,
+      {
+        ...existing,
+        [arrayKey]: [...entries, value],
+      },
+      signal,
+    );
     // Verify our entry survived; if another writer raced us we retry.
     let verified = await fetchAccountData(
       matrixURL,
       userId,
       userAccessToken,
       eventType,
+      signal,
     );
     let verifiedEntries = Array.isArray(verified[arrayKey])
       ? (verified[arrayKey] as unknown[]).filter(
@@ -547,17 +679,20 @@ export async function fetchAccountData(
   userId: string,
   userAccessToken: string,
   eventType: string,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   let path = `_matrix/client/v3/user/${encodeURIComponent(userId)}/account_data/${eventType}`;
   let response = await fetch(`${matrixURL.href}${path}`, {
     headers: { Authorization: `Bearer ${userAccessToken}` },
+    signal,
   });
   if (response.status === 404) {
     return {};
   }
   if (!response.ok) {
-    throw new Error(
+    throw new MatrixHttpError(
       `matrix GET ${eventType} for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
+      response.status,
     );
   }
   return (await response.json()) as Record<string, unknown>;
@@ -569,6 +704,7 @@ async function putAccountData(
   userAccessToken: string,
   eventType: string,
   content: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<void> {
   let path = `_matrix/client/v3/user/${encodeURIComponent(userId)}/account_data/${eventType}`;
   let response = await fetch(`${matrixURL.href}${path}`, {
@@ -578,10 +714,12 @@ async function putAccountData(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(content),
+    signal,
   });
   if (!response.ok) {
-    throw new Error(
+    throw new MatrixHttpError(
       `matrix PUT ${eventType} for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
+      response.status,
     );
   }
 }

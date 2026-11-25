@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Pret UI Actions"
+      },
+      "category": "Actions"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../pretui-overview",
+        "name": "PretUIOverview"
+      }
+    }
+  }
+}

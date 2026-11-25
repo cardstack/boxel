@@ -108,6 +108,10 @@ export interface AutomationScriptInput extends JSONTypes.Object {
   // later than this, so time spent waiting for the tab counts against it,
   // and the run's token expires at the same moment.
   endsAt: string;
+  // The card's `batchDeadlineMinutes`: how long a batch the script submits
+  // with `realm.resolve.batch` and no `by` of its own may take. A tab given
+  // none takes `DEFAULT_BATCH_DEADLINE_MINUTES`.
+  batchDeadlineMinutes: number;
 }
 
 export function isAutomationScriptInput(
@@ -126,6 +130,8 @@ export function isAutomationScriptInput(
     input.secondsCap > 0 &&
     typeof input.endsAt === 'string' &&
     !Number.isNaN(Date.parse(input.endsAt)) &&
+    (input.batchDeadlineMinutes === undefined ||
+      typeof input.batchDeadlineMinutes === 'number') &&
     !!automation &&
     typeof automation === 'object' &&
     typeof automation.url === 'string' &&

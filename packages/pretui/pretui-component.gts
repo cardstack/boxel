@@ -21,11 +21,8 @@ import StringField from '@cardstack/base/string';
 import enumField from '@cardstack/base/enum';
 import BooleanField from '@cardstack/base/boolean';
 import NumberField from '@cardstack/base/number';
-import GlimmerComponent from '@glimmer/component';
 import { guidFor } from '@ember/object/internals';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
 import { not } from './helpers';
 import StarIcon from '@cardstack/boxel-icons/star';
@@ -35,16 +32,15 @@ import { LoadingState } from './components/loading-state';
 import { StatusChip } from './components/status-chip';
 import { Chip } from './components/chip';
 import { Token } from './components/token';
-import { Button } from './components/button';
 import { Switch } from './components/switch';
 import { Tooltip } from './components/tooltip';
 import { VisuallyHidden } from './components/visually-hidden';
-import { StepList } from './components/step-list';
-import type { StepItem, StepState } from './components/step-list';
 import { demoModuleFor, loadDemo, loadExamples } from './demo-locations';
 import type { DemoSubject } from './demo-locations';
 import { iconFor } from './icon-registry';
 import { ExampleGallery } from './example-gallery';
+import { CardLink } from './showcase-chrome';
+import { categoryNamed, overviewHref } from './showcase-data';
 import type { ExampleSpec } from './examples-kit';
 
 // A stored enum value as shown, from its option label; '—' when unset.
@@ -95,130 +91,6 @@ function isNewIn(introducedVersion: string | undefined): boolean {
 const NAME_HUMP_RE = new RegExp('(?<=[a-z0-9])(?=[A-Z])');
 function nameParts(name: string): string[] {
   return name.split(NAME_HUMP_RE);
-}
-
-// The write-up shows its first lines under a fade, with a centered toggle
-// over the fade; opening it grows the region to the content's height. Its own
-// component because reactive state can't live in a format-class expression
-// (`static isolated = class …`).
-interface WriteupFoldSignature {
-  Args: { writeup: MarkdownDef };
-  Element: HTMLDivElement;
-}
-
-class WriteupFold extends GlimmerComponent<WriteupFoldSignature> {
-  @tracked open = false;
-  @tracked overflows = false;
-  regionId = `${guidFor(this)}-writeup`;
-  toggle = () => (this.open = !this.open);
-  get showToggle(): boolean {
-    return this.open || this.overflows;
-  }
-  // The toggle and its fade only matter when the closed region clips the
-  // prose; measured while closed, so opening keeps "Show less".
-  measureOverflow = modifier((region: HTMLElement) => {
-    let prose = region.firstElementChild;
-    let check = () => {
-      if (!this.open && prose) {
-        this.overflows = prose.scrollHeight > region.clientHeight;
-      }
-    };
-    let observer = new ResizeObserver(check);
-    observer.observe(region);
-    if (prose) observer.observe(prose);
-    return () => observer.disconnect();
-  });
-
-  <template>
-    <div class='wb-fold' data-open={{if this.open 'true'}} ...attributes>
-      {{! the write-up's prose only — the panel owns the padding, so the
-          file's own embedded chrome and surface stay out }}
-      <div id={{this.regionId}} class='wb-fold-region' {{this.measureOverflow}}>
-        <div class='wb-fold-prose'>
-          <MarkdownPreview
-            @model={{@writeup}}
-            @format='isolated'
-            @displayContainer={{false}}
-          />
-        </div>
-      </div>
-      {{#if this.showToggle}}
-        <div class='wb-fold-more'>
-          <Button
-            @tone='neutral'
-            @appearance='outlined'
-            @size='xs'
-            aria-expanded={{if this.open 'true' 'false'}}
-            aria-controls={{this.regionId}}
-            {{on 'click' this.toggle}}
-            data-test-pretui-writeup-toggle
-          >{{if this.open 'Show less' 'Show more'}}</Button>
-        </div>
-      {{/if}}
-    </div>
-    <style scoped>
-      /* closed, the preview fills whatever height the fold is given, never
-         less than --_wb-fold-preview-h; open, it grows to the content */
-      .wb-fold {
-        --_wb-fold-preview-h: 14rem;
-        --_wb-fold-fade-h: 2rem;
-
-        position: relative;
-        display: flex;
-        flex-direction: column;
-      }
-      .wb-fold-region {
-        flex: 1 1 0;
-        min-block-size: var(--_wb-fold-preview-h);
-        overflow: hidden;
-        /* the open state changes the flex basis and grow, not height, so those
-           are what animate; interpolate-size lets the basis reach auto */
-        interpolate-size: allow-keywords;
-        transition:
-          flex-basis 250ms ease,
-          flex-grow 250ms ease;
-      }
-      .wb-fold[data-open='true'] .wb-fold-region {
-        flex: 0 0 auto;
-      }
-      /* mono reads larger than sans at the same size; a step down in em
-         matches the prose around it optically */
-      .wb-fold-prose {
-        --markdown-code-font-size: 0.875em;
-        --markdown-pre-font-size: 0.875em;
-        --markdown-pre-border-radius: var(--boxel-border-radius-sm);
-
-        padding: var(--boxel-sp-sm);
-      }
-      /* highlighted code joins its words with non-breaking spaces, so a long
-         line can't wrap; it scrolls inside its block instead of being
-         clipped by the fold */
-      .wb-fold-prose :deep(pre) {
-        overflow-x: auto;
-      }
-      /* closed, the toggle sits over a fade into the panel's surface; open,
-         it follows the content */
-      .wb-fold-more {
-        display: flex;
-        justify-content: center;
-        position: absolute;
-        inset-inline: 0;
-        inset-block-end: 0;
-        padding: var(--_wb-fold-fade-h) var(--boxel-sp-sm) var(--boxel-sp-xs);
-        background-image: linear-gradient(transparent, var(--card) 70%);
-      }
-      .wb-fold[data-open='true'] .wb-fold-more {
-        position: static;
-        padding-block-start: 0;
-        background-image: none;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .wb-fold-region {
-          transition: none;
-        }
-      }
-    </style>
-  </template>
 }
 
 // ── Usage pages, loaded when a Spec renders ──────────────────────────────
@@ -376,7 +248,13 @@ export class PretUISpec extends Spec {
   // each format is cast: Spec's format classes carry getters these views do not use
   static isolated = class Isolated extends Component<typeof PretUISpec> {
     writeupHeadingId = `${guidFor(this)}-writeup-heading`;
-    provenanceHeadingId = `${guidFor(this)}-provenance-heading`;
+    get overviewHref() {
+      return overviewHref();
+    }
+    get categoryHref() {
+      let category = categoryNamed(this.args.model.category);
+      return category ? overviewHref(category.slug) : undefined;
+    }
     get demoLoad() {
       let m = this.args.model;
       return m.componentName
@@ -417,72 +295,6 @@ export class PretUISpec extends Spec {
       if (this.isDemoLoading) return 'loading';
       return this.isDemoExcluded ? 'excluded' : 'missing';
     }
-    get metaItems() {
-      let m = this.args.model;
-      let rows: { key: string; value: string; dots?: boolean[] }[] = [
-        { key: 'Category', value: m.category ?? '—' },
-        { key: 'Tier', value: m.tier ?? '—' },
-        {
-          key: 'Implementation',
-          value: optionLabel(IMPLEMENTATION_OPTIONS, m.implementationStatus),
-        },
-        {
-          key: 'Adoption',
-          value: optionLabel(ADOPTION_OPTIONS, m.adoptionStatus),
-        },
-        {
-          key: 'Ownership',
-          value: optionLabel(OWNERSHIP_OPTIONS, m.ownership),
-        },
-        // versions are earned by use — nothing worn shows no number
-        ...(isInUse(m.adoptionStatus)
-          ? [{ key: 'Version', value: m.version || '0.0.0' }]
-          : []),
-        { key: 'Source', value: m.source ?? '—' },
-      ];
-      if (m.buildsOn) {
-        rows.push({ key: 'Builds on', value: m.buildsOn });
-      }
-      if (m.lineage) {
-        rows.push({ key: 'boxel-ui lineage', value: m.lineage });
-      }
-      if (m.refs) {
-        rows.push({ key: 'Elsewhere', value: m.refs });
-      }
-      if (this.demand) {
-        rows.push({
-          key: 'Demand',
-          value: `${this.demand} of 5`,
-          dots: [1, 2, 3, 4, 5].map((i) => i <= this.demand!),
-        });
-      }
-      return rows;
-    }
-    get facetPills() {
-      let m = this.args.model;
-      return [
-        { label: 'design', on: m.hasDesign },
-        { label: 'brief', on: Boolean(m.brief) },
-        { label: 'impl', on: m.implementationStatus === 'implemented' },
-        { label: 'examples', on: m.hasExamples },
-        { label: 'in use', on: isInUse(m.adoptionStatus) },
-      ];
-    }
-    // the same five facets, handed to the kit's StepList as an ordered
-    // pipeline: it owns the list semantics, the per-step state text and the
-    // '5 of 5 complete' summary
-    get provenanceSteps(): StepItem[] {
-      return this.facetPills.map((f) => ({
-        label: f.label,
-        state: (f.on ? 'complete' : 'upcoming') as StepState,
-      }));
-    }
-    get demand(): number | undefined {
-      let d = this.args.model.demand;
-      if (!d || d < 1) return undefined;
-      return Math.min(5, Math.round(d));
-    }
-
     <template>
       <ThemeFrame
         class='wb-frame'
@@ -493,17 +305,33 @@ export class PretUISpec extends Spec {
       >
         <article class='page' data-demo-policy={{this.demoPolicy}}>
           <header class='wb-topbar'>
-            <div class='wb-crumb' data-test-pretui-spec-crumb>
-              <span>Pret UI</span>
-              <span aria-hidden='true'>/</span>
-              <span>{{if @model.category @model.category 'components'}}</span>
-              <span aria-hidden='true'>/</span>
-              <span class='wb-here'>{{if
-                  @model.componentName
-                  @model.componentName
-                  'Component'
-                }}</span>
-            </div>
+            <nav
+              class='wb-crumb'
+              aria-label='Breadcrumb'
+              data-test-pretui-spec-crumb
+            >
+              <ol class='wb-crumb-list'>
+                <li><CardLink
+                    class='wb-crumb-link'
+                    @href={{this.overviewHref}}
+                    @viewCard={{@viewCard}}
+                  >Pret UI</CardLink></li>
+                {{#if this.categoryHref}}
+                  <li><CardLink
+                      class='wb-crumb-link'
+                      @href={{this.categoryHref}}
+                      @viewCard={{@viewCard}}
+                    >{{@model.category}}</CardLink></li>
+                {{else}}
+                  <li>{{if @model.category @model.category 'components'}}</li>
+                {{/if}}
+                <li class='wb-here' aria-current='page'>{{if
+                    @model.componentName
+                    @model.componentName
+                    'Component'
+                  }}</li>
+              </ol>
+            </nav>
             <div class='wb-badges'>
               {{#if (isInUse @model.adoptionStatus)}}
                 <Token
@@ -595,67 +423,25 @@ export class PretUISpec extends Spec {
             {{/if}}
           </div>
           <ExampleGallery @specs={{this.examples}} />
-          <div class='wb-below'>
-            {{#if @model.writeup}}
-              <section
-                class='wb-panel wb-writeup-panel'
-                aria-labelledby={{this.writeupHeadingId}}
-              >
-                <div class='wb-panel-h'>
-                  <h2 id={{this.writeupHeadingId}} class='wb-cap'>Write-up</h2>
-                </div>
-                <WriteupFold
-                  class='wb-writeup-fold'
-                  @writeup={{@model.writeup}}
-                />
-              </section>
-            {{/if}}
+          {{#if @model.writeup}}
             <section
-              class='wb-panel wb-provenance'
-              aria-labelledby={{this.provenanceHeadingId}}
+              class='wb-panel wb-writeup'
+              aria-labelledby={{this.writeupHeadingId}}
             >
               <div class='wb-panel-h'>
-                <h2
-                  id={{this.provenanceHeadingId}}
-                  class='wb-cap'
-                >Provenance</h2>
+                <h2 id={{this.writeupHeadingId}} class='wb-cap'>Write-up</h2>
               </div>
-              <StepList
-                class='wb-pipe'
-                @steps={{this.provenanceSteps}}
-                @variant='track'
-                @label='Provenance pipeline'
-                @summary={{true}}
-              />
-              <dl class='wb-kv'>
-                {{#each this.metaItems as |row|}}
-                  <div class='wb-krow'>
-                    <dt>{{row.key}}</dt>
-                    <dd>
-                      {{#if row.dots}}
-                        {{! drawn, not ●/○ glyphs, so filled and hollow share one
-                        size and baseline }}
-                        <span
-                          class='wb-dots'
-                          role='img'
-                          aria-label={{row.value}}
-                        >
-                          {{#each row.dots as |on|}}
-                            <span
-                              class='wb-dot'
-                              data-on={{if on 'true'}}
-                            ></span>
-                          {{/each}}
-                        </span>
-                      {{else}}
-                        {{row.value}}
-                      {{/if}}
-                    </dd>
-                  </div>
-                {{/each}}
-              </dl>
+              {{! the write-up's prose only — the panel owns the padding, so
+                  the file's own embedded chrome and surface stay out }}
+              <div class='wb-writeup-prose'>
+                <MarkdownPreview
+                  @model={{@model.writeup}}
+                  @format='isolated'
+                  @displayContainer={{false}}
+                />
+              </div>
             </section>
-          </div>
+          {{/if}}
         </article>
       </ThemeFrame>
       <style scoped>
@@ -675,13 +461,6 @@ export class PretUISpec extends Spec {
           --_wb-topbar-h: 2.75rem;
           --_wb-panel-h: 2.25rem;
           --_wb-title-frame-size: 3rem;
-          --_wb-writeup-min-w: 48rem;
-          /* StepList's track turns vertical at 24rem; with the panel's
-             padding, provenance needs 26rem to keep it horizontal */
-          --_wb-provenance-min-w: 26rem;
-          --_wb-provenance-max-w: 30rem;
-          --_wb-krow-label-w: 6.875rem;
-          --_wb-dot-size: 0.5rem;
           /* the page's inline padding, which the topbar cancels and restores
              to run edge to edge */
           --_wb-page-gutter: var(--boxel-sp-lg);
@@ -752,6 +531,29 @@ export class PretUISpec extends Spec {
           color: var(--muted-foreground);
           min-width: 0;
         }
+        .wb-crumb-list {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          min-width: 0;
+        }
+        .wb-crumb-list > li + li::before {
+          content: '/' / '';
+          margin-inline-end: var(--boxel-sp-xs);
+        }
+        .wb-crumb-link {
+          border-radius: var(--boxel-border-radius-xs);
+          color: inherit;
+          text-decoration: none;
+        }
+        .wb-crumb-link:hover {
+          color: var(--card-foreground);
+          text-decoration: underline;
+        }
         .wb-here {
           min-width: 0;
           overflow-wrap: break-word;
@@ -774,39 +576,8 @@ export class PretUISpec extends Spec {
         .wb-work {
           min-width: 0;
         }
-        /* the write-up and provenance share a row when both fit, and stack
-           otherwise; provenance stops at its cap and the write-up takes the
-           rest */
-        .wb-below {
-          container-type: inline-size;
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp);
-          /* on a shared row the write-up is at least as tall as provenance */
-          align-items: stretch;
-        }
-        .wb-below > .wb-writeup-panel {
-          flex: 1 1 var(--_wb-writeup-min-w);
-          display: flex;
-          flex-direction: column;
-        }
-        .wb-writeup-fold {
-          flex: 1;
-        }
-
-        .wb-below > .wb-provenance {
-          flex: 1 1 var(--_wb-provenance-min-w);
-          align-self: start;
-        }
-        /* capped only while it shares the row: 75rem is the write-up's 48rem
-           minimum plus provenance's 26rem plus the 1rem gap (a container query
-           can't read the variables). Stacked, it runs full width. Unnamed: a
-           named container query doesn't survive the realm's scoped-CSS
-           transpiler. */
-        @container (width >= 75rem) {
-          .wb-below > .wb-writeup-panel ~ .wb-provenance {
-            max-inline-size: var(--_wb-provenance-max-w);
-          }
+        .wb-writeup-prose {
+          padding: var(--boxel-sp) var(--boxel-sp-lg) var(--boxel-sp-lg);
         }
         .wb-panel {
           background-color: var(--card);
@@ -834,50 +605,6 @@ export class PretUISpec extends Spec {
           letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
           color: var(--muted-foreground);
-        }
-        /* the provenance rail is the kit's StepList in its track variant —
-           the panel only positions it; every bar, glyph, state text and the
-           completion summary belong to the component */
-        .wb-pipe {
-          padding: var(--boxel-sp-sm) var(--boxel-sp-sm) var(--boxel-sp-2xs);
-        }
-        .wb-kv {
-          margin: 0;
-          padding: var(--boxel-sp-3xs) 0 var(--boxel-sp-2xs);
-        }
-        .wb-krow {
-          display: grid;
-          grid-template-columns: var(--_wb-krow-label-w) minmax(0, 1fr);
-          gap: var(--boxel-sp-sm);
-          padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
-          align-items: baseline;
-        }
-        .wb-krow dt {
-          font-size: var(--boxel-ui-label-font-size);
-          font-weight: var(--boxel-ui-label-font-weight);
-          color: var(--muted-foreground);
-        }
-        .wb-dots {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--boxel-sp-4xs);
-          vertical-align: middle;
-        }
-        .wb-dot {
-          width: var(--_wb-dot-size);
-          height: var(--_wb-dot-size);
-          border-radius: 50%;
-          box-shadow: inset 0 0 0 1px currentColor;
-        }
-        .wb-dot[data-on='true'] {
-          background-color: currentColor;
-        }
-        .wb-krow dd {
-          margin: 0;
-          font-family: var(--font-mono);
-          font-size: var(--boxel-font-size-xs);
-          line-height: 1.5;
-          overflow-wrap: break-word;
         }
         .panel {
           background-color: var(--card);
