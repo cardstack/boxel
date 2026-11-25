@@ -248,7 +248,7 @@ function makeRule(check: Check): Rule.RuleModule {
       },
     },
     create(context) {
-      let sourceCode = context.sourceCode ?? context.getSourceCode();
+      let sourceCode = context.sourceCode;
       return {
         PropertyDefinition(node: Node) {
           // `satisfies OperationDeclaration` and `as const` are erased before

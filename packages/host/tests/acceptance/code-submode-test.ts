@@ -1041,12 +1041,21 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Error: Parse Error at broken.gts:1:6: 1:10`,
+          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace:`,
           files: [
             { name: 'broken.gts', sourceUrl: `${testRealmURL}broken.gts` },
           ],
         },
       ]);
+      let messageText = document.querySelector(
+        '[data-test-message-idx="0"] [data-test-user-message-text]',
+      ) as HTMLElement;
+      assert.true(
+        messageText.innerText.includes(
+          'Stack trace:\nError: Parse Error at broken.gts:1:6',
+        ),
+        'the stack trace starts on its own line',
+      );
       let roomId = getService('matrix-service').currentRoomId;
       let lastEvent = mockMatrixUtils.getRoomEvents(roomId!).pop();
       assert.ok(

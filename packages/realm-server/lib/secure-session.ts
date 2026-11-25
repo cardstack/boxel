@@ -19,9 +19,8 @@ import {
   appendRealmToUserAccountData,
   fetchAccountData,
   getMatrixAdminToken,
-  impersonateAsMatrixAdmin,
-  logoutMatrixAccessToken,
   resolveAdminCreds,
+  withImpersonatedUser,
 } from '../synapse.ts';
 import {
   createRealm,
@@ -48,6 +47,7 @@ import {
 import { revokeUserOAuthGrants } from './oauth-provider/grants.ts';
 import { GOOGLE_CALLBACK_PATH } from './secure-origin.ts';
 import { ensureSessionRoom } from './session-room.ts';
+import { withWorkspaceListLock } from './workspace-list.ts';
 import type { SignInLimiter } from './sign-in-limiter.ts';
 
 // A session signed in on the secure origin: the credential that minting a key
@@ -386,26 +386,9 @@ async function asUser<T>(
   user: string,
   fn: (accessToken: string) => Promise<T>,
 ): Promise<T | undefined> {
-  let admin = adminCreds(deps);
-  let accessToken: string;
-  try {
-    accessToken = await impersonateAsMatrixAdmin({ ...admin, userId: user });
-  } catch (e: any) {
-    if (e?.status === 404 || e?.status === 400) {
-      return undefined;
-    }
-    throw e;
-  }
-  try {
-    return await fn(accessToken);
-  } finally {
-    await logoutMatrixAccessToken({
-      matrixURL: admin.matrixURL,
-      accessToken,
-    }).catch((e: any) =>
-      log.warn(`could not log out a sign-in token: ${e?.message ?? e}`),
-    );
-  }
+  return await withImpersonatedUser(adminCreds(deps), user, fn, (e: any) =>
+    log.warn(`could not log out a sign-in token: ${e?.message ?? e}`),
+  );
 }
 
 // Signs in with a password, checked by the Matrix server's UIA check as
@@ -1404,12 +1387,15 @@ async function setUpFirstSignIn(
         }
       }
     }
-    await appendRealmToUserAccountData({
-      matrixURL: deps.matrixClient.matrixURL,
-      userId: user,
-      userAccessToken: accessToken,
-      realmURL,
-    });
+    await withWorkspaceListLock(deps.dbAdapter, user, (signal) =>
+      appendRealmToUserAccountData({
+        matrixURL: deps.matrixClient.matrixURL,
+        userId: user,
+        userAccessToken: accessToken,
+        realmURL,
+        signal,
+      }),
+    );
   });
   await ensureLoggedIn(deps.matrixClient);
   await ensureSessionRoom(deps, user, registrationToken);

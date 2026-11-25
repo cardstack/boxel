@@ -36,10 +36,36 @@ export function automationRunDedupeKey(run: {
   return `automation:${run.automationId}:${run.trigger}:${run.slot}`;
 }
 
+// A webhook run's slot: `delivery:` and the delivery's id. The prefix marks
+// the run as a delivery's for good, whatever its card says later: the
+// delivery's payload lives only in the run's job, so a webhook run is never
+// enqueued again without it (`isWebhookDeliverySlot`). A cron or one-time
+// slot is an ISO instant, a click's or a batch's an id, and none of those
+// carries the prefix.
+const WEBHOOK_DELIVERY_SLOT_PREFIX = 'delivery:';
+
+export function webhookDeliverySlot(deliveryId: string): string {
+  return `${WEBHOOK_DELIVERY_SLOT_PREFIX}${deliveryId}`;
+}
+
+export function isWebhookDeliverySlot(slot: string): boolean {
+  return slot.startsWith(WEBHOOK_DELIVERY_SLOT_PREFIX);
+}
+
 // The longest script a run takes, in characters: the interactive surface's
 // limit. The script rides the request to the prerender server and the tab's
 // storage, so it is bounded before it is sent.
 export const MAX_AUTOMATION_SCRIPT_CHARS = 100_000;
+
+// The largest webhook delivery body a run takes, in characters of its JSON.
+// The body rides the same way the script does, to the prerender server and
+// into the tab's storage, so a delivery over this starts a run that ends
+// without running the script, saying the body was too large.
+export const MAX_WEBHOOK_PAYLOAD_CHARS = 1_000_000;
+
+// The code a run ends with when its delivery's body is over
+// `MAX_WEBHOOK_PAYLOAD_CHARS`.
+export const WEBHOOK_PAYLOAD_TOO_LARGE_REASON = 'webhook-payload-too-large';
 
 // What starts a run, besides its trigger label: the kind of a run started by
 // hand or by a batch, which no trigger on the card names.
@@ -64,6 +90,9 @@ export interface AutomationJobInput {
   triggerKind?: 'manual' | 'batch';
   // The delivery's JSON body, for a run a webhook started.
   webhookPayload?: JSONTypes.Value;
+  // Set in place of `webhookPayload` when the delivery's body is longer than
+  // `MAX_WEBHOOK_PAYLOAD_CHARS`. The run ends without running the script.
+  webhookPayloadChars?: number;
 }
 
 export function isAutomationJobInput(
@@ -81,7 +110,9 @@ export function isAutomationJobInput(
     typeof input.dryRun === 'boolean' &&
     (input.triggerKind === undefined ||
       input.triggerKind === 'manual' ||
-      input.triggerKind === 'batch')
+      input.triggerKind === 'batch') &&
+    (input.webhookPayloadChars === undefined ||
+      typeof input.webhookPayloadChars === 'number')
   );
 }
 
@@ -108,6 +139,10 @@ export interface AutomationScriptInput extends JSONTypes.Object {
   // later than this, so time spent waiting for the tab counts against it,
   // and the run's token expires at the same moment.
   endsAt: string;
+  // The card's `batchDeadlineMinutes`: how long a batch the script submits
+  // with `realm.resolve.batch` and no `by` of its own may take. A tab given
+  // none takes `DEFAULT_BATCH_DEADLINE_MINUTES`.
+  batchDeadlineMinutes: number;
 }
 
 export function isAutomationScriptInput(
@@ -126,6 +161,8 @@ export function isAutomationScriptInput(
     input.secondsCap > 0 &&
     typeof input.endsAt === 'string' &&
     !Number.isNaN(Date.parse(input.endsAt)) &&
+    (input.batchDeadlineMinutes === undefined ||
+      typeof input.batchDeadlineMinutes === 'number') &&
     !!automation &&
     typeof automation === 'object' &&
     typeof automation.url === 'string' &&

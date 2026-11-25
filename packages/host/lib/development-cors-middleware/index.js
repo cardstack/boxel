@@ -1,4 +1,3 @@
-/* eslint-env node */
 'use strict';
 
 // Without this, CORS errors show when using other ports in development, especially Matrix tests (4205)

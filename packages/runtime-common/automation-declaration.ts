@@ -284,6 +284,11 @@ function readScript(
 // share a run's slot and dedupe key with a scheduled run.
 export const MANUAL_RUN_TRIGGER = 'manual';
 
+// The trigger label a batch's follow-up run row carries, with the batch's id
+// as its slot. No trigger on a card may take it either, so a follow-up's slot
+// and dedupe key are its batch's alone.
+export const BATCH_RUN_TRIGGER = 'batch';
+
 function readTriggers(
   raw: unknown,
   report: Report,
@@ -301,6 +306,12 @@ function readTriggers(
         'reserved-label',
         `${path}.label`,
         `The label "${label}" is reserved for runs started by hand (Preview and Run now); choose another label`,
+      );
+    } else if (label === BATCH_RUN_TRIGGER) {
+      report(
+        'reserved-label',
+        `${path}.label`,
+        `The label "${label}" is reserved for the runs that pick up batched AI results; choose another label`,
       );
     } else if (labels.has(label)) {
       report(

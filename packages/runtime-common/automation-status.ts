@@ -20,6 +20,7 @@ import {
 } from './automation-schedule.ts';
 import {
   getAutomation,
+  lastDeclaredLabels,
   readAutomationFailures,
   type AutomationFailure,
   type AutomationFailures,
@@ -38,7 +39,6 @@ import {
   utcDayStart,
   utcMonthStart,
 } from './automation-spend.ts';
-import { WEBHOOK_DELIVERIES_START_RUNS } from './automation-webhooks.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
 import { dbAdapterQuerier, param, type Querier } from './expression.ts';
@@ -99,9 +99,6 @@ export interface AutomationRunUsage {
 export type AutomationStatusAttributes =
   | {
       switchedOn: false;
-      // Whether Boxel starts runs from webhook deliveries; the card warns
-      // under each webhook trigger while it is false.
-      webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
       // What `lastRun` used of each per-run cap, or null without a last run.
@@ -109,7 +106,6 @@ export type AutomationStatusAttributes =
     }
   | {
       switchedOn: true;
-      webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
       lastRunUsage: AutomationRunUsage | null;
@@ -337,7 +333,6 @@ export function automationStatusDocument({
       attributes: row
         ? {
             switchedOn: true,
-            webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
             state: row.state,
             pauseReason: row.pauseReason,
             pauseProblems: row.pauseProblems,
@@ -365,7 +360,6 @@ export function automationStatusDocument({
           }
         : {
             switchedOn: false,
-            webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
             lastRun,
             currentRun,
             lastRunUsage,
@@ -430,17 +424,17 @@ export const RUNS_LEFT_BUDGET_MS = 250;
 // from the row. The next run and whether a trigger is spent are computed at
 // `now`, as the tick computes them, so a slot that came due and isn't
 // enqueued yet reads as due now. Runs left are counted without `now`, so such
-// a slot still counts as left. Without a declaration, each trigger the row
-// has counted.
+// a slot still counts as left. Without a declaration, each trigger the card
+// declared when it last read (`lastDeclaredLabels`), with its run count.
 function triggerStatuses(
   row: AutomationRow,
   declaration: AutomationDeclaration | undefined,
   now: number,
 ): AutomationTriggerStatus[] {
   if (!declaration) {
-    return Object.entries(row.triggerRuns).map(([label, state]) => ({
+    return lastDeclaredLabels(row.triggerRuns).map((label) => ({
       label,
-      runs: runsOf(state),
+      runs: runsOf(row.triggerRuns[label]),
     }));
   }
   let schedule = computeAutomationSchedule({

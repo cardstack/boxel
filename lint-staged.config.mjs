@@ -65,7 +65,15 @@ const isUnderRootDocs = (file) => resolve(file).startsWith(ROOT_DOCS);
 // eslint also applies prettier formatting for these via eslint-plugin-prettier,
 // so they must NOT also go to prettier (that would double-process and fight
 // over formatting). Matches what CI's `eslint .` lints.
-const ESLINT_EXTENSIONS = new Set(['.js', '.ts', '.gjs', '.gts']);
+const ESLINT_EXTENSIONS = new Set([
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.ts',
+  '.mts',
+  '.gjs',
+  '.gts',
+]);
 // .gjs / .gts are routed to ember-template-lint in addition to eslint:
 // eslint sees the surrounding JS/TS but can't lint the inline <template>
 // blocks, so template-lint rules (e.g. no-unnecessary-curly-parens) would

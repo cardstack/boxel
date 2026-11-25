@@ -200,7 +200,10 @@ async function userKeyReadiness(
       return keyRejected(check) ? 'credential-rejected' : 'ready';
     case 'binding-needs-reapproval':
       return 'needs-reapproval';
+    // Readiness names no automation run, so `key-approval-ended` never
+    // answers it; approving is what would fix one.
     case 'interactive-use-not-approved':
+    case 'key-approval-ended':
       return 'needs-approval';
     case 'anonymous-use-not-approved':
       return 'needs-sign-in';
@@ -300,7 +303,10 @@ async function shareReadiness(
   switch (check.refused) {
     case 'binding-needs-reapproval':
       return theirs ? 'needs-reapproval' : 'needs-admin';
+    // Readiness names no automation run, so `key-approval-ended` never
+    // answers it; the key's owner approving is what would fix one.
     case 'interactive-use-not-approved':
+    case 'key-approval-ended':
       return theirs ? 'needs-approval' : 'needs-admin';
     // Only people who aren't signed in reach this, and signing in is what
     // serves them.

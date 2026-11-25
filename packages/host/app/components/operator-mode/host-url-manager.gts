@@ -23,9 +23,11 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import DanglingRoutingWarning from '@cardstack/host/components/operator-mode/dangling-routing-warning';
 import config from '@cardstack/host/config/environment';
 
 import type HostURLService from '@cardstack/host/services/host-url-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
@@ -34,6 +36,13 @@ import type {
   HostURL,
   HostURLKind,
 } from '@cardstack/host/services/realm-server';
+import type StoreService from '@cardstack/host/services/store';
+import {
+  findDanglingRoutingRules,
+  type DanglingRoutingRule,
+} from '@cardstack/host/utils/dangling-routing-rules';
+
+import type * as CardAPI from '@cardstack/base/card-api';
 
 // Host Mode v2's publish dialog. It lists the addresses a realm is mounted at
 // (its host URLs), mounts it at more, marks one canonical and unmounts them
@@ -95,9 +104,13 @@ interface MountTarget {
 // also reads, and each change goes through it.
 class HostURLs extends Component<{ Args: ContentArgs }> {
   @service declare private hostUrlService: HostURLService;
+  @service declare private loaderService: LoaderService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
+  @service declare private store: StoreService;
 
+  // The realm's host routing rules whose target card no longer exists.
+  @tracked private danglingRules: DanglingRoutingRule[] = [];
   @tracked private homePage: HomePageCheck | undefined;
   @tracked private claimedDomain: ClaimedDomain | null = null;
   @tracked private siteName = '';
@@ -125,17 +138,37 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
   private loadTask = restartableTask(async () => {
     this.loadError = undefined;
     try {
-      let [, homePage, claimedDomain] = await Promise.all([
+      let [, homePage, claimedDomain, danglingRules] = await Promise.all([
         this.hostUrlService.refresh(this.args.realmURL),
         this.realmServer.checkHomePage(this.args.realmURL),
         this.realmServer.fetchBoxelClaimedDomain(this.args.realmURL),
+        this.findDanglingRules(),
       ]);
       this.homePage = homePage;
       this.claimedDomain = claimedDomain;
+      this.danglingRules = danglingRules;
     } catch (error) {
       this.loadError = messageOf(error);
     }
   });
+
+  // Read with the host URLs, so the warning is in the section's first render.
+  // A failure here shows no warning, and doesn't stop the dialog.
+  private async findDanglingRules(): Promise<DanglingRoutingRule[]> {
+    try {
+      let api = await this.loaderService.loader.import<typeof CardAPI>(
+        '@cardstack/base/card-api',
+      );
+      return await findDanglingRoutingRules(
+        this.store,
+        api,
+        this.args.realmURL,
+      );
+    } catch (error) {
+      console.error('Failed to check for dangling routing rules', error);
+      return [];
+    }
+  }
 
   private get isLoading() {
     return this.loadTask.isRunning && !this.homePage;
@@ -540,6 +573,7 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
         </:action>
       </Alert>
     {{else}}
+      <DanglingRoutingWarning @rules={{this.danglingRules}} />
       <section class='section' aria-labelledby='host-urls-mounted'>
         <h3 id='host-urls-mounted' class='section-title'>Mounted at</h3>
         {{#if this.hostURLs.length}}

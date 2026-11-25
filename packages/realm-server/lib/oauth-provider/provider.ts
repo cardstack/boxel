@@ -18,6 +18,7 @@ import { newDynamicClientId } from './dynamic-client-id.ts';
 import type { CallerLimit } from './caller-limit.ts';
 import {
   authorizationHandler,
+  keepAuthorizationErrorsOnBoxelsPage,
   DEFAULT_AUTHORIZATION_LIMIT,
   errorDetailsHandler,
   errorReturnHandler,
@@ -282,6 +283,9 @@ export function startOAuthProvider({
       testOnlyDocumentOrigins,
     }),
   });
+  provider.use(
+    keepAuthorizationErrorsOnBoxelsPage({ dbAdapter, secureOriginURL, issuer }),
+  );
   // The token and revocation endpoints count failures in the same buckets,
   // so one alert watches both.
   let tokenFailureAlert = failureAlert(tokenLimit);
