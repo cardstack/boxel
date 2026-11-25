@@ -95,17 +95,17 @@ export async function chargeAutomationStorage(
         WHERE l.charge_kind = 'storage' AND l.run_id IS NULL
           AND l.batch_id IS NULL AND l.automation_id = a.automation_id)
          AS last_charged_day,
-       -- Active on the day: active as the day began, or made active during
-       -- the day.
+       -- Active on the day: active as the day began (after every change at
+       -- or before midnight), or made active later in the day.
        (COALESCE((SELECT c.state FROM automation_state_changes c
                   WHERE c.automation_id = a.automation_id
-                    AND c.changed_at <`,
+                    AND c.changed_at <=`,
     param(`${day}T00:00:00Z`),
     `::timestamptz
                   ORDER BY c.changed_at DESC, c.id DESC LIMIT 1), '') = 'active'
         OR EXISTS (SELECT 1 FROM automation_state_changes c
                    WHERE c.automation_id = a.automation_id
-                     AND c.state = 'active' AND c.changed_at >=`,
+                     AND c.state = 'active' AND c.changed_at >`,
     param(`${day}T00:00:00Z`),
     '::timestamptz AND c.changed_at <',
     param(`${addDays(day, 1)}T00:00:00Z`),
