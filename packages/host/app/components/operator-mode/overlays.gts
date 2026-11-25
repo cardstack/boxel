@@ -309,6 +309,11 @@ export default class Overlays extends Component<OverlaySignature> {
         // prevent outer nested contains fields from triggering when inner most
         // contained field was clicked
         e.stopPropagation();
+        // A card inside a link opens here, so the browser must not also
+        // follow the link. A link inside the card keeps its default.
+        if (renderedCard.element.closest('a[href]')) {
+          e.preventDefault();
+        }
         if (this.shouldSwallowCardClick()) {
           // A subclass is currently holding chrome open (e.g. an overlay
           // dropdown is open). This click is the outside-click that's about
