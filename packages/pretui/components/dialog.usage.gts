@@ -19,9 +19,21 @@ class DialogUsage extends GlimmerComponent {
   get sizeVal() {
     return this.size as 's' | 'm' | 'l';
   }
+  get usage() {
+    let bits = [
+      '@open={{this.open}}',
+      '@onClose={{this.hide}}',
+      `@label='Demo'`,
+    ];
+    if (this.size !== 's') bits.push(`@size='${this.size}'`);
+    if (!this.dismissible) bits.push('@dismissible={{false}}');
+    return `<Dialog ${bits.join(' ')}><:title>…</:title><:default>…</:default><:footer>…</:footer></Dialog>`;
+  }
+
   <template>
     <FreestyleUsage
       @name='Dialog'
+      @source={{this.usage}}
       @description='Modal dialog on the native top layer (showModal). Focus trap, Escape (as a cancelable controlled close), ::backdrop, and stacking come from the platform — no JS dismissible-stack. Supersedes boxel-ui Modal, which owns the viewport and ships no focus trap.'
     >
       <:example>

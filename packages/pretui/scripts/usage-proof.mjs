@@ -92,6 +92,12 @@ module('Pretui | usage pages', function (hooks) {
           ),
           \`\${name} shows its example\`,
         );
+        for (let usage of document.querySelectorAll('[data-test-pretui-usage]')) {
+          assert.ok(
+            usage.querySelector('[data-test-pretui-usage-source-code]')?.textContent?.trim(),
+            \`\${name} shows code to copy\`,
+          );
+        }
       });
     }
   }

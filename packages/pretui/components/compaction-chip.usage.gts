@@ -28,9 +28,14 @@ class CompactionUsage extends GlimmerComponent {
     return this.state === 'running' ? 'running' : 'done';
   }
 
+  get usage() {
+    return `<CompactionChip @state='${this.state}' @messageCount={{14}} @toolCallCount={{9}} @summary='…' />`;
+  }
+
   <template>
     <FreestyleUsage
       @name='CompactionChip'
+      @source={{this.usage}}
       @description='Compaction is the moment a session quietly loses its history, and the law the spec states is that it must be RENDERED — a transcript that silently forgets is a transcript the reader cannot reason about. So: a marker in the stream while it runs, and a receipt afterwards that expands to the written summary of what was condensed. The counts are text beside the label, not a tooltip, so the receipt survives the screenshot test and greyscale. Without a summary the chip does not pretend to have one; it says so.'
     >
       <:example>

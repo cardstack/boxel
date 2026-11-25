@@ -7,6 +7,8 @@ import type { MenuEntry, ShortcutPlatform } from '../internal/menu';
 import { PLATFORM_OPTIONS } from '../demo-menu';
 
 // ── Menubar ──────────────────────────────────────────────────────────────
+const SOURCE = '<Menubar @items={{this.items}} @label="Sourcing desk" />';
+
 class MenubarState extends GlimmerComponent {
   @tracked platform: string = 'apple';
   @tracked log = '—';
@@ -127,6 +129,7 @@ class MenubarUsage extends MenubarState {
   <template>
     <FreestyleUsage
       @name='Menubar'
+      @source={{SOURCE}}
       @description='An application menu bar — the WAI-ARIA menubar pattern, which is a different pattern from the menu button Menu implements rather than a horizontal skin of it. The axis flips: ←/→ move between titles and wrap, ↓ opens onto the first item and ↑ opens onto the last, Home/End jump to the first and last title. With a menu already down, ←/→ close it, step to the adjacent title and open THAT one with focus back on the bar — the behaviour that makes a real menu bar feel like one. Esc closes the menu and returns focus to its title, staying in the bar; inside a nested submenu it closes one level. The whole bar is ONE tab stop, so Tab leaves it rather than walking the titles. Hover is deliberately asymmetric: an idle bar ignores it entirely, an active one switches instantly with no dwell delay. It takes the same MenuNode tree as Menu and CommandPalette, so a command is defined once with one shortcut and one enabled rule.'
     >
       <:example>

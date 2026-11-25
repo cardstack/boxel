@@ -6,6 +6,8 @@ import { Button } from './button';
 import { Sonner } from './sonner';
 import { ToastStore } from './toaster';
 
+const SOURCE = '<Sonner @store={{this.toasts}} @placement="bottom-end" />';
+
 class SonnerUsage extends Component {
   toasts = new ToastStore();
 
@@ -20,7 +22,7 @@ class SonnerUsage extends Component {
     <FreestyleUsage
       @name='Sonner'
       @description='Toaster under the shadcn name: the positioned region that stacks, ages and dismisses toasts pushed into a ToastStore. Import it when a port already says Sonner; the component and its writeup are Toaster.'
-      @source='<Sonner @store={{this.toasts}} @placement="bottom-end" />'
+      @source={{SOURCE}}
     >
       <:example>
         <Button @tone='primary' @appearance='accent' {{on 'click' this.show}}>

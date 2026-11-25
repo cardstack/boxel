@@ -13,13 +13,12 @@ import { Descriptions } from './descriptions';
 import type { DataColumn, FilterState } from './data-table';
 import type { DescriptionsItem } from './descriptions';
 import type { ListingSizeArg } from '../internal/reading-listing';
-import type {
-  RowKey,
-  SelectionMode,
-  SortState,
-} from '../data-component';
+import type { RowKey, SelectionMode, SortState } from '../data-component';
 import { GRADES, LOTS, MODES, SIZES, lotLabel } from '../examples-listing';
 import type { Lot } from '../examples-listing';
+
+const SOURCE =
+  '<DataTable @columns={{this.columns}} @rows={{this.rows}} @key={{this.rowKey}} @caption="Lots booked this season" @selectionMode="multi" @pageSize={{6}} @onSortChange={{this.onSortChange}} />';
 
 const GRADE_OPTIONS = GRADES.map((g) => ({ value: g, label: g }));
 const PLACE_OPTIONS = Array.from(new Set(LOTS.map((l) => l.place))).map(
@@ -128,6 +127,7 @@ class DataTableUsage extends Component {
   <template>
     <FreestyleUsage
       @name='DataTable'
+      @source={{SOURCE}}
       @slug='data-table'
       @description='The record listing: sortable headers with real aria-sort, per-column filters in the toolbar, a column switcher, row selection, expandable detail rows, pinned columns and density. It is NOT the spreadsheet — that is Sheet — and it is not the markup primitive Table.'
     >

@@ -5,6 +5,9 @@ import { FreestyleUsage } from './freestyle-usage';
 import { GraphOutline } from './graph-outline';
 import type { OutlineEdge, OutlineNode } from './graph-outline';
 
+const SOURCE =
+  '<GraphOutline @nodes={{this.nodes}} @edges={{this.edges}} @mode="visible" />';
+
 const OUTLINE_NODES: OutlineNode[] = [
   { id: 'origin', data: { title: 'Wuyi Origins', status: 'contracted' } },
   { id: 'lot', data: { title: 'Spring Lot 14', status: 'curing' } },
@@ -38,7 +41,7 @@ class GraphOutlineUsage extends GlimmerComponent {
     <FreestyleUsage
       @name='GraphOutline'
       @description='The node graph as text: a named region, one real button per node and every incoming and outgoing connection spoken in full. It is the keyboard-readable peer of NodeCanvas, not a canvas fallback screenshot.'
-      @source='<GraphOutline @nodes={{this.nodes}} @edges={{this.edges}} @mode="visible" />'
+      @source={{SOURCE}}
       @viewportMode='wide'
     >
       <:example>

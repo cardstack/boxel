@@ -15,11 +15,14 @@ const KBD_SAMPLES = [
   'F2',
 ];
 
+const SOURCE = `<Kbd @value="Mod+K" />`;
+
 class KbdUsage extends GlimmerComponent {
   samples = KBD_SAMPLES;
   <template>
     <FreestyleUsage
       @name='Kbd'
+      @source={{SOURCE}}
       @description='The shortcut token. One spec renders both platforms: "Mod" is ⌘ on Apple and Ctrl elsewhere, modifiers are ordered ⌃⌥⇧⌘ the way Apple orders them regardless of how they were typed, and named keys pick up their glyphs where the platform expects them. A literal face ("⌘K", "F2") passes through untouched, so hand-written shortcuts keep rendering. The visible glyphs are mirrored into aria-label as the platform-neutral aria-keyshortcuts spelling, so a screen reader announces "Command K" rather than reading a symbol it has no name for.'
     >
       <:example>

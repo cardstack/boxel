@@ -28,10 +28,16 @@ const TAB_IDS = [
 export class TabsUsage extends GlimmerComponent {
   @tracked defaultValue = 'dashboard';
   setDefault = (v: string) => (this.defaultValue = v);
+  get usage() {
+    return `<Tabs @options={{this.options}} @defaultValue='${this.defaultValue}'>
+  <:default as |active|>…</:default>
+</Tabs>`;
+  }
   <template>
     <FreestyleUsage
       @name='Tabs'
       @description='Header row with horizontally arranged tab buttons that switch between sections — pair with content panels below for the standard tabs pattern. Pretui Tabs renders just the tab bar plus its yielded panel; pair with Toolbar when you need a title row. The accent underline composes motion-core’s SlidingHighlight (underline cut) — the same indicator SegmentedControl wears, so it travels along the rail rather than reappearing under the new tab, and parks instantly under reduced motion.'
+      @source={{this.usage}}
     >
       <:example>
         <div class='tabs-host'>

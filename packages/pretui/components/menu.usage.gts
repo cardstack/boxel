@@ -10,9 +10,15 @@ import { MenuState, PLATFORM_OPTIONS } from '../demo-menu';
 const ALIGN_OPTIONS = ['start', 'end'];
 
 class MenuUsage extends MenuState {
+  get usage() {
+    let align = this.align === 'start' ? '' : ` @align="${this.align}"`;
+    return `<Menu @items={{this.items}} @label="Lot actions"${align}>\n  <:trigger as |open toggle|>\n    <Button {{on "click" toggle}}>Lot actions</Button>\n  </:trigger>\n</Menu>`;
+  }
+
   <template>
     <FreestyleUsage
       @name='Menu'
+      @source={{this.usage}}
       @description='A platform menu, not a popover list: submenus, checkmark toggles with mixed state, mutually exclusive radio groups, section headers, separators, a bold default item, dynamic items that swap while Option/Alt is held, and the HIG ellipsis convention applied by the component so no caller can type three periods. Keyboard is the whole APG contract — one tab stop with a roving tabindex, ↑/↓ wrapping, → into a submenu and ← back out, Home/End, multi-character type-ahead, Enter/Space to activate, Esc to close exactly one level, Tab to dismiss and move on with focus returned to the trigger. Disabled items use aria-disabled, never the disabled attribute, so a dimmed command stays focusable and announced instead of silently vanishing for keyboard and screen-reader users. Hovering across a diagonal toward an open submenu is protected by the Amazon safe triangle, so the submenu never flickers away as you reach for it.'
     >
       <:example>

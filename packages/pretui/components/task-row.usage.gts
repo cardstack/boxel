@@ -31,10 +31,18 @@ class TaskRowUsage extends GlimmerComponent {
       : undefined;
   }
 
+  get usage() {
+    let bits = [`@state='${this.state}'`, "@label='Reprice the Kandy lots'"];
+    if (this.open) bits.push('@open={{true}}');
+    if (this.flat) bits.push('@flat={{true}}');
+    bits.push('@details={{this.details}}');
+    return `<TaskRow ${bits.join(' ')} />`;
+  }
   <template>
     <FreestyleUsage
       @name='TaskRow'
       @description='One row of an agent work queue, closed by default because settled work has earned quiet, and opening it shows the receipt — the named sub-results with their figures. State is never colour alone: completed carries a check AND the word, failed carries a cross AND the named error (pass @statusText and name it — the default "Failed" is a placeholder, not an explanation), and pending/running carry the queue position inside the ring. The row header is a real button with aria-expanded and aria-controls; the details panel is `inert` while shut, so a keyboard user cannot tab into rows they cannot see — the original left it in the tab order and mutated borderRadius inline instead of expressing it as a CSS state.'
+      @source={{this.usage}}
     >
       <:example>
         <div class='demo-stack'>

@@ -24,9 +24,17 @@ class ProgressRadialUsage extends GlimmerComponent {
       this.size = v;
     }
   };
+  get usage() {
+    let bits = [`@value={{${this.value}}}`];
+    if (this.max !== 100) bits.push(`@max={{${this.max}}}`);
+    if (this.size !== 48) bits.push(`@size={{${this.size}}}`);
+    return `<ProgressRadial ${bits.join(' ')} />`;
+  }
+
   <template>
     <FreestyleUsage
       @name='ProgressRadial'
+      @source={{this.usage}}
       @description='A circular progress indicator to show completion of a task'
     >
       <:example>

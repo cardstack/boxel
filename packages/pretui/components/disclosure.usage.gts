@@ -4,6 +4,9 @@ import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { Disclosure } from './disclosure';
 
+const SOURCE =
+  '<Disclosure @label=\'Grading notes\' @open={{this.open}} @onOpenChange={{this.setOpen}}>…</Disclosure>';
+
 class DisclosureUsage extends Component {
   @tracked open = false;
   setOpen = (v: boolean) => (this.open = v);
@@ -11,7 +14,7 @@ class DisclosureUsage extends Component {
     <FreestyleUsage
       @name='Disclosure'
       @description='Collapsible under the React Aria name: one trigger, one disclosed region. Reach for this import when a port or an agent already speaks the Aria vocabulary; the component, its contract and its writeup are Collapsible’s.'
-      @source="<Disclosure @label='Grading notes' @open={{this.open}} @onOpenChange={{this.setOpen}}>…</Disclosure>"
+      @source={{SOURCE}}
     >
       <:example>
         <Disclosure

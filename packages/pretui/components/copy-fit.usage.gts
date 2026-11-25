@@ -28,9 +28,22 @@ class CopyFitUsage extends GlimmerComponent {
   setMonogram = (v: string) => (this.monogram = v);
   setFooterLeft = (v: string) => (this.footerLeft = v);
   setFooterRight = (v: string) => (this.footerRight = v);
+  get usage() {
+    let bits = [`@title="${this.title}"`];
+    if (this.eyebrow) bits.push(`@eyebrow="${this.eyebrow}"`);
+    if (this.meta) bits.push(`@meta="${this.meta}"`);
+    if (this.media) bits.push('@media="…"');
+    if (this.mediaBg) bits.push(`@mediaBg="${this.mediaBg}"`);
+    if (this.monogram) bits.push(`@monogram="${this.monogram}"`);
+    if (this.footerLeft) bits.push(`@footerLeft="${this.footerLeft}"`);
+    if (this.footerRight) bits.push(`@footerRight="${this.footerRight}"`);
+    return `<CopyFit ${bits.join(' ')} />`;
+  }
+
   <template>
     <FreestyleUsage
       @name='CopyFit'
+      @source={{this.usage}}
       @description='The copy-fitting layout mechanism. One adaptive design across the badge / strip / tile / card sub-formats, chosen automatically via CSS container queries on the card root — media-forward when media exists, monogram placeholder otherwise. Content is supplied via args; only title is required.'
     >
       <:example>
