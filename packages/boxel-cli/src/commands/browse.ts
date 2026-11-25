@@ -16,7 +16,7 @@ import { resolveAnonymousBrowseUrl as defaultResolveAnonymousBrowseUrl } from '.
 import { openBrowser } from '../lib/open-browser.ts';
 import { FG_RED, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
-import { OAUTH_REFUSALS } from '../lib/oauth-refusals.ts';
+import { OAUTH_HELP_NOTES, OAUTH_REFUSALS } from '../lib/oauth-refusals.ts';
 
 // The standard local dev URLs. The realm server and the host app dev server run
 // on different ports, and the browser session lives in origin-scoped storage,
@@ -295,6 +295,7 @@ export function registerBrowseCommand(program: Command): void {
         'profile or the one --profile names (a published-realm card URL opens ' +
         'directly, no sign-in needed)',
     )
+    .addHelpText('after', OAUTH_HELP_NOTES.browse)
     .argument(
       '[card-path]',
       'Card to open: a realm-relative path (opens signed in) or a ' +

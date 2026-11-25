@@ -2,11 +2,15 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { browse } from '../../src/commands/browse.ts';
-import { capture } from '../../src/commands/capture.ts';
-import { runCommand } from '../../src/commands/run-command.ts';
+import { browse, registerBrowseCommand } from '../../src/commands/browse.ts';
+import { capture, registerCaptureCommand } from '../../src/commands/capture.ts';
+import {
+  registerRunCommand,
+  runCommand,
+} from '../../src/commands/run-command.ts';
 import { BoxelCLIClient } from '../../src/lib/boxel-cli-client.ts';
 import { OAUTH_REFUSALS } from '../../src/lib/oauth-refusals.ts';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
@@ -192,5 +196,31 @@ describe("a realm's refusal of an OAuth write to its policy", () => {
 
   it('leaves any other failure alone', () => {
     expect(describeOAuthPolicyRefusal('Forbidden')).toBeUndefined();
+  });
+});
+
+describe('the help of a command an OAuth profile refuses', () => {
+  function helpOf(name: string): string {
+    let program = new Command();
+    registerRunCommand(program);
+    registerCaptureCommand(program);
+    registerBrowseCommand(program);
+    let command = program.commands.find((c) => c.name() === name)!;
+    let out = '';
+    command.configureOutput({ writeOut: (text) => (out += text) });
+    command.outputHelp();
+    return out;
+  }
+
+  it('says, before anyone runs it, that it needs a profile signed in with Matrix', () => {
+    expect(helpOf('run-command')).toContain(
+      "Needs a profile signed in with Matrix: the realm server doesn't let an OAuth token run commands yet.",
+    );
+    expect(helpOf('capture')).toContain(
+      "Needs a profile signed in with Matrix: the realm server doesn't let an OAuth token capture cards yet.",
+    );
+    expect(helpOf('browse')).toContain(
+      'Signing a browser in needs a profile signed in with Matrix',
+    );
   });
 });

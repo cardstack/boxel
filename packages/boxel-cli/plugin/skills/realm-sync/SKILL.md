@@ -180,7 +180,7 @@ Remove a realm — deletes server-side files and unlinks it from your realm list
 **Options:**
 
 - `-y, --yes` — Skip the interactive confirmation prompt
-- `--dry-run` — Preview the change without writing to Matrix
+- `--dry-run` — Preview the removal without deleting or unlinking anything
 
 ### `boxel realm list`
 

@@ -225,4 +225,75 @@ describe('profile list', () => {
       expect(process.exitCode).toBe(1);
     });
   });
+
+  describe('a profile signed in with OAuth', () => {
+    beforeEach(() => {
+      manager.addOAuthProfile(
+        '@example-user:boxel.ai',
+        {
+          issuer: 'https://app.boxel.ai',
+          tokenEndpoint: 'https://app.boxel.ai/_oauth-provider/token',
+          accessToken: 'access-token-placeholder',
+          refreshToken: 'refresh-token-placeholder',
+          accessExpiresAt: new Date(Date.now() + 600_000).toISOString(),
+          connectionEndsAt: new Date(
+            Date.now() + 30 * 86_400_000,
+          ).toISOString(),
+        },
+        {
+          matrixUrl: 'https://matrix.boxel.ai/',
+          realmServerUrl: 'https://app.boxel.ai/',
+        },
+      );
+    });
+
+    it("names the commands it can't run yet", async () => {
+      const out = captureLog();
+      try {
+        await listProfiles(manager);
+      } finally {
+        out.restore();
+      }
+
+      expect(out.lines()).toContain(
+        'Not with OAuth yet: boxel run-command, boxel capture, boxel browse, boxel realm list --hidden, boxel realm list --all-accessible',
+      );
+    });
+
+    it('names them in --json too', async () => {
+      const out = captureLog();
+      try {
+        await listProfiles(manager, { json: true });
+      } finally {
+        out.restore();
+      }
+
+      const [profile] = JSON.parse(out.lines()).profiles;
+      expect(profile.unavailableCommands).toEqual([
+        'run-command',
+        'capture',
+        'browse',
+        'realm list --hidden',
+        'realm list --all-accessible',
+      ]);
+    });
+
+    it('flags nothing on a profile signed in with Matrix', async () => {
+      await manager.addProfileWithAuth(
+        '@other-user:boxel.ai',
+        fakeAuth('@other-user:boxel.ai', 'https://matrix.boxel.ai'),
+      );
+      const out = captureLog();
+      try {
+        await listProfiles(manager, { json: true });
+      } finally {
+        out.restore();
+      }
+
+      const matrix = JSON.parse(out.lines()).profiles.find(
+        (p: { id: string }) => p.id === '@other-user:boxel.ai',
+      );
+      expect(matrix.unavailableCommands).toBeUndefined();
+    });
+  });
 });

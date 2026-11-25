@@ -17,18 +17,18 @@ export interface RemoveRealmOptions {
 export interface RemoveRealmResult {
   /** Normalized URL the operation targeted (always trailing-slashed). */
   realmUrl: string;
-  /** True only when both server delete and Matrix unlink completed. */
+  /** True only when both the server delete and the unlink completed. */
   removed: boolean;
   /** True when DELETE /_delete-realm returned 204. */
   serverDeleted: boolean;
-  /** True when Matrix `app.boxel.realms` was rewritten without the URL. */
+  /** True when the workspace list no longer holds the URL. */
   unlinked: boolean;
   /** Number of entries before the change. */
   previousCount: number;
   /** Number of entries the next list would contain (computed even on dry-run). */
   nextCount: number;
   /**
-   * True when the URL was not present in `app.boxel.realms`. Mutually
+   * True when the URL was not present in the workspace list. Mutually
    * exclusive with a successful real removal.
    */
   notInList?: boolean;
@@ -38,8 +38,10 @@ export interface RemoveRealmResult {
 /**
  * Remove a realm: delete server-side files / index / registry via
  * `DELETE /_delete-realm`, then unlink the URL from the active profile's
- * `app.boxel.realms` Matrix account_data list. Mirrors the host UI's
- * workspace delete flow and inverts `boxel realm create`.
+ * workspace list. A profile signed in with Matrix rewrites its
+ * `app.boxel.realms` account_data itself; for one signed in with OAuth the
+ * realm server takes the realm off the list as part of the delete. Mirrors
+ * the host UI's workspace delete flow and inverts `boxel realm create`.
  *
  * Programmatic API. Returns a result object on every code path; never
  * prompts and never calls `process.exit`. The CLI wraps this with a TTY
@@ -92,7 +94,7 @@ export async function removeRealm(
       previousCount,
       nextCount: previousCount,
       notInList: true,
-      error: 'Realm is not in app.boxel.realms. Nothing to remove.',
+      error: 'Realm is not in your workspace list. Nothing to remove.',
     };
   }
 
@@ -218,7 +220,10 @@ export function registerRemoveCommand(realm: Command): void {
     )
     .argument('<realm-url>', 'realm URL to remove')
     .option('-y, --yes', 'Skip the interactive confirmation prompt')
-    .option('--dry-run', 'Preview the change without writing to Matrix')
+    .option(
+      '--dry-run',
+      'Preview the removal without deleting or unlinking anything',
+    )
     .action(async (realmUrlInput: string, opts: RemoveCliOptions) => {
       let normalized = ensureTrailingSlash(realmUrlInput.trim());
 
@@ -239,12 +244,12 @@ export function registerRemoveCommand(realm: Command): void {
 
       console.log(`Remove target: ${FG_CYAN}${preview.realmUrl}${RESET}`);
       console.log(
-        `${DIM}app.boxel.realms: ${preview.previousCount} -> ${preview.nextCount}${RESET}`,
+        `${DIM}Workspace list: ${preview.previousCount} -> ${preview.nextCount}${RESET}`,
       );
 
       if (opts.dryRun) {
         console.log(
-          `${DIM}[DRY RUN] No server delete or Matrix changes sent.${RESET}`,
+          `${DIM}[DRY RUN] Nothing deleted, and the workspace list is unchanged.${RESET}`,
         );
         return;
       }

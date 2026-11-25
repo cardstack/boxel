@@ -55,7 +55,7 @@ describe('realm remove (integration)', () => {
     expect(res.stdout).toContain(realmUrl);
     // previousCount -> nextCount, where nextCount == previousCount - 1.
     expect(res.stdout).toContain(
-      `app.boxel.realms: ${before.length} -> ${before.length - 1}`,
+      `Workspace list: ${before.length} -> ${before.length - 1}`,
     );
 
     let userRealms = await reloadProfile(home).getUserRealms();
@@ -109,7 +109,7 @@ describe('realm remove (integration)', () => {
     expect(res.ok, res.stderr).toBe(true);
     expect(res.stdout).toContain('[DRY RUN]');
     expect(res.stdout).toContain(
-      `app.boxel.realms: ${before.length} -> ${before.length - 1}`,
+      `Workspace list: ${before.length} -> ${before.length - 1}`,
     );
 
     let after = await reloadProfile(home).getUserRealms();
@@ -155,7 +155,7 @@ describe('realm remove (integration)', () => {
     expect(res.stdout).toContain('Removed:');
     // Both duplicate entries are removed: previousCount - nextCount == 2.
     expect(res.stdout).toContain(
-      `app.boxel.realms: ${beforeRemove.length} -> ${beforeRemove.length - 2}`,
+      `Workspace list: ${beforeRemove.length} -> ${beforeRemove.length - 2}`,
     );
 
     let after = await reloadProfile(home).getUserRealms();

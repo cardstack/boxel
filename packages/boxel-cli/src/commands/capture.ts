@@ -7,7 +7,7 @@ import {
   RealmPaths,
 } from '@cardstack/runtime-common/paths';
 import { resolveRealmAuthenticator } from '../lib/auth-resolver.ts';
-import { OAUTH_REFUSALS } from '../lib/oauth-refusals.ts';
+import { OAUTH_HELP_NOTES, OAUTH_REFUSALS } from '../lib/oauth-refusals.ts';
 import { cliLog } from '../lib/cli-log.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../lib/colors.ts';
 import { describeFetchError } from '../lib/describe-fetch-error.ts';
@@ -744,6 +744,7 @@ export function registerCaptureCommand(program: Command): void {
     .description(
       'Capture a card via the realm server: writes image or PDF files (or prints served URLs) plus a per-capture manifest',
     )
+    .addHelpText('after', OAUTH_HELP_NOTES.capture)
     .argument(
       '[card-url]',
       'Card instance URL or @cardstack/<realm>/<path> identifier (omit when using --spec)',

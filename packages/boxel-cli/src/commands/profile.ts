@@ -8,6 +8,7 @@ import {
   signInKind,
 } from '../lib/profile-manager.ts';
 import { matrixLogout } from '../lib/auth.ts';
+import { OAUTH_UNAVAILABLE_COMMANDS } from '../lib/oauth-refusals.ts';
 import {
   ensurePersonalRealm,
   ensurePersonalRealmWithOAuth,
@@ -424,7 +425,10 @@ export async function listProfiles(
           realmServerUrl: profile.realmServerUrl,
           signIn: signInKind(profile),
           ...(profile.oauth
-            ? { connectionEndsAt: profile.oauth.connectionEndsAt }
+            ? {
+                connectionEndsAt: profile.oauth.connectionEndsAt,
+                unavailableCommands: [...OAUTH_UNAVAILABLE_COMMANDS],
+              }
             : {}),
           active: id === activeId,
         };
@@ -470,6 +474,11 @@ export async function listProfiles(
     console.log(`    ${DIM}Environment:${RESET} ${envColor}${domain}${RESET}`);
     console.log(`    ${DIM}Realm Server:${RESET} ${profile.realmServerUrl}`);
     console.log(`    ${DIM}Sign-in:${RESET} ${describeSignIn(profile)}`);
+    if (profile.oauth) {
+      console.log(
+        `    ${DIM}Not with OAuth yet:${RESET} ${OAUTH_UNAVAILABLE_COMMANDS.map((c) => `boxel ${c}`).join(', ')}`,
+      );
+    }
     console.log('');
   }
 
