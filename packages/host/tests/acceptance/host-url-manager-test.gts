@@ -676,7 +676,8 @@ module(
   'Acceptance | host URL manager | dangling routing rule',
   function (hooks) {
     // A `/gone` routing rule, and a `/old` child route under `/docs`, whose
-    // target cards were never created, so their `instance` links dangle.
+    // target cards were never created, so their `instance` links dangle. The
+    // `/person` rule's card exists, so it doesn't dangle.
     setupHostURLManager(
       hooks,
       JSON.stringify({
@@ -687,6 +688,7 @@ module(
             hostRoutingRules: [
               { path: '/gone' },
               { path: '/docs', routes: [{ path: '/old' }] },
+              { path: '/person' },
             ],
           },
           relationships: {
@@ -695,6 +697,9 @@ module(
             },
             'hostRoutingRules.1.routes.0.instance': {
               links: { self: './also-missing' },
+            },
+            'hostRoutingRules.2.instance': {
+              links: { self: './Person/1' },
             },
           },
           meta: {
@@ -732,6 +737,11 @@ module(
           `${testRealmURL}also-missing`,
           'the warning names a child route by its full path',
         );
+      assert
+        .dom(
+          '[data-test-host-url-manager] [data-test-dangling-routing-rule="/person"]',
+        )
+        .doesNotExist('a rule whose card exists is not listed');
     });
   },
 );

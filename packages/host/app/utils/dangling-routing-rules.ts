@@ -3,6 +3,8 @@ import {
   isCardErrorJSONAPI,
   isCardInstance,
   joinRoutingPaths,
+  resolveRRIReference,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type StoreService from '@cardstack/host/services/store';
@@ -11,7 +13,7 @@ import type * as CardAPI from '@cardstack/base/card-api';
 
 export interface DanglingRoutingRule {
   path: string;
-  // The URL of the missing card.
+  // The id of the missing card.
   reference: string;
 }
 
@@ -42,7 +44,7 @@ export async function findDanglingRoutingRules(
         .membership?.[0];
       let reference = slot?.reference;
       if (reference) {
-        let targetId = new URL(reference, realmConfigId).href;
+        let targetId = resolveRRIReference(reference, rri(realmConfigId));
         let target = await store.get(targetId);
         if (isCardErrorJSONAPI(target) && target.status === 404) {
           dangling.push({ path, reference: targetId });
