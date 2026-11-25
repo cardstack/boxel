@@ -76,7 +76,7 @@ export interface AutomationRunItemAttributes {
   // now. A trigger the card no longer declares keeps the label it had.
   trigger: string | null;
   // The slot the trigger fired for: a cron or one-time trigger's scheduled
-  // instant as an ISO time, or a webhook delivery's id. Null for a Preview or
+  // instant as an ISO time, or `delivery:` and a webhook delivery's id. Null for a Preview or
   // Run now.
   slot: string | null;
   state: AutomationRunState;

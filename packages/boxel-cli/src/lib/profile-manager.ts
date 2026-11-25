@@ -10,7 +10,10 @@ import {
   getRealmServerToken as fetchRealmServerToken,
   getRealmTokens,
   addRealmToMatrixAccountData,
+  editUserRealmsOnRealmServer,
+  type RealmServerListEdit,
   removeRealmFromMatrixAccountData,
+  requireUserRealmsFromMatrixAccountData,
   getUserRealmsFromMatrixAccountData,
   type MatrixAuth,
 } from './auth.ts';
@@ -28,6 +31,7 @@ import {
 import { promptPassword as defaultPromptPassword } from './prompt.ts';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
 import { realmFetch } from './realm-fetch.ts';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export interface ProfileManagerDeps {
   matrixLogin?: typeof matrixLogin;
@@ -1299,30 +1303,93 @@ export class ProfileManager implements RealmAuthenticator {
     }
   }
 
-  // The account's realm list (the workspaces the app shows). A Matrix
-  // profile edits it in the user's Matrix account data. For an OAuth profile
-  // the realm server keeps it: creating and deleting a realm with an OAuth
-  // token adds it to the list and removes it, so there is nothing for the
-  // CLI to edit, and these two refuse.
+  // The account's realm list (the workspaces the app shows). The realm
+  // server edits it when it keeps one for this user, holding the same lock as
+  // its own edits of it (creating and deleting a realm with an OAuth token,
+  // a permission change), so the two never overlap. A Matrix profile writes
+  // it to the user's Matrix account data itself when the server keeps no list
+  // for the user or the request fails. Matrix account data has no
+  // compare-and-set, so that direct write may still overlap another writer's
+  // edit. An OAuth profile holds no Matrix token, so for it a list the server
+  // can't edit is an error.
   async addToUserRealms(realmUrl: string): Promise<void> {
-    this.refuseListEditOnOAuth();
+    let edit = await this.editListOnRealmServer({ add: [realmUrl] });
+    if (edit.outcome === 'edited') {
+      return;
+    }
+    this.refuseMatrixFallbackOnOAuth(edit);
+    // Adds the realm only when it's missing, so a failed request that added
+    // it already leaves no duplicate.
     await this.withMatrixAuthRecovery((auth) =>
       addRealmToMatrixAccountData(auth, realmUrl),
     );
   }
 
+  // True when an entry was removed. Entries are compared with a trailing
+  // slash, so a legacy entry without one goes too.
   async removeFromUserRealms(realmUrl: string): Promise<boolean> {
-    this.refuseListEditOnOAuth();
-    return this.withMatrixAuthRecovery((auth) =>
+    let withSlash = ensureTrailingSlash(realmUrl);
+    let edit = await this.editListOnRealmServer({
+      remove: [...new Set([withSlash, withSlash.replace(/\/$/, ''), realmUrl])],
+    });
+    if (edit.outcome === 'edited') {
+      return edit.removed.length > 0;
+    }
+    this.refuseMatrixFallbackOnOAuth(edit);
+    let removed = await this.withMatrixAuthRecovery((auth) =>
       removeRealmFromMatrixAccountData(auth, realmUrl),
+    );
+    if (removed || edit.outcome === 'not-kept') {
+      return removed;
+    }
+    // The request to the realm server failed, and may have removed the
+    // entry before it did: an entry that is gone now counts as removed. The
+    // read is strict, since a failed read must not pass for an empty list.
+    let remaining: string[];
+    try {
+      remaining = await this.withMatrixAuthRecovery((auth) =>
+        requireUserRealmsFromMatrixAccountData(auth),
+      );
+    } catch {
+      return false;
+    }
+    return !remaining.some((url) => ensureTrailingSlash(url) === withSlash);
+  }
+
+  private async editListOnRealmServer(edit: {
+    add?: string[];
+    remove?: string[];
+  }): Promise<RealmServerListEdit> {
+    let active = this.getActiveProfile();
+    if (!active) {
+      return { outcome: 'failed' };
+    }
+    return await editUserRealmsOnRealmServer(
+      active.profile.realmServerUrl,
+      async (url, init) => {
+        try {
+          return await this.authedRealmServerFetch(url, init);
+        } catch {
+          // No realm-server token could be had: a Matrix profile writes the
+          // list to Matrix instead.
+          return new Response(null, { status: 503 });
+        }
+      },
+      edit,
     );
   }
 
-  private refuseListEditOnOAuth(): void {
+  // An OAuth profile has no Matrix token to write the list with, so a list
+  // edit the realm server didn't make fails.
+  private refuseMatrixFallbackOnOAuth(
+    edit: Exclude<RealmServerListEdit, { outcome: 'edited' }>,
+  ): void {
     let active = this.getActiveProfile();
     if (active?.profile.oauth) {
       throw new Error(
-        `Profile "${active.id}" is signed in with OAuth: the realm server keeps its workspace list as realms are created and deleted.`,
+        edit.outcome === 'not-kept'
+          ? `The realm server keeps no workspace list for profile "${active.id}".`
+          : `The realm server couldn't update the workspace list for profile "${active.id}". Try again.`,
       );
     }
   }
@@ -1360,8 +1427,9 @@ export class ProfileManager implements RealmAuthenticator {
     );
   }
 
-  // Whether the active profile's sign-in leaves its workspace list to the
-  // realm server (see `addToUserRealms`).
+  // Whether the realm server edits the active profile's workspace list
+  // itself as part of creating and deleting a realm, so the caller has no
+  // list edit to make: true for an OAuth profile.
   serverKeepsWorkspaceList(): boolean {
     return Boolean(this.getActiveProfile()?.profile.oauth);
   }

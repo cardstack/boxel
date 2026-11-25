@@ -129,7 +129,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.deepEqual(
         response.body,
-        { status: 'received', commandsExecuted: 0 },
+        { status: 'received', commandsExecuted: 0, automationRunsStarted: 0 },
         'response indicates receipt with no commands executed',
       );
     });
