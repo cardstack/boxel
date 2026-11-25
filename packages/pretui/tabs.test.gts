@@ -190,4 +190,63 @@ module('Pretui | Tabs', function (hooks) {
     assert.dom('[data-test-pretui-tabpanel]').doesNotExist();
     assert.dom(tab('overview')).doesNotHaveAttribute('aria-controls');
   });
+
+  test('keyboard focus draws an inset ring that moves nothing', async function (assert) {
+    await render(<template><Tabs @options={{OPTIONS}} /></template>);
+    let before = tab('activity').getBoundingClientRect();
+    await focus(tab('overview'));
+    await triggerKeyEvent(tab('overview'), 'keydown', 'ArrowRight');
+    let focused = tab('activity');
+    assert.true(focused.matches(':focus-visible'), 'focus is visible');
+    let style = getComputedStyle(focused);
+    assert.strictEqual(style.outlineStyle, 'solid');
+    assert.strictEqual(style.outlineWidth, '2px');
+    assert.strictEqual(style.outlineOffset, '-2px', 'the ring sits inside');
+    assert.notStrictEqual(style.boxShadow, 'none', 'with a contrast stroke');
+    assert.deepEqual(
+      focused.getBoundingClientRect().toJSON(),
+      before.toJSON(),
+      'the tab did not move or resize',
+    );
+  });
+
+  test('@label names the tab list', async function (assert) {
+    await render(
+      <template><Tabs @options={{OPTIONS}} @label='Sections' /></template>,
+    );
+    assert
+      .dom('[data-test-pretui-tabs] [role="tablist"]')
+      .hasAttribute('aria-label', 'Sections');
+  });
+
+  test("@overflow='scroll' scrolls the list and keeps the selected tab in view", async function (assert) {
+    await render(
+      <template>
+        <div class='narrow'>
+          <Tabs @options={{OPTIONS}} @overflow='scroll' />
+        </div>
+        <style scoped>
+          .narrow {
+            width: 8rem;
+          }
+        </style>
+      </template>,
+    );
+    let list = document.querySelector(
+      '[data-test-pretui-tabs] [role="tablist"]',
+    ) as HTMLElement;
+    assert.true(list.scrollWidth > list.clientWidth, 'the list overflows');
+    assert.dom(list).hasAttribute('data-fade-right');
+    assert.dom(list).doesNotHaveAttribute('data-fade-left');
+
+    await focus(tab('overview'));
+    await triggerKeyEvent(tab('overview'), 'keydown', 'End');
+    let l = list.getBoundingClientRect();
+    let t = tab('settings').getBoundingClientRect();
+    assert.true(
+      t.left >= l.left - 1 && t.right <= l.right + 1,
+      'the selected tab is scrolled into view',
+    );
+    assert.dom(list).hasAttribute('data-fade-left');
+  });
 });

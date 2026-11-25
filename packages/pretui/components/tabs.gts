@@ -5,6 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { guidFor } from '@ember/object/internals';
+import { modifier } from 'ember-modifier';
 import { listen, rovingTabindex } from '../focus';
 import { slidingHighlight, SlidingHighlight } from './sliding-highlight';
 import { emit, firstDefined } from '../pretui-primitives';
@@ -20,6 +21,11 @@ export interface TabsSignature {
     onValueChange?: (value: string) => void;
     /** alias — the HTML/Mantine/Ant notify name */
     onChange?: (value: string) => void;
+    /** the tab list's accessible name */
+    label?: string;
+    /** 'scroll' lets a list that doesn't fit scroll sideways, with an edge
+     * fade and the selected tab kept in view; unset, tabs shrink to fit */
+    overflow?: 'scroll';
   };
   Blocks: { default: [active: string] };
   Element: HTMLDivElement;
@@ -52,6 +58,43 @@ function stepFor(event: KeyboardEvent, list: HTMLElement) {
   }
 }
 
+// Scroll mode: keep the selected tab in view, and mark which physical edges
+// hide tabs so the CSS fades only those.
+const scrollTabs = modifier(
+  (list: HTMLElement, [enabled, _value]: [boolean, string | undefined]) => {
+    if (!enabled) {
+      return;
+    }
+    let edges = () => {
+      let sl = Math.abs(list.scrollLeft);
+      let start = sl > 1;
+      let end = sl + list.clientWidth < list.scrollWidth - 1;
+      let rtl = getComputedStyle(list).direction === 'rtl';
+      list.toggleAttribute('data-fade-left', rtl ? end : start);
+      list.toggleAttribute('data-fade-right', rtl ? start : end);
+    };
+    let active = list.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (active) {
+      let a = active.getBoundingClientRect();
+      let l = list.getBoundingClientRect();
+      if (a.left < l.left) {
+        list.scrollLeft -= l.left - a.left;
+      } else if (a.right > l.right) {
+        list.scrollLeft += a.right - l.right;
+      }
+    }
+    edges();
+    let resize =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(edges);
+    resize?.observe(list);
+    list.addEventListener('scroll', edges, { passive: true });
+    return () => {
+      resize?.disconnect();
+      list.removeEventListener('scroll', edges);
+    };
+  },
+);
+
 // The underline is the same shared primitive the SegmentedControl wears, in
 // its `underline` cut: one <SlidingHighlight /> travelling along the rail
 // instead of an ::after grown on whichever tab happens to be active. The
@@ -73,6 +116,9 @@ export class Tabs extends Component<TabsSignature> {
     }
     emit([this.args.onValueChange, this.args.onChange], option.value);
   };
+  get scrolls() {
+    return this.args.overflow === 'scroll';
+  }
   private guid = guidFor(this);
   get panelId() {
     return `${this.guid}-panel`;
@@ -126,10 +172,12 @@ export class Tabs extends Component<TabsSignature> {
       <div
         class='pretui-tabs'
         role='tablist'
+        aria-label={{@label}}
+        data-overflow={{@overflow}}
         {{slidingHighlight}}
+        {{scrollTabs this.scrolls this.value}}
         {{listen 'keydown' this.onKeydown}}
       >
-        <div class='pretui-tabs-rail'></div>
         <SlidingHighlight @variant='underline' @thickness={{2}} @radius={{0}} />
         {{#each this.tabs key='id' as |tab|}}
           <button
@@ -159,15 +207,46 @@ export class Tabs extends Component<TabsSignature> {
     </div>
     <style scoped>
       @layer PretComponent {
+        /* the 1px rail is an inset shadow, so it stays put while a
+           scrolling list moves its tabs */
         .pretui-tabs {
           position: relative;
           display: flex;
-          gap: 22px;
+          gap: 0.625rem;
+          box-shadow: inset 0 -1px var(--border);
+          isolation: isolate;
+        }
+        /* the mask gradient is alpha only; black is not a colour here */
+        .pretui-tabs[data-overflow='scroll'] {
+          --_tabs-fade-left: 0px;
+          --_tabs-fade-right: 0px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          scrollbar-width: none;
+          mask-image: linear-gradient(
+            to right,
+            transparent,
+            black var(--_tabs-fade-left),
+            black calc(100% - var(--_tabs-fade-right)),
+            transparent
+          );
+        }
+        .pretui-tabs[data-overflow='scroll'] .pretui-tab {
+          flex-shrink: 0;
+        }
+        .pretui-tabs[data-overflow='scroll']::-webkit-scrollbar {
+          display: none;
+        }
+        .pretui-tabs[data-fade-left] {
+          --_tabs-fade-left: var(--pretui-tabs-fade, 1.5rem);
+        }
+        .pretui-tabs[data-fade-right] {
+          --_tabs-fade-right: var(--pretui-tabs-fade, 1.5rem);
         }
         .pretui-tab {
           position: relative;
           height: 34px;
-          padding: 0 2px;
+          padding: 0 0.5rem;
           border: 0;
           background: none;
           font-family: inherit;
@@ -178,23 +257,29 @@ export class Tabs extends Component<TabsSignature> {
           cursor: pointer;
           transition: color 150ms var(--pretui-ease-snap, ease);
         }
-        .pretui-tab:hover {
-          color: var(--foreground);
+        @media (hover: hover) {
+          .pretui-tab:hover {
+            color: var(--foreground);
+          }
+        }
+        /* inset, so a scrolling list never clips it and nothing moves; the
+           host's unlayered button focus rule reads its offset from
+           --host-outline-offset. The 1px --foreground stroke inside the ring
+           keeps 3:1 against the surface when --ring is a light hue. The
+           focused tab drops below the SlidingHighlight so the selection
+           underline stays visible over the ring. */
+        .pretui-tab:focus-visible {
+          --host-outline-offset: -2px;
+          z-index: -1;
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+          box-shadow: inset 0 0 0 3px var(--foreground);
         }
         .pretui-tab[data-state='active'] {
           color: var(--foreground);
         }
         /* the 2px accent bar is the shared SlidingHighlight in its underline
-           cut, same geometry (bottom
-           edge of the tab box, square ends via a zero radius) */
-        .pretui-tabs-rail {
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          height: 1px;
-          background: var(--border);
-        }
+           cut: bottom edge of the tab box, square ends via a zero radius */
         .pretui-tabpanel {
           padding-top: var(--space-4, 11px);
         }
