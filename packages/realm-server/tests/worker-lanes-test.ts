@@ -48,7 +48,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a system-index worker claims every index job and no system prerender-html', function (assert) {
+    test('a system-index worker claims every index job and no prerender-html', function (assert) {
       assert.deepEqual(workerSpecs({ ...none, systemIndexCount: 1 }), [
         {
           lane: 'system-index',
@@ -57,8 +57,8 @@ module(basename(import.meta.filename), function () {
         },
       ]);
       assert.true(
-        systemInitiatedPriority > systemInitiatedPrerenderHtmlPriority,
-        'the floor sits above system prerender-html, so the HTML pass after a boot index never holds the lane',
+        userInitiatedPrerenderHtmlPriority > systemInitiatedPriority,
+        'user-tier prerender-html sits above the floor, so only the job-type filter keeps it off the lane',
       );
       assert.true(
         systemInitiatedPriority <= userInitiatedPriority,

@@ -45,8 +45,9 @@ export interface WorkerSpec {
 //   and all user-initiated work, and never system-tier jobs.
 // - system-index floors at the system indexing tier and registers only the
 //   indexing job types, so it takes every index job — a boot index, a system
-//   repair, a user write — and never a prerender-html job, whose system tier
-//   sits one below its floor. A realm's `_readiness-check` waits on the jobs
+//   repair, a user write — and never a prerender-html job at either tier. The
+//   job-type filter, not the floor, is what keeps HTML off it: user-tier
+//   prerender-html (9) sits above the floor. A realm's `_readiness-check` waits on the jobs
 //   that write its index, so with one of these running, a realm's readiness
 //   never waits on HTML rendering: on a single all-priority worker, which
 //   claims oldest-first, an index job queued after a large realm's HTML pass

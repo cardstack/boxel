@@ -40,9 +40,10 @@ import type { Deferred } from './deferred.ts';
 // serving all user-initiated work — both render tiers and user indexing — and
 // never system-tier jobs; the all-priority pool floors at
 // `systemInitiatedPrerenderHtmlPriority` (0) and serves everything. The
-// opt-in system-index lane (`--systemIndexCount` + `--indexJobsOnly`) floors
-// at `systemInitiatedPriority` (1) and takes only index jobs, so system
-// prerender-html (0) can never hold it. The local development worker manager
+// opt-in system-index lane (`--systemIndexCount`, whose workers run with
+// `--indexJobsOnly`) floors at `systemInitiatedPriority` (1) and takes only
+// index jobs; that job-type filter, not the floor, keeps prerender-html at
+// either tier off it. The local development worker manager
 // (`mise-tasks/services/worker`) runs one, so no index job for the realms it
 // serves waits behind a realm's HTML pass.
 //
