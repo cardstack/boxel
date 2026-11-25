@@ -21,6 +21,7 @@ import handleCreateRealmRequest, {
 import handleDeleteRealm from './handlers/handle-delete-realm.ts';
 import {
   handleFetchDisplayName,
+  handleEditWorkspaceList,
   handleFetchWorkspaceList,
 } from './handlers/handle-workspace-list.ts';
 import {
@@ -462,6 +463,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_user-realms',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleFetchWorkspaceList(args),
+  );
+  router.patch(
+    '/_user-realms',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleEditWorkspaceList(args),
   );
   router.get(
     '/_user-display-name',
