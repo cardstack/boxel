@@ -175,7 +175,7 @@ export function hostRouteTypeInfo(
     let field: HostRouteTypeField = target
       ? { type: fieldDef.type, isPrimitive, target }
       : { type: fieldDef.type, isPrimitive };
-    if (target && fieldDef.query) {
+    if (isLinkType(fieldDef.type) && fieldDef.query) {
       field.isQueryBacked = true;
     }
     fields[name] = field;
@@ -1051,17 +1051,11 @@ class Validator {
         // show which card holds the link, since the child's card may have a
         // field of that name too, so it is left for the resolver to read on
         // whichever card has it, as is a field the known type doesn't have.
-        // A query-backed link of that name on the known type is refused
-        // either way: it stores no link for the resolver to read.
+        // That holds when the parent's field is query-backed too. A
+        // query-backed link on the child's type is refused: it is the link
+        // this route names, and it stores nothing for the resolver to read.
         let field = childType?.fields[named];
-        let parentField = parentType?.fields[named];
-        if (
-          (field && isLinkType(field.type) && field.isQueryBacked) ||
-          (!field &&
-            parentField &&
-            isLinkType(parentField.type) &&
-            parentField.isQueryBacked)
-        ) {
+        if (field && isLinkType(field.type) && field.isQueryBacked) {
           return queryBackedParent(named);
         }
         if (field && isLinkType(field.type)) {
@@ -1363,7 +1357,8 @@ function linkCandidates(
   let sameField = (field: string, def: HostRouteTypeField, other: Fields) =>
     related &&
     other[field]?.type === def.type &&
-    other[field]?.target === def.target;
+    other[field]?.target === def.target &&
+    !!other[field]?.isQueryBacked === !!def.isQueryBacked;
   for (let [field, def] of Object.entries(childType.fields)) {
     if (!isLinkType(def.type) || !def.target) {
       continue;

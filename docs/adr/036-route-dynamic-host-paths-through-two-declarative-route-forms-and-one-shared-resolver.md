@@ -64,9 +64,11 @@ MUST be named in `parent`, or inferred when exactly one link connects the two
 types. With two or more, validation MUST drop a route that doesn't name one.
 A query-backed link field stores no link, so it MUST NOT count as a link
 here: inference MUST skip it, and validation MUST drop a route whose
-`parent` names one. Membership MUST be checked by reading the link on one of
-the two loaded cards, with no search. A matched value only has to be unique
-within its parent.
+`parent` names one. The exception is a `parent` checked against the parent
+route's type alone: the child's card may store a link of that name, so the
+route is kept for the resolver to read on either card. Membership MUST be
+checked by reading the link on one of the two loaded cards, with no search. A
+matched value only has to be unique within its parent.
 
 ### 1.4. One resolver, run as the visitor
 

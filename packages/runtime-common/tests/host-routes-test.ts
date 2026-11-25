@@ -76,6 +76,22 @@ const TYPES: Record<string, HostRouteTypeInfo> = {
     slug: contains,
     department: linksTo('Department'),
   }),
+  // A sub-topic redeclares the topic's query-backed list as a stored one.
+  Topic: cardType('Topic', {
+    slug: contains,
+    subtopics: queryLinksToMany('Topic'),
+  }),
+  SubTopic: {
+    ...cardType('SubTopic', {
+      slug: contains,
+      subtopics: linksToMany('Topic'),
+    }),
+    types: [
+      `${MODULE}/SubTopic`,
+      `${MODULE}/Topic`,
+      'https://base/card-api/CardDef',
+    ],
+  },
   // Only a query-backed link connects them.
   Aisle: cardType('Aisle', { slug: contains, wares: queryLinksToMany('Ware') }),
   Ware: cardType('Ware', { slug: contains }),
@@ -672,10 +688,11 @@ const tests: SharedTests<unknown> = Object.freeze({
     );
   },
 
-  'validateHostRoutes: parent cannot name a query-backed link when one type is known':
+  'validateHostRoutes: a named query-backed link when one type is known':
     async (assert) => {
       let { routes, warnings } = validate([
-        // Only the parent route's type is known.
+        // Only the parent route's type is known. The child's card may store
+        // a link of that name, so the route is kept for the resolver.
         fieldMatch(
           '/d/:department',
           'Department',
@@ -686,7 +703,8 @@ const tests: SharedTests<unknown> = Object.freeze({
             ],
           },
         ),
-        // Only the child route's type is known.
+        // Only the child route's type is known, and its field of that name
+        // is query-backed: refused.
         {
           path: '/g/:gadget',
           card: './Gadget/:gadget',
@@ -700,13 +718,18 @@ const tests: SharedTests<unknown> = Object.freeze({
           ],
         },
       ]);
-      assert.deepEqual(paths(routes), ['/d/:department', '/g/:gadget']);
+      assert.deepEqual(paths(routes), [
+        '/d/:department',
+        '/d/:department/:gadget',
+        '/g/:gadget',
+      ]);
+      let kept = routes[0]!.routes[0]!;
+      assert.deepEqual(kept.kind === 'card-id' ? kept.parentLink : undefined, {
+        field: 'gadgets',
+        side: 'unverified',
+        inferred: false,
+      });
       assert.deepEqual(codes(warnings), [
-        {
-          code: 'invalid-parent-link',
-          path: '/d/:department/:gadget',
-          dropped: true,
-        },
         {
           code: 'invalid-parent-link',
           path: '/g/:gadget/:department',
@@ -714,12 +737,36 @@ const tests: SharedTests<unknown> = Object.freeze({
         },
       ]);
       assert.true(
-        warnings.every((w) =>
-          w.message.includes('gadgets is a query-backed link'),
+        warnings[0]!.message.includes('gadgets is a query-backed link'),
+        `the warning says the named link is query-backed: ${warnings[0]!.message}`,
+      );
+    },
+
+  'validateHostRoutes: a subtype that stores an inherited query-backed link':
+    async (assert) => {
+      // A sub-topic redeclares the topic's query-backed `subtopics` as a
+      // stored link: they are two fields, not one inherited field.
+      let { routes, warnings } = validate([
+        fieldMatch(
+          '/t/:topic',
+          'Topic',
+          { slug: ':topic' },
+          {
+            routes: [fieldMatch('/:sub', 'SubTopic', { slug: ':sub' })],
+          },
         ),
-        `the warnings say the named link is query-backed: ${warnings
-          .map((w) => w.message)
-          .join(' / ')}`,
+      ]);
+      assert.deepEqual(warnings, []);
+      let child = routes[0]!.routes[0]!;
+      assert.deepEqual(
+        child.kind === 'field-match' ? child.parentLink : undefined,
+        {
+          field: 'subtopics',
+          side: 'child',
+          kind: 'linksToMany',
+          inferred: true,
+        },
+        'the stored link is inferred',
       );
     },
 
@@ -738,21 +785,34 @@ const tests: SharedTests<unknown> = Object.freeze({
       type: 'card-def',
       codeRef: ref('Category'),
       displayName: 'Category',
-      fields: { featured: 'a', products: 'b' },
+      fields: { featured: 'a', products: 'b', missing: 'c' },
       fieldDefs: {
         a: link('linksTo'),
         b: link('linksToMany', {
           filter: { eq: { 'category.id': '$this.id' } },
         }),
+        c: {
+          ...link('linksToMany', { filter: { eq: { slug: 'x' } } }),
+          fieldOrCard: ref('Missing'),
+        },
       },
     } as Definition;
-    let info = hostRouteTypeInfo(
-      { definition },
-      (r) => `${(r as ResolvedCodeRef).module}/${(r as ResolvedCodeRef).name}`,
-    );
+    let info = hostRouteTypeInfo({ definition }, (r) => {
+      let { module, name } = r as ResolvedCodeRef;
+      if (name === 'Missing') {
+        throw new Error('no key for this ref');
+      }
+      return `${module}/${name}`;
+    });
     assert.deepEqual(info.fields, {
       featured: linksTo('Product'),
       products: queryLinksToMany('Product'),
+      // Its target can't be keyed, and it is still query-backed.
+      missing: {
+        type: 'linksToMany',
+        isPrimitive: false,
+        isQueryBacked: true,
+      },
     });
   },
 
