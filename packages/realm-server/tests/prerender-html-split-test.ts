@@ -1152,6 +1152,53 @@ module(basename(import.meta.filename), function () {
       };
     }
 
+    test('a render records the URL it was made against, and a failed render keeps the URL of the HTML it keeps', async function (assert) {
+      let url = `${testRealm}rendered-against.json`;
+      let renderedAgainst = async () =>
+        (
+          (await adapter.execute(
+            `SELECT rendered_against_url FROM prerendered_html WHERE url = $1 AND type = 'instance'`,
+            { bind: [url] },
+          )) as { rendered_against_url: string | null }[]
+        )[0]?.rendered_against_url;
+
+      await writeInstance(1, url, '<div>good</div>');
+      assert.strictEqual(
+        await renderedAgainst(),
+        testRealm,
+        "a render records the realm's URL",
+      );
+
+      // The kept render was made against another URL, as it is once renders
+      // are made against a canonical host URL.
+      let hostURL = 'https://site.example.test/';
+      await adapter.execute(
+        `UPDATE prerendered_html SET rendered_against_url = $1 WHERE url = $2`,
+        { bind: [hostURL, url] },
+      );
+      let batch = await makeBatch(2);
+      await batch.seedPrerenderedHtmlInvalidations([
+        { url, operation: 'update' },
+      ]);
+      await batch.updatePrerenderedHtmlEntry(new URL(url), {
+        type: 'instance-error',
+        error: { message: 'boom', status: 500, additionalErrors: null },
+      } as any);
+      await batch.done();
+
+      let row = await productionRow(url);
+      assert.strictEqual(
+        row.isolated_html,
+        '<div>good</div>',
+        'the failed render keeps the earlier HTML',
+      );
+      assert.strictEqual(
+        await renderedAgainst(),
+        hostURL,
+        'and the URL that HTML was rendered against',
+      );
+    });
+
     // Withholding a stale-shell failure has to happen on THIS channel as well
     // as on `boxel_index`, because `effectiveHasError()` is
     // `COALESCE(i.has_error, FALSE) OR (ph.error_doc IS NOT NULL AND
