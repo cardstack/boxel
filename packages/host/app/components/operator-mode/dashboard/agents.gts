@@ -26,6 +26,7 @@ import { logger } from '@cardstack/runtime-common';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -38,6 +39,7 @@ import {
   type DashboardAgent,
 } from './agent-kinds';
 import AgentMark from './agent-mark';
+import { aiStarterPrompt } from './ai-starter-prompt';
 
 const log = logger('component:dashboard/agents');
 
@@ -70,6 +72,7 @@ export default class Agents extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
@@ -320,7 +323,9 @@ export default class Agents extends Component<Signature> {
   }
 
   @action private async describeIt() {
-    await this.aiAssistantPanelService.openNewSession();
+    await this.aiAssistantPanelService.openNewSessionWithPrompt(
+      aiStarterPrompt(this.realm, this.operatorModeStateService),
+    );
   }
 
   <template>

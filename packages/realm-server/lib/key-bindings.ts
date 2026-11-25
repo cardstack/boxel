@@ -7,6 +7,7 @@ import {
   RealmPaths,
   rri,
   trimExecutableExtension,
+  type ChangedAutomation,
   type DBAdapter,
   type Expression,
   type LocalPath,
@@ -420,6 +421,10 @@ export interface ApprovedBinding {
 // (`expectedVersion`, as `confirmationOf` spells it, so the `callApiCalls`
 // cap is part of it), and is refused when the automation, its cap included,
 // has changed since.
+//
+// A slot approved again with another key or share ends the automation
+// approvals its binding had (`endAutomationKeyApprovalsIn`); the automations
+// those approvals served are answered in `affected`.
 export async function approveBindings(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -455,7 +460,11 @@ export async function approveBindings(
       current: AutomationVersion;
     };
   },
-): Promise<{ batchId: string; approved: ApprovedBinding[] }> {
+): Promise<{
+  batchId: string;
+  approved: ApprovedBinding[];
+  affected: ChangedAutomation[];
+}> {
   if (anonymous) {
     throw new UserKeyError(403, 'anonymous use of a binding is not offered');
   }
@@ -612,7 +621,11 @@ export async function approveBindings(
 
   let batchId = randomUUID();
   let approved: ApprovedBinding[] = [];
+  let affected: ChangedAutomation[] = [];
   await dbAdapter.withTransaction(async (txQuery) => {
+    // A retried attempt starts over: only the committed one is answered.
+    approved = [];
+    affected = [];
     let shareKeys = new Map<string, string>();
     for (let shareId of [...filledShares].sort()) {
       shareKeys.set(
@@ -639,7 +652,7 @@ export async function approveBindings(
           via,
         });
         let snapshot = bindingSnapshot(plan.request, fill.slot);
-        let binding = await writeApproval(txQuery, {
+        let written = await writeApproval(txQuery, {
           batchId,
           realmURL: realmURL.href,
           type: plan.type,
@@ -654,7 +667,13 @@ export async function approveBindings(
           snapshot,
           interactive,
         });
-        approved.push({ binding, snapshot, grant, grantCreated: created });
+        affected.push(...written.affected);
+        approved.push({
+          binding: written.binding,
+          snapshot,
+          grant,
+          grantCreated: created,
+        });
       }
     }
     if (automation) {
@@ -666,7 +685,7 @@ export async function approveBindings(
       });
     }
   });
-  return { batchId, approved };
+  return { batchId, approved, affected };
 }
 
 // A card of the realm, as an operation approved per instance names it: the
@@ -805,7 +824,9 @@ async function setFirstInteractiveBudget(
 }
 
 // Writes one slot's approval: the binding, created or moved to what was just
-// approved, and its approval row.
+// approved, and its approval row. Answers the binding, and the automations
+// whose approvals of it ended because it came to send another key or share
+// than they were given for.
 async function writeApproval(
   txQuery: Querier,
   {
@@ -837,7 +858,7 @@ async function writeApproval(
     snapshot: BindingSnapshot;
     interactive: boolean;
   },
-): Promise<KeyBinding> {
+): Promise<{ binding: KeyBinding; affected: ChangedAutomation[] }> {
   let [existing] = await txQuery([
     `SELECT id, key_id, share_id FROM key_bindings WHERE realm_url = `,
     param(realmURL),
@@ -860,13 +881,12 @@ async function writeApproval(
   let approvalId = randomUUID();
   let bindingId = (existing?.id as string | undefined) ?? randomUUID();
   // An automation's approval was given for the key the binding sent then.
-  if (
+  let affected =
     existing &&
     ((existing.key_id ?? null) !== keyId ||
       (existing.share_id ?? null) !== shareId)
-  ) {
-    await endAutomationKeyApprovalsIn(txQuery, [bindingId]);
-  }
+      ? await endAutomationKeyApprovalsIn(txQuery, [bindingId])
+      : [];
   let [row] = existing
     ? await txQuery([
         `UPDATE key_bindings SET key_id = `,
@@ -937,7 +957,7 @@ async function writeApproval(
     via,
     interactive,
   });
-  return toBinding(row);
+  return { binding: toBinding(row), affected };
 }
 
 async function insertApprovalRow(
@@ -1024,7 +1044,7 @@ async function insertApprovalRow(
 
 // Revokes one binding its owner approved. Its grant stays, for other bindings
 // and later approvals. Another user's binding answers as one that doesn't
-// exist.
+// exist. Answers the automations the binding's ended approvals served.
 export async function revokeBinding(
   dbAdapter: DBAdapter,
   {
@@ -1032,11 +1052,11 @@ export async function revokeBinding(
     bindingId,
     via,
   }: { owner: string; bindingId: string; via: SecureSessionClient },
-): Promise<void> {
+): Promise<ChangedAutomation[]> {
   if (!UUID.test(bindingId)) {
     throw new UserKeyError(404, 'no such binding');
   }
-  let revoked = await dbAdapter.withTransaction((txQuery) =>
+  let { revoked, affected } = await dbAdapter.withTransaction((txQuery) =>
     revokeBindingsIn(txQuery, {
       where: [`id = `, param(bindingId), ` AND approved_by = `, param(owner)],
       actor: owner,
@@ -1046,6 +1066,7 @@ export async function revokeBinding(
   if (revoked.length === 0) {
     throw new UserKeyError(404, 'no such binding');
   }
+  return affected;
 }
 
 // The bindings the user approved, in every realm.
@@ -1069,7 +1090,9 @@ export async function listOwnBindings(
 // of the new key for the destination it was last approved for, created or
 // reused, the new owner as its approver, and a `re-approved` row. Its
 // fingerprint stays: the new owner approves the request as it was approved.
-// Runs in the swap's own transaction, with the share locked.
+// Runs in the swap's own transaction, with the share locked. Answers the
+// moved bindings' ids, and the automations whose approvals of those bindings
+// ended.
 export async function moveShareBindingsIn(
   txQuery: Querier,
   keyring: SecretsKeyring,
@@ -1084,7 +1107,7 @@ export async function moveShareBindingsIn(
     owner: string;
     via: SecureSessionClient | undefined;
   },
-): Promise<string[]> {
+): Promise<{ moved: string[]; affected: ChangedAutomation[] }> {
   let rows = await txQuery([
     `SELECT b.id, b.approval_id, b.fingerprint, b.interactive, last.realm_url, last.definition_url, last.export_name, last.operation_name, last.instance_url, last.slot, last.destination, last.method, last.path_template, last.headers_template, last.placement, last.placement_name, last.transform, last.body_template
        FROM key_bindings b JOIN key_binding_approvals last ON last.id = b.approval_id
@@ -1093,7 +1116,7 @@ export async function moveShareBindingsIn(
     ` ORDER BY b.id FOR UPDATE OF b`,
   ]);
   if (rows.length === 0) {
-    return [];
+    return { moved: [], affected: [] };
   }
   if (!via) {
     throw new UserKeyError(
@@ -1156,8 +1179,8 @@ export async function moveShareBindingsIn(
   }
   // Each automation approval of a moved binding was given for the key the
   // share held before.
-  await endAutomationKeyApprovalsIn(txQuery, moved);
-  return moved;
+  let affected = await endAutomationKeyApprovalsIn(txQuery, moved);
+  return { moved, affected };
 }
 
 // ---------------------------------------------------------------------------

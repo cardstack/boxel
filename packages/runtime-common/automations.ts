@@ -213,9 +213,17 @@ export type AutomationCapsSnapshot = AutomationCaps & {
 //   followed it. A trigger that comes back (re-added, or a spent one given a
 //   higher `count` or a later `until`) starts at the edit, so the slots it
 //   missed while gone don't collapse into a make-up run.
+// - `declared`: whether the card declared the trigger when it last read as a
+//   declaration. A label an edit removed keeps its run state, so the label
+//   keeps its count if it comes back, and carries `declared: false`, so a
+//   view that reads the row while the card doesn't read leaves the label
+//   out. `live` can't tell the two apart: a spent trigger the card declares
+//   isn't live either. A run state without `declared` predates the
+//   flag and counts as declared.
 export interface AutomationTriggerRuns extends TriggerRunState {
   timing?: string;
   live?: boolean;
+  declared?: boolean;
 }
 
 // The card's committed index row as the index hook reads it.
@@ -1236,9 +1244,11 @@ async function toKeyApprovalWait(
 // - `recomputed`: the next run, *done* and the trigger cursors follow the
 //   card as indexed, or, for an automation paused with
 //   `invalid-declaration`, its problems follow the card.
-// - `unchanged`: the row stays as it was. It is paused or waiting for key
-//   approval, or the card failed to index or doesn't read as a declaration,
-//   so there is nothing to schedule from until a later index reads it.
+// - `unchanged`: the schedule stays as it was. It is paused or waiting for
+//   key approval, or the card failed to index or doesn't read as a
+//   declaration, so there is nothing to schedule from until a later index
+//   reads it. A card that reads still has the row record which labels it
+//   declares (`withDeclaredLabels`).
 export type AutomationSync =
   | {
       kind: 'removed';
@@ -1360,6 +1370,25 @@ export async function syncAutomationWithCard(
       return { kind: 'recomputed', automation: followed };
     }
     let { declaration } = read;
+    // The branches below that keep the row's schedule (a pause, a wait for
+    // key approval) leave `trigger_runs` as it is, so the labels the card
+    // declares are recorded here first. A view that reads the row while the
+    // card doesn't read then lists only the triggers of the card's last
+    // readable edit.
+    let declaredRuns = withDeclaredLabels(
+      automation.triggerRuns,
+      declaration.triggers,
+    );
+    if (declaredRuns) {
+      let [updated] = await txQuery([
+        'UPDATE automations SET trigger_runs =',
+        param(JSON.stringify(declaredRuns)),
+        '::jsonb, updated_at = now() WHERE automation_id =',
+        param(automationId),
+        'RETURNING *',
+      ]);
+      automation = automationFromRow(updated);
+    }
     if (automation.pauseReason === 'invalid-declaration') {
       let raised = agreementExceededBy(automation.capsSnapshot, declaration);
       if (raised) {
@@ -1597,7 +1626,8 @@ export function withEditCursors(
 }
 
 // Records, on each run state, the trigger's timing and whether it is live
-// under `schedule`. A label the card no longer has is recorded as not live.
+// under `schedule`. A label the card doesn't declare is recorded as neither
+// live nor declared.
 export function recordTriggers(
   triggerRuns: Record<string, AutomationTriggerRuns>,
   triggers: AutomationTriggerDeclaration[],
@@ -1606,16 +1636,59 @@ export function recordTriggers(
   let spent = new Map(schedule.triggers.map((t) => [t.label, t.spent]));
   let next: Record<string, AutomationTriggerRuns> = {};
   for (let [label, state] of Object.entries(triggerRuns)) {
-    next[label] = { ...state, live: false };
+    next[label] = { ...state, live: false, declared: false };
   }
   for (let trigger of triggers) {
     next[trigger.label] = {
       ...(next[trigger.label] ?? { runs: 0 }),
       timing: triggerTiming(trigger),
       live: !spent.get(trigger.label),
+      declared: true,
     };
   }
   return next;
+}
+
+// Records which labels the card declares, for a row that keeps its schedule
+// through an edit (paused, or waiting for key approval). A label the row has
+// a run state for keeps its cursor, `timing` and `live`. A label the row
+// lacks gets `{ runs: 0, live: false, declared: true }`: no cursor, so the
+// schedule reads it as it reads an absent label. Whatever ends the pause or
+// the wait (`startSchedule`, `restartSchedule`) starts it at that moment.
+// Returns undefined when the row already records the card's labels.
+export function withDeclaredLabels(
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+  triggers: AutomationTriggerDeclaration[],
+): Record<string, AutomationTriggerRuns> | undefined {
+  let declared = new Set(triggers.map((t) => t.label));
+  let next: Record<string, AutomationTriggerRuns> = {};
+  let changed = false;
+  for (let [label, state] of Object.entries(triggerRuns)) {
+    let isDeclared = declared.has(label);
+    if ((state.declared ?? true) !== isDeclared) {
+      changed = true;
+    }
+    next[label] = { ...state, declared: isDeclared };
+  }
+  for (let label of declared) {
+    if (!next[label]) {
+      changed = true;
+      next[label] = { runs: 0, live: false, declared: true };
+    }
+  }
+  return changed ? next : undefined;
+}
+
+// The labels to list for an automation whose card can't be read: each label
+// the row has a run state for that the card declared when the card last read.
+// A label an edit removed stays in the row, so the label keeps its count if
+// it comes back, and is left out here.
+export function lastDeclaredLabels(
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+): string[] {
+  return Object.entries(triggerRuns)
+    .filter(([, state]) => state.declared !== false)
+    .map(([label]) => label);
 }
 
 // Pauses the row and cancels its pending and running runs. A run a person's

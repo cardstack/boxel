@@ -955,19 +955,27 @@ export type AutomationRunCallCount =
   | { kind: 'over-cap' | 'not-running'; run: AutomationRun }
   | { kind: 'missing' };
 
-// Counts one call against a running run's cap on `counter`, for the attempt
-// that owns it. The check and the count are one statement, so two calls
-// racing for a run's last call can't both make it.
+// Counts `calls` calls (one unless given) against a running run's cap on
+// `counter`, for the attempt that owns it: a batch of AI requests counts each
+// of its requests. The check and the count are one statement, so two calls
+// racing for a run's last call can't both make it, and calls that would pass
+// the cap together are none of them counted.
 export async function countAutomationRunCall(
   dbAdapter: DBAdapter,
   id: string,
   attempt: number,
   counter: AutomationRunCallCounter,
   cap: number,
+  calls = 1,
 ): Promise<AutomationRunCallCount> {
   if (!Number.isSafeInteger(cap) || cap < 0) {
     throw new Error(
       `a run's ${counter} cap must be a whole number, not ${cap}`,
+    );
+  }
+  if (!Number.isSafeInteger(calls) || calls < 1) {
+    throw new Error(
+      `a run counts a whole number of calls, 1 or more, not ${calls}`,
     );
   }
   let column = COUNT_COLUMNS[counter];
@@ -975,8 +983,8 @@ export async function countAutomationRunCall(
     dbAdapter,
     id,
     attempt,
-    [`${column} = ${column} + 1`],
-    [`AND ${column} + 1 <=`, param(cap)],
+    [`${column} = ${column} +`, param(calls)],
+    [`AND ${column} +`, param(calls), '<=', param(cap)],
   );
   if (run) {
     return { kind: 'counted', run };

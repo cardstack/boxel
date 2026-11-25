@@ -47,6 +47,7 @@ import {
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
+import { DEFAULT_BATCH_DEADLINE_MINUTES } from '@cardstack/runtime-common/automation-declaration';
 import { isWrite } from '@cardstack/runtime-common/card-operations';
 import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
 
@@ -99,7 +100,10 @@ import {
 import {
   DEFAULT_WEB_SEARCH_LLM,
   jsonBytes,
+  RESOLVE_LLM,
   resolve as resolveJSON,
+  resolveBatchRequest,
+  resolveChatBody,
   resolveRequest,
   webRead,
   webReadRequest,
@@ -365,6 +369,7 @@ const RESEARCH_METHODS = new Set<RealmRunnerCallMethod>([
   'web.search',
   'web.read',
   'resolve',
+  'resolve.batch',
 ]);
 
 // The run's research requests. Each goes through the realm server's proxy,
@@ -380,7 +385,30 @@ interface Research {
     signal: AbortSignal,
   ): Promise<WebReadResult>;
   resolve(request: ResolveRequest, signal: AbortSignal): Promise<ResolveResult>;
+  // `realm.resolve.batch`, on the automation surface only.
+  batch?: {
+    submit: SubmitResolveBatch;
+    // The deadline of a batch whose script sets none: the automation
+    // card's `batchDeadlineMinutes`.
+    defaultDeadlineMinutes: number;
+  };
 }
+
+// One batch of `realm.resolve` requests, as the realm server's batch path
+// takes it: each request's chat completion body under the position it has in
+// the script's list, and how many seconds after the submit the follow-up
+// run starts at the latest.
+export interface ResolveBatchSubmit {
+  model: string;
+  deadlineSeconds: number;
+  requests: { customId: string; body: Record<string, unknown> }[];
+}
+
+// Submits a batch with the run's token. Answers OpenRouter's id for it.
+export type SubmitResolveBatch = (
+  submit: ResolveBatchSubmit,
+  signal: AbortSignal,
+) => Promise<{ id: string }>;
 // A file as the realm serves it. `content` is empty unless the file is UTF-8
 // text; `tooLarge` marks a text file whose body was not read.
 type ReadSource = (url: string) => Promise<{
@@ -647,6 +675,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'web.search': false,
   'web.read': false,
   resolve: false,
+  'resolve.batch': false,
   transform: false,
   activity: false,
   plan: false,
@@ -702,6 +731,7 @@ const REQUIRES_READ: Record<RealmRunnerCallMethod, boolean> = {
   'web.search': false,
   'web.read': false,
   resolve: false,
+  'resolve.batch': false,
   transform: false,
   activity: false,
   plan: false,
@@ -1231,6 +1261,8 @@ class RealmFsSession {
           return await this.webRead(args[0], args[1]);
         case 'resolve':
           return await this.resolveData(args[0]);
+        case 'resolve.batch':
+          return await this.resolveBatch(args[0], args[1]);
         default:
           throw new Error(`Unknown realm call: ${String(method)}`);
       }
@@ -1333,6 +1365,59 @@ class RealmFsSession {
       );
       throw error;
     }
+  }
+
+  // realm.resolve.batch: submits the requests as one batch, which starts
+  // the batch's run milestone and ends the run's part in it. A follow-up run
+  // picks up the answers. A run submits one batch: its milestone is where
+  // the run stops and the follow-up carries on.
+  private batchSubmitted = false;
+
+  private async resolveBatch(rawRequests: unknown, rawOptions: unknown) {
+    let batch = this.research.batch;
+    if (!batch) {
+      throw new Error(
+        "realm.resolve.batch needs an automation run's token to submit a batch, and this run holds none",
+      );
+    }
+    if (this.batchSubmitted) {
+      throw new Error(
+        'An automation run submits at most one batch, and this run has submitted one: put every request that can wait in one realm.resolve.batch call',
+      );
+    }
+    let now = Date.now();
+    let { requests, deadline, milestone } = resolveBatchRequest(
+      rawRequests,
+      rawOptions,
+      {
+        now,
+        defaultDeadlineMinutes: batch.defaultDeadlineMinutes,
+        maxMilestoneChars: MAX_MILESTONE_CHARS,
+      },
+    );
+    this.batchSubmitted = true;
+    this.reportProgress('progress.milestone', [milestone]);
+    let deadlineSeconds = Math.max(1, Math.floor((deadline - now) / 1000));
+    let { id } = await this.withResearchTimeout(
+      'realm.resolve.batch',
+      (signal) =>
+        batch!.submit(
+          {
+            model: RESOLVE_LLM,
+            deadlineSeconds,
+            requests: requests.map((request, index) => ({
+              customId: String(index),
+              body: resolveChatBody(request),
+            })),
+          },
+          signal,
+        ),
+    );
+    let due = new Date(now + deadlineSeconds * 1000).toISOString();
+    this.reportProgress('progress.task', [
+      `Submitted ${requests.length} AI request${requests.length === 1 ? '' : 's'} as one batch, answered by ${due}`,
+    ]);
+    return { batchId: id, requests: requests.length, deadline: due, milestone };
   }
 
   private takeWebCall(name: string) {
@@ -3165,6 +3250,9 @@ export interface AutomationRealmIO {
   // realm.resolve's model call, billed to the run's identity and counted
   // against the automation's `resolve` cap.
   resolve: Research['resolve'];
+  // realm.resolve.batch's submit, with the run's token. Without it the
+  // script's batch is refused.
+  resolveBatch?: SubmitResolveBatch;
 }
 
 export interface AutomationRunOptions {
@@ -3175,6 +3263,9 @@ export interface AutomationRunOptions {
   automation: AutomationRunContext;
   // The automation's `seconds` cap; see `automationTimeLimitMs`.
   secondsCap: number;
+  // The deadline of a batch whose script sets none, in minutes: the
+  // automation card's `batchDeadlineMinutes`.
+  batchDeadlineMinutes?: number;
   io: AutomationRealmIO;
   progress: RunProgressSink;
   // Values the run holds that must never reach its progress, such as its
@@ -3285,6 +3376,15 @@ export async function runAutomationScript(
       search: refused('realm.web.search'),
       read: refused('realm.web.read'),
       resolve: afterFlush(io.resolve),
+      ...(io.resolveBatch
+        ? {
+            batch: {
+              submit: afterFlush(io.resolveBatch),
+              defaultDeadlineMinutes:
+                options.batchDeadlineMinutes ?? DEFAULT_BATCH_DEADLINE_MINUTES,
+            },
+          }
+        : {}),
     },
     () => undefined,
     refused('realm.operations.capabilities'),

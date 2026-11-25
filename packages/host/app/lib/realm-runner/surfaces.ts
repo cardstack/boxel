@@ -84,6 +84,7 @@ export const METHOD_REACH: Record<
   'web.search': 'web',
   'web.read': 'web',
   resolve: 'model',
+  'resolve.batch': 'model',
   transform: 'transform',
   activity: 'progress',
   plan: 'progress',
@@ -144,7 +145,9 @@ export const INTERACTIVE_METHODS: ReadonlySet<RealmRunnerCallMethod> =
   ]);
 
 // An automation run's surface, an allowlist (ADR 025 §1.4): a method that is
-// not here is refused. Adding a method here, or moving one between the two
+// not here is refused. `resolve.batch` is here and never on the interactive
+// surface: a batch is answered hours later, by a follow-up run, and a person
+// in a chat is waiting (ADR 030 §1.1). Adding a method here, or moving one between the two
 // surfaces, is a reviewed change, and the allowlist test pins this list.
 export const AUTOMATION_METHODS: ReadonlySet<RealmRunnerCallMethod> =
   new Set<RealmRunnerCallMethod>([
@@ -162,6 +165,7 @@ export const AUTOMATION_METHODS: ReadonlySet<RealmRunnerCallMethod> =
     'operations.invoke',
     'operations.invokeBatchOperation',
     'resolve',
+    'resolve.batch',
     'activity',
     'progress.plan',
     'progress.milestone',

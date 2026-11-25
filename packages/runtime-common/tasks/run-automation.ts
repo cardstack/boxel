@@ -487,6 +487,7 @@ async function attemptRun(
     },
     secondsCap: remainingMs / 1000,
     endsAt: new Date(deadline).toISOString(),
+    batchDeadlineMinutes: declaration.declaration.batchDeadlineMinutes,
   };
 
   let outcome: AutomationScriptOutcome;
