@@ -1,4 +1,6 @@
-# Disallow usage of card-api with missing imports with auto-fix (`@cardstack/boxel/missing-card-api-import`)
+# @cardstack/boxel/missing-card-api-import
+
+📝 Disallow usage of card-api with missing imports with auto-fix.
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

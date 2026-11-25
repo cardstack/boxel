@@ -32,6 +32,7 @@ import { titleize } from '../utils/titleize';
 
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from './operator-mode-state-service';
 
+import type { Message } from '../lib/matrix-classes/message';
 import type CodeSemanticsService from './code-semantics-service';
 import type LocalPersistenceService from './local-persistence-service';
 import type MatrixService from './matrix-service';
@@ -40,7 +41,6 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type SessionService from './session';
 import type StoreService from './store';
 import type ToolService from './tool-service';
-import type { Message } from '../lib/matrix-classes/message';
 import type { CardDef, Format } from '@cardstack/base/card-api';
 import type * as CommandModule from '@cardstack/base/command';
 import type { FileDef } from '@cardstack/base/file-api';

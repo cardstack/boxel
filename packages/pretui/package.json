@@ -38,7 +38,7 @@
     "ember-source": "catalog:",
     "ember-template-lint": "catalog:",
     "eslint": "catalog:",
-    "eslint-plugin-import": "catalog:",
+    "eslint-plugin-import-x": "catalog:",
     "qunit": "catalog:",
     "qunit-dom": "catalog:",
     "typescript": "catalog:"

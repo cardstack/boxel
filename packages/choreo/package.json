@@ -172,7 +172,7 @@
     "ember-source": "catalog:",
     "ember-strict-application-resolver": "^0.1.0",
     "ember-template-lint": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "catalog:",
     "glimmer-motion": "workspace:*",
     "motion-dom": "catalog:",
     "motion-utils": "catalog:",

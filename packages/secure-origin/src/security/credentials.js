@@ -1,4 +1,3 @@
-/* eslint-env browser */
 // The protocol of the credential fields the app frames: the inputs of its
 // change-password and confirm-your-password forms. Card code runs in the app page, so a password
 // typed into that page could be read by any card on it. Typed here, on the

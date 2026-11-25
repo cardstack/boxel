@@ -145,11 +145,10 @@ link MUST fall back to the card's own URL. Where the server needs a card's canon
 MUST work it out from index data, as the visitor, through the same canonical
 route walk. Both MUST give the same address for the same card, in the HTML
 visit and in the browser alike. An address MUST be the routed path on the URL
-that ADR 033 §1.5 gives for the realm: in stored HTML, the URL it has
-prerendered HTML carry, and on a page served on a host URL, that host URL.
-The stored HTML MUST carry the address. Whether the realm has a host URL
-MUST NOT change the routed path of an address, so adding a realm's first host
-URL or removing its last needs no new HTML visits. The server MUST NOT work
+that ADR 033 gives for the realm: in stored HTML, the URL that ADR 033 §1.8
+has prerendered HTML rendered against, and on a page served on a host URL,
+that host URL. The stored HTML MUST carry the address. Whether the realm has
+a host URL MUST NOT change the routed path of an address. The server MUST NOT work
 out a routed address when a response leaves it. Translating between the
 realm's URL and a host URL at that boundary is ADR 033 §1.5: it changes the
 URL an address is on, never its routed path. A change to the realm's routes MUST run the realm's HTML visits
@@ -234,7 +233,9 @@ realm's URL opens its page, because the realm server resolves a publicly
 readable realm's routes at the realm's URL too, as it does for a published
 realm, which has no host URL [17]. So the stored path depends only on the
 realm's routes, whose change already runs the HTML visits again, and not on
-whether a host URL exists, which changes with no HTML visit [17].
+whether a host URL exists [17]. A change to a realm's host URLs that changes
+the URL its stored HTML is on runs the HTML visits again too (ADR 033 §1.8),
+but it changes only that URL, never a path.
 
 A link with no route renders with no `href` instead of failing, as Rails and
 Ember do, because there one team owns the templates and the routes. A shared
@@ -270,9 +271,9 @@ A hand-written redirect is explicit [10].
   each card that a field match serves [13].
 - **A realm with no host URL keeps card URLs [16].** The realm's URL serves
   its routes when the realm is publicly readable, so this would take the
-  `href` from links to pages that work. Stored links would also stay wrong
-  when a realm gains its first host URL or loses its last, since that runs
-  no HTML visit and ADR 033 §1.5 changes only the URL, never the path [17].
+  `href` from links to pages that work. A realm gaining its first host URL
+  or losing its last would also change the path of its stored links, not
+  only the URL they are on [17].
 - **A link that searches for its card when no route fits.** It makes each
   such link slow and async [10].
 - **Card types that declare the route names they need, which each realm maps

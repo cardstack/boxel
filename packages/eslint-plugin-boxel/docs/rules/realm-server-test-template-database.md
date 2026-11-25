@@ -1,4 +1,6 @@
-# Disallow a realm-server test module that brings up realms before every test without a template database, which indexes them from scratch each time (`@cardstack/boxel/realm-server-test-template-database`)
+# @cardstack/boxel/realm-server-test-template-database
+
+📝 Disallow a realm-server test module that brings up realms before every test without a template database, which indexes them from scratch each time.
 
 <!-- end auto-generated rule header -->
 

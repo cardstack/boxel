@@ -38,9 +38,9 @@ import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader'
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
+import type { Config } from '../mock-matrix';
 import type { MockSDK } from './_sdk';
 import type { ServerState } from './_server-state';
-import type { Config } from '../mock-matrix';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
 import type { FileDef } from '@cardstack/base/file-api';

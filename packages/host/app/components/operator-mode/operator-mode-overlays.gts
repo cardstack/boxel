@@ -57,13 +57,12 @@ import { detectStackItemTypeForTarget } from '../../lib/stack-item';
 
 import Overlays from './overlays';
 
-import type { StackItemRenderedCardForOverlayActions } from './stack-item';
-
-import type { CardDefOrId } from './stack-item';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type StoreService from '../../services/store';
 import type WorkspacePinsService from '../../services/workspace-pins';
+import type { CardDefOrId } from './stack-item';
+import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 import type {
   BaseDef,
   CardCrudFunctions,

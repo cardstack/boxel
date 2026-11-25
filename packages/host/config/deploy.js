@@ -1,5 +1,3 @@
-/* eslint-env node */
-
 // `immutable` is only ever a safe promise about a content-addressed filename:
 // the name changes whenever the content does, so a copy a browser holds forever
 // can never be the wrong one. The build writes exactly those files under

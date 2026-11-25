@@ -1,4 +1,6 @@
-# Disallow missing helpers, modifiers, or components in \<template\> with auto-fix to import them (`@cardstack/boxel/template-missing-invokable`)
+# @cardstack/boxel/template-missing-invokable
+
+📝 Disallow missing helpers, modifiers, or components in \<template\> with auto-fix to import them.
 
 💼 This rule is enabled in the ✅ `recommended` config.
 
