@@ -8,6 +8,7 @@ import {
   maybeHandleScopedCSSRequest,
   rri,
   hostRouteAddress,
+  hostRouteLink,
   matchRoutePathPattern,
   validateHostRoutes,
   type CardAPIForMatching,
@@ -17,6 +18,7 @@ import {
   type HostRouteTypeInfo,
   type RawHostRoutingRule,
   type ResolvedCodeRef,
+  type UnresolvedHostRouteLink,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -631,5 +633,228 @@ module('Unit | host-route-address', function (hooks) {
       { address: '/posts/hi', route: '/posts/:slug' },
       'a value skips the where check',
     );
+  });
+
+  // What a link built on the lookup gives: the routed path on the realm's
+  // URL, or the fallback for its form.
+  function link(
+    rules: RawHostRoutingRule[],
+    target: HostRouteAddressTarget,
+    opts: {
+      loadedCard?: (id: string) => BaseDef | undefined;
+      unresolved?: UnresolvedHostRouteLink[];
+    } = {},
+  ): string | undefined {
+    return hostRouteLink(target, {
+      routes: { realmURL, routes: routes(rules) },
+      api,
+      loadedCard: opts.loadedCard,
+      unresolved: (unresolved) => opts.unresolved?.push(unresolved),
+    });
+  }
+
+  test('a link to a loaded card gets the routed path on the realm URL', function (assert) {
+    let post = make('Post', 'Post/1', {
+      slug: 'hello world',
+      status: 'published',
+    });
+    let unresolved: UnresolvedHostRouteLink[] = [];
+    assert.strictEqual(
+      link(POSTS(), { kind: 'cards', cards: [post] }, { unresolved }),
+      `${testRealmURL}posts/hello%20world`,
+    );
+    assert.deepEqual(unresolved, [], 'a link that resolves is not reported');
+  });
+
+  test('a link to a card no route fits gets the card URL and is reported', function (assert) {
+    let draft = make('Post', 'Post/2', { slug: 'soon', status: 'draft' });
+    let unresolved: UnresolvedHostRouteLink[] = [];
+    assert.strictEqual(
+      link(POSTS(), { kind: 'cards', cards: [draft] }, { unresolved }),
+      `${testRealmURL}Post/2`,
+    );
+    assert.deepEqual(unresolved, [
+      {
+        form: 'cards',
+        target: `${testRealmURL}Post/2`,
+        reason: 'where-not-matched',
+        routePath: '/posts/:slug',
+        realmURL: testRealmURL,
+      },
+    ]);
+  });
+
+  test('a link given an id asks for the card and uses it once it is loaded', function (assert) {
+    let post = make('Post', 'Post/1', { slug: 'hi', status: 'published' });
+    let id = `${testRealmURL}Post/1`;
+    let asked: string[] = [];
+    let unresolved: UnresolvedHostRouteLink[] = [];
+    let store = new Map<string, BaseDef>();
+    let loadedCard = (cardId: string) => {
+      asked.push(cardId);
+      return store.get(cardId);
+    };
+    assert.strictEqual(
+      link(POSTS(), { kind: 'cards', cards: [id] }, { loadedCard, unresolved }),
+      id,
+      'the card URL until the card is loaded',
+    );
+    assert.true(asked.includes(id), 'the card was asked for');
+    assert.deepEqual(unresolved, [], 'a link that waits is not reported');
+
+    store.set(id, post);
+    assert.strictEqual(
+      link(POSTS(), { kind: 'cards', cards: [id] }, { loadedCard, unresolved }),
+      `${testRealmURL}posts/hi`,
+      'the address once the card is loaded',
+    );
+  });
+
+  test('a link reads a parent link that is not loaded, which starts its load', function (assert) {
+    let rules: RawHostRoutingRule[] = [
+      {
+        path: '/c/:category',
+        type: ref('Category'),
+        match: { slug: ':category' },
+        routes: [
+          {
+            path: '/:product',
+            type: ref('Product'),
+            match: { slug: ':product' },
+          },
+        ],
+      },
+    ];
+    let asked: string[] = [];
+    let runner = make('Product', 'Product/runner', { slug: 'trail-runner' });
+    // The category is known only by id, as a link that isn't loaded is.
+    let notLoaded: CardAPIForMatching = {
+      ...api,
+      peekAtField: (instance, fieldName) =>
+        instance === runner && fieldName === 'category'
+          ? { type: 'not-loaded', reference: `${testRealmURL}Category/shoes` }
+          : api.peekAtField(instance, fieldName),
+      isNonPresentLink: (value) =>
+        (value as { type?: string } | undefined)?.type === 'not-loaded' ||
+        api.isNonPresentLink(value),
+    };
+    // A template's read of the link is what starts its lazy load.
+    let reads: string[] = [];
+    Object.defineProperty(runner, 'category', {
+      get() {
+        reads.push('category');
+        return undefined;
+      },
+    });
+    let unresolved: UnresolvedHostRouteLink[] = [];
+    let result = hostRouteLink(
+      { kind: 'cards', cards: [runner] },
+      {
+        routes: { realmURL, routes: routes(rules) },
+        api: notLoaded,
+        loadedCard: (id) => {
+          asked.push(id);
+          return undefined;
+        },
+        unresolved: (u) => unresolved.push(u),
+      },
+    );
+    assert.strictEqual(
+      result,
+      `${testRealmURL}Product/runner`,
+      'the card URL while the parent is not loaded',
+    );
+    assert.deepEqual(unresolved, [], 'a link that waits is not reported');
+    assert.deepEqual(asked, [], 'no id was given, so no card is asked for');
+    assert.deepEqual(reads, ['category'], 'the link to the parent was read');
+  });
+
+  test('a link given a type or a route name gets no URL when no route fits', function (assert) {
+    let unresolved: UnresolvedHostRouteLink[] = [];
+    let tags: RawHostRoutingRule[] = [
+      {
+        path: '/tags/:name',
+        name: 'tag',
+        type: ref('Tag'),
+        match: { name: ':name' },
+      },
+    ];
+    assert.strictEqual(
+      link(
+        tags,
+        { kind: 'type', type: classes.Tag!, values: { name: 'crag' } },
+        { unresolved },
+      ),
+      `${testRealmURL}tags/crag`,
+    );
+    assert.strictEqual(
+      link(
+        tags,
+        { kind: 'route-name', name: 'tag', args: ['crag'] },
+        { unresolved },
+      ),
+      `${testRealmURL}tags/crag`,
+    );
+    assert.deepEqual(unresolved, []);
+
+    assert.strictEqual(
+      link(
+        tags,
+        { kind: 'type', type: classes.Post!, values: { slug: 'hi' } },
+        { unresolved },
+      ),
+      undefined,
+      'a type no route is on',
+    );
+    assert.strictEqual(
+      link(
+        tags,
+        { kind: 'route-name', name: 'people', args: [] },
+        { unresolved },
+      ),
+      undefined,
+      'a route name no route has',
+    );
+    assert.deepEqual(
+      unresolved.map(({ form, target, reason }) => ({ form, target, reason })),
+      [
+        { form: 'type', target: 'Post (slug)', reason: 'no-route' },
+        { form: 'route-name', target: 'people', reason: 'no-route' },
+      ],
+    );
+  });
+
+  test('a link keeps card URLs when the routes are not known or there are none', function (assert) {
+    let post = make('Post', 'Post/1', { slug: 'hi', status: 'published' });
+    let unresolved: UnresolvedHostRouteLink[] = [];
+    let options = {
+      api,
+      unresolved: (u: UnresolvedHostRouteLink) => unresolved.push(u),
+    };
+    assert.strictEqual(
+      hostRouteLink(
+        { kind: 'cards', cards: [post] },
+        { ...options, routes: undefined },
+      ),
+      `${testRealmURL}Post/1`,
+      'routes not known',
+    );
+    assert.strictEqual(
+      hostRouteLink(
+        { kind: 'route-name', name: 'post', args: [post] },
+        { ...options, routes: undefined },
+      ),
+      undefined,
+      'a route name with routes not known',
+    );
+    assert.strictEqual(
+      hostRouteLink(
+        { kind: 'cards', cards: [post] },
+        { ...options, routes: { realmURL, routes: [] } },
+      ),
+      `${testRealmURL}Post/1`,
+      'a realm with no routes',
+    );
+    assert.deepEqual(unresolved, [], 'none of these is reported');
   });
 });

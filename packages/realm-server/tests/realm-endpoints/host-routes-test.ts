@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   DEFAULT_PERMISSIONS,
+  DURING_PRERENDER_HEADER,
   HostRoutesReadError,
   SupportedMimeType,
   rri,
@@ -222,6 +223,59 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let stranger = await hostRoutes(strangerUserId, []);
       assert.strictEqual(stranger.status, 403, 'no read permission: 403');
       assert.strictEqual(stranger.body.routes, undefined, 'and no routes');
+    });
+
+    test('answers a render the routes, although no host URL serves the realm', async function (assert) {
+      // A routed address doesn't depend on whether a host URL serves the
+      // realm, so an HTML visit gets the routes either way.
+      let response = await hostRoutes(ownerUserId).set(
+        DURING_PRERENDER_HEADER,
+        '1',
+      );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(
+        response.body.routes,
+        JSON.parse(JSON.stringify((await testRealm.getHostRoutes()).routes)),
+        'with its routes',
+      );
+    });
+  });
+
+  module('a published realm with host routes', function (hooks) {
+    let realmURL = testRealmURLFor('published-host-routes/');
+    let request: RealmRequest;
+    let testRealm: Realm;
+
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
+      permissions: { '*': ['read'] },
+      fileSystem: makeRoutedFixture(),
+      published: true,
+      onRealmSetup(args) {
+        testRealm = args.testRealm;
+        request = withRealmPath(args.request, realmURL);
+      },
+    });
+
+    function hostRoutesForRender() {
+      return request
+        .get('/_host-routes')
+        .set('Accept', SupportedMimeType.JSON)
+        .set(DURING_PRERENDER_HEADER, '1');
+    }
+
+    test('answers a render the routes of a published realm', async function (assert) {
+      // The routes are the tree the index stored, so a render's request
+      // doesn't wait for a type's definition.
+      let response = await hostRoutesForRender();
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(
+        response.body.routes,
+        JSON.parse(JSON.stringify((await testRealm.getHostRoutes()).routes)),
+        'with its routes',
+      );
     });
   });
 

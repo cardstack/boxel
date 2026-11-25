@@ -1227,13 +1227,15 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       configFields.hostRoutingMap = hostScopedMap;
     }
 
-    if (dynamicRoutes && routedRealm) {
+    if (hostRoutes.length > 0 && routedRealm) {
       // The realm's validated routes, the whole tree, fixed routes
       // included, as plain JSON: what the resolver takes, so the host app
-      // can resolve a path the way this server does. `realmURL` is the URL
-      // card id templates are filled under; a request path is resolved
-      // relative to its pathname. `hostRoutingMap` above stays the fixed
-      // routes the host resolves synchronously.
+      // can resolve a path the way this server does, and what its links
+      // get their routed addresses from. So a realm with only fixed routes
+      // gets it too. `realmURL` is the URL card id templates are filled
+      // under; a request path is resolved relative to its pathname.
+      // `hostRoutingMap` above stays the fixed routes the host resolves
+      // synchronously.
       configFields.hostDynamicRoutes = {
         realmURL: routedRealm.url,
         routes: hostRoutes,
