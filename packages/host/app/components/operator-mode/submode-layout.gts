@@ -55,6 +55,7 @@ import SectionRail from './dashboard/section-rail';
 import DashboardSections from './dashboard/sections';
 
 import NewFileButton, { type NewFileOptions } from './new-file-button';
+import { focusTopCardIfFocusLost } from './stack-focus';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type AssistantQuickLookService from '../../services/assistant-quick-look';
@@ -405,6 +406,20 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.operatorModeStateService.workspaceChooserOpened;
   }
 
+  // Whether the dashboard covered the submode as it last rendered.
+  #submodeCovered = false;
+
+  // As the dashboard uncovers the submode, focus that went with the
+  // dashboard goes to the top card.
+  private uncoverSubmode = modifier(
+    (_element: HTMLElement, [covered]: [boolean]) => {
+      if (this.#submodeCovered && !covered) {
+        focusTopCardIfFocusLost(this.operatorModeStateService);
+      }
+      this.#submodeCovered = covered;
+    },
+  );
+
   private set workspaceChooserOpened(workspaceChooserOpened: boolean) {
     this.operatorModeStateService.workspaceChooserOpened =
       workspaceChooserOpened;
@@ -574,13 +589,22 @@ export default class SubmodeLayout extends Component<Signature> {
             </div>
           {{/if}}
 
-          {{yield
-            (hash
-              openSearchToPrompt=this.openSearchSheetToPrompt
-              openSearchToResults=this.openSearchAndShowResults
-              updateSubmode=this.updateSubmode
-            )
-          }}
+          {{! The dashboard covers the submode, which stays rendered under it
+              so closing the dashboard returns to it as it was. Meanwhile it is
+              inert, so focus, the pointer and a screen reader can't reach it. }}
+          <div
+            class='submode-content'
+            inert={{if this.workspaceChooserOpened true}}
+            {{this.uncoverSubmode this.workspaceChooserOpened}}
+          >
+            {{yield
+              (hash
+                openSearchToPrompt=this.openSearchSheetToPrompt
+                openSearchToResults=this.openSearchAndShowResults
+                updateSubmode=this.updateSubmode
+              )
+            }}
+          </div>
           {{#if @onCardSelectFromSearch}}
             <SearchSheet
               @mode={{this.searchSheetMode}}
@@ -672,6 +696,10 @@ export default class SubmodeLayout extends Component<Signature> {
         width: 100%;
         background-color: var(--boxel-800);
         z-index: var(--host-workspace-chooser-z-index);
+      }
+      /* Only carries the inert state, so it lays out nothing itself. */
+      .submode-content {
+        display: contents;
       }
       .submode-layout {
         --submode-bar-item-border-radius: var(--boxel-border-radius);
