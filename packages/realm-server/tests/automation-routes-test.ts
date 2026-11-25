@@ -4102,7 +4102,8 @@ module(basename(import.meta.filename), function (hooks) {
 
       let edited = sharedTwoFixture([{ type: INBOX, names: ['shared'] }]);
       await realm.write(`${SHARED_TWO}.json`, edited[`${SHARED_TWO}.json`]);
-      await realm.indexing();
+      // Settles once the realm has checked the automations the pass touched.
+      await realm.incrementalIndexing();
 
       let { data, meta } = await noticesOf(WRITER);
       assert.strictEqual(
