@@ -86,7 +86,13 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
     operations: [],
   };
 
-  setupRealmServerEndpoints(hooks, [
+  setupRealmServerEndpoints(hooks);
+
+  // The realm server's automation routes, as the stubbed fetch answers them.
+  const routes: {
+    route: string;
+    getResponse: (req: Request) => Promise<Response>;
+  }[] = [
     {
       route: '_automation-switch-on',
       getResponse: async (req: Request) => {
@@ -148,9 +154,10 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
         );
       },
     })),
-  ]);
+  ];
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });
@@ -168,6 +175,17 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
         'automation-shape.gts': AUTOMATION_SHAPE,
         'automations/sale-end.json': saleEndJSON(),
       },
+    });
+    Object.defineProperty(getService('realm-server'), 'authedFetch', {
+      value: async (url: string, init?: RequestInit) => {
+        let request = new Request(url, init);
+        let { pathname } = new URL(url);
+        let endpoint = routes.find((r) => pathname.endsWith(`/${r.route}`));
+        return endpoint
+          ? await endpoint.getResponse(request)
+          : new Response('{}', { status: 404 });
+      },
+      configurable: true,
     });
     let secureWindow = getService('secure-window');
     secureWindow.open = (url: string) => {

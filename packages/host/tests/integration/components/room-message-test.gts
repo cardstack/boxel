@@ -89,22 +89,6 @@ module('Integration | Component | RoomMessage', function (hooks) {
       getResponse: async () =>
         new Response(JSON.stringify({ data: [] }), { status: 200 }),
     },
-    // The estimate a gate reads for an automation the script switches on.
-    {
-      route: '_automation-switch-on',
-      getResponse: async () =>
-        Response.json({
-          data: {
-            type: 'automation-estimate',
-            id: 'http://test-realm/automations/sale-end',
-            attributes: {
-              switchedOn: false,
-              monthlyCredits: 25,
-              estimate: { credits: 3, perRun: { totalCredits: 3 } },
-            },
-          },
-        }),
-    },
   ]);
 
   interface TestScenarioOptions {
@@ -731,6 +715,22 @@ module('Integration | Component | RoomMessage', function (hooks) {
           : null,
       { prepend: true },
     );
+    // The estimate the gate reads from the realm server.
+    Object.defineProperty(getService('realm-server'), 'authedFetch', {
+      value: async () =>
+        Response.json({
+          data: {
+            type: 'automation-estimate',
+            id: `${realmURL}sale-end`,
+            attributes: {
+              switchedOn: false,
+              monthlyCredits: 25,
+              estimate: { credits: 3, perRun: { totalCredits: 3 } },
+            },
+          },
+        }),
+      configurable: true,
+    });
     let toolService = getService('tool-service');
     let confirmed: { id: string; confirmations: any[] }[] = [];
     toolService.confirmAutomations = (id, confirmations) =>
