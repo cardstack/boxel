@@ -17,7 +17,9 @@ import {
   startAutomationRunAttempt,
   VirtualNetwork,
   type DBAdapter,
+  type QueuePublisher,
 } from '@cardstack/runtime-common';
+import { startWebhookAutomationRuns } from '@cardstack/runtime-common/automation-webhook-runs';
 import {
   cancelAutomationRunFor,
   capsRaisedAbove,
@@ -2619,6 +2621,48 @@ module(basename(import.meta.filename), function () {
           let result = await sync(indexed());
           assert.strictEqual(result?.automation.state, 'active');
           assert.strictEqual(result?.automation.pauseReason, null);
+        });
+
+        test('a delivery never takes an automation whose snapshot has no webhookPaths as a candidate', async function (assert) {
+          await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
+          // A card that doesn't read ends a candidate's handling before any
+          // run or job, so `unreadable` shows the automation was a candidate.
+          let reads = 0;
+          let deliver = (deliveryId: string) =>
+            startWebhookAutomationRuns(
+              dbAdapter,
+              {
+                webhookPath: OWNER_WEBHOOK,
+                owner: OWNER,
+                deliveryId,
+                payload: {},
+              },
+              {
+                queue: {} as QueuePublisher,
+                readDeclaration: async () => {
+                  reads++;
+                  return { ok: false, message: 'not read in this test' };
+                },
+                virtualNetwork: options.virtualNetwork,
+                matrixServerName: 'localhost',
+              },
+            );
+          assert.deepEqual(
+            await deliver('agreed'),
+            [
+              {
+                kind: 'skipped',
+                automationId: AUTOMATION,
+                reason: 'unreadable',
+              },
+            ],
+            'a snapshot that lists the webhook makes the automation a candidate',
+          );
+          await dbAdapter.execute(
+            `UPDATE automations SET caps_snapshot = caps_snapshot - 'webhookPaths'`,
+          );
+          assert.deepEqual(await deliver('unagreed'), [], 'no candidate');
+          assert.strictEqual(reads, 1, 'the card is read only as a candidate');
         });
 
         test('an automation paused for an invalid declaration whose fixed card names another webhook pauses for the webhook', async function (assert) {
