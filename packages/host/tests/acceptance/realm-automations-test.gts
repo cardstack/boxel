@@ -308,7 +308,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
       assert
         .dom(`[data-test-realm-automations-notice="${NIGHTLY}"]`)
         .containsText(
-          'Boxel holds every run of Nightly import because the payer has no credits left.',
+          'Boxel has paused every run of Nightly import because the payer has no credits left.',
         );
       assert
         .dom(
@@ -373,7 +373,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
       assert
         .dom(`[data-test-realm-config-automation-notice="${NIGHTLY}"]`)
         .containsText(
-          'Boxel holds every run of Nightly import because the payer has no credits left.',
+          'Boxel has paused every run of Nightly import because the payer has no credits left.',
         );
       assert
         .dom('[data-test-realm-config-automation-notice]')

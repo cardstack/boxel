@@ -1189,7 +1189,7 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'waiting-for-credits', pauseReason: null },
         'Waiting for credits',
-        'The payer has no credits left, so Boxel holds every run. Boxel runs the automation again once the payer adds credits.',
+        'The payer has no credits left, so Boxel has paused every run. Boxel runs the automation again once the payer adds credits.',
       ],
       [
         {

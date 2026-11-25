@@ -258,7 +258,7 @@ export function automationNoticeText(
       };
     case 'waiting-for-key-approval':
       return {
-        happened: `Boxel holds every run of ${name} until each key’s owner approves the automation.`,
+        happened: `Boxel has paused every run of ${name} until each key’s owner approves the automation.`,
         fix: 'Each key’s owner approves the automation in the secure window, and Boxel runs the automation once the last approval lands.',
       };
     case 'binding-not-approved':
@@ -291,7 +291,7 @@ export function automationNoticeText(
       };
     case 'waiting-for-credits':
       return {
-        happened: `Boxel holds every run of ${name} because the payer has no credits left.`,
+        happened: `Boxel has paused every run of ${name} because the payer has no credits left.`,
         fix: 'The payer adds credits, and Boxel runs the automation at the next scheduled time.',
       };
     case 'credential-rejected':
@@ -358,9 +358,9 @@ function glanceText(automation: Automation): string | undefined {
     case 'paused':
       return pausedBecause(automation);
     case 'waiting-for-credits':
-      return 'The payer has no credits left, so Boxel holds every run';
+      return 'The payer has no credits left, so Boxel has paused every run';
     case 'waiting-for-key-approval':
-      return 'Boxel holds every run until someone approves the automation’s use of each key';
+      return 'Boxel has paused every run until someone approves the automation’s use of each key';
     case 'done':
       return 'No runs left on any trigger';
     default:
