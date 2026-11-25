@@ -1157,7 +1157,7 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'paused', pauseReason: 'payer-lost-access' },
         'Paused',
-        'The payer is no longer a realm administrator, so Boxel paused the automation. Boxel runs nothing until a realm administrator resumes the automation and becomes the new payer.',
+        'The payer’s account can no longer pay for runs, so Boxel paused the automation. Boxel runs nothing until a realm administrator resumes the automation and becomes the new payer.',
       ],
       [
         {
