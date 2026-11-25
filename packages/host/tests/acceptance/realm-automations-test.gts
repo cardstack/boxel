@@ -419,6 +419,41 @@ module('Acceptance | realm config | Automations', function (hooks) {
         .doesNotExist('opening another automation clears the mark');
     });
 
+    test('Show in Automations reveals the automation when the config card is already on top of the stack it opens in', async function (assert) {
+      answer = {
+        status: 200,
+        data: [ACTIVE, summary(DIGEST, { title: 'Issue digest' })],
+      };
+      statusForWriter = true;
+      // The automation on the left, and the config card already on top of
+      // the stack on the right, where the action opens the config card.
+      await visitOperatorMode({
+        stacks: [
+          [{ id: DIGEST, format: 'isolated' }],
+          [{ id: `${testRealmURL}realm`, format: 'isolated' }],
+        ],
+      });
+      let right = '[data-test-operator-mode-stack="1"]';
+      await waitFor(`${right} [data-test-automation-slot="${DIGEST}"]`, {
+        timeout: 10000,
+      });
+      assert
+        .dom(`${right} [data-test-automation-slot-focused]`)
+        .doesNotExist('nothing is marked before the click');
+
+      let action = `[data-test-operator-mode-stack="0"] [data-test-automation] header [data-test-automation-show-in-console]`;
+      await waitFor(action, { timeout: 10000 });
+      await click(action);
+
+      await waitFor(
+        `${right} [data-test-automation-slot="${DIGEST}"][data-test-automation-slot-focused="true"]`,
+        { timeout: 10000 },
+      );
+      assert
+        .dom(`${right} [data-test-stack-card-index="1"]`)
+        .doesNotExist('the config card stays the only card on the right');
+    });
+
     test('Show in Automations that fails to open the config card leaves no mark for a console opened later', async function (assert) {
       answer = {
         status: 200,

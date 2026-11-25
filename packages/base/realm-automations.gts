@@ -106,6 +106,9 @@ export async function showAutomationInConsole(
     await new ShowCardTool(toolContext).execute({
       cardId: realmConfigCardURL(new URL(request.realm)).href,
       format: 'isolated',
+      // A config card already on top of the stack opens fresh too, so a
+      // console mounts to take the request.
+      reopen: true,
     });
   } catch (error) {
     // The config card mounts its console once the card loads, after the tool

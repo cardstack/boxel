@@ -41,6 +41,9 @@ export default class ShowCardTool extends HostBaseTool<
 
   requireInputFields = ['cardId'];
 
+  // `reopen` is for callers inside the app, not the model.
+  ignoreInputFields = ['cardInfo', 'reopen'];
+
   protected async run(input: BaseToolModule.ShowCardInput): Promise<CardDef> {
     let { operatorModeStateService } = this;
     if (operatorModeStateService.workspaceChooserOpened) {
@@ -59,10 +62,14 @@ export default class ShowCardTool extends HostBaseTool<
       // A card buried in that stack is shown again on top: the cards above
       // it close, and the card opens fresh in their place. Adding it as it is
       // would leave the card under whatever covers it. A card already on top
-      // stays as it is, with its format and scroll position.
+      // stays as it is, with its format and scroll position, unless the
+      // caller asks for it to reopen.
       let stack = operatorModeStateService.state?.stacks?.[newStackIndex];
       let existing = stack?.find((item) => item.id === newStackItem.id);
-      if (existing && existing !== stack?.[stack.length - 1]) {
+      if (
+        existing &&
+        (input.reopen || existing !== stack?.[stack.length - 1])
+      ) {
         operatorModeStateService.trimItemsFromStack(existing);
         newStackItem = await operatorModeStateService.createStackItem(
           input.cardId,

@@ -363,6 +363,31 @@ module('Integration | Command | show-card', function (hooks) {
       );
     });
 
+    test('a card already on top reopens when the caller asks for it to', async function (assert) {
+      const cardId = `${testRealmURL}Person/alice`;
+      let top = new StackItem({
+        id: cardId,
+        stackIndex: 1,
+        format: 'isolated',
+      });
+      mockOperatorModeStateService.state = {
+        submode: 'interact',
+        codeSelection: undefined,
+        stacks: [[], [top]],
+      };
+
+      await command.execute({ cardId, reopen: true });
+
+      assert.deepEqual(
+        mockOperatorModeStateService.trimmedStackItems,
+        [top],
+        'the card on top closes',
+      );
+      let added = mockOperatorModeStateService.addedStackItems[0];
+      assert.strictEqual(added?.id, cardId, 'the card is added again');
+      assert.notStrictEqual(added, top, 'the card opens as a new item');
+    });
+
     test('calculates correct stack index based on numberOfStacks', async function (assert) {
       const cardId = `${testRealmURL}Person/alice`;
       mockOperatorModeStateService.state = {
