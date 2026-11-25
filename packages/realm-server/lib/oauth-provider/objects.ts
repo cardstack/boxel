@@ -347,6 +347,7 @@ export const AUTHORIZATION_REFUSAL_REASONS = Object.freeze([
   'library',
   // Boxel's checks before the library (`checkAuthorizationRequest`).
   'unsupported-response-type',
+  'unsupported-parameter',
   'pkce-required',
   'prompt-none',
   'malformed',
@@ -355,6 +356,7 @@ export const AUTHORIZATION_REFUSAL_REASONS = Object.freeze([
   'client-not-allowed',
   'confirmation-code',
   'unknown-scope',
+  'unregistered-scope',
   'missing-scope',
   'openid',
   // The consent route, for a flow it ended because the authorize page's
