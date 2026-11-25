@@ -21,8 +21,14 @@ import {
   type AutomationVersionKey,
   type KeyApprover,
   type OperationKeyApproval,
+  type SlotKeyApproval,
 } from '@cardstack/runtime-common/automation-key-approval';
-import { bindingType, checkSlots, slotToken } from './key-bindings.ts';
+import {
+  bindingType,
+  checkSlots,
+  slotToken,
+  type SlotCheck,
+} from './key-bindings.ts';
 import { lookupGrantOperation } from './user-key-grants.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 
@@ -125,6 +131,7 @@ export async function checkAutomationKeyApprovals(
       continue;
     }
     let missing: NonNullable<OperationKeyApproval['missing']> = [];
+    let slots: SlotKeyApproval[] = [];
     for (let check of await checkSlots(
       dbAdapter,
       {
@@ -139,6 +146,15 @@ export async function checkAutomationKeyApprovals(
       { probeIntervalMs },
     )) {
       let slot = slotToken(check.slot);
+      slots.push(
+        await slotKeyApproval(dbAdapter, {
+          check,
+          realmURL: realmURL.href,
+          approvals,
+          version,
+          payer,
+        }),
+      );
       let { binding } = check;
       if (!binding) {
         missing.push({
@@ -170,6 +186,7 @@ export async function checkAutomationKeyApprovals(
       targetType,
       state: missing.length ? 'missing' : 'approved',
       ...(missing.length ? { missing } : {}),
+      slots,
     });
   }
   return {
@@ -182,6 +199,11 @@ export async function checkAutomationKeyApprovals(
 // Brings each automation's state in step with its key approvals, checked in
 // the realm served at `realmURL` (`Realm.followAutomationKeyApprovals`).
 // Returns what each did, keyed by automation id.
+//
+// The realm's direct writers are told of every automation followed, its
+// state moved or not: an automation that still waits can have had one of
+// several approvals land, and the card's key approvals section reads the
+// `automation` event to show it without a reload.
 export async function followAutomationKeyApprovals(
   args: CreateRoutesArgs,
   realmURL: URL,
@@ -194,7 +216,14 @@ export async function followAutomationKeyApprovals(
   if (realm?.url !== realmURL.href) {
     return new Map();
   }
-  return await realm.followAutomationKeyApprovals(automationIds);
+  let followed = await realm.followAutomationKeyApprovals(automationIds);
+  await reportAutomationChanges(
+    realmServerAutomationChangeReporter(args),
+    [...followed.values()]
+      .filter(({ kind }) => kind === 'unchanged')
+      .map(({ automation }) => automation),
+  );
+  return followed;
 }
 
 // Every switched-on automation in the realm served at `realmURL` that is
@@ -240,12 +269,16 @@ export async function followEndedKeyApprovals(
   }
 }
 
+// The automation's approvals, by binding: the version each approved and
+// when its key's owner approved that version.
+type RecordedApproval = AutomationVersionKey & { approvedAt: string };
+
 async function approvalsOf(
   dbAdapter: DBAdapter,
   automationId: string,
-): Promise<Map<string, AutomationVersionKey>> {
+): Promise<Map<string, RecordedApproval>> {
   let rows = await query(dbAdapter, [
-    'SELECT binding_id, version_key, call_api_calls FROM automation_key_approvals WHERE automation_id =',
+    'SELECT binding_id, version_key, call_api_calls, updated_at FROM automation_key_approvals WHERE automation_id =',
     param(automationId),
   ]);
   return new Map(
@@ -254,9 +287,103 @@ async function approvalsOf(
       {
         versionKey: String(row.version_key),
         callApiCalls: Number(row.call_api_calls),
+        approvedAt: new Date(row.updated_at as string | Date).toISOString(),
       },
     ]),
   );
+}
+
+// Where one checked credential slot stands for the automation
+// (`SlotKeyApproval`), with what its binding sends and who owns that key.
+async function slotKeyApproval(
+  dbAdapter: DBAdapter,
+  {
+    check,
+    realmURL,
+    approvals,
+    version,
+    payer,
+  }: {
+    check: SlotCheck;
+    realmURL: string;
+    approvals: Map<string, RecordedApproval>;
+    version: AutomationVersionKey;
+    payer: string;
+  },
+): Promise<SlotKeyApproval> {
+  let slot = slotToken(check.slot);
+  let kind: SlotKeyApproval['kind'] =
+    check.slot.key === 'userKey' ? 'userKey' : 'apiKey';
+  let { binding } = check;
+  if (!binding) {
+    if (kind === 'userKey') {
+      return { slot, kind, state: 'waiting', keyOwner: payer };
+    }
+    let [share] = await query(dbAdapter, [
+      'SELECT id FROM key_shares WHERE realm_url = ',
+      param(realmURL),
+      " AND state = 'active' AND key_id IS NOT NULL LIMIT 1",
+    ]);
+    return share
+      ? { slot, kind, state: 'waiting', keyOwner: null }
+      : { slot, kind, state: 'no-share', keyOwner: null };
+  }
+  let keyOwner = binding.share_id
+    ? (binding.share_owner ?? binding.approved_by)
+    : binding.approved_by;
+  let sent: Pick<SlotKeyApproval, 'share' | 'key'> = {};
+  if (binding.share_id) {
+    let [share] = await query(dbAdapter, [
+      'SELECT id, label, state FROM key_shares WHERE id = ',
+      param(binding.share_id),
+    ]);
+    if (share) {
+      sent.share = {
+        id: String(share.id),
+        label: String(share.label),
+        state: String(share.state),
+      };
+    }
+  } else if (binding.key_id) {
+    let [key] = await query(dbAdapter, [
+      'SELECT id, name FROM user_keys WHERE id = ',
+      param(binding.key_id),
+    ]);
+    if (key) {
+      sent.key = { id: String(key.id), name: String(key.name) };
+    }
+  }
+  let approval = approvals.get(binding.id);
+  let matches = approval !== undefined && approvalMatches(approval, version);
+  let state: SlotKeyApproval['state'];
+  switch (check.refused) {
+    case 'share-suspended':
+    case 'binding-needs-reapproval':
+      state =
+        check.refused === 'share-suspended'
+          ? 'share-suspended'
+          : 'needs-reapproval';
+      break;
+    case 'credential-rejected':
+    case 'key-rejected':
+      state = 'key-rejected';
+      break;
+    case 'binding-not-approved':
+      state = 'waiting';
+      break;
+    default:
+      state = matches ? 'approved' : 'waiting';
+  }
+  return {
+    slot,
+    kind,
+    state,
+    keyOwner,
+    ...sent,
+    ...(matches && (state === 'approved' || state === 'key-rejected')
+      ? { approvedAt: approval!.approvedAt }
+      : {}),
+  };
 }
 
 // Who can approve an `{{apiKey}}` slot no share fills yet: the payer, when a

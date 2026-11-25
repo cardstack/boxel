@@ -22087,8 +22087,13 @@ export class Realm {
     // Loaded on first use: only a realm server answers it with a row, and
     // the schedule code it reads stays out of every bundle that imports the
     // realm.
-    let { answerAutomationStatus, automationRef, AUTOMATION_STATUS_PARAM } =
-      await import('./automation-status.ts');
+    let {
+      answerAutomationStatus,
+      automationRef,
+      AUTOMATION_STATUS_PARAM,
+      AUTOMATION_STATUS_KEY_APPROVALS_PARAM,
+    } = await import('./automation-status.ts');
+    let searchParams = new URL(request.url).searchParams;
     let answer = await answerAutomationStatus({
       dbAdapter: this.#dbAdapter,
       realmURL: new URL(this.url),
@@ -22100,10 +22105,17 @@ export class Realm {
         this.#virtualNetwork,
       ),
       viewer: await this.#statusViewer(requestContext),
-      automation: new URL(request.url).searchParams.get(
-        AUTOMATION_STATUS_PARAM,
-      ),
+      automation: searchParams.get(AUTOMATION_STATUS_PARAM),
       readInstance: (url) => this.#realmIndexQueryEngine.instanceSource(url),
+      ...(searchParams.get(AUTOMATION_STATUS_KEY_APPROVALS_PARAM) === 'true'
+        ? {
+            checkKeyApprovals: (args: {
+              automationId: string;
+              declaration: AutomationDeclaration;
+              payer: string;
+            }) => this.checkAutomationKeyApprovals(args),
+          }
+        : {}),
     });
     if (answer.status !== 200) {
       return createResponse({
