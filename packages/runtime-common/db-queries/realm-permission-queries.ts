@@ -642,7 +642,10 @@ export async function fetchReachableRealms(
     realm.permissions[row.username] = actions;
   }
 
-  let hasAccount = accountCheck(dbAdapter, userId);
+  // Asked at most once, however many realms on the list carry a `users` row.
+  let checkAccount = accountCheck(dbAdapter, userId);
+  let account: Promise<boolean> | undefined;
+  let hasAccount = () => (account ??= checkAccount());
   let reachable: ReachableRealm[] = [];
   for (let url of realmURLs) {
     let realm = byRealm.get(url);
