@@ -586,14 +586,15 @@ export interface ReachableRealm {
   archived: boolean;
 }
 
-// Which of `realmURLs` the user can still open, in the order given, each
-// marked archived or not. A realm counts while the permissions it enforces
-// for the user (`effectiveRealmPermissions`: their own row, `*` and `users`)
-// include read or write. An archived realm is sealed, so it counts only for a
-// user whose own row can write it, who may restore it, as
-// `fetchArchivedRealmsForAdministrator` decides. Published snapshots, and
-// realms with no permission rows (a deleted realm loses them all), don't
-// count.
+// Which of `realmURLs` the user can still open on this realm server, in the
+// order given, each marked archived or not. A realm counts while the
+// permissions it enforces for the user (`effectiveRealmPermissions`: their
+// own row, `*` and `users`) include read or write. An archived realm is
+// sealed, so it counts only for a user whose own row can write it, who may
+// restore it, as `fetchArchivedRealmsForAdministrator` decides. Published
+// snapshots don't count, and nor does a realm with no permission rows here:
+// one that was deleted, which loses them all, or one another realm server
+// serves.
 export async function fetchReachableRealms(
   dbAdapter: DBAdapter,
   {

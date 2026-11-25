@@ -317,6 +317,22 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       await grant('own', { [user.userId]: ['read', 'write', 'realm-owner'] });
       await grant('shared', { [user.userId]: ['read'] });
       await grant('public', { '*': ['read'] });
+      // Open to every signed-in user of this server, which the caller is:
+      // the Boxel API token gave them an account here.
+      await grant('signed-in', { users: ['read'] });
+      // A published copy: its own permissions don't make it a workspace.
+      await grant('published', { [user.userId]: ['read'] });
+      await query(context.dbAdapter, [
+        `INSERT INTO realm_registry (url, kind, disk_id, owner_username, source_url) VALUES (`,
+        param(realm('published')),
+        `, 'published',`,
+        param(`published-${uuidv4()}`),
+        `,`,
+        param(owner),
+        `,`,
+        param(realm('own')),
+        `)`,
+      ]);
       // Revoked: the owner's row is all that is left.
       await grant('revoked', {});
       // Deleted: no rows at all, as deleting a realm leaves none.
@@ -332,6 +348,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         realm('revoked'),
         realm('deleted'),
         realm('public'),
+        realm('signed-in'),
+        realm('published'),
         realm('archived-own'),
         realm('archived-shared'),
         realm('own'),
@@ -339,11 +357,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       ];
       await setWorkspaceListOf(user, stored);
 
-      let response = await read(
-        context.server,
-        '/_user-realms',
-        await boxelApiToken(context.dbAdapter, user.userId, BOXEL_API),
+      let token = await boxelApiToken(
+        context.dbAdapter,
+        user.userId,
+        BOXEL_API,
       );
+      let response = await read(context.server, '/_user-realms', token);
       assert.strictEqual(response.status, 200, response.text);
       assert.deepEqual(
         response.body.data.attributes.realms,
@@ -356,6 +375,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           { url: realm('shared'), archived: false },
           { url: realm('own'), archived: false },
           { url: realm('public'), archived: false },
+          { url: realm('signed-in'), archived: false },
           { url: realm('archived-own'), archived: true },
         ],
         'only the realms the caller can open, in list order, archived ones only for a caller who can write them',

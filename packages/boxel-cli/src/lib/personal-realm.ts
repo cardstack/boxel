@@ -123,11 +123,17 @@ export interface ReachableRealm {
 }
 
 // Reads the realms a `GET /_user-realms` response says the account can still
-// open (`reachableRealms`), throwing on anything but a list of them.
+// open (`reachableRealms`), throwing on anything but a list of them. A realm
+// server that predates `reachableRealms` answers without it.
 export async function readReachableRealmsResponse(
   response: Response,
 ): Promise<ReachableRealm[]> {
   let reachable = (await workspaceListAttributes(response)).reachableRealms;
+  if (reachable === undefined) {
+    throw new Error(
+      "The realm server didn't say which of your workspaces you can still open. It is probably older than this version of boxel-cli.",
+    );
+  }
   if (
     !Array.isArray(reachable) ||
     !reachable.every(

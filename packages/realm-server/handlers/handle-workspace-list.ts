@@ -27,10 +27,11 @@ const log = logger('realm-server');
 // user comes from the request's token, and nothing in the request names one.
 //
 // `realms` is the list as the account stores it. `reachableRealms` is the
-// part of it the caller can still open, each marked archived or not, without
-// the realms whose permission was revoked or that were deleted
-// (`fetchReachableRealms`): what a caller that can't ask `_realm-auth` lists
-// as the user's workspaces.
+// part of it the caller can still open on this realm server, each marked
+// archived or not (`fetchReachableRealms`): not the realms whose permission
+// was revoked, that were deleted, or that another realm server serves. It is
+// what a caller that can't ask `_realm-auth`, and whose token reaches only
+// this server, lists as the user's workspaces.
 export function handleFetchWorkspaceList(
   deps: WorkspaceListDeps & { dbAdapter: DBAdapter },
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {

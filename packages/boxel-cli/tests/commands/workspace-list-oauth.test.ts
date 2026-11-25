@@ -33,6 +33,8 @@ function realmServer(
     listStatus?: number;
     realms?: string[];
     unreachable?: string[];
+    // Answers as a realm server that predates `reachableRealms`.
+    withoutReachable?: boolean;
     createStatus?: number;
   } = {},
 ) {
@@ -58,7 +60,9 @@ function realmServer(
           data: {
             type: 'user-realms',
             id: USER,
-            attributes: { realms, reachableRealms },
+            attributes: options.withoutReachable
+              ? { realms }
+              : { realms, reachableRealms },
           },
         });
       }
@@ -178,6 +182,17 @@ describe('the workspace list on a profile signed in with OAuth', () => {
     expect(result).toEqual({
       realms: [{ url: MINE, hidden: false, archived: false }],
     });
+  });
+
+  it('says a realm server that predates reachableRealms is older', async () => {
+    serve({ realms: [MINE], withoutReachable: true });
+
+    let result = await listRealms({ profileManager: pm });
+
+    expect(result.realms).toEqual([]);
+    expect(result.error).toMatch(
+      /didn't say which of your workspaces you can still open\. It is probably older than this version of boxel-cli/,
+    );
   });
 
   it("doesn't list what the server can't say it can open", async () => {
