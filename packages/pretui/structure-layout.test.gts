@@ -522,6 +522,28 @@ module('Pretui | structure-layout | Collapsible', function (hooks) {
     );
   });
 
+  test('an open panel does not clip its content; a closed one does', async function (assert) {
+    await render(
+      <template>
+        <Collapsible @label='Open' @defaultOpen={{true}}><p>a</p></Collapsible>
+        <Collapsible @label='Closed'><p>b</p></Collapsible>
+      </template>,
+    );
+    let [open, closed] = [
+      ...root().querySelectorAll('[data-test-pretui-collapsible-inner]'),
+    ] as HTMLElement[];
+    assert.strictEqual(
+      getComputedStyle(open!).overflow,
+      'visible',
+      'a ring on a child at the edge shows in full',
+    );
+    assert.strictEqual(
+      getComputedStyle(closed!).overflow,
+      'hidden',
+      'the closed and animating panel still clips',
+    );
+  });
+
   test('uncontrolled: a click toggles state and fires the callback', async function (assert) {
     let seen: boolean[] = [];
     let record = (next: boolean) => seen.push(next);

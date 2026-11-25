@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 143185,
+      "bytes": 143507,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -1774,10 +1774,6 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "components/a1ee81ddc6.css"
-        },
-        {
-          "package": "@cardstack/pretui@0.0.0",
           "module": "components/b2e0c6c378.css"
         },
         {
@@ -1791,6 +1787,10 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/cd535640b0.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/d0708ee7ca.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -2099,7 +2099,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 622505,
+      "bytes": 622550,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2320,8 +2320,8 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/collapsible.gts",
-          "sha256": "1f0363f0025a75ddb93d68dd9fab501a117355296728dc56dbcaafb0c8070b9b",
-          "size": 2954
+          "sha256": "96b43fd2cf08c104b014c5a280c4465a7d26875185816624cf98194cd6b36584",
+          "size": 3003
         },
         {
           "package": "@cardstack/pretui@0.0.0",

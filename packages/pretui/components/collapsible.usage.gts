@@ -4,6 +4,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { FreestyleUsage } from './freestyle-usage';
 import { Collapsible } from './collapsible';
+import { Button } from './button';
 import type { SizeAlias } from '../internal/structure-layout';
 
 class CollapsibleUsage extends Component {
@@ -48,7 +49,7 @@ class CollapsibleUsage extends Component {
   <template>
     <FreestyleUsage
       @name='Collapsible'
-      @description='One trigger, one disclosed region. The height animates with the kit expand grammar — a grid row track going from 0fr to 1fr — so there is no measurement, no max-height guess and no stale pixel value when the content reflows mid-transition. Content stays mounted and visibility takes it out of the tab order, so an input inside keeps its value across a toggle.'
+      @description='One trigger, one disclosed region. The height animates with the kit expand grammar — a grid row track going from 0fr to 1fr — so there is no measurement, no max-height guess and no stale pixel value when the content reflows mid-transition. Content stays mounted and visibility takes it out of the tab order, so an input inside keeps its value across a toggle. The clip is only for the animation: an open panel shows a child’s focus ring or box-shadow in full, as the button at its edge shows.'
       @source={{this.usage}}
     >
       <:example>
@@ -69,6 +70,9 @@ class CollapsibleUsage extends Component {
                 never remounted — Radix rebuilds its children on every open
                 unless you opt into a mode that then leaks focus into the
                 closed box.</p>
+              {{! Sits on the panel's bottom and start edges, so its focus ring
+                  shows that an open panel does not clip its content. }}
+              <Button class='fold-action' @size='s'>Save notes</Button>
             </div>
           </Collapsible>
           <p class='fold-count'>onOpenChange fired
@@ -157,6 +161,9 @@ class CollapsibleUsage extends Component {
         font-size: var(--text-ui-sm, 11.5px);
         line-height: 1.55;
         color: var(--muted-foreground);
+      }
+      .fold-action {
+        justify-self: start;
       }
       .fold-count {
         margin: var(--space-4, 11px) 0 0;
