@@ -26,16 +26,33 @@
 //
 // A batch of an automation that is paused, or waiting for a key approval,
 // waits however long that lasts: its follow-up starts once the automation is
-// active again, as the tick next sees it (ADR 030 §1.5). The tick holds the
-// automation's row while it makes the follow-up's run row, enqueues its job
-// and records it, as it does for a trigger's run, so a pause or a key-approval
-// wait either lands first, and the batch waits, or lands after and finds the
-// follow-up there to cancel. A batch of an automation that has been removed
+// active again (ADR 030 §1.5). The tick holds the automation's row while it
+// makes the follow-up's run row, enqueues its job and records it, as it does
+// for a trigger's run, so a pause or a key-approval wait either lands first,
+// and the batch waits, or lands after and finds the follow-up there to hold.
+// A follow-up already made when the pause or the wait came is held, not
+// canceled (`holdAutomationFollowUpRuns` in `automation-runs.ts`): its run
+// goes back to pending with no job, and its batch records the hold
+// (`follow_up_held_at`). Each tick enqueues a held follow-up's job again once
+// its automation is active, and clears the hold.
+//
+// A resume makes the person who resumed the follow-up's identity, from the
+// resume on (`follow_up_acts_as`, set by `resumeAutomation`): the follow-up
+// acts as, and is billed to, them, and its authority dates from the resume
+// (`follow_up_resumed_at`), while the batch stays billed to its `acts_as`.
+// The resume then starts each follow-up it can at once
+// (`startResumedAIBatchFollowUps`): a held one, and one whose batch's
+// deadline passed or whose batch reached a final status. The rest start at
+// their deadline, as the tick sees it. A held follow-up that starts after
+// its deadline reads the batch as any follow-up does: the results when the
+// batch completed and OpenRouter still holds them, the same requests at the
+// normal price otherwise. A batch of an automation that has been removed
 // gets no follow-up, including after the automation is switched on again:
 // only batches submitted since the automation's row was made count. Once its
 // deadline has passed, such a batch is marked dropped
-// (`follow_up_dropped_at`), which takes it out of the tick's search; the
-// settle job still bills it.
+// (`follow_up_dropped_at`), which takes it out of the tick's search. A
+// removed automation's held follow-up is canceled with its other runs, and
+// its hold cleared. The settle job still bills every such batch.
 
 import { BATCH_RUN_TRIGGER } from './automation-declaration.ts';
 import type { AutomationJobInput } from './automation-run-command.ts';
@@ -44,6 +61,7 @@ import {
   emitAutomationRunEvent,
   type AutomationRunEnqueuedEvent,
 } from './automation-run-telemetry.ts';
+import { AI_BATCH_FINAL_STATES } from './ai-batches.ts';
 import { insertOrFindAutomationRun } from './automation-runs.ts';
 import type { DBAdapter } from './db.ts';
 import {
@@ -74,15 +92,21 @@ export interface AIBatchFollowUpOptions {
   pageSize?: number;
   // Called after each batch handled.
   onProgress?: () => void;
+  // Only this automation's batches.
+  automationId?: RealmResourceIdentifier;
+  // Also start the follow-up of a batch that reached a final status before
+  // its deadline.
+  startFinished?: boolean;
 }
 
 // What came of one batch whose deadline passed with no follow-up:
 //
 // - `started`: this call made the follow-up's run row and enqueued its job.
 // - `resumed`: the run row was already there, still pending, from a tick that
-//   stopped before recording it on the batch; its job was enqueued again.
-// - `found`: the run row was already there and had started, so nothing was
-//   enqueued.
+//   stopped before recording it on the batch, or held by a pause or a wait
+//   for a key approval; its job was enqueued again.
+// - `found`: the run row was already there and had started or ended, so
+//   nothing was enqueued.
 // - `held`: the automation was paused, or began waiting for a key approval,
 //   or was removed, after the search read the batch; it stays due.
 // - `failed`: starting the follow-up threw. The batch stays due, and the next
@@ -114,21 +138,50 @@ export type AIBatchFollowUpOutcome =
     };
 
 // Starts the follow-up of every batch whose deadline has passed by `now` and
-// that has none, one batch at a time, so one batch's failure doesn't stop the
-// rest.
+// that has none, and enqueues again every held follow-up whose automation is
+// active, one batch at a time, so one batch's failure doesn't stop the rest.
 export async function startDueAIBatchFollowUps(
   dbAdapter: DBAdapter,
   options: AIBatchFollowUpOptions,
 ): Promise<AIBatchFollowUpOutcome[]> {
   let now = options.now ?? Math.floor(Date.now() / 1000);
+  await dropUnreachableFollowUps(dbAdapter, now);
+  return [
+    ...(await startFollowUps(dbAdapter, 'held', now, options)),
+    ...(await startFollowUps(dbAdapter, 'due', now, options)),
+  ];
+}
+
+// Starts what a resume of `automationId` lets start at once: each follow-up
+// the pause held, and the follow-up of each batch whose deadline passed or
+// that reached a final status. Called once the resume has committed; a
+// follow-up this misses (the call fails) is the tick's to start, at the
+// latest at its batch's deadline.
+export async function startResumedAIBatchFollowUps(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+  options: Omit<AIBatchFollowUpOptions, 'automationId' | 'startFinished'>,
+): Promise<AIBatchFollowUpOutcome[]> {
+  return await startDueAIBatchFollowUps(dbAdapter, {
+    ...options,
+    automationId,
+    startFinished: true,
+  });
+}
+
+async function startFollowUps(
+  dbAdapter: DBAdapter,
+  which: 'held' | 'due',
+  now: number,
+  options: AIBatchFollowUpOptions,
+): Promise<AIBatchFollowUpOutcome[]> {
   let pageSize = options.pageSize ?? AI_BATCH_FOLLOW_UP_PAGE_SIZE;
   let outcomes: AIBatchFollowUpOutcome[] = [];
   // The last batch read, by deadline and then id, so a batch that failed
   // isn't read again in the same pass.
   let after: { deadline: string; batchId: string } | undefined;
-  await dropUnreachableFollowUps(dbAdapter, now);
   for (;;) {
-    let due = await dueBatches(dbAdapter, now, pageSize, after);
+    let due = await dueBatches(dbAdapter, which, now, pageSize, after, options);
     for (let batch of due) {
       try {
         outcomes.push(await startFollowUp(dbAdapter, batch, options));
@@ -153,7 +206,11 @@ export async function startDueAIBatchFollowUps(
 interface DueBatch {
   batchId: string;
   runId: string;
+  // Whom the follow-up acts as: the person who resumed the automation since
+  // the batch was submitted, or the submitting run's identity.
   actsAs: string;
+  // Whether a pause or a wait for a key approval holds the follow-up's run.
+  held: boolean;
   realm: RealmIdentifier;
   automationId: RealmResourceIdentifier;
   // ISO 8601.
@@ -164,23 +221,46 @@ interface DueBatch {
   secondsCap: number;
 }
 
-// The batches whose deadline passed by `now` that have no follow-up recorded,
-// of an automation that is switched on, neither paused nor waiting for a key
-// approval, and was switched on before the batch was submitted, earliest
-// deadline first.
+// The batches of an automation that is switched on, neither paused nor
+// waiting for a key approval, and was switched on before the batch was
+// submitted, earliest deadline first: for `due`, those whose deadline passed
+// by `now` (or, with `startFinished`, that reached a final status) and that
+// have no follow-up recorded; for `held`, those whose follow-up is held.
 async function dueBatches(
   dbAdapter: DBAdapter,
+  which: 'held' | 'due',
   now: number,
   limit: number,
   after: { deadline: string; batchId: string } | undefined,
+  { automationId, startFinished }: AIBatchFollowUpOptions,
 ): Promise<DueBatch[]> {
   let nowISO = new Date(now * 1000).toISOString();
   let rows = await query(dbAdapter, [
-    "SELECT b.batch_id, b.run_id, b.acts_as, b.realm, b.automation_id, b.deadline, b.request_count, a.caps_snapshot ->> 'seconds' AS seconds_cap",
+    "SELECT b.batch_id, b.run_id, COALESCE(b.follow_up_acts_as, b.acts_as) AS follow_up_acts_as, b.follow_up_held_at, b.realm, b.automation_id, b.deadline, b.request_count, a.caps_snapshot ->> 'seconds' AS seconds_cap",
     'FROM ai_batches b JOIN automations a ON a.automation_id = b.automation_id',
-    'WHERE b.follow_up_run_id IS NULL AND b.follow_up_dropped_at IS NULL AND b.deadline <=',
-    param(nowISO),
-    '::timestamptz AND',
+    'WHERE',
+    ...((which === 'held'
+      ? ['b.follow_up_held_at IS NOT NULL']
+      : [
+          'b.follow_up_run_id IS NULL AND b.follow_up_dropped_at IS NULL AND (b.deadline <=',
+          param(nowISO),
+          '::timestamptz',
+          ...(startFinished
+            ? [
+                'OR b.state IN (',
+                ...AI_BATCH_FINAL_STATES.flatMap((state, index) => [
+                  ...(index > 0 ? [','] : []),
+                  param(state),
+                ]),
+                ')',
+              ]
+            : []),
+          ')',
+        ]) as Expression),
+    ...((automationId
+      ? ['AND b.automation_id =', param(automationId)]
+      : []) as Expression),
+    'AND',
     ...followUpMayStart(),
     ...(after
       ? [
@@ -197,7 +277,8 @@ async function dueBatches(
   return rows.map((row) => ({
     batchId: String(row.batch_id),
     runId: String(row.run_id),
-    actsAs: String(row.acts_as),
+    actsAs: String(row.follow_up_acts_as),
+    held: row.follow_up_held_at != null,
     realm: row.realm as RealmIdentifier,
     automationId: row.automation_id as RealmResourceIdentifier,
     deadline: new Date(row.deadline as string).toISOString(),
@@ -219,7 +300,9 @@ async function startFollowUp(
     let [mayStart] = await txQuery([
       'SELECT 1 FROM automations a JOIN ai_batches b ON b.automation_id = a.automation_id WHERE b.batch_id =',
       param(batchId),
-      'AND b.follow_up_run_id IS NULL AND',
+      batch.held
+        ? 'AND b.follow_up_held_at IS NOT NULL AND'
+        : 'AND b.follow_up_run_id IS NULL AND',
       ...followUpMayStart(),
       'FOR UPDATE OF a',
     ]);
@@ -242,6 +325,19 @@ async function startFollowUp(
       await recordFollowUp(txQuery, batchId, run.id);
       return { kind: 'found' as const, run };
     }
+    if (!created) {
+      // A run the tick made before it stopped, or one a pause held: it acts
+      // as the follow-up's identity now, and its job is a new one, which
+      // reconcile may enqueue again once more if it is lost.
+      await txQuery([
+        'UPDATE automation_runs SET acts_as =',
+        param(batch.actsAs),
+        ', reconciled_at = NULL WHERE id =',
+        param(run.id),
+        "AND state = 'pending'",
+      ]);
+      run = { ...run, actsAs: batch.actsAs };
+    }
     let job = await enqueueAutomationRunJob(queue, {
       automationId,
       realmURL: ensureTrailingSlash(virtualNetwork.toURLHref(batch.realm)),
@@ -262,6 +358,24 @@ async function startFollowUp(
     return { kind: 'held', batchId, automationId };
   }
   let { run } = started;
+  if (started.kind === 'resumed' && batch.held) {
+    await logRunPlatformLine(
+      dbAdapter,
+      run.id,
+      {
+        kind: 'trigger',
+        level: 'info',
+        message: `The automation is active again, so this held follow-up of batch ${batchId} starts again, acting as ${run.actsAs}`,
+        data: {
+          trigger: BATCH_RUN_TRIGGER,
+          slot: batchId,
+          held: false,
+          actsAs: run.actsAs,
+        },
+      },
+      started.job.id,
+    );
+  }
   if (started.kind !== 'started') {
     return { kind: started.kind, batchId, automationId, runId: run.id };
   }
@@ -314,19 +428,18 @@ export function aiBatchFollowUpInput(
   return { runId, scheduledAt: deadline, dryRun: false, triggerKind: 'batch' };
 }
 
-// Records the batch's follow-up run, which takes the batch out of the tick's
-// search.
+// Records the batch's follow-up run and clears any hold on it, which takes
+// the batch out of the tick's searches.
 async function recordFollowUp(
   querier: Querier,
   batchId: string,
   runId: string,
 ): Promise<void> {
   await querier([
-    'UPDATE ai_batches SET follow_up_run_id =',
+    'UPDATE ai_batches SET follow_up_run_id = COALESCE(follow_up_run_id,',
     param(runId),
-    '::uuid WHERE batch_id =',
+    '::uuid), follow_up_held_at = NULL WHERE batch_id =',
     param(batchId),
-    'AND follow_up_run_id IS NULL',
   ]);
 }
 

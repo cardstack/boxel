@@ -143,6 +143,10 @@ export interface AutomationScriptInput extends JSONTypes.Object {
   // with `realm.resolve.batch` and no `by` of its own may take. A tab given
   // none takes `DEFAULT_BATCH_DEADLINE_MINUTES`.
   batchDeadlineMinutes: number;
+  // The card's `batchedAI`. A Preview's `realm.resolve.batch` sends its
+  // requests at once, at the normal price, only when it is on, as a run's
+  // batch is submitted only then.
+  batchedAI: boolean;
 }
 
 export function isAutomationScriptInput(

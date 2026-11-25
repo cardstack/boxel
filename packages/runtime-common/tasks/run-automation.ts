@@ -40,6 +40,7 @@ import {
   addAutomationRunTabTime,
   finishAutomationRun,
   getAutomationRun,
+  holdAutomationFollowUpRun,
   recordAutomationRunAdmitted,
   recordAutomationRunScript,
   recordAutomationRunVersion,
@@ -366,6 +367,26 @@ async function attemptRun(
     reportAutomationChange: ctx.reportAutomationChange,
   };
   let identity = await admitRunIdentity(admission, run, { kind });
+  if (!identity.ok && identity.hold) {
+    // A batch's follow-up whose automation is paused or waiting for a key
+    // approval is held, never ended: it goes back to pending, and starts
+    // again once its automation is active (ADR 030 §1.5).
+    admitted(identity.reason);
+    let held = await holdAutomationFollowUpRun(dbAdapter, runId, attempt);
+    if (!held) {
+      log.info(`${tag} left alone: another attempt owns the run, or it ended`);
+      return { state: 'left', reason: 'superseded' };
+    }
+    await logRunPlatformLine(dbAdapter, runId, {
+      kind: 'admission',
+      level: 'info',
+      message: `Admission held the run (${identity.reason}): ${identity.message}`,
+      data: { admitted: false, held: true, reason: identity.reason },
+    });
+    await ctx.reportRunChange?.(runId);
+    log.info(`${tag} held: ${identity.message}`);
+    return { state: 'left', reason: 'held' };
+  }
   if (!identity.ok) {
     let refused = await refuse(identity.reason, identity.message);
     // The payer lost access: the automation pauses, which cancels its other
@@ -516,6 +537,7 @@ async function attemptRun(
     secondsCap: remainingMs / 1000,
     endsAt: new Date(deadline).toISOString(),
     batchDeadlineMinutes: declaration.declaration.batchDeadlineMinutes,
+    batchedAI: declaration.declaration.batchedAI,
   };
 
   let outcome: AutomationScriptOutcome;

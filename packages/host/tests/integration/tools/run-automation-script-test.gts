@@ -976,6 +976,122 @@ return 'done';`);
     await assert.rejects(done, /needs an automation run's token/);
   });
 
+  // A Preview of an automation whose card turns on batched AI.
+  function previewWithBatches(
+    code: string,
+    overrides: Partial<AutomationRunOptions> = {},
+  ) {
+    return runWithBatches(code, {
+      automation: { ...CONTEXT, dryRun: true },
+      batchedAI: true,
+      ...overrides,
+    });
+  }
+
+  const PREVIEW_SCRIPT = `
+    const automation = realm.current.automation;
+    if (automation.trigger.kind === 'batch') {
+      const batch = automation.batch;
+      await realm.fs.writeText(
+        'out/labels.json',
+        JSON.stringify(batch.results.map((r) => r.output ? r.output.label : r.error)),
+      );
+      return {
+        followUp: true,
+        label: automation.trigger.label,
+        id: batch.id,
+        late: batch.late,
+        milestone: batch.milestone,
+        deadline: batch.deadline,
+        results: batch.results.map((r) => r.output ? r.output.label : 'failed: ' + r.error),
+      };
+    }
+    await realm.fs.writeText('out/first.txt', 'before the batch');
+    return await realm.resolve.batch(
+      [
+        { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } },
+        { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'broken' } },
+        { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'three' } },
+      ],
+      { milestone: 'classify tickets' },
+    );
+  `;
+
+  test('a Preview submits no batch: it sends the requests at once, at the normal price, and runs the follow-up in the same Preview', async function (assert) {
+    let sent: unknown[] = [];
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let { submitted, events, done } = previewWithBatches(PREVIEW_SCRIPT, {
+      io: {
+        ...tool.automationRealmIO(testRealmURL),
+        resolveBatch: async () => {
+          throw new Error('a Preview never submits a batch');
+        },
+        resolve: async (request) => {
+          sent.push(request.input);
+          let ticket = (request.input as { ticket: string }).ticket;
+          if (ticket === 'broken') {
+            throw new Error('the model refused');
+          }
+          return { output: { label: `label-${ticket}` }, model: 'test/model' };
+        },
+      },
+    });
+    let outcome = await done;
+    let result = JSON.parse(outcome.scriptResult);
+
+    assert.strictEqual(submitted.length, 0, 'no batch is submitted');
+    assert.deepEqual(
+      sent,
+      [{ ticket: 'one' }, { ticket: 'broken' }, { ticket: 'three' }],
+      'each request is sent as realm.resolve sends it',
+    );
+    assert.deepEqual(
+      {
+        followUp: result.followUp,
+        label: result.label,
+        id: result.id,
+        late: result.late,
+        milestone: result.milestone,
+      },
+      {
+        followUp: true,
+        label: 'batch',
+        id: null,
+        late: false,
+        milestone: 'classify tickets',
+      },
+      'the script runs again as the batch’s follow-up',
+    );
+    assert.false(Number.isNaN(Date.parse(result.deadline)));
+    assert.strictEqual(result.results[0], 'label-one');
+    assert.true(
+      /the model refused/.test(result.results[1]),
+      'a failed request keeps its error in its place',
+    );
+    assert.strictEqual(result.results[2], 'label-three');
+    assert.deepEqual(
+      outcome.written.map((url) => url.replace(testRealmURL, '')).sort(),
+      ['out/first.txt', 'out/labels.json'],
+      'the Preview shows what both passes staged',
+    );
+    assert.true(
+      events.some(
+        (event) =>
+          event.kind === 'milestone' && event.name === 'classify tickets',
+      ),
+      'the batch starts its milestone',
+    );
+  });
+
+  test('a Preview of an automation that doesn’t turn on batched AI refuses realm.resolve.batch, as its runs’ batches are refused', async function (assert) {
+    let { submitted, done } = previewWithBatches(PREVIEW_SCRIPT, {
+      batchedAI: false,
+    });
+
+    await assert.rejects(done, /turn on batchedAI/);
+    assert.strictEqual(submitted.length, 0);
+  });
+
   test("the progress sink is flushed before each call the realm server logs, so the run's log keeps one order", async function (assert) {
     let order: string[] = [];
     let { done } = run(
