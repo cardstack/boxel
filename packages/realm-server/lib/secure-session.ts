@@ -19,9 +19,8 @@ import {
   appendRealmToUserAccountData,
   fetchAccountData,
   getMatrixAdminToken,
-  impersonateAsMatrixAdmin,
-  logoutMatrixAccessToken,
   resolveAdminCreds,
+  withImpersonatedUser,
 } from '../synapse.ts';
 import {
   createRealm,
@@ -386,26 +385,9 @@ async function asUser<T>(
   user: string,
   fn: (accessToken: string) => Promise<T>,
 ): Promise<T | undefined> {
-  let admin = adminCreds(deps);
-  let accessToken: string;
-  try {
-    accessToken = await impersonateAsMatrixAdmin({ ...admin, userId: user });
-  } catch (e: any) {
-    if (e?.status === 404 || e?.status === 400) {
-      return undefined;
-    }
-    throw e;
-  }
-  try {
-    return await fn(accessToken);
-  } finally {
-    await logoutMatrixAccessToken({
-      matrixURL: admin.matrixURL,
-      accessToken,
-    }).catch((e: any) =>
-      log.warn(`could not log out a sign-in token: ${e?.message ?? e}`),
-    );
-  }
+  return await withImpersonatedUser(adminCreds(deps), user, fn, (e: any) =>
+    log.warn(`could not log out a sign-in token: ${e?.message ?? e}`),
+  );
 }
 
 // Signs in with a password, checked by the Matrix server's UIA check as

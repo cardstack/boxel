@@ -638,6 +638,38 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await queuedRuns()).length, 1, 'no job is added');
   });
 
+  test("a webhook delivery's lost run is ended, not enqueued again without its payload, even when its card can't be read", async function (assert) {
+    await switchOn();
+    // The card can't be read when reconcile runs, so only the run's slot says
+    // the run is a delivery's.
+    card = { ok: false, message: 'the card failed to index' };
+    let run = await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger: 'deliveries',
+      slot: 'delivery:delivery-lost',
+      actsAs: OWNER,
+    });
+    // Made past the grace, and reconciled before the hourly trigger's first
+    // slot, so the pass has only the lost run to handle.
+    await madeAt(SWITCHED_ON - 5 * 60);
+    let [outcome] = (await reconcile(SWITCHED_ON + 30)).lostRuns;
+    assert.strictEqual(outcome.kind, 'ended');
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, run.id))?.errorReason,
+      JOB_LOST_REASON,
+    );
+    assert.deepEqual(
+      (await queuedRuns()).filter(
+        ({ dedupeKey }) =>
+          dedupeKey ===
+          `automation:${AUTOMATION}:deliveries:delivery:delivery-lost`,
+      ),
+      [],
+      'no job is made again',
+    );
+  });
+
   test('a lost run whose trigger is gone from the card is ended', async function (assert) {
     await switchOn();
     await tick(NOON + 30);

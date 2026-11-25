@@ -59,10 +59,19 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
+// What `keys sign-in` and `keys status` say on a profile signed in with
+// OAuth, which never keeps a secure session.
+const OAUTH_SIGNS_IN_PER_COMMAND =
+  'This profile is signed in with OAuth, so each `boxel keys` command signs in through the browser for that command, and no session is kept.';
+
 export async function keysSignIn(
   options: SignInOptions & SignInDeps = {},
 ): Promise<void> {
   let pm = options.profileManager ?? getProfileManager();
+  if (activeProfile(pm).profile.oauth) {
+    console.log(OAUTH_SIGNS_IN_PER_COMMAND);
+    return;
+  }
   let session = await signInToManageKeys(pm, {
     openBrowserFn: options.openBrowserFn,
     ...(options.timeout ? { timeoutMs: Number(options.timeout) * 1000 } : {}),
@@ -91,7 +100,10 @@ export function keysStatus(
   options: { profileManager?: ProfileManager } = {},
 ): void {
   let pm = options.profileManager ?? getProfileManager();
-  activeProfile(pm);
+  if (activeProfile(pm).profile.oauth) {
+    console.log(OAUTH_SIGNS_IN_PER_COMMAND);
+    return;
+  }
   let session = pm.getSecureSession();
   if (session) {
     console.log(

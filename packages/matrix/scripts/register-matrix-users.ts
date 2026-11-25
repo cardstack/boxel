@@ -200,16 +200,17 @@ async function main() {
     mode === 'all' ? [waitForSynapse(), waitForPostgres()] : [waitForSynapse()],
   );
 
-  // The admin user must exist before we can mint a registration token, so
-  // register it sequentially first. Everything else fans out in parallel.
-  if (mode === 'all') {
-    await registerUser({
-      username: ADMIN_USERNAME,
-      password: ADMIN_PASSWORD,
-      admin: true,
-      label: ADMIN_USERNAME,
-    });
-  }
+  // The admin user is registered in both modes: the realm server drives
+  // Synapse's admin API with it to keep the workspace list of a caller with an
+  // OAuth token, so creating or deleting a workspace with one needs it. It
+  // must also exist before we can mint a registration token, so it is
+  // registered sequentially first. Everything else fans out in parallel.
+  await registerUser({
+    username: ADMIN_USERNAME,
+    password: ADMIN_PASSWORD,
+    admin: true,
+    label: ADMIN_USERNAME,
+  });
 
   const tasks: Promise<unknown>[] = [];
 

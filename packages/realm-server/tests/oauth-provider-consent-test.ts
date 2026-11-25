@@ -8,6 +8,7 @@ import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
   closeServer,
   ensureMatrixAdminUser,
+  insertUser,
   matrixRegistrationSecret,
   matrixURL,
   realmSecretSeed,
@@ -540,6 +541,53 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(decided.status, 404);
       assert.strictEqual(await findConsentDecision(db, uid), undefined);
+    });
+  });
+
+  module('after the secure session changes user', function () {
+    test('the next flow in the same browser shows consent for the new user, and gets their code', async function (assert) {
+      let accounts = await Promise.all(
+        ['first', 'second'].map(async (which) => {
+          let email = `${which}-${randomBytes(4).toString('hex')}@example.test`;
+          let matrixId = await matrixAccount({ email });
+          let { id } = await insertUser(db, matrixId, `cus_${matrixId}`, null);
+          return {
+            email,
+            id,
+            session: await secureSessionAuth(db, matrixId),
+          };
+        }),
+      );
+      let clientId = await register();
+      let browser = supertest.agent(server!);
+
+      for (let { email, session } of accounts) {
+        let uid = await startOAuthFlow(browser, clientId);
+        let shown = await details(uid, { authorization: session });
+        assert.strictEqual(shown.status, 200, shown.text);
+        assert.deepEqual(
+          shown.body.account,
+          { email },
+          `consent names the signed-in user: ${email}`,
+        );
+        let decided = await decide(uid, ALLOW, { authorization: session });
+        assert.strictEqual(decided.status, 201, decided.text);
+        let landed = await landOAuthFlow(browser, uid, decided.body.ticket);
+        assert.ok(landed.searchParams.get('code'), `a code: ${email}`);
+        assert.notOk(
+          landed.href.includes('end_session'),
+          "never the library's logout confirmation",
+        );
+      }
+      let codes = (await db.execute(
+        `SELECT payload->>'accountId' AS account FROM oauth_provider_objects
+           WHERE kind = 'AuthorizationCode' ORDER BY created_at`,
+      )) as { account: string }[];
+      assert.deepEqual(
+        codes.map(({ account }) => account),
+        accounts.map(({ id }) => id),
+        "the second code is the new user's, never the first's",
+      );
     });
   });
 

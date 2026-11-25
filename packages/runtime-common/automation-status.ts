@@ -39,7 +39,6 @@ import {
   utcDayStart,
   utcMonthStart,
 } from './automation-spend.ts';
-import { WEBHOOK_DELIVERIES_START_RUNS } from './automation-webhooks.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
 import { dbAdapterQuerier, param, type Querier } from './expression.ts';
@@ -100,9 +99,6 @@ export interface AutomationRunUsage {
 export type AutomationStatusAttributes =
   | {
       switchedOn: false;
-      // Whether Boxel starts runs from webhook deliveries; the card warns
-      // under each webhook trigger while it is false.
-      webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
       // What `lastRun` used of each per-run cap, or null without a last run.
@@ -110,7 +106,6 @@ export type AutomationStatusAttributes =
     }
   | {
       switchedOn: true;
-      webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
       lastRunUsage: AutomationRunUsage | null;
@@ -338,7 +333,6 @@ export function automationStatusDocument({
       attributes: row
         ? {
             switchedOn: true,
-            webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
             state: row.state,
             pauseReason: row.pauseReason,
             pauseProblems: row.pauseProblems,
@@ -366,7 +360,6 @@ export function automationStatusDocument({
           }
         : {
             switchedOn: false,
-            webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
             lastRun,
             currentRun,
             lastRunUsage,

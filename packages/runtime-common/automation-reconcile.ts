@@ -31,6 +31,13 @@
 //   whose extra job was lost too is ended the same way, as is a scheduled run
 //   whose automation is paused, waiting for key approval or no longer switched on, or whose trigger is
 //   gone from its card.
+//
+//   A webhook delivery's run is ended too, never enqueued again: its
+//   delivery's payload lived only in its job, so a job made again would run
+//   the script without it. Its slot says it is a delivery's
+//   (`isWebhookDeliverySlot`), whatever its card says now. A cron trigger on
+//   the same card is what makes up a delivery that was lost (see
+//   `automation-webhook-runs.ts`).
 // - **A due time that passed with nothing enqueued.** An automation whose
 //   next run is `graceSeconds` or more behind is one the minute tick missed
 //   (the tick was down, or its worker manager just started). Reconcile hands
@@ -76,6 +83,7 @@ import { pauseAfterRepeatedFailures } from './automations.ts';
 import type { DBAdapter } from './db.ts';
 import { param, query, type Querier } from './expression.ts';
 import { enqueueAutomationRunJob } from './jobs/run-command.ts';
+import { isWebhookDeliverySlot } from './automation-run-command.ts';
 import type { MeteredCharges } from './metered-charges.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import type { QueuePublisher } from './queue.ts';
@@ -336,6 +344,12 @@ async function reconcileLostRun(
           : automation.state === 'paused'
             ? 'its automation is paused'
             : 'its automation is waiting for key approval',
+      );
+    }
+    if (scheduled && isWebhookDeliverySlot(run.slot)) {
+      return await end(
+        run,
+        "it is a webhook delivery's run, and the delivery's payload lived only in its job",
       );
     }
     // A card that can't be read still gets its run enqueued: the run's

@@ -47,6 +47,7 @@ import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-rea
 import { getProfileManager, type ProfileManager } from './profile-manager.ts';
 import { resolveRealmNetwork } from './resolve-realm-identifier.ts';
 import { describeFetchError } from './describe-fetch-error.ts';
+import { OAUTH_REFUSALS } from './oauth-refusals.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export type {
@@ -313,6 +314,9 @@ export class BoxelCLIClient {
     command: string,
     commandInput?: Record<string, unknown>,
   ): Promise<RunCommandResult> {
+    if (this.pm.getActiveProfile()?.profile.oauth) {
+      return { status: 'error', error: OAUTH_REFUSALS.runCommand };
+    }
     let url = `${ensureTrailingSlash(realmServerUrl)}_run-command`;
     let body = {
       data: {
@@ -519,8 +523,14 @@ export class BoxelCLIClient {
    * Prefer `authedServerFetch` for server endpoints called from JS — it handles
    * the per-request 401 retries this getter cannot, and so keeps the shorter
    * lifetime.
+   *
+   * Throws on a profile signed in with OAuth, which has no realm-server JWT
+   * to give: its token can't spend AI credits.
    */
   async getServerToken(): Promise<string> {
+    if (this.pm.getActiveProfile()?.profile.oauth) {
+      throw new Error(OAUTH_REFUSALS.serverToken);
+    }
     return this.pm.mintExtendedServerToken();
   }
 

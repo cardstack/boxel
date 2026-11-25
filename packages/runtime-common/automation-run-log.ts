@@ -1,5 +1,6 @@
 // An automation run's log (ADR 025 §1.1): the script's console lines,
-// activity lines, run milestones and tasks and uncaught error, beside the platform's
+// activity lines, run milestones and tasks, the tally of its transforms and
+// its uncaught error, beside the platform's
 // own lines for what the realm server did on the run's behalf. Each line is
 // stored in `automation_run_log` for the console, and written once to the
 // realm server's own log as an `[automation-run-log]` line, which reaches
@@ -58,6 +59,8 @@ export const RUN_LOG_SCRIPT_KINDS = [
   // A count inside a milestone, from a tab whose host still sends one. The
   // log keeps the line; no milestone records it.
   'count',
+  // What the run's realm.transform calls came to, one line per run.
+  'transform',
   'error',
 ] as const;
 
@@ -582,6 +585,15 @@ export function scriptRunLogLines(
   return { ok: true, lines };
 }
 
+// A transform line's counts, each a whole number of 0 or more.
+const TRANSFORM_TALLY_FIELDS = [
+  'calls',
+  'failed',
+  'ms',
+  'inBytes',
+  'outBytes',
+] as const;
+
 // The furthest from the epoch a `Date` reaches, in ms.
 const MAX_DATE_MS = 8.64e15;
 const MAX_SCRIPT_LINE = 2 ** 31 - 1;
@@ -671,6 +683,25 @@ function scriptLine(event: unknown): RunLogLine | undefined {
         kind: 'count',
         message: total === undefined ? `${done}` : `${done} of ${total}`,
         data: { done, ...(total !== undefined ? { total } : {}) },
+      };
+    }
+    case 'transform': {
+      let tally = TRANSFORM_TALLY_FIELDS.map((name) => e[name]);
+      if (
+        !tally.every(
+          (value) =>
+            typeof value === 'number' && Number.isInteger(value) && value >= 0,
+        )
+      ) {
+        return undefined;
+      }
+      let [calls, failed, ms, inBytes, outBytes] = tally as number[];
+      return {
+        at,
+        source: 'script',
+        kind: 'transform',
+        message: `Transforms: ${calls} call${calls === 1 ? '' : 's'}, ${failed} failed, ${ms} ms`,
+        data: { calls, failed, ms, inBytes, outBytes },
       };
     }
     case 'console': {
