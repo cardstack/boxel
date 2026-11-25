@@ -122,6 +122,10 @@ export function buildBoxelProgram(version: string): Command {
       'Sign in with a username and password in the terminal instead of opening a browser (for add command)',
     )
     .option(
+      '--oauth',
+      'Sign in through the browser with OAuth: a token limited to the Boxel API that ends within 30 days, instead of your Matrix session (for add command)',
+    )
+    .option(
       '--host-url <url>',
       "Sign in on this origin's /cli-auth page instead of the realm server's secure origin (for add command)",
     )
@@ -151,6 +155,13 @@ Sign-in (for 'add'):
   --no-browser to sign in with a username and password in the terminal
   instead. Supplying -u with a password (or BOXEL_PASSWORD) stays fully
   non-interactive and never opens a browser, which is the path to use in CI.
+
+  --oauth signs in with OAuth instead. The profile keeps a token limited to
+  the Boxel API, which ends within 30 days and shows on Connected apps, and
+  no Matrix session. The terminal prints a confirmation code; check that the
+  browser shows the same one before you allow Boxel CLI. It works only where
+  the realm server offers OAuth sign-in, and can't be combined with
+  --no-browser, -u, -p or --host-url.
 
 Environment (for 'add'):
   Defaults to production. Pass --staging or --local for another environment

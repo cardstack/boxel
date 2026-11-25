@@ -197,6 +197,12 @@ export default class InteractSubmode extends Component {
     // point of the shortcut: flip in/out of edit without first having
     // to click somewhere else. Modals still own the keyboard, though.
     if (document.body.classList.contains('has-modal')) return;
+    // Nor does it change a card hidden behind the workspace chooser. The
+    // shortcut is still the app's, so the browser doesn't act on it either.
+    if (this.operatorModeStateService.workspaceChooserOpened) {
+      event.preventDefault();
+      return;
+    }
     let item = this.mostRecentlyInteractedStackItem;
     // Files have no edit format; nothing to toggle.
     if (!item || item.type === 'file') return;

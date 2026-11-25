@@ -223,6 +223,13 @@ export interface StartTestRealmServerOptions {
    * Serve a secure origin at this URL, for tests that sign in on it.
    */
   secureOriginURL?: URL;
+  /**
+   * Turn on the realm server's OAuth provider with this configuration (the
+   * realm-server tests' `testOAuthProviderConfig()`). Needs `secureOriginURL`.
+   */
+  oauthProvider?: Parameters<
+    typeof runTestRealmServerWithRealms
+  >[0]['oauthProvider'];
 }
 
 export async function startTestRealmServer(
@@ -353,6 +360,14 @@ async function bootTestRealmServer(
     prerenderer: options.prerenderer ?? noopPrerenderer,
     ...(options.secureOriginURL
       ? { secureOriginURL: options.secureOriginURL }
+      : {}),
+    ...(options.oauthProvider
+      ? {
+          oauthProvider: options.oauthProvider,
+          // The provider limits requests by the caller's address, which a
+          // server takes from the connection when it trusts no proxy.
+          clientAddress: { trustedProxyHops: 0, infraAddresses: [] },
+        }
       : {}),
   };
   let result = await timePhase('boot-realm-server', () =>

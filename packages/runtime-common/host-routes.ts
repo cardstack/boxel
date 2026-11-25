@@ -431,9 +431,14 @@ export type HostRouteTypeReads = ReadonlyMap<
   HostRouteTypeInfo | 'unavailable' | 'transient' | undefined
 >;
 
+// How long a server asks a client to wait before it asks again for what it
+// answers 503 because a realm's host routes can't be read or served yet, in
+// seconds (`Retry-After`).
+export const HOST_ROUTES_RETRY_AFTER_SECONDS = '30';
+
 // Thrown by a read of a realm's host routes when the index can't be read.
-// The read may pass when tried again, so a server answers 503 rather than
-// a page without routes.
+// The read may pass when tried again, so a server answers 503 with
+// `Retry-After` rather than a page or a tree without routes.
 export class HostRoutesReadError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);

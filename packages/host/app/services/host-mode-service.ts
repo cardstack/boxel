@@ -15,6 +15,7 @@ import {
   normalizeRoutingPath,
   resolveHostRoute,
   resolveRedirectTarget,
+  rri,
   sanitizeHeadHTML,
   type HostRoute,
   type HostRoutingRule,
@@ -47,8 +48,8 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SessionService from '@cardstack/host/services/session';
 
 // The routing realm's validated routes, the whole tree, as the realm server
-// injects them next to the fixed routing map, for a realm with dynamic
-// routes. `realmURL` is the URL the realm is served at, ending with `/`.
+// injects them next to the fixed routing map, for a realm with any routes.
+// `realmURL` is the URL the realm is served at, ending with `/`.
 export interface HostDynamicRoutes {
   realmURL: string;
   routes: readonly HostRoute[];
@@ -62,6 +63,22 @@ export type DynamicRoutedPath =
   | { kind: 'card'; cardHref: string }
   | { kind: 'redirect'; redirectTo: string }
   | { kind: 'error'; error: unknown };
+
+// A path as a followed link and the index route compare it: canonical, with
+// its percent-escapes decoded. A link's path is the browser's percent-encoded
+// form, and the router may give its own path in either form, so a path with
+// a non-ASCII or escaped character compares the same both ways. An escape
+// that decodes to a reserved character, such as `%2F`, stays as it is.
+function comparablePath(path: string): string {
+  let pathname = path.startsWith('/') ? path : `/${path}`;
+  let decoded = pathname;
+  try {
+    decoded = decodeURI(pathname);
+  } catch {
+    // A malformed escape: compared as it is.
+  }
+  return normalizeRoutingPath(decoded);
+}
 
 function parsesAsURL(value: string): boolean {
   try {
@@ -96,6 +113,13 @@ export default class HostModeService extends Service {
     | { path: string; result: DynamicRoutedPath }
     | undefined;
 
+  // The card a link the visitor followed is known to open, by canonical
+  // path: the link was made for that card, or the link's path was resolved
+  // before the navigation began. The index route's next decision for that
+  // path uses it and runs no lookup. It is dropped when that decision is
+  // made, and when the navigation ends without one.
+  private followedLink: { path: string; result: DynamicRoutedPath } | undefined;
+
   // How many routing decisions this app has made. The serve rule the server
   // adds for a dynamically routed page it served counts only for the first
   // one: the render of that page.
@@ -122,6 +146,7 @@ export default class HostModeService extends Service {
     this.headTemplateContainsTitle = false;
     this.publishDialogRealm = undefined;
     this.currentDynamicRoutedPath = undefined;
+    this.followedLink = undefined;
     this.routingDecisions = 0;
     // A Publish still opening its workspace doesn't carry into the next
     // session.
@@ -249,8 +274,96 @@ export default class HostModeService extends Service {
   // only.
   resolveRoutedPath(path: string): HostRoutingRule | null {
     this.routingDecisions++;
+    return this.fixedRoutingRule(path);
+  }
+
+  // The fixed rule for `path`, as `resolveRoutedPath` returns it, without
+  // counting as a routing decision: for code that asks where a link leads
+  // before anything navigates.
+  fixedRoutingRule(path: string): HostRoutingRule | null {
     let rule = this.findRoutingRule(path);
     return rule && !this.isBootstrapRoutingRule(rule) ? rule : null;
+  }
+
+  // The URL of the site this page belongs to, ending with `/`: every page
+  // of the site has a URL under it. A site is one published realm, served
+  // at the realm's own URL, so this is the realm's URL: the one the server
+  // put in the page's config with the dynamic routes, or else the URL of
+  // the realm the page's card is in. `undefined` outside host mode and
+  // while neither is known.
+  //
+  // This getter and `sitePath` are the only code that says which URLs are
+  // inside the site.
+  //
+  // When Host Mode v2 lands, return the host URL the page is served on, in
+  // both branches below. Until then a site is served at its realm's URL, so
+  // this returns the realm's URL.
+  get siteURL(): string | undefined {
+    if (!this.isActive) {
+      return undefined;
+    }
+    let fromConfig = this.hostDynamicRoutes?.realmURL;
+    if (fromConfig) {
+      return fromConfig;
+    }
+    let primaryCard = this.hostModeStateService.primaryCard;
+    let realm = primaryCard ? this.realm.realmOf(rri(primaryCard)) : undefined;
+    if (!realm) {
+      return undefined;
+    }
+    try {
+      return ensureTrailingSlash(this.network.virtualNetwork.toURL(realm).href);
+    } catch {
+      return undefined;
+    }
+  }
+
+  // The path the index route takes (`resolveRoutedPath`'s `path`, with no
+  // leading slash) for a URL inside this site, or `undefined` for a URL
+  // outside it. The query string and the fragment are not part of it.
+  //
+  // When Host Mode v2 lands, check that the link is under the host URL the
+  // page is served on, and take its path relative to that host URL. Until
+  // then a site is served at its realm's URL, so this checks the link
+  // against the realm's URL.
+  sitePath(url: URL): string | undefined {
+    let siteURL = this.siteURL;
+    let origin = this.hostModeOrigin;
+    if (!siteURL || !origin || !parsesAsURL(`${origin}/`)) {
+      return undefined;
+    }
+    let site = new URL(siteURL);
+    let base = new URL(`${origin}/`);
+    if (
+      url.origin !== site.origin ||
+      site.origin !== base.origin ||
+      !site.pathname.startsWith(base.pathname)
+    ) {
+      return undefined;
+    }
+    if (
+      !url.pathname.startsWith(site.pathname) &&
+      `${url.pathname}/` !== site.pathname
+    ) {
+      return undefined;
+    }
+    return url.pathname.slice(base.pathname.length);
+  }
+
+  // Tells the index route which card the path of a link the visitor is
+  // about to follow opens, so its decision for that path runs no lookup.
+  // The caller calls the returned function when the navigation ends.
+  followLink(path: string, cardHref: string): () => void {
+    let followed = {
+      path: comparablePath(path),
+      result: { kind: 'card' as const, cardHref },
+    };
+    this.followedLink = followed;
+    return () => {
+      if (this.followedLink === followed) {
+        this.followedLink = undefined;
+      }
+    };
   }
 
   private findRoutingRule(path: string): HostRoutingRule | undefined {
@@ -312,6 +425,10 @@ export default class HostModeService extends Service {
   // the realm URL's pathname taken relative to `hostModeOrigin`, the base
   // the index route resolves a card URL against. Undefined when there are
   // no dynamic routes, or the realm is not under that origin.
+  //
+  // When Host Mode v2 lands, take the mount pathname from the host URL the
+  // page is served on. Until then a site is served at its realm's URL, so
+  // the mount pathname comes from the realm's URL.
   private get dynamicRoutesMount():
     | {
         dynamicRoutes: HostDynamicRoutes;
@@ -341,6 +458,7 @@ export default class HostModeService extends Service {
   // for every routing decision it acts on, and never for a transition that
   // was aborted, so the entry is always the page the visitor is on.
   rememberDynamicRoutedPath(path: string, result?: DynamicRoutedPath) {
+    this.followedLink = undefined;
     let pathname = path.startsWith('/') ? path : `/${path}`;
     this.currentDynamicRoutedPath =
       result?.kind === 'card'
@@ -367,11 +485,14 @@ export default class HostModeService extends Service {
     if (!mount || mount.dynamicRoutes.routes.length === 0) {
       return undefined;
     }
-    let { dynamicRoutes, realmURL, mountPathname } = mount;
     let pathname = path.startsWith('/') ? path : `/${path}`;
     let canonical = normalizeRoutingPath(pathname);
     if (this.currentDynamicRoutedPath?.path === canonical) {
       return this.currentDynamicRoutedPath.result;
+    }
+    // A link the visitor followed, whose card is already known.
+    if (this.followedLink?.path === comparablePath(pathname)) {
+      return this.followedLink.result;
     }
     // The page the server served: its first render keeps the card the
     // server resolved, so the prerendered page is not replaced.
@@ -385,6 +506,22 @@ export default class HostModeService extends Service {
         return { kind: 'card', cardHref: rule.id };
       }
     }
+    return await this.lookUpDynamicRoutedPath(path);
+  }
+
+  // Resolves a path through the realm's dynamic routes with lookups that
+  // run now, whatever the app holds for the path. This is what
+  // `resolveDynamicRoutedPath` runs for a path it holds nothing for. It is
+  // also for code that asks where a link leads before anything navigates.
+  async lookUpDynamicRoutedPath(
+    path: string,
+  ): Promise<DynamicRoutedPath | undefined> {
+    let mount = this.dynamicRoutesMount;
+    if (!mount || mount.dynamicRoutes.routes.length === 0) {
+      return undefined;
+    }
+    let { dynamicRoutes, realmURL, mountPathname } = mount;
+    let pathname = path.startsWith('/') ? path : `/${path}`;
     let realmRoot = mountPathname.replace(/\/$/, '');
     if (pathname !== realmRoot && !pathname.startsWith(mountPathname)) {
       return undefined;

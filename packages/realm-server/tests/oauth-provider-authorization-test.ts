@@ -610,6 +610,13 @@ module(basename(import.meta.filename), function () {
           'client-not-allowed',
         ],
         [
+          // Refused whole: the client gets neither, not just the one it may use.
+          'two resources, one of which the client may not use',
+          { resource: [MCP, OWN_APPS], scope: 'boxel:read test:own' },
+          'invalid_target',
+          'client-not-allowed',
+        ],
+        [
           // The Boxel API, identified by the issuer itself, takes only the
           // clients Boxel registers in code (ADR 021 §1.4).
           'the Boxel API, for a client that registered itself',

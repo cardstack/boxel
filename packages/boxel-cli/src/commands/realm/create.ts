@@ -107,6 +107,11 @@ export async function createRealm(
         realmServerUrl,
         realmName,
       );
+      // On an OAuth profile the realm server has already re-linked one of
+      // the caller's own realms to its workspace list.
+      if (pm.serverKeepsWorkspaceList()) {
+        return { realmUrl, created: false };
+      }
       let realmToken = await fetchRealmToken(pm, realmUrl);
 
       try {
@@ -130,6 +135,17 @@ export async function createRealm(
   }
   let realmUrl = ensureTrailingSlash(rawRealmUrl);
 
+  // An OAuth profile has no per-realm token (its access token reaches every
+  // realm), and the realm server added the realm to its workspace list.
+  if (pm.serverKeepsWorkspaceList()) {
+    if (options.waitForReady) {
+      await waitForRealmReady(realmUrl, (url, init) =>
+        pm.authedRealmFetch(url, init),
+      );
+    }
+    return { realmUrl, created: true };
+  }
+
   let realmToken = await fetchRealmToken(pm, realmUrl);
 
   try {
@@ -139,7 +155,11 @@ export async function createRealm(
   }
 
   if (options.waitForReady && realmToken) {
-    await waitForRealmReady(realmUrl, realmToken);
+    await waitForRealmReady(realmUrl, (url, init) => {
+      let headers = new Headers(init.headers);
+      headers.set('Authorization', realmToken);
+      return fetch(url, { ...init, headers });
+    });
   }
 
   return {
@@ -163,7 +183,7 @@ async function fetchRealmToken(
 
 async function waitForRealmReady(
   realmUrl: string,
-  authorization: string,
+  authedFetch: (url: string, init: RequestInit) => Promise<Response>,
 ): Promise<void> {
   let readinessUrl = new URL('_readiness-check', realmUrl).href;
   let timeoutMs = 15_000;
@@ -173,11 +193,8 @@ async function waitForRealmReady(
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      let response = await fetch(readinessUrl, {
-        headers: {
-          Accept: 'application/vnd.api+json',
-          Authorization: authorization,
-        },
+      let response = await authedFetch(readinessUrl, {
+        headers: { Accept: 'application/vnd.api+json' },
       });
 
       if (response.ok) {

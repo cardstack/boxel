@@ -37,6 +37,42 @@ new keys. A deployed server takes both variables from its task definition in
 the infra repo. The realm server logs `OAuth provider on: issuer <url>,
 resources <ids>` at start when it is on: no such line means it is off.
 
+### Turning it on in an environment
+
+In `cardstack/infra`, `configs/boxel-realm-server/base/main.tf` lists
+`BOXEL_OAUTH_PROVIDER_ENABLED` among the realm server's `feature_flags`: a
+Parameter Store value at `/<env>/boxel/BOXEL_OAUTH_PROVIDER_ENABLED`, seeded
+`false`, that an apply never overwrites. `BOXEL_OAUTH_CONFIG` reaches only an
+environment whose own `main.tf` names it in `additional_ecs_secrets`, read from
+`/<env>/boxel/BOXEL_OAUTH_CONFIG`.
+
+1. Make the environment's keys and store them, in one pipe, so they never
+   land in a file, the terminal or shell history:
+
+   ```sh
+   node packages/realm-server/scripts/oauth-provider-dev-config.ts --new --kid <env>-<yyyy-mm> |
+     aws ssm put-parameter --name /<env>/boxel/BOXEL_OAUTH_CONFIG \
+       --type SecureString --value file:///dev/stdin
+   ```
+
+   Use the default `aws/ssm` key (no `--key-id`): the task's execution role
+   reads the realm server's other secrets the same way. Add `--overwrite`
+   only when replacing keys, and read Rotating keys first.
+
+2. Apply the environment's realm-server config, if it doesn't name the
+   parameter yet. Its plan fails until step 1 is done.
+3. Write `true` to `/<env>/boxel/BOXEL_OAUTH_PROVIDER_ENABLED` and force a new
+   deployment of `boxel-realm-server-<env>`. A task reads its environment
+   only when it starts.
+4. Check: the `OAuth provider on:` line at start, and
+   `/.well-known/oauth-authorization-server` and
+   `/.well-known/oauth-protected-resource/mcp` on the realm server's origin
+   answering 200.
+
+Turning it off is writing `false` and redeploying. The rows stay; nothing
+reads them while it is off, and every live grant works again when it comes
+back on, unless it expired meanwhile.
+
 The issuer is the realm server's own origin. Every route answers only on the
 issuer's host; the same path on a published site's host goes on to realm
 routing.
@@ -330,7 +366,13 @@ is signed (tokens are opaque) and the library's key route isn't served, so
 no app ever sees it: it is set only so the library doesn't fall back to the
 development keys it ships. Replace it in one deploy with a new key (an RSA
 private JWK with `kid`, `use: "sig"`, `alg: "RS256"`, as
-`scripts/oauth-provider-dev-config.ts` makes).
+`scripts/oauth-provider-dev-config.ts --new` makes).
+
+Both live in the one `BOXEL_OAUTH_CONFIG` value, so a step above is: write the
+whole new value to the environment's parameter, then force a new deployment.
+To edit the list of `cookieKeys` without the keys ever being shown, read the
+parameter with decryption and pipe it through `jq` back into
+`put-parameter --overwrite --value file:///dev/stdin`.
 
 ## Tests
 

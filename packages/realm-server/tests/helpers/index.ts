@@ -1873,6 +1873,7 @@ export async function runTestRealmServer({
   cardDocumentCache,
   published,
   history,
+  matrixAdmin,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1901,6 +1902,8 @@ export async function runTestRealmServer({
   // read path reads it off the realm, and the search fan-out reads it off the
   // server, so a test that sets it gets the setting on both legs.
   linkShapePolicy?: LinkShapePolicy;
+  // The Synapse admin account the server uses; omit for the local default.
+  matrixAdmin?: { username: string; password: string };
   // Gives the server a secure origin (see `lib/secure-origin.ts`).
   secureOriginURL?: URL;
   googleSignIn?: ConstructorParameters<typeof RealmServer>[0]['googleSignIn'];
@@ -2065,6 +2068,12 @@ export async function runTestRealmServer({
     ...(oauthTokenLimit ? { oauthTokenLimit } : {}),
     ...(secureOriginAppOrigins ? { secureOriginAppOrigins } : {}),
     ...(clientAddress ? { clientAddress } : {}),
+    ...(matrixAdmin
+      ? {
+          matrixAdminUsername: matrixAdmin.username,
+          matrixAdminPassword: matrixAdmin.password,
+        }
+      : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(realmURL.port)),
@@ -2116,6 +2125,7 @@ export async function runTestRealmServerWithRealms({
   clientAddress,
   secureOriginURL,
   googleSignIn,
+  oauthProvider,
 }: {
   realmsRootPath: string;
   realms: {
@@ -2152,6 +2162,9 @@ export async function runTestRealmServerWithRealms({
   clientAddress?: ConstructorParameters<typeof RealmServer>[0]['clientAddress'];
   // Where the server's secure origin is, for a test that signs in on it.
   secureOriginURL?: URL;
+  // Turns on the OAuth provider (see `lib/oauth-provider/`); needs
+  // `secureOriginURL` and `clientAddress` too.
+  oauthProvider?: ConstructorParameters<typeof RealmServer>[0]['oauthProvider'];
   googleSignIn?: ConstructorParameters<typeof RealmServer>[0]['googleSignIn'];
 }) {
   stripTlsEnvVars();
@@ -2207,6 +2220,20 @@ export async function runTestRealmServerWithRealms({
       enableFileWatcher,
       definitionLookup,
       mediaCacheAdapter,
+      // Each realm is one of the Boxel API's controllers whenever the server
+      // runs the OAuth provider, as in production.
+      ...(oauthProvider
+        ? {
+            oauth: boxelApiForRealms(
+              boxelApi(dbAdapter, {
+                issuer: oauthIssuer(realmConfig.realmURL.origin),
+                registry: buildRegistry(
+                  oauthIssuer(realmConfig.realmURL.origin),
+                ),
+              }),
+            ),
+          }
+        : {}),
       // Every realm this server serves, reached as the production server
       // reaches them: found without being mounted.
       realmFor: async (url) =>
@@ -2275,6 +2302,7 @@ export async function runTestRealmServerWithRealms({
     ...(clientAddress ? { clientAddress } : {}),
     ...(secureOriginURL ? { secureOriginURL } : {}),
     ...(googleSignIn ? { googleSignIn } : {}),
+    ...(oauthProvider ? { oauthProvider } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),
