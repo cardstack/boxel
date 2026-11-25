@@ -39,8 +39,8 @@ import {
   sendResponseForBadRequest,
   sendResponseForSystemError,
   setContextResponse,
+  requestUser,
 } from '../middleware/index.ts';
-import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 const log = logger('realm-server');
 
@@ -334,8 +334,8 @@ export default function handleCreateRealmRequest(
   sendEvent: SendEvent,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token) {
+    let user = requestUser(ctxt);
+    if (!user) {
       await sendResponseForSystemError(
         ctxt,
         'token is required to create realm',
@@ -343,7 +343,7 @@ export default function handleCreateRealmRequest(
       return;
     }
 
-    let { user: ownerUserId } = token;
+    let ownerUserId = user;
     let request = await fetchRequestFromContext(ctxt);
     let body = await request.text();
     let json: Record<string, any>;

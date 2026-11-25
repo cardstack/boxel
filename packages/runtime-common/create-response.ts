@@ -72,9 +72,11 @@ export function createResponse({
       // CORS-safelisted and survives regardless; it is named alongside the
       // pair so the range trio reads as one unit. Content-Disposition carries
       // a served capture's save-as filename, which a host download control
-      // reads off a cross-origin capture response.
+      // reads off a cross-origin capture response. WWW-Authenticate carries an
+      // OAuth refusal's challenge (RFC 6750 §3), which names the resource's
+      // metadata and the scopes a client should ask for.
       'Access-Control-Expose-Headers':
-        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length,Content-Disposition',
+        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length,Content-Disposition,WWW-Authenticate',
     },
   });
 }

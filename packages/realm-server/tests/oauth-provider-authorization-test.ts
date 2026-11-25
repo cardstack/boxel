@@ -610,6 +610,14 @@ module(basename(import.meta.filename), function () {
           'client-not-allowed',
         ],
         [
+          // The Boxel API, identified by the issuer itself, takes only the
+          // clients Boxel registers in code (ADR 021 §1.4).
+          'the Boxel API, for a client that registered itself',
+          { resource: ISSUER, scope: 'boxel:read' },
+          'invalid_target',
+          'client-not-allowed',
+        ],
+        [
           'a scope the named resource does not offer',
           { scope: 'boxel:read test:a' },
           'invalid_scope',

@@ -55,8 +55,9 @@ export type RunProgressEvent =
   | { kind: 'plan'; at: number; milestones: string[] }
   // the milestone the script has reached
   | { kind: 'milestone'; at: number; name: string }
-  // how far through the current milestone: `done` of `total`
-  | { kind: 'count'; at: number; done: number; total?: number }
+  // a notable task the script did inside the current milestone, in a few
+  // plain words
+  | { kind: 'task'; at: number; text: string }
   // `line` is the script's own line number, when QuickJS reports one
   | {
       kind: 'console';
@@ -64,6 +65,18 @@ export type RunProgressEvent =
       level: ConsoleLevel;
       message: string;
       line?: number;
+    }
+  // what the run's realm.transform calls came to, reported once as the run
+  // settles: the calls the script made, those that failed, the time their
+  // programs ran, and the bytes sent in and answered
+  | {
+      kind: 'transform';
+      at: number;
+      calls: number;
+      failed: number;
+      ms: number;
+      inBytes: number;
+      outBytes: number;
     }
   // the error the run ended with: an uncaught error from the script, with
   // its script line and its stack in the script's lines, or the time limit

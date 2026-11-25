@@ -13,6 +13,7 @@
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import { GRANT_STATE_COLUMNS, grantUsable, type GrantState } from './grants.ts';
 import { asRecord, sha256Hex } from './objects.ts';
+import type { OAuthCaller } from '@cardstack/runtime-common/oauth-route-admission';
 
 const log = logger('boxel:oauth-provider');
 
@@ -20,22 +21,11 @@ const log = logger('boxel:oauth-provider');
 // token doesn't become a write on every request.
 export const LAST_USED_INTERVAL_SECONDS = 5 * 60;
 
-// Who a valid OAuth access token speaks for, and nothing taken from the
-// request (§1.5). It never carries `secureSession` (§1.6), and it is never
-// turned into a session token's claims: those reach `isSessionRevoked`,
-// which would compare the grant against the user's session revocations.
-export interface OAuthCaller {
-  // The user's Matrix ID, the user a session token names.
-  user: string;
-  // The user's internal ID (`users.id`).
-  userId: string;
-  grantId: string;
-  clientId: string;
-  // The token's scopes that its grant still approves for the resource.
-  scopes: readonly string[];
-  // When the grant was created (its consent), in epoch seconds.
-  grantCreatedAt: number;
-}
+// Who a valid OAuth access token speaks for (`OAuthCaller`) is declared in
+// runtime-common, since a realm is a controller too. It is never turned into a
+// session token's claims: those reach `isSessionRevoked`, which would compare
+// the grant against the user's session revocations.
+export type { OAuthCaller } from '@cardstack/runtime-common/oauth-route-admission';
 
 // Why a token was refused. It goes to telemetry, never into a response.
 export type OAuthLookupRefusal =

@@ -23,8 +23,8 @@ import {
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
   setContextResponse,
+  requestUser,
 } from '../middleware/index.ts';
-import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 
 // The stage of a publish a realm is currently in. `index` and `render` are the
@@ -66,15 +66,15 @@ export default function handlePublishProgress({
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
-      let token = ctxt.state.token as RealmServerTokenClaim;
-      if (!token) {
+      let user = requestUser(ctxt);
+      if (!user) {
         await sendResponseForSystemError(
           ctxt,
           'token is required to read publish progress',
         );
         return;
       }
-      let { user: ownerUserId } = token;
+      let ownerUserId = user;
 
       let publishedRealmURLParam = ctxt.query.published_realm_url as
         | string

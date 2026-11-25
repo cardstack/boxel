@@ -34,8 +34,21 @@ import {
   type Stats,
   type Diagnostics,
   type SearchIndexEntry,
+  internalKeyFor,
+  type ResolvedCodeRef,
 } from './index.ts';
-import { moduleFrom } from './code-ref.ts';
+import {
+  hostRouteTypeInfo,
+  hostRouteTypeRefs,
+  readRawHostRoutingRules,
+  realmConfigCardURL,
+  typeLookupKey,
+  type HostRouteTypeInfo,
+  type HostRouteTypeReads,
+  type RawHostRoutingRule,
+} from './host-routes.ts';
+import { canonicalURL } from './index-runner/dependency-url.ts';
+import { moduleFrom, type CodeRef } from './code-ref.ts';
 import { baseRRI } from './constants.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
@@ -44,6 +57,7 @@ import {
   CardError,
   coerceErrorMessage,
   isCardError,
+  isTransientRenderError,
   isVisitRequestFailure,
   serializableError,
   stringifyErrorForLog,
@@ -269,6 +283,9 @@ export class IndexRunner {
   // as missing re-reads it while the realm's record says it just created the
   // file, and a file the realm has removed is visited as gone at once.
   #visitRereads: WrittenFileRereads | undefined;
+  // The search document of the realm.json this pass staged, when it staged
+  // one: the routing rules the pass's commit publishes.
+  #stagedRealmConfigSearchDoc: Record<string, unknown> | undefined;
 
   constructor({
     realmURL,
@@ -528,6 +545,7 @@ export class IndexRunner {
       let finalizeStart = Date.now();
       let { totalIndexEntries, ...commit } = await current.batch.done({
         fullRealm: true,
+        readHostRouteTypes: () => current.#readHostRouteTypes(true),
         validation: current.#commitValidation(
           new Set(discoverResult.deletedUrls),
           {
@@ -801,6 +819,7 @@ export class IndexRunner {
 
       let finalizeStart = Date.now();
       let { totalIndexEntries, ...commit } = await current.batch.done({
+        readHostRouteTypes: () => current.#readHostRouteTypes(false),
         validation: current.#commitValidation(
           new Set(
             [...operations]
@@ -1662,8 +1681,190 @@ export class IndexRunner {
   // (and its neighbors, coalesced into a multi-row upsert) drains. The batch
   // times the physical writes; the job result reads `batch.writeMs`.
   async #writeEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
+    // The RealmConfig card is written under its file's URL (realm.json) or
+    // its card URL, depending on the visit.
+    if (
+      entry.type === 'instance' &&
+      (url.href === realmConfigHrefFor(this.#realmURL) ||
+        url.href === realmConfigCardURL(this.#realmURL).href)
+    ) {
+      this.#stagedRealmConfigSearchDoc = entry.searchData;
+    }
     await this.batch.bufferEntry(url, entry);
   }
+
+  // The definitions of the types the realm's field-match routes name, which
+  // the commit validates the routes with and stores the validated tree with
+  // (`Batch.done`), so no reader of the routes reads a type when a request
+  // comes. Read through the definitions cache, which renders a module it
+  // doesn't hold; the index renders the realm's modules anyway. The rules
+  // are those this pass leaves: the realm.json it staged, else the one the
+  // index holds. A type that can't be read is `'unavailable'`, and its route
+  // is dropped with a warning; a read that failed for a reason that may
+  // pass is `'transient'` (see `Batch.done`).
+  //
+  // An incremental pass that changed neither realm.json nor any module
+  // reads nothing, and resolves to undefined: the commit keeps the stored
+  // tree. Every card save is such a pass. A module change may change a
+  // route type's fields, so it reads them all.
+  async #readHostRouteTypes(
+    fullRealm: boolean,
+  ): Promise<HostRouteTypeReads | undefined> {
+    let invalidations = this.batch.invalidations;
+    let realmConfigHrefs = new Set([
+      realmConfigHrefFor(this.#realmURL),
+      realmConfigCardURL(this.#realmURL).href,
+    ]);
+    if (
+      !fullRealm &&
+      !invalidations.some((href) => realmConfigHrefs.has(href)) &&
+      !passInvalidatesExecutables(invalidations)
+    ) {
+      return undefined;
+    }
+    let rules: RawHostRoutingRule[];
+    try {
+      rules = readRawHostRoutingRules(
+        this.#stagedRealmConfigSearchDoc ??
+          (await this.batch.realmConfigSearchDoc()),
+      );
+    } catch (e) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} could not read the host routing rules of ${this.#realmURL.href}: ${e}`,
+      );
+      return undefined;
+    }
+    // Shared by the reads below, so each other realm is asked once.
+    let contexts = new Map<string, Promise<ModuleCacheContext>>();
+    return new Map(
+      await Promise.all(
+        hostRouteTypeRefs(rules).map(
+          async (ref) =>
+            [
+              typeLookupKey(ref),
+              await this.#readHostRouteType(ref, contexts),
+            ] as const,
+        ),
+      ),
+    );
+  }
+
+  async #readHostRouteType(
+    ref: ResolvedCodeRef,
+    contexts: Map<string, Promise<ModuleCacheContext>>,
+  ): Promise<HostRouteTypeInfo | 'unavailable' | 'transient' | undefined> {
+    let keyFor = (codeRef: CodeRef) =>
+      internalKeyFor(codeRef, undefined, this.#virtualNetwork);
+    let fail = (reason: unknown, transient: boolean) => {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} could not read the definition of ${ref.name} from ${ref.module} for a host route of ${this.#realmURL.href}${transient ? ', for a reason that may pass' : ''}: ${reason}`,
+      );
+      return transient ? ('transient' as const) : ('unavailable' as const);
+    };
+    let moduleURL: string;
+    let entry: Awaited<
+      ReturnType<DefinitionLookup['populateDefinitionCacheEntry']>
+    >;
+    try {
+      moduleURL = canonicalURL(ref.module, undefined, this.#virtualNetwork);
+      let context = await this.#moduleCacheContextFor(moduleURL, contexts);
+      if (context === 'not-found') {
+        return fail(`${moduleURL} was not found`, false);
+      }
+      entry = await this.#definitionLookup.populateDefinitionCacheEntry({
+        moduleURL,
+        ...context,
+        priority: this.#jobPriority,
+      });
+    } catch (e) {
+      // A request that failed or got no answer: a prerender server, or
+      // another realm's server, that couldn't be reached or answered with a
+      // 5xx.
+      return fail(e, true);
+    }
+    if (!entry) {
+      return fail('the module has no definitions', false);
+    }
+    if (entry.error) {
+      return fail(
+        entry.error.error.message,
+        isTransientRenderError(entry.error.error),
+      );
+    }
+    let found =
+      entry.definitions[keyFor(ref)] ??
+      entry.definitions[
+        keyFor({ ...ref, module: moduleURL as RealmResourceIdentifier })
+      ];
+    if (!found) {
+      // The module has no such export: not a card type.
+      return undefined;
+    }
+    if (found.type !== 'definition') {
+      return fail(found.error.message ?? 'the definition has an error', false);
+    }
+    return hostRouteTypeInfo(found, keyFor);
+  }
+
+  // The cache context a module's definition is read under: this realm's, or,
+  // for a module of another realm, that realm's, which the module's own
+  // response names. `'not-found'` when the other realm answers that the
+  // module isn't there. `contexts` holds the contexts this read has asked
+  // for, by realm, and the realm each module named.
+  async #moduleCacheContextFor(
+    moduleURL: string,
+    contexts: Map<string, Promise<ModuleCacheContext>>,
+  ): Promise<ModuleCacheContext | 'not-found'> {
+    let realmURL = this.#realmURL;
+    // `moduleURL` is canonical, so a module of a realm served under a prefix
+    // (`@cardstack/base/…`) is in its prefix form, which isn't a URL.
+    let url = this.#virtualNetwork.toURL(moduleURL);
+    if (!this.#realmPaths.inRealm(url)) {
+      let response = await this.#fetch(url.href, { method: 'HEAD' });
+      let header = response.headers.get('x-boxel-realm-url');
+      if (response.status >= 500) {
+        throw new Error(`${moduleURL} answered ${response.status}`);
+      }
+      if (!response.ok || !header) {
+        return 'not-found';
+      }
+      realmURL = new URL(header);
+    }
+    let context = contexts.get(realmURL.href);
+    if (!context) {
+      context = this.#readModuleCacheContext(realmURL);
+      contexts.set(realmURL.href, context);
+    }
+    return await context;
+  }
+
+  async #readModuleCacheContext(realmURL: URL): Promise<ModuleCacheContext> {
+    let { resolvedRealmURL, cacheScope, authUserId } =
+      realmURL.href === this.#realmURL.href
+        ? await this.getModuleCacheContext()
+        : await resolveModuleCacheContext({
+            fetch: this.#fetch,
+            realmURL,
+            realmOwnerUserId: this.#realmOwnerUserId,
+          });
+    return {
+      realmURL: realmURL.href,
+      resolvedRealmURL,
+      cacheScope,
+      cacheUserId: authUserId,
+      prerenderUserId: this.#realmOwnerUserId,
+    };
+  }
+}
+
+// The cache context a module's definition is read under
+// (`populateDefinitionCacheEntry`).
+interface ModuleCacheContext {
+  realmURL: string;
+  resolvedRealmURL: string;
+  cacheScope: CacheScope;
+  cacheUserId: string;
+  prerenderUserId: string;
 }
 
 // What a commit-validation round re-announces to the pass's HTML job: the

@@ -7,8 +7,9 @@
 // 1. The automation's row. A run of one of the card's own triggers (cron,
 //    one-time, webhook) or a batch's follow-up is refused when the
 //    automation was removed (`not-switched-on`), and a trigger's run when it
-//    is paused (`automation-paused`), so a run enqueued before a pause or a
-//    remove doesn't start. A batch's follow-up still runs while paused: it
+//    is paused (`automation-paused`) or waiting for key approval
+//    (`waiting-for-key-approval`), so a run enqueued before a pause, a
+//    remove or the wait doesn't start. A batch's follow-up still runs while paused: it
 //    reads results its submitting run already paid for, and nothing runs it
 //    again after a resume. A trigger's run that no longer acts as the payer
 //    (a resume made someone else the payer) is refused (`payer-changed`). A
@@ -40,7 +41,14 @@
 //    resolves the declared type and reads its definition as the realm does.
 //    A refusal ends the run with its code, such as `binding-not-approved`,
 //    `share-suspended`, `binding-needs-reapproval` or `credential-rejected`;
-//    a realm that can't be asked refuses it (`run-admission-failed`).
+//    a realm that can't be asked refuses it (`run-admission-failed`). For any
+//    run but a Preview or a Run now (as the run's row says), the realm also
+//    checks each binding's automation approval against the automation's
+//    version as the card and script read now (ADR 039 §1.7), and refuses one
+//    that ended or no longer matches (`key-approval-ended`). When a run that acts as the payer is
+//    refused for a key approval (`KEY_APPROVAL_REFUSAL_REASONS`), the
+//    automation moves to *waiting for key approval*: an approval it was
+//    switched on with ended or stopped matching after switch-on.
 // 5. The run's spending: `AutomationAdmissionChecks.admitSpending`, which
 //    checks the automation's daily and monthly credit caps and its
 //    identity's balance under their cost lock, and holds the most the run
@@ -65,11 +73,13 @@ import {
   type AutomationRun,
 } from './automation-runs.ts';
 import type { AutomationCaps } from './automation-declaration.ts';
+import { KEY_APPROVAL_REFUSAL_REASONS } from './automation-key-approval.ts';
 import {
   checkAutomationPayer,
   getAutomation,
   pauseForPayerLostAccess,
   setAutomationWaitingForCredits,
+  waitForKeyApproval,
   SPENDING_REFUSAL_REASONS,
   type AutomationRow,
   type SpendingRefusalReason,
@@ -188,6 +198,12 @@ export async function admitRunIdentity(
       return refuse(
         'automation-paused',
         `The automation is paused (${automation.pauseReason}), so its scheduled run doesn't start`,
+      );
+    }
+    if (automation.state === 'waiting-for-key-approval' && kind === 'trigger') {
+      return refuse(
+        'waiting-for-key-approval',
+        "The automation is waiting for a key approval one of its operations needs, so its scheduled run doesn't start",
       );
     }
     // A trigger's run acts as the payer (ADR 026 §1.1). One enqueued before
@@ -363,6 +379,13 @@ export async function admitRunOperations(
   }
   let { refusal } = asked.answer;
   if (refusal) {
+    if (
+      kind !== 'manual' &&
+      automation?.payer === run.actsAs &&
+      (KEY_APPROVAL_REFUSAL_REASONS as readonly string[]).includes(refusal.code)
+    ) {
+      await keyApprovalEnded(ctx, run);
+    }
     return refuse(refusal.code, operationRefusalMessage(refusal));
   }
   let spending = await ctx.checks?.admitSpending?.({
@@ -495,6 +518,35 @@ async function waitingForCredits(
   } catch (e: any) {
     log.error(
       `run ${run.id}: couldn't move automation ${run.automationId} ${waiting ? 'to' : 'out of'} waiting for credits: ${e?.message ?? e}`,
+    );
+  }
+}
+
+// Moves the run's automation to *waiting for key approval*, telling
+// `reportAutomationChange` when it moved. The run's own outcome doesn't
+// depend on it, so a failure is logged and the next run's admission moves it.
+async function keyApprovalEnded(
+  ctx: AdmissionContext,
+  run: AutomationRun,
+): Promise<void> {
+  try {
+    let moved = await waitForKeyApproval(
+      ctx.dbAdapter,
+      run.automationId,
+      { payer: run.actsAs },
+      {
+        reportRunChange: ctx.reportRunChange,
+        reportAutomationChange: ctx.reportAutomationChange,
+      },
+    );
+    if (moved) {
+      log.info(
+        `run ${run.id}: automation ${run.automationId} is waiting for key approval`,
+      );
+    }
+  } catch (e: any) {
+    log.error(
+      `run ${run.id}: couldn't move automation ${run.automationId} to waiting for key approval: ${e?.message ?? e}`,
     );
   }
 }

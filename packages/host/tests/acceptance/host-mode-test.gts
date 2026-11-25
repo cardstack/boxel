@@ -175,12 +175,6 @@ class StubMalformedDynamicRoutingHostModeService extends StubDynamicRoutingHostM
   }
 }
 
-class StubIncompleteDynamicRoutingHostModeService extends StubDynamicRoutingHostModeService {
-  get hostDynamicRoutesConfig(): HostDynamicRoutes {
-    return { ...super.hostDynamicRoutesConfig, complete: false };
-  }
-}
-
 module('Acceptance | host mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -1919,53 +1913,6 @@ module('Acceptance | host mode tests', function (hooks) {
 
       await waitFor('[data-test-host-mode-404]');
       assert.dom('[data-test-host-mode-404]').exists();
-      assert.dom('[data-card-error]').doesNotExist();
-    });
-
-    test('a miss on an incomplete route set shows an error, not the not-found page', async function (assert) {
-      let owner = getOwner(this)!;
-      let ownerWithUnregister = owner as {
-        unregister?: (fullName: string) => void;
-      };
-      ownerWithUnregister.unregister?.('service:host-mode-service');
-      owner.register(
-        'service:host-mode-service',
-        StubIncompleteDynamicRoutingHostModeService,
-      );
-
-      try {
-        await visit('/test/pets/nobody');
-      } catch (e) {
-        assert.strictEqual(
-          (e as Error).name,
-          'HostRouteResolutionError',
-          'the miss ends the transition',
-        );
-      }
-      await settled();
-
-      assert
-        .dom('[data-card-error]')
-        .containsText('This page could not be loaded.');
-      assert.dom('[data-test-host-mode-404]').doesNotExist();
-    });
-
-    test("a card's own path still renders the card while the route set is incomplete", async function (assert) {
-      let owner = getOwner(this)!;
-      let ownerWithUnregister = owner as {
-        unregister?: (fullName: string) => void;
-      };
-      ownerWithUnregister.unregister?.('service:host-mode-service');
-      owner.register(
-        'service:host-mode-service',
-        StubIncompleteDynamicRoutingHostModeService,
-      );
-
-      await visit('/test/Pet/mango');
-
-      assert
-        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
-        .exists();
       assert.dom('[data-card-error]').doesNotExist();
     });
 

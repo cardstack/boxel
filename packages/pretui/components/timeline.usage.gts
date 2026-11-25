@@ -106,7 +106,7 @@ class TimelineUsage extends Component {
   <template>
     <FreestyleUsage
       @name='Timeline'
-      @description="A chronological sequence — a shipment's life, an audit trail, a release history. Semantically it is an ordered list and nothing else: role='list' is stamped explicitly because list-style:none strips list semantics in Safari/VoiceOver, and the rail is a CSS pseudo-element while the marker span carries aria-hidden, so a screen reader hears '1. Spring lot booked, confirmed, B-1181, 5 months ago' and not a stream of bullet noise. Everything with meaning is composed from the kit rather than hand-drawn: StatusChip (hue derived from the value, never picked), Token for machine values, RelativeTime for the when, Avatar for the who. Relative times are timer-free — pass a fresh @now to re-derive them, which is what the 'now' knob below does. Honest limits: no left/right alternating layout and no opposite-content slot (they double the CSS, halve the line length, and read as two unrelated columns at narrow widths), and no per-event duration bars — compose a <Meter> or <ProgressBar> into the default block instead."
+      @description="A chronological sequence — a shipment's life, an audit trail, a release history. Semantically it is an ordered list and nothing else: role='list' is stamped explicitly because list-style:none strips list semantics in Safari/VoiceOver, and the rail is a CSS pseudo-element while the marker span carries aria-hidden, so a screen reader hears '1. Spring lot booked, confirmed, B-1181, 5 months ago' and not a stream of bullet noise. Everything with meaning is composed from the kit rather than hand-drawn: StatusChip (hue derived from the value, never picked, unless statusTone names the chip's tone for a status whose meaning the value's hue can't carry), Token for machine values, RelativeTime for the when, Avatar for the who. Relative times are timer-free — pass a fresh @now to re-derive them, which is what the 'now' knob below does. Honest limits: no left/right alternating layout and no opposite-content slot (they double the CSS, halve the line length, and read as two unrelated columns at narrow widths), and no per-event duration bars — compose a <Meter> or <ProgressBar> into the default block instead."
       @source={{this.usage}}
     >
       <:example>
@@ -124,7 +124,7 @@ class TimelineUsage extends Component {
           @name='events'
           @required={{true}}
           @value={{this.events}}
-          @description='The events, in the order you want them rendered and numbered — oldest-first or newest-first, the component does not sort. Each TimelineEvent is { id, title, at?, status?, token?, person?, body?, icon? }.'
+          @description='The events, in the order you want them rendered and numbered — oldest-first or newest-first, the component does not sort. Each TimelineEvent is { id, title, at?, status?, statusTone?, token?, person?, body?, icon? }.'
         />
         <Args.String
           @name='density'

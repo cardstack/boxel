@@ -63,6 +63,9 @@ import {
   isCardInstance,
   isFileDefInstance,
   excludeCardInstanceFileRows,
+  resolveRRIReference,
+  rri,
+  trimJsonExtension,
   SupportedMimeType,
   subscribeToRealm,
   codeRefFromInternalKey,
@@ -79,6 +82,7 @@ import {
   SidebarTrigger,
 } from './components/sidebar';
 import { Tooltip as PretTooltip } from './components/tooltip';
+import { isNonPresentLink } from './field-support';
 import { rawArrayValues } from './watched-array';
 import CardsGridLayout, {
   VIEW_OPTIONS,
@@ -298,6 +302,44 @@ function homeModulesOf(model: Partial<Workspace>): string[] {
     }
   }
   return configured;
+}
+
+// The edit view's chooser can link a Workspace card to itself, which the pin
+// tool and the card menus refuse. Such a pin isn't shown: the Home and the
+// Library are already that card. A pin is a loaded card, or the link of one
+// that isn't loaded, so both are compared; the realm's root URL names its
+// index card.
+function isSelfPin(model: Partial<Workspace>, pin: unknown): boolean {
+  if (!model.id) {
+    return false;
+  }
+  if (isCardInstance(pin)) {
+    return pin.id === model.id;
+  }
+  if (!isNonPresentLink(pin)) {
+    return false;
+  }
+  try {
+    let id = rri(model.id);
+    let linked = trimJsonExtension(resolveRRIReference(pin.reference, id));
+    let folder = resolveRRIReference('./', id);
+    return linked === id || (linked === folder && id === `${folder}index`);
+  } catch {
+    return false;
+  }
+}
+
+// The pins the Library lists: those whose card loaded, less a self-pin.
+function listedPinsOf(model: Partial<Workspace>): CardDef[] {
+  return (model.entryPoints ?? []).filter(
+    (card): card is CardDef => Boolean(card) && !isSelfPin(model, card),
+  );
+}
+
+// Pins whose card is missing still count; only a self-pin is left out.
+function pinCountOf(model: Partial<Workspace>): number {
+  let pins = rawArrayValues(model.entryPoints ?? []);
+  return pins.length - pins.filter((pin) => isSelfPin(model, pin)).length;
 }
 
 interface PublishedSite {
@@ -857,7 +899,7 @@ class Isolated extends Component<typeof Workspace> {
             Modules); each block is unchanged, only sequenced }}
           {{#each this.homeModules as |mod|}}
             {{#if (eq mod 'pinned')}}
-              {{#if @model.entryPoints.length}}
+              {{#if this.pinCount}}
                 <section class='zone'>
                   <div class='section-head'>
                     <h2 class='section-title'>Pinned</h2>
@@ -865,54 +907,56 @@ class Isolated extends Component<typeof Workspace> {
                   </div>
                   <div class='doors' style={{this.doorsStyle}}>
                     {{#each @fields.entryPoints as |Door index|}}
-                      <article class='door'>
-                        <div class='door-kicker'>
-                          <span class='door-kind kicker'>{{this.doorKind
-                              index
-                            }}</span>
-                          {{#if @canEdit}}
-                            <IconButton
-                              @icon={{XIcon}}
-                              @variant='text-only'
-                              @size='extra-small'
-                              @width='12'
-                              @height='12'
-                              class='door-unpin'
-                              aria-label='Unpin'
-                              title='Unpin'
-                              {{on 'click' (this.unpinDoor index)}}
-                              data-test-door-unpin={{index}}
+                      {{#unless (this.isSelfPinAt index)}}
+                        <article class='door'>
+                          <div class='door-kicker'>
+                            <span class='door-kind kicker'>{{this.doorKind
+                                index
+                              }}</span>
+                            {{#if @canEdit}}
+                              <IconButton
+                                @icon={{XIcon}}
+                                @variant='text-only'
+                                @size='extra-small'
+                                @width='12'
+                                @height='12'
+                                class='door-unpin'
+                                aria-label='Unpin'
+                                title='Unpin'
+                                {{on 'click' (this.unpinDoor index)}}
+                                data-test-door-unpin={{index}}
+                              />
+                            {{/if}}
+                          </div>
+                          <div class='door-face'>
+                            <Door
+                              @format='fitted'
+                              @displayContainer={{false}}
+                              class='door-card'
                             />
-                          {{/if}}
-                        </div>
-                        <div class='door-face'>
-                          <Door
-                            @format='fitted'
-                            @displayContainer={{false}}
-                            class='door-card'
-                          />
-                          <Button
-                            @kind='text-only'
-                            @size='auto'
-                            class='tile-open'
-                            aria-label='Open {{this.doorTitle index}}'
-                            {{on 'click' (this.openDoor index)}}
-                          />
-                          {{! Match Library fitted tiles: the read-only preview opens through viewCard }}
-                        </div>
-                        <div class='door-footer'>
-                          <span class='door-title data'>{{this.doorTitle
-                              index
-                            }}</span>
-                          <Button
-                            @kind='primary'
-                            @size='extra-small'
-                            @rectangular={{true}}
-                            class='door-open'
-                            {{on 'click' (this.openDoor index)}}
-                          >Open</Button>
-                        </div>
-                      </article>
+                            <Button
+                              @kind='text-only'
+                              @size='auto'
+                              class='tile-open'
+                              aria-label='Open {{this.doorTitle index}}'
+                              {{on 'click' (this.openDoor index)}}
+                            />
+                            {{! Match Library fitted tiles: the read-only preview opens through viewCard }}
+                          </div>
+                          <div class='door-footer'>
+                            <span class='door-title data'>{{this.doorTitle
+                                index
+                              }}</span>
+                            <Button
+                              @kind='primary'
+                              @size='extra-small'
+                              @rectangular={{true}}
+                              class='door-open'
+                              {{on 'click' (this.openDoor index)}}
+                            >Open</Button>
+                          </div>
+                        </article>
+                      {{/unless}}
                     {{/each}}
                     {{#if @canEdit}}
                       {{! the pin affordance: a ghost tile ending the row }}
@@ -968,7 +1012,7 @@ class Isolated extends Component<typeof Workspace> {
                 </section>
               {{/if}}
             {{else if (eq mod 'about')}}
-              {{#if @model.entryPoints.length}}
+              {{#if this.pinCount}}
                 {{#if this.aboutVisible}}
                   {{! with pins, the README settles into a collapsed section }}
                   <section class='zone'>
@@ -2671,8 +2715,19 @@ class Isolated extends Component<typeof Workspace> {
     }
   };
 
-  // Pin management: the ghost tile pins a card from the card chooser through
-  // the same tool as the card menus; the kicker × removes a pin by position.
+  isSelfPinAt = (index: number) =>
+    isSelfPin(
+      this.args.model,
+      rawArrayValues(this.args.model.entryPoints ?? [])[index],
+    );
+
+  private get pinCount() {
+    return pinCountOf(this.args.model);
+  }
+
+  // Pin management: the ghost tile pins the cards chosen in the card chooser
+  // through the same tool as the card menus; the kicker × removes a pin by
+  // position.
   pinCard = () => {
     this.pinCardTask.perform();
   };
@@ -2682,7 +2737,7 @@ class Isolated extends Component<typeof Workspace> {
     if (!toolContext) {
       return;
     }
-    let chosenId = await chooseCard(
+    let chosenIds = await chooseCard(
       {
         filter: {
           every: [
@@ -2693,15 +2748,17 @@ class Isolated extends Component<typeof Workspace> {
         page: { size: SEARCH_PAGE_SIZE },
       },
       {
+        multiSelect: true,
         consumingRealm: this.args.model[realmURL],
         lockConsumingRealm: true,
       },
     );
-    if (!chosenId) {
+    if (!chosenIds?.length) {
       return;
     }
+    // In the order picked; the tool skips a card that's already pinned.
     await new SetWorkspacePinTool(toolContext).execute(
-      new SetWorkspacePinInput({ cardId: chosenId, pinned: true }),
+      new SetWorkspacePinInput({ cardIds: chosenIds, pinned: true }),
     );
   });
 
@@ -3355,14 +3412,12 @@ class Isolated extends Component<typeof Workspace> {
       displayName: 'Entry points',
       icon: DoorOpenIcon,
       get count() {
-        return model.entryPoints?.length ?? 0;
+        return listedPinsOf(model).length;
       },
       get cards() {
-        return (model.entryPoints ?? [])
-          .filter(Boolean)
-          .map((card: CardDef) =>
-            (card.constructor as typeof BaseDef).getComponent(card),
-          );
+        return listedPinsOf(model).map((card) =>
+          (card.constructor as typeof BaseDef).getComponent(card),
+        );
       },
     };
   }
@@ -3417,7 +3472,7 @@ class Isolated extends Component<typeof Workspace> {
       options.push(this.searchFilter); // transient row while a search is open
     }
     options.push(this.everythingFilter);
-    if (this.args.model.entryPoints?.length) {
+    if (listedPinsOf(this.args.model).length) {
       options.push(this.entryPointsFilter);
     }
     options.push(this.cardsFilter, this.filesFilter);

@@ -48,10 +48,6 @@ const AUTOMATION_TYPE: ResolvedCodeRef = {
   name: 'Automation',
 };
 
-function count(n: number): string {
-  return n.toLocaleString('en-US');
-}
-
 // A card with no name reads by the last segment of the card's URL.
 export function automationTitle(automation: Automation): string {
   let { title } = automation.attributes;
@@ -84,6 +80,8 @@ export function automationStateLook(automation: Automation): StateLook {
       return { label: 'Paused', tone: 'warning', dot: true };
     case 'waiting-for-credits':
       return { label: 'Waiting for credits', tone: 'warning', dot: true };
+    case 'waiting-for-key-approval':
+      return { label: 'Waiting for key approval', tone: 'warning', dot: true };
     case 'done':
       return { label: 'Done', tone: 'neutral', dot: true };
     default:
@@ -101,7 +99,7 @@ const PAUSED_BECAUSE: Record<string, string> = {
   'webhook-changed':
     'Boxel paused the automation because a trigger names an incoming webhook the payer didn’t agree to.',
   'payer-lost-access':
-    'Boxel paused the automation because the payer can no longer edit this workspace.',
+    'Boxel paused the automation because the payer is no longer a realm administrator.',
   'realm-archived':
     'Boxel paused the automation because someone archived this workspace.',
   'repeated-failures':
@@ -119,7 +117,7 @@ export function pausedBecause(automation: Automation): string {
 }
 
 // Where a run in progress is: the milestone the script last reported, with
-// the count inside the milestone when the script counts.
+// the last task the script reported inside the milestone.
 export function runningText(automation: Automation): string | undefined {
   let run = automation.attributes.currentRun;
   if (!run) {
@@ -128,11 +126,8 @@ export function runningText(automation: Automation): string | undefined {
   if (!run.milestone) {
     return 'Running, before the first milestone';
   }
-  let progress =
-    run.done !== undefined && run.total !== undefined
-      ? ` (${count(run.done)} of ${count(run.total)})`
-      : '';
-  return `Running “${run.milestone}”${progress}`;
+  let task = run.task ? ` — ${run.task}` : '';
+  return `Running “${run.milestone}”${task}`;
 }
 
 // What a row says under the automation's name when the automation's card
@@ -151,6 +146,8 @@ function glanceText(automation: Automation): string | undefined {
       return pausedBecause(automation);
     case 'waiting-for-credits':
       return 'The payer has no credits left, so Boxel holds every run';
+    case 'waiting-for-key-approval':
+      return 'Boxel holds every run until someone approves the automation’s use of each key';
     case 'done':
       return 'No runs left on any trigger';
     default:

@@ -1,6 +1,12 @@
 import { module, test } from 'qunit';
 
 import {
+  RUN_MILESTONE_MAX_NAME_CHARS,
+  RUN_MILESTONE_MAX_PLAN,
+  RUN_TASK_MAX_CHARS,
+} from '@cardstack/runtime-common/automation-run-milestones';
+
+import {
   automationTimeLimitMs,
   REDACTED,
   redactSecrets,
@@ -8,6 +14,9 @@ import {
 import {
   AUTOMATION_METHODS,
   INTERACTIVE_METHODS,
+  MAX_MILESTONE_CHARS,
+  MAX_MILESTONES,
+  MAX_TASK_CHARS,
   METHOD_REACH,
   NOTIFY_METHODS,
   type RealmRunnerMethodReach,
@@ -16,12 +25,14 @@ import {
 // What an automation run may reach (ADR 025 §1.4): its own realm's reads,
 // writes the realm server stages for the one batch the run commits, card
 // operations (a `callApi` is the run's only way to an outside API), the
-// `resolve` model call, and its own progress and console lines.
+// `resolve` model call and its batch, BXL transforms in a worker that
+// touch nothing outside it, and its own progress and console lines.
 const AUTOMATION_MAY_REACH = new Set<RealmRunnerMethodReach>([
   'realm-read',
   'realm-write',
   'operation',
   'model',
+  'transform',
   'progress',
   'log',
 ]);
@@ -52,8 +63,16 @@ module('Unit | Lib | realm-runner surfaces', function () {
       'progress.count',
       'progress.milestone',
       'progress.plan',
+      'progress.task',
       'resolve',
+      'resolve.batch',
+      'transform',
     ]);
+  });
+
+  test('realm.resolve.batch is on the automation surface only, since a person in a chat is waiting for an answer', function (assert) {
+    assert.true(AUTOMATION_METHODS.has('resolve.batch'));
+    assert.false(INTERACTIVE_METHODS.has('resolve.batch'));
   });
 
   test('no automation method writes outside the final batch, reaches the network another way, or touches the UI or a room', function (assert) {
@@ -143,5 +162,17 @@ module('Unit | Lib | realm-runner surfaces', function () {
     ]) {
       assert.strictEqual(redactSecrets(text, ['stays']), text, text);
     }
+  });
+  // The tab refuses a progress call past these caps, and the realm server
+  // holds what it records to its own: the two must agree, or a line the tab
+  // accepts is cut short or dropped without a mark.
+  test('progress caps in the tab match what the realm server records', function (assert) {
+    assert.strictEqual(MAX_TASK_CHARS, RUN_TASK_MAX_CHARS, 'task text');
+    assert.strictEqual(
+      MAX_MILESTONE_CHARS,
+      RUN_MILESTONE_MAX_NAME_CHARS,
+      'milestone name',
+    );
+    assert.strictEqual(MAX_MILESTONES, RUN_MILESTONE_MAX_PLAN, 'plan length');
   });
 });

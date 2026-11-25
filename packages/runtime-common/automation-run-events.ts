@@ -1,9 +1,9 @@
 // The `job` realm event: what tells a realm's direct writers that one of its
 // automation runs moved. A run moves through its states (`automation-runs.ts`),
 // through three steps within an attempt (admission, the script, the commit),
-// and through the run milestones its script reports. Each process that moves a
-// run reports it with a `ReportRunChange`, which reads the run's row and
-// sends the event.
+// and through the run milestones and the tasks inside them its script
+// reports. Each process that moves a run reports it with a
+// `ReportRunChange`, which reads the run's row and sends the event.
 //
 // The event is delivered by `Realm.broadcastJobEvent`, which sends it only to
 // the realm's direct writers' session rooms: the run's progress is theirs to
@@ -26,7 +26,8 @@ import type { VirtualNetwork } from './virtual-network.ts';
 
 export type AutomationRunStep = NonNullable<JobEventContent['step']>;
 
-// Reports that a run moved: its state, its step or its run milestone changed.
+// Reports that a run moved: its state, its step or its run milestone changed,
+// or its script reported a task inside a milestone.
 // It never rejects, since a run's progress doesn't depend on anyone hearing
 // about it; a report that fails is logged.
 export type ReportRunChange = (runId: string) => Promise<void>;

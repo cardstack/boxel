@@ -1,5 +1,15 @@
 import type Koa from 'koa';
-import { logger, type VirtualNetwork } from '@cardstack/runtime-common';
+import {
+  automationsWaitingForKeyApproval,
+  followAutomationKeyApprovals,
+  followEndedKeyApprovals,
+} from '../lib/automation-key-approvals.ts';
+import {
+  logger,
+  reportAutomationChanges,
+  type VirtualNetwork,
+} from '@cardstack/runtime-common';
+import { realmServerAutomationChangeReporter } from '../lib/run-change-reporter.ts';
 import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { setContextResponse } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
@@ -251,10 +261,16 @@ export function handleShareKey(args: CreateRoutesArgs): Handler {
   });
 }
 
-export function handleUnshareKey({ dbAdapter }: CreateRoutesArgs): Handler {
+// Unsharing removes the share's bindings and their automation approvals; the
+// automations they served are reported and checked again.
+export function handleUnshareKey(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
-    await unshareKey(dbAdapter, { user, shareId: ctxt.params.shareId });
+    let affected = await unshareKey(args.dbAdapter, {
+      user,
+      shareId: ctxt.params.shareId,
+    });
+    await followEndedKeyApprovals(args, affected);
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }
@@ -272,7 +288,11 @@ export function handleSuspendKeyShare({
   });
 }
 
-export function handleResumeKeyShare({ dbAdapter }: CreateRoutesArgs): Handler {
+// Resuming a share resumes the automation approvals of its bindings, so
+// every automation of its realm waiting for key approval is checked again,
+// and one whose approvals all match runs again.
+export function handleResumeKeyShare(args: CreateRoutesArgs): Handler {
+  let { dbAdapter } = args;
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     let body = await readJSON(ctxt);
@@ -281,6 +301,12 @@ export function handleResumeKeyShare({ dbAdapter }: CreateRoutesArgs): Handler {
       shareId: ctxt.params.shareId,
       ticket: ticketOf(body),
     });
+    let realmURL = new URL(share.realm);
+    await followAutomationKeyApprovals(
+      args,
+      realmURL,
+      await automationsWaitingForKeyApproval(dbAdapter, realmURL, args),
+    );
     await sendJSON(ctxt, 200, { data: serialize(share) });
   });
 }
@@ -300,7 +326,7 @@ export function handleSwapKeyIntoShare(args: CreateRoutesArgs): Handler {
           ctxt.state.token as RealmServerTokenClaim | undefined,
         )
       : undefined;
-    let { share, reapprovedBindings } = await swapKeyIntoShare(
+    let { share, reapprovedBindings, affected } = await swapKeyIntoShare(
       dbAdapter,
       secretsKeyring(),
       {
@@ -311,6 +337,20 @@ export function handleSwapKeyIntoShare(args: CreateRoutesArgs): Handler {
         via,
         opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       },
+    );
+    // The swap ended the approvals of the share's bindings and moved their
+    // automations to waiting, which their realm's direct writers are told.
+    // One whose ended approval was for an operation its card no longer
+    // declares has nothing missing, and runs again.
+    await reportAutomationChanges(
+      realmServerAutomationChangeReporter(args),
+      affected,
+    );
+    let realmURL = new URL(share.realm);
+    await followAutomationKeyApprovals(
+      args,
+      realmURL,
+      await automationsWaitingForKeyApproval(dbAdapter, realmURL, args),
     );
     await sendJSON(ctxt, 200, {
       data: serialize(share),

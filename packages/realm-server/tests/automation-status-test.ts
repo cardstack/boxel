@@ -435,7 +435,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(attributes.currentRun, null, 'no run is in progress');
     });
 
-    test('a run in progress reads as currentRun, with the milestone it is in', async function (assert) {
+    test('a run in progress reads as currentRun, with the milestone it is in and the tasks inside it', async function (assert) {
       await writeAutomation();
       let created = await createAutomationRun(dbAdapter, {
         automationId: rri(automationURL()),
@@ -464,9 +464,9 @@ module(basename(import.meta.filename), function (hooks) {
         {
           at,
           source: 'script',
-          kind: 'count',
-          message: '3 of 9',
-          data: { done: 3, total: 9 },
+          kind: 'task',
+          message: 'Task: Imported the March invoices',
+          data: { text: 'Imported the March invoices' },
         },
       ]);
       let attributes = attributesOf(
@@ -477,7 +477,9 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(current.state, 'running');
       assert.strictEqual(current.current, 'Import');
       assert.deepEqual(current.ahead, ['Index']);
-      assert.strictEqual(current.milestones[0].done, 3);
+      assert.deepEqual(current.milestones[0].tasks, [
+        { text: 'Imported the March invoices', at: new Date(at).toISOString() },
+      ]);
       assert.strictEqual(current.milestones[0].endedAt, null);
       assert.strictEqual(attributes.lastRun, null, 'no run has ended');
     });
@@ -788,11 +790,11 @@ module(basename(import.meta.filename), function (hooks) {
       let status = attributesOf(
         (await statusOf(ADMIN, ['read', 'write'])).body,
       );
-      // Without a declaration the route reports each trigger the row has
-      // counted. Switch-on records every trigger the card declared, and an
-      // edit that fails to read leaves the row as it was, so all four
-      // triggers report, with only their run counts. The row keeps its
-      // labels in jsonb's key order, so they are compared by label.
+      // Without a declaration the route reports each trigger of the card's
+      // last readable edit. Switch-on records every trigger the card
+      // declared, and an edit that fails to read leaves the row as it was,
+      // so all four triggers report, with only their run counts. The row
+      // keeps its labels in jsonb's key order, so they are compared by label.
       let [row] = await query(dbAdapter, [
         'SELECT trigger_runs FROM automations WHERE automation_id =',
         param(automationURL()),
@@ -809,6 +811,60 @@ module(basename(import.meta.filename), function (hooks) {
           { label: 'push', runs: 0 },
         ],
         `each trigger the row counted reports its runs; the row's trigger_runs: ${JSON.stringify(row?.trigger_runs)}`,
+      );
+    });
+
+    test('a card that no longer reads as a declaration leaves out a trigger an earlier edit removed', async function (assert) {
+      await writeAutomation();
+      await switchOn();
+      await setRuns('hourly', 7);
+      // Spent, so not live, yet still declared.
+      await setRuns('nightly', 30);
+      function cardWith(triggers: Record<string, unknown>[]) {
+        return JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { ...attributes, triggers },
+            relationships: {
+              script: { links: { self: '../scripts/nightly-import.js' } },
+            },
+            meta: { adoptsFrom: automationRef },
+          },
+        });
+      }
+      let withoutHourly = attributes.triggers.filter(
+        (t: Record<string, unknown>) => t.label !== 'hourly',
+      );
+      // The first edit removes `hourly`, and the card reads.
+      await testRealm.write(
+        'automations/nightly.json',
+        cardWith(withoutHourly),
+      );
+      // The next edit leaves a cron trigger without an expression, so the
+      // card fails to read.
+      await testRealm.write(
+        'automations/nightly.json',
+        cardWith([...withoutHourly, trigger('cron', { label: 'half-typed' })]),
+      );
+      let status = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      let [row] = await query(dbAdapter, [
+        'SELECT trigger_runs FROM automations WHERE automation_id =',
+        param(automationURL()),
+      ]);
+      let labels = status.switchedOn
+        ? status.triggers.map(({ label }) => label).sort()
+        : [];
+      assert.deepEqual(
+        labels,
+        ['launch', 'nightly', 'push'],
+        `the removed trigger is left out; the row's trigger_runs: ${JSON.stringify(row?.trigger_runs)}`,
+      );
+      assert.strictEqual(
+        (row?.trigger_runs as Record<string, { runs: number }>)?.hourly?.runs,
+        7,
+        "the row keeps the removed trigger's count, should the label come back",
       );
     });
 
@@ -1201,6 +1257,65 @@ module(basename(import.meta.filename), function (hooks) {
           [ended.milestones?.failedIn, ended.milestones?.ahead],
           ['Group by label', ['Write digest']],
           'a failed run names the milestone it failed in',
+        );
+      });
+
+      test('each run lists the tasks its script reported under the milestone each task belongs to', async function (assert) {
+        await writeAutomation();
+        let at = Date.parse('2026-11-10T18:00:00.000Z');
+        let line = (
+          offset: number,
+          kind: 'milestone' | 'task',
+          text: string,
+        ) => ({
+          at: at + offset,
+          source: 'script' as const,
+          kind,
+          message: `${kind === 'task' ? 'Task' : 'Milestone'}: ${text}`,
+          data: kind === 'task' ? { text } : { name: text },
+        });
+        let ended = await made('nightly', '2026-11-09T08:30:00.000Z', 20);
+        await recordAutomationRunAdmitted(dbAdapter, ended.id, 1);
+        await appendRunLog(dbAdapter, ended.id, [
+          line(0, 'milestone', 'Fetch open issues'),
+          line(100, 'task', 'Fetched 42 open issues'),
+          line(1_000, 'milestone', 'Group by label'),
+        ]);
+        let running = await made('nightly', '2026-11-10T08:30:00.000Z', 10);
+        await recordAutomationRunAdmitted(dbAdapter, running.id, 1);
+        await appendRunLog(dbAdapter, running.id, [
+          line(0, 'milestone', 'Fetch open issues'),
+          line(100, 'task', 'Skipped 3 archived issues'),
+          line(200, 'task', 'Fetched 17 open issues'),
+        ]);
+
+        let { data } = await listed();
+        let byRun = new Map(
+          data.map(({ id, attributes }) => [
+            id,
+            attributes.milestones?.milestones.map(({ name, tasks }) => [
+              name,
+              tasks.map(({ text }) => text),
+            ]),
+          ]),
+        );
+        assert.deepEqual(
+          byRun.get(running.id),
+          [
+            [
+              'Fetch open issues',
+              ['Skipped 3 archived issues', 'Fetched 17 open issues'],
+            ],
+          ],
+          'a running run lists the tasks of the milestone the run is in, in order',
+        );
+        assert.deepEqual(
+          byRun.get(ended.id),
+          [
+            ['Fetch open issues', ['Fetched 42 open issues']],
+            ['Group by label', []],
+          ],
+          'each task sits under the milestone the run was in when the script reported the task',
         );
       });
 
@@ -1627,7 +1742,7 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
-      test('a paused, waiting or done automation lists that state, and a running one the milestone its run is in', async function (assert) {
+      test('a paused, waiting or done automation lists that state, and a running one the milestone its run is in with the last task inside it', async function (assert) {
         await writeAutomation();
         await switchOn();
         let paused = await pauseAutomation(
@@ -1684,9 +1799,9 @@ module(basename(import.meta.filename), function (hooks) {
           {
             at,
             source: 'script',
-            kind: 'count',
-            message: '3 of 9',
-            data: { done: 3, total: 9 },
+            kind: 'task',
+            message: 'Task: Imported the March invoices',
+            data: { text: 'Imported the March invoices' },
           },
         ]);
         [entry] = await entries();
@@ -1694,8 +1809,7 @@ module(basename(import.meta.filename), function (hooks) {
           runId: created.id,
           startedAt: entry.attributes.currentRun?.startedAt ?? null,
           milestone: 'Import',
-          done: 3,
-          total: 9,
+          task: 'Imported the March invoices',
         });
         assert.ok(entry.attributes.currentRun?.startedAt, 'with its start');
       });
@@ -1774,6 +1888,43 @@ module(basename(import.meta.filename), function (hooks) {
             ({ label, kind }) => label === 'nightly' && kind === null,
           ),
           'each trigger the row has counted, by its label',
+        );
+      });
+
+      test('an automation whose card the index lacks leaves out a trigger an earlier edit removed', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await testRealm.write(
+          'automations/nightly.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                ...attributes,
+                triggers: attributes.triggers.filter(
+                  (t: Record<string, unknown>) => t.label !== 'hourly',
+                ),
+              },
+              relationships: {
+                script: { links: { self: '../scripts/nightly-import.js' } },
+              },
+              meta: { adoptsFrom: automationRef },
+            },
+          }),
+        );
+        await query(dbAdapter, [
+          `UPDATE boxel_index SET is_deleted = TRUE WHERE url =`,
+          param(`${automationURL()}.json`),
+          `OR file_alias =`,
+          param(automationURL()),
+        ]);
+        let [entry] = await entries();
+        assert.deepEqual(
+          entry.attributes.triggers
+            .map(({ label }: { label: string }) => label)
+            .sort(),
+          ['launch', 'nightly', 'push'],
+          'the list names the triggers of the last edit the card read in',
         );
       });
 

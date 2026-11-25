@@ -1,5 +1,7 @@
 // The authorize page's error page (ADR 021 §1.8): what the page shows when the
-// provider refused a flow before consent, at `authorize?error=<value>`.
+// provider refused a flow before consent, at `authorize?error=<value>`, and
+// when a flow ended at consent, with the error the authorize page gives it
+// (`@error`).
 //
 // Each state says what went wrong in fixed words, with Close. "Return to
 // <app>" is drawn only where the realm server offers it, and links to the
@@ -21,6 +23,7 @@ import {
   parseErrorParam,
   readAuthorizationError,
   type ErrorApp,
+  type ErrorParam,
   type ErrorState,
 } from '../../security/oauth-errors.ts';
 import type { PageVisit } from '../../telemetry/instrument.ts';
@@ -39,6 +42,9 @@ interface Signature {
     config: { realmServerURL: URL };
     // How the page's load ended, for the telemetry.
     visit: PageVisit;
+    // The error to show, when the authorize page ended a flow itself. Without
+    // it, the page reads the error from its address.
+    error?: ErrorParam;
   };
 }
 
@@ -123,7 +129,7 @@ export default class ErrorPage extends Component<Signature> {
     </style>
   </template>
 
-  private param = parseErrorParam(window.location.search);
+  private param = this.args.error ?? parseErrorParam(window.location.search);
   private page = trackedObject<{ state: State; closeTried: boolean }>({
     state: { name: 'loading' },
     closeTried: false,

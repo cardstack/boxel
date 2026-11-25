@@ -60,9 +60,11 @@ export interface BillableCallOptions {
   // way the charge also records this process's pricing version.
   charge?: AICallCharge;
   // Told what the upstream response cost in USD once the credit strategy has
-  // priced it, or undefined when it couldn't be. Not called for a call that
+  // priced it, or undefined when it couldn't be, with what `call` returned
+  // (the request forward's `{ id, usage }`, whose `usage` carries the token
+  // counts of a response that wasn't streamed). Not called for a call that
   // returned nothing to price.
-  onCostResolved?: (costInUsd: number | undefined) => void;
+  onCostResolved?: (costInUsd: number | undefined, usage: unknown) => void;
 }
 
 // How a call ended, as the timing line reports it:
@@ -268,7 +270,7 @@ async function settle(
   } finally {
     timing.costMs = Date.now() - costStartedAt;
   }
-  onCostResolved?.(costInUsd);
+  onCostResolved?.(costInUsd, usage);
   if (costInUsd === undefined) {
     return false;
   }

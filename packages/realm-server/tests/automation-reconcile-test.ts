@@ -8,6 +8,7 @@ import {
   getAutomationRun,
   insertPermissions,
   query,
+  recordAIBatch,
   recordAutomationRunCommitted,
   ri,
   rri,
@@ -559,6 +560,63 @@ module(basename(import.meta.filename), function (hooks) {
       scheduledAt: (await getAutomationRun(dbAdapter, run.id))!.createdAt,
       dryRun: false,
       triggerKind: 'manual',
+    });
+  });
+
+  test("a lost batch follow-up is enqueued again with its batch's input, due at the batch's deadline", async function (assert) {
+    await switchOn();
+    await recordAIBatch(dbAdapter, {
+      batchId: 'batch_1',
+      runId: (
+        await createAutomationRun(dbAdapter, {
+          automationId: AUTOMATION,
+          realm: REALM,
+          trigger: 'hourly',
+          slot: NOON_SLOT,
+          actsAs: OWNER,
+        })
+      ).id,
+      actsAs: OWNER,
+      realm: REALM,
+      automationId: AUTOMATION,
+      model: 'openai/gpt-4.1-mini',
+      requestCount: 2,
+      estimatedUsd: 0.01,
+      runAIReservation: 'reservation-1',
+      reservedCredits: 2,
+      deadline: new Date('2026-11-10T12:05:00.000Z'),
+      expiresAt: null,
+      state: 'in_progress',
+    });
+    let followUp = await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger: 'batch',
+      slot: 'batch_1',
+      actsAs: OWNER,
+    });
+    await query(dbAdapter, [
+      `UPDATE automation_runs SET state = 'complete' WHERE trigger = 'hourly'`,
+    ]);
+    await madeAt(NOON);
+
+    let outcomes = (await reconcile(NOON + 10 * 60)).lostRuns;
+
+    let outcome = outcomes.find((o) => 'runId' in o && o.runId === followUp.id);
+    assert.strictEqual(
+      outcome?.kind,
+      'requeued',
+      'no trigger on the card names it, and it is still enqueued',
+    );
+    let [job] = (await queuedRuns()).filter(
+      (queued) => queued.input.runId === followUp.id,
+    );
+    assert.strictEqual(job.dedupeKey, `automation:${AUTOMATION}:batch:batch_1`);
+    assert.deepEqual(job.input, {
+      runId: followUp.id,
+      scheduledAt: '2026-11-10T12:05:00.000Z',
+      dryRun: false,
+      triggerKind: 'batch',
     });
   });
 

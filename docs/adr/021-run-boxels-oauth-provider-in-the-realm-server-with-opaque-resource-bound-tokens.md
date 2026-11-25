@@ -173,7 +173,7 @@ flood within the limit can't reach it.
 A resource MUST check an OAuth token only through the provider's shared
 lookup. Only its controller MAY call the lookup, and it MUST call it at most
 once per request. `/mcp`'s controller is its entry point. The Boxel API's
-controllers are `Realm.#verifySession`, `multiRealmAuthorization` and
+controllers are `Realm.#admitOAuthToken`, `multiRealmAuthorization` and
 `jwtMiddleware`. A route that checks a session token itself, such as
 `/_download-realm`, MUST refuse an OAuth token. The lookup MUST be called from
 the controller itself, not from a helper that such a route and the controller
@@ -197,18 +197,28 @@ token's scopes MUST only narrow what its caller may do: the
 user's current realm permissions MUST still decide each call, and a scope MUST
 NOT grant what they don't (ADR 006). An OAuth token MUST NOT be exchanged for a
 realm-server session, a realm session, a delegated session or a Matrix login.
+A session the realm server mints in process for work a route starts, such as
+publishing a realm, is not an exchange when it never reaches the caller, nor
+any code the caller chose, and acts only for that work. A route that runs
+code the caller chose beside such a session MUST NOT be mapped.
 
 ### 1.6. What an OAuth token never reaches
 
 A verified caller MUST NOT carry `secureSession` (ADR 005 §1.2). An entry
 MUST NOT map a scope to key management, reads included, to a route that needs a
 secure session, to a route that mints a token or a signed URL, or to a route
-that changes a realm's permissions. Each of these refusals MUST be tested on
+that changes a realm's permissions. Creating a realm, which writes only its
+creator's own permissions on a realm that didn't exist, doesn't change a
+realm's permissions. Nor does publishing one: it writes read for everyone
+only on the published copy, a separate read-only realm it creates, and the
+realm published from keeps the permissions it had. Each of these refusals MUST be tested on
 the realm server, and each that names a realm route in the realm too.
 
 An OAuth token MUST NOT change what a realm's policy admits (ADR 006 §1.3): a
-write that changes `realm.json`'s `policy` or `config`, or the `RealmPolicy`
-card `policy` names, MUST be refused. A policy grant that reads the card it
+write that changes `realm.json`'s `policy`, `config` or type, any change to a
+`realm.json` whose type is a RealmConfig subclass (which may compute `config`
+from any field), or a write to the `RealmPolicy` card `policy` names, MUST be
+refused. A policy grant that reads the card it
 guards gives that part of the decision to anyone who can write the card, OAuth
 tokens included.
 

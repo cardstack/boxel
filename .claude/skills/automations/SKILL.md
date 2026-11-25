@@ -216,7 +216,7 @@ A trigger's fields by kind: `cron` reads `expression`, `timeZone`, optional `cou
 
 Every view is built from Pret UI, which subset files may import, and speaks plainly: "workspace", "outside services", "AI requests" and "saves", never realm, `callApi` or `resolve`.
 
-- **Isolated**: `PanelSection`s. The script shows read-only in a `CodeView` (from `fields/code/code.gts`, the catalog `CodeField`'s read face over Pret UI's `CodeBlock`). Each trigger is an `Item` row: an icon for its kind (a lightning bolt for a webhook), its label, its schedule in words with the raw expression as a `Token`, and the times, days or months it names as bulleted lists. Limits are two bordered `Descriptions` grids, _Each run_ and _Each month_, with a line under each value saying what it counts. Outside calls are `Item` rows, params a `KeyValue` list, and each empty group an `EmptyState`. Run milestones aren't a field: the script declares them with `realm.progress.plan([...])` and marks each with `realm.progress.milestone(name)` as it reaches it (_Run milestones_, below). For a direct writer, the card's _Run milestones_ section lists the milestones of the run in progress (`currentRun`), or else of the last run (`lastRun`), as a Pret UI `Timeline` whose rail joins them: each one's time and last count, and a marker shaded by state, gray before a milestone runs, yellow while it runs, green once it is done, red where the run ended with an error, and a pause where Boxel stopped the run. The plan's milestones the run hasn't started stay gray after it, marked _Not started_. Without a last run to list, and for everyone else, the section lists the milestones the script declares, each _Not started_. The card reads them from the script's text: the first `realm.progress.plan([...])` whose array holds only string literals (`declaredMilestones`). A plan built at run time shows nothing until a run reports one, and the section shows an `EmptyState`. A `Callout` says who runs it and who pays.
+- **Isolated**: `PanelSection`s. The script shows read-only in a `CodeView` (from `fields/code/code.gts`, the catalog `CodeField`'s read face over Pret UI's `CodeBlock`). Each trigger is an `Item` row: an icon for its kind (a lightning bolt for a webhook), its label, its schedule in words with the raw expression as a `Token`, and the times, days or months it names as bulleted lists. Limits are two bordered `Descriptions` grids, _Each run_ and _Each month_, with a line under each value saying what it counts. Outside calls are `Item` rows, params a `KeyValue` list, and each empty group an `EmptyState`. Run milestones aren't a field: the script declares them with `realm.progress.plan([...])` and marks each with `realm.progress.milestone(name)` as it reaches it (_Run milestones and tasks_, below). For a direct writer, the card's _Run milestones_ section lists the milestones of the run in progress (`currentRun`), or else of the last run (`lastRun`), as a Pret UI `Timeline` whose rail joins them: each one's time, and a marker shaded by state, gray before a milestone runs, yellow while it runs, green once it is done, red where the run ended with an error, and a pause where Boxel stopped the run. Under each milestone, the timeline lists the tasks the script reported inside it (`realm.progress.task`): the latest 5, with a button that shows the earlier ones. The plan's milestones the run hasn't started stay gray after it, marked _Not started_. Without a last run to list, and for everyone else, the section lists the milestones the script declares, each _Not started_. The card reads them from the script's text: the first `realm.progress.plan([...])` whose array holds only string literals (`declaredMilestones`). A plan built at run time shows nothing until a run reports one, and the section shows an `EmptyState`. A `Callout` says who runs it and who pays.
 - **Edit**: `FormSection`s of `Field`s. The script is edited in place in a `CodeEdit` (the `CodeField`'s edit face over Pret UI's `CodeEditor`) and saved to its file with the host's `write-text-file` tool. It reloads when the file changes elsewhere, unless it holds unsaved edits. A trigger's form shows only its kind's fields: a `SegmentedControl` for the kind, a `Combobox` of IANA zones, `DatePicker`, `TimeInput` and `NumberInput` controls, and the schedule's reading under its expression. The schedule's expression is checked as the author types with `cronTriggerProblem` in the trigger's time zone, the rule the server reads the declaration with (_The 5-minute minimum_), so the editor shows the server's own message and accepts exactly what the server accepts.
 - **Webhook triggers**: the edit view picks the webhook from the realm's `_automation-webhooks` list in a Pret UI `Select`, each choice showing who made it. A path the card holds that the list lacks stays a choice, marked as not one of the workspace's webhooks, with a problem under the field. Without the list (no tools, as in a prerender, a failed request, or an answer that the viewer isn't a direct writer) the field takes a typed path. While the server reports `webhookDeliveriesStartRuns: false` (the status route's attributes in the isolated view, the webhook list's `meta` in the editor), each webhook trigger warns "This trigger can’t fire, Boxel doesn’t run automations from webhooks." A server that reports true, or nothing, gets no warning.
 - **Cron in words**: `describeCron(expression)` in `automation/describe-cron.ts` returns `{ summary, groups }`. A short summary ("Weekdays at 9:00 AM", "3 times a day") plus a labelled group for every list of times, days or months, so several values are listed rather than joined into a long sentence. It returns undefined for shapes it can't put plainly, and the view falls back to the expression alone. It is display only; validity and firing times are `automation-schedule.ts`'s.
@@ -236,9 +236,9 @@ The views get the row from `GET <realm>/_automation-status?automation=<card URL>
 - **400** when `automation` is missing, not a URL, or outside the realm, asked only for a direct writer.
 - **200** with `{ data: { type: 'automation-status', id, attributes }, meta: { directWriter: true } }` for a direct writer. `attributes` is `{ switchedOn: false }` when no row exists. Otherwise it holds `state`, `pauseReason`, `payer`, `viewerIsPayer`, `nextRun`, `lastResult`, `lastFinishedAt`, `failuresInARow` and `lastFailure` (the failure streak and its latest run's id, `reason`, `message` and `finishedAt`, or null; see _Pausing after repeated failures_), `pauseProblems` (what the declaration reader found, each `{ code, path, message }`, when `pauseReason` is `invalid-declaration`, else null), and `triggers`, one per trigger the card declares, in the card's order: `label`, `runs`, and for a bounded trigger `runsLeft` (with `runsLeftAtLeast` past `REMAINING_RUNS_LIMIT`) and `until`, plus `nextRun` and `spent`. Times are ISO strings.
 
-Both shapes carry `webhookDeliveriesStartRuns` (`WEBHOOK_DELIVERIES_START_RUNS`, _Which webhooks a realm can use_), which the card reads to warn under each webhook trigger. Both shapes carry `lastRun`, the automation's last run that started and has ended (`readLastRunMilestones`), and `currentRun`, its run in progress (`readCurrentRunMilestones`), each with its milestones (_Run milestones_) or null. A Preview is a test of the script, so neither is ever one. A run can start and end before switch-on (a Run now), so neither depends on the row.
+Both shapes carry `webhookDeliveriesStartRuns` (`WEBHOOK_DELIVERIES_START_RUNS`, _Which webhooks a realm can use_), which the card reads to warn under each webhook trigger. Both shapes carry `lastRun`, the automation's last run that started and has ended (`readLastRunMilestones`), and `currentRun`, its run in progress (`readCurrentRunMilestones`), each with its milestones (_Run milestones and tasks_) or null. A Preview is a test of the script, so neither is ever one. A run can start and end before switch-on (a Run now), so neither depends on the row.
 
-`payer` is the payer's Matrix id only when the viewer is the payer or `shareARealmGrant` finds a realm whose permission rows name both (ADR 011 §1.2). Otherwise it is null, and the view reads "A person who shares no workspace with you". Each trigger's next run and whether the trigger is spent come from `computeAutomationSchedule` at the realm's clock (`now()` in `clock.ts`), as the tick computes them. Runs left are counted one trigger at a time over the indexed declaration, the row's `scheduled_since` and `trigger_runs`, with no `now`, so a slot that has passed but isn't enqueued yet still counts as left. Counting stops after `RUNS_LEFT_BUDGET_MS` (250 ms) per answer; a trigger past the budget reports no `runsLeft`. When the card no longer reads as a declaration, each trigger the row has counted reports `runs` alone. The response is `no-store`. The view fetches again when the card is re-indexed, and on a `job` or `automation` realm event naming the automation (below), since a run or a change to the row changes the answer and not the card.
+`payer` is the payer's Matrix id only when the viewer is the payer or `shareARealmGrant` finds a realm whose permission rows name both (ADR 011 §1.2). Otherwise it is null, and the view reads "A person who shares no workspace with you". Each trigger's next run and whether the trigger is spent come from `computeAutomationSchedule` at the realm's clock (`now()` in `clock.ts`), as the tick computes them. Runs left are counted one trigger at a time over the indexed declaration, the row's `scheduled_since` and `trigger_runs`, with no `now`, so a slot that has passed but isn't enqueued yet still counts as left. Counting stops after `RUNS_LEFT_BUDGET_MS` (250 ms) per answer; a trigger past the budget reports no `runsLeft`. When the card doesn't read as a declaration, each trigger the card declared when it last read (`lastDeclaredLabels`) reports `runs` alone; a label an edit removed stays in the row with `declared: false`, keeping its count should it come back, and is left out. The realm's automation list (`_automations`) names the same labels for a switched-on automation whose card the index lacks. The response is `no-store`. The view fetches again when the card is re-indexed, and on a `job` or `automation` realm event naming the automation (below), since a run or a change to the row changes the answer and not the card.
 
 The realm loads `automation-status.ts` with a dynamic `import()` on the route's first use, so the schedule code stays out of every bundle that imports the realm. An in-browser test realm has no `automations` table. Host tests mount a virtual-network handler that answers the route (`tests/acceptance/automation-view-test.gts`).
 
@@ -284,18 +284,18 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 
 ### What a row holds
 
-| Column                                                                   | Holds                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `automation_id`, `realm`                                                 | The automation card and its realm, as canonical identifiers (ADR 002), the same spellings `automation_runs` uses                                                                                                                                                                                                                                     |
-| `payer`                                                                  | The Matrix user id of the direct writer who switched it on or last resumed it. Only switch-on and resume set it                                                                                                                                                                                                                                      |
-| `state`, `pause_reason`, `paused_by`, `pause_problems`                   | `active`, `paused`, `waiting-for-credits` or `done`. A paused row has a reason, and no other row does; `paused_by` names the person, when a person paused it; `pause_problems` (JSON `[{ code, path, message }]`) what the declaration reader found, read only when the reason is `invalid-declaration`. Every pause writes it, and resume clears it |
-| `caps_snapshot`                                                          | JSON: every cap in `AUTOMATION_CAP_NAMES` as the card set it, plus `batchedAI` and the webhooks its triggers named (`webhookPaths`), when the payer switched it on or resumed it                                                                                                                                                                     |
-| `trigger_runs`                                                           | JSON keyed by trigger label: `{ runs, lastSlot?, since?, timing?, live? }`, the `runState` `computeAutomationSchedule` reads (see _The cursor_), plus each trigger's `timing` and whether it was `live` when the row last followed the card                                                                                                          |
-| `scheduled_since`                                                        | When it was switched on or last resumed: the schedule's `since`. Slots at or before it never run                                                                                                                                                                                                                                                     |
-| `next_run`                                                               | The earliest next run across unspent cron and one-time triggers; null when none is left. The `automations_due_idx` partial index serves the tick's search over active and waiting-for-credits rows                                                                                                                                                   |
-| `last_enqueued_at`, `last_started_at`, `last_finished_at`, `last_result` | The most recent run: when it was enqueued, started and finished, and whether it ended `complete`, `error` or `canceled`                                                                                                                                                                                                                              |
-| `failures_since`                                                         | When it was switched on or last resumed, by the database clock: only runs created at or after it count toward a pause for repeated failures (see _Pausing after repeated failures_)                                                                                                                                                                  |
-| `switched_on_at`, `updated_at`                                           | When the row was made and last changed                                                                                                                                                                                                                                                                                                               |
+| Column                                                                   | Holds                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `automation_id`, `realm`                                                 | The automation card and its realm, as canonical identifiers (ADR 002), the same spellings `automation_runs` uses                                                                                                                                                                                                                                                                 |
+| `payer`                                                                  | The Matrix user id of the direct writer who switched it on or last resumed it. Only switch-on and resume set it                                                                                                                                                                                                                                                                  |
+| `state`, `pause_reason`, `paused_by`, `pause_problems`                   | `active`, `paused`, `waiting-for-credits`, `waiting-for-key-approval` or `done`. A paused row has a reason, and no other row does; `paused_by` names the person, when a person paused it; `pause_problems` (JSON `[{ code, path, message }]`) what the declaration reader found, read only when the reason is `invalid-declaration`. Every pause writes it, and resume clears it |
+| `caps_snapshot`                                                          | JSON: every cap in `AUTOMATION_CAP_NAMES` as the card set it, plus `batchedAI` and the webhooks its triggers named (`webhookPaths`), when the payer switched it on or resumed it                                                                                                                                                                                                 |
+| `trigger_runs`                                                           | JSON keyed by trigger label: `{ runs, lastSlot?, since?, timing?, live?, declared? }`, the `runState` `computeAutomationSchedule` reads (see _The cursor_), plus each trigger's `timing`, whether it was `live` when the row last followed the card, and whether the card `declared` it when the card last read                                                                  |
+| `scheduled_since`                                                        | When it was switched on or last resumed: the schedule's `since`. Slots at or before it never run                                                                                                                                                                                                                                                                                 |
+| `next_run`                                                               | The earliest next run across unspent cron and one-time triggers; null when none is left. The `automations_due_idx` partial index serves the tick's search over active and waiting-for-credits rows                                                                                                                                                                               |
+| `last_enqueued_at`, `last_started_at`, `last_finished_at`, `last_result` | The most recent run: when it was enqueued, started and finished, and whether it ended `complete`, `error` or `canceled`                                                                                                                                                                                                                                                          |
+| `failures_since`                                                         | When it was switched on or last resumed, by the database clock: only runs created at or after it count toward a pause for repeated failures (see _Pausing after repeated failures_)                                                                                                                                                                                              |
+| `switched_on_at`, `updated_at`                                           | When the row was made and last changed                                                                                                                                                                                                                                                                                                                                           |
 
 ### States and who changes them
 
@@ -314,7 +314,19 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 - **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Before it changes the row, resume admits its caller as the payer (`admitPayer` in `automation-admission.ts`, the `admit` that `resumeAutomation` is given), as the automation's next run would admit them: their account can sign in, the realm finds the script readable and parsing and every declared operation passing as them (`Realm.admitAutomationPayer`, so a `{{userKey}}` slot fills from their own key bindings), and their balance covers one run's minimum balance, with the automation under the daily and monthly caps they agree to for the day and month its first run after the resume falls in (`firstRunAfterResume`: now for a webhook trigger, otherwise the next scheduled run; `buildAdmitPayerSpending`). A refusal (`not-admitted`, carrying the run's refusal code) leaves the automation paused under its old payer. Admission asks the Matrix server and the realm, so it runs before the resume's transaction, for a resume that would otherwise go ahead (paused, the caller a direct writer, the realm not archived); a transaction that finds the row paused when admission wasn't asked (a pause committed in between) asks it then and starts again. Each run is still admitted on its own. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending and running runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it), and pauses them once more after. Switch-on and resume refuse an archived realm (`realm-archived`), asked in their own transaction under the realm's automation lock, which they take shared and `pauseRealmAutomations` takes exclusive (`lockRealmAutomations`), so one that read the realm as not yet archived commits before the second pause reads the realm's automations. Restoring the realm leaves them paused until a direct writer resumes each one.
 - **`checkAutomationCaps`** and **`checkAutomationPayer`** pause without a person. A row already paused keeps its reason, since a resume takes a new snapshot whatever paused it. A cap the snapshot doesn't limit (an unset credit cap, or a cap added to the card type after the snapshot) is never "raised"; `capsRaisedAbove` is the comparison.
 - **Waiting for credits.** A run's admission moves the row between `active` and `waiting-for-credits` (`setAutomationWaitingForCredits`). A run that acts as the payer and is refused with `insufficient-credits` moves an active row to waiting; the next such run whose balance passes (admitted, or refused only for a credit cap, which the check reads after the balance) moves it back to active. The tick keeps enqueuing a waiting row's due runs as it does an active one's, and each is admitted or refused on the balance at that moment, so the automation continues at its next due time once the balance recovers. Nothing changes the state when the payer tops up; the view says _Waiting for credits_ until the next due run. A Preview or Run now is charged to whoever clicked, so its refusal never moves the row. A paused or _done_ row, or one whose payer a resume changed, is never moved. The move is one conditional `UPDATE`, so a pause that commits first wins.
-- The tick, the card's index hook and the run task own `next_run`, `trigger_runs`, `waiting-for-credits`, `done` and the `last_*` columns once the row exists. The lifecycle functions set the next run and `done` only where they start a schedule. Whatever writes `trigger_runs` keeps each entry's `timing`.
+- **Waiting for key approval.** See _Key approvals: waiting for key approval_, below.
+- The tick, the card's index hook and the run task own `next_run`, `trigger_runs`, `waiting-for-credits`, `done` and the `last_*` columns once the row exists. The lifecycle functions set the next run and `done` only where they start a schedule. Whatever writes `trigger_runs` keeps each entry's `timing` and `declared`: `recordTriggers` records both, and the index hook's paused and waiting branches, which keep the schedule, record `declared` alone (`withDeclaredLabels`).
+
+### Key approvals: waiting for key approval
+
+An automation's keys are approved when it is switched on, for the life of the automation, and again after it changes (ADR 039). The pieces: `packages/runtime-common/automation-key-approval.ts` (the version and how it matches), `packages/realm-server/lib/automation-key-approvals.ts` (the check, and following it), `lib/automation-key-approval-records.ts` (writing and ending records), and `followKeyApprovals` / `waitForKeyApproval` in `automations.ts`.
+
+- **What a run needs.** A run of the automation's triggers needs, for each credential slot of each declared operation, the binding a call fills the slot from (the payer's own for `{{userKey}}`, the realm's share for `{{apiKey}}`, as the `key-bindings` skill describes) **and an automation approval**: a row in `automation_key_approvals` naming the automation (`automation_id`, cascading from `automations`) and the binding (`binding_id`, cascading from `key_bindings`), written by the key's owner. A binding approved for automations without naming this automation serves none of its runs.
+- **The version.** An approval records the automation as its owner approved it (`version` JSON): the payer, the declared operations, the SHA-256 of the script file, each trigger's label, timing (`triggerTiming`), run count and webhook, the params, and the `callApiCalls` cap. `version_key` is the SHA-256 of all but the cap. A changed run count asks again, even a lower one. An approval matches when `version_key` is the same and the card's `callApiCalls` is no higher than `call_api_calls`; a lower cap, and any other caps edit, keeps it (raising a cap pauses with `caps-raised` instead). A version that changes back matches again.
+- **Who can clear the state.** Each key owner whose approval is missing approves the automation in the secure window, with a confirmation naming the automation and the version it was shown (`automation: { id, version }` on `POST /_key-bindings`, where `version` is `confirmationOf`'s `<versionKey>.<callApiCalls>`; refused 409 when the automation, its cap included, changed since, so no approval records a cap its owner wasn't shown). Who that is, per slot, is `canApprove` in the switch-on answer: `payer` (their own key, or a share whose key they own), `another-key-owner` (the owner of a share's key), or `nobody-yet` (an `{{apiKey}}` slot with no share in the realm: a direct writer shares a key first). Once the confirmation commits, every automation of the realm waiting for key approval is checked again (`followAutomationKeyApprovals`); one whose approvals all match moves to the state its schedule gives from that moment (active or `done`), with its next run computed, and the `automation` event goes to direct writers. Slots that passed while it waited never run: each trigger's cursor moves up to that moment, while `scheduled_since` stays the payer's switch-on or last resume, so a revocation of the payer's sessions made while it waited still refuses its runs (`session-revoked`). Resuming a suspended share (`handleResumeKeyShare`) checks the realm's waiting automations again the same way.
+- **Into the state.** Switch-on and resume check every declared operation with the caller as payer (`Realm.checkAutomationKeyApprovals`, through `CallApiSender.checkAutomationKeyApprovals`); a switch-on whose approvals the realm can't check (its script can't be read) is refused 422. One missing: the row starts `waiting-for-key-approval`, `next_run` null, nothing enqueued; a resume admits a payer who lacks a binding and resumes the automation waiting. An active, `done` or `waiting-for-credits` row moves to waiting when: the index hook sees an edit to the card or its script that stops an approval matching (`approvalsStillMatch`, compared in the worker with the script read through the pass's fetch, over only the approvals of bindings the card could use now: a share's, or the payer's own, for a declared operation; an approval a former payer gave, or one for an operation the card dropped, is ignored. A script the pass can't read changes nothing); the realm's full check after an incremental pass it started finds an approval missing (see _While waiting_), which is how an edit that adds an operation needing a key moves an automation that had no approval; a binding it uses is revoked or removed (`revokeBindingsIn`, which removes the approval; `waitForKeyApprovalOfBindingsIn` counts only an approval the automation can use, a share's binding or one its payer approved with their own key, so revoking a former payer's own binding moves nothing); or a run's admission is refused for a key approval (`KEY_APPROVAL_REFUSAL_REASONS`). A move by the index hook or a run's admission cancels the row's pending runs (`error_reason` `waiting-for-key-approval`); a revocation or a binding move leaves them to admission, which refuses them `waiting-for-key-approval`. A binding that comes to send another share or key ends its approvals (`writeApproval`, `moveShareBindingsIn`), unless the same confirmation approves those automations again. Every path that ends approvals answers the automations they served (`affected`: `revokeBindingsIn`, `endAutomationKeyApprovalsIn`, `waitForKeyApprovalOfBindingsIn`, and the `revokeBinding`, `removeGrant`, `deleteUserKey`, `unshareKey`, `approveBindings` and `swapKeyIntoShare` results built on them), paused and already-waiting ones included, since their approvals changed either way. Once it commits, its handler sends each one's `automation` event to its realm's direct writers and checks it again (`followEndedKeyApprovals`; a re-approval or a swap reports them and checks the realm's waiting automations): one whose ended approval was for an operation its card no longer declares has nothing missing, and runs again. A pause takes precedence: a paused row keeps its pause.
+- **While waiting.** The tick never claims it (no `next_run`), reconcile ends a lost scheduled run of it rather than enqueuing it again, admission refuses a trigger's run enqueued before the wait (`waiting-for-key-approval`), and the realm's `_run-admission` check refuses any run but a Preview or Run now (it reads the run's row, so a batch's follow-up is checked too) whose approvals don't match (`key-approval-ended`). Preview and Run now still run. The worker's index hook doesn't move a waiting row back to active: the worker can't read a private realm's operation definitions. The realm does: once an incremental pass it started lands, it checks the approvals of each automation that isn't paused and whose card or script the pass touched (`automationTouchedBy`), in full (`Realm.followAutomationKeyApprovals`), so an edit that makes every approval match again (a revert) runs it again with nobody asked, and one that leaves an approval missing moves it to waiting. That check runs beside the write rather than in its way (a definition lookup can render a module), and `Realm.incrementalIndexing()` holds it until it settles. A pass whose writer asked for no realm events still moves the rows and reports nothing. An approval landing, a switch-on or a resume checks the same way.
+- **An approval lasts.** Nothing asks again per run, and a pause and resume by the same payer need none. It ends when its owner revokes the binding, the binding is removed (key deleted, grant removed), the binding moves to another share or key, or the automation is removed or its card deleted. A suspended share or a binding that needs re-approval makes runs refuse at admission, which moves the automation to waiting.
 
 ### When the row is recomputed: the card's index hook
 
@@ -360,6 +372,7 @@ SELECT state, pause_reason, paused_by, payer, next_run, scheduled_since,
 - `paused` with `invalid-declaration`: a run came due while the card didn't read as a declaration. `pause_problems` (or the status route's `pauseProblems`, which the card's Status section lists by trigger or section) names each problem, and follows the card as it is re-indexed. Fixing the card resumes the automation on the next index pass; no one needs to resume it.
 - `paused` with `repeated-failures`: the automation's own runs kept failing. `readAutomationFailures` (or the status route's `failuresInARow` and `lastFailure`) names the latest failed run, its `error_reason` and its `error_message`; the query under _Pausing after repeated failures_ lists the whole streak. Fix what the runs fail on (the script, a key, the card), check it with a Preview, then resume, which clears the streak.
 - `active` with a null `next_run`: only webhook triggers, or none left that the schedule can place.
+- `waiting-for-key-approval`: a key approval one of its operations needs is missing or no longer matches. `GET /_automation-switch-on` answers `keyApprovals` (each operation's state and who can approve what is missing); `SELECT binding_id, approved_by, version_key, call_api_calls, version FROM automation_key_approvals WHERE automation_id = '<id>'` shows what was approved, to compare with the card and script now.
 - `waiting-for-credits`: the payer's last run was refused with `insufficient-credits`. Its due runs still start and are refused until the payer's balance, less what their runs in flight and unsettled batches hold, reaches the run's minimum balance (the `pricing` skill, _The minimum balance and the credit caps_). The first run admitted makes it `active`.
 - A run canceled with no `canceled_by`: an automatic pause, or the index hook's remove, canceled it; its `error_reason` names which.
 
@@ -426,6 +439,20 @@ SELECT r.id, r.trigger, r.slot, r.state, r.created_at, l.message
 ```
 
 The ticks themselves are `automation-tick` rows in `jobs`; their `result` counts what each did.
+
+**Batch follow-ups.** The same job then starts each batch's follow-up run (`startDueAIBatchFollowUps` in `packages/runtime-common/ai-batch-follow-ups.ts`): every `ai_batches` row whose `deadline` has passed and whose `follow_up_run_id` and `follow_up_dropped_at` are null (read through `ai_batches_follow_up_due_idx`), whose automation has a row that is neither `paused` nor `waiting-for-key-approval`, and that was submitted since that row's `switched_on_at`. For each, holding the automation's row `FOR UPDATE` and checking it again under the hold (as it holds the row for a trigger's run), it makes the run row (trigger `batch`, slot = the batch's id, `acts_as` = the batch's `acts_as`), enqueues its job with `triggerKind: 'batch'`, `scheduledAt` = the deadline, the dedupe key `automation:<id>:batch:<batch id>` and a timeout from the caps snapshot's `seconds`, then records the run in `follow_up_run_id`, which takes the batch out of the search. A tick that finds the run row already made and still pending (a tick stopped before recording it) enqueues its job again, which the queue joins to any unfinished job with that key, and records it; one that finds it started only records it. So each batch has one follow-up. A paused or key-approval-waiting automation's batch waits however long that lasts, including when the pause lands while the tick is starting follow-ups (the outcome is `held`, logged `is held`); a removed automation's batch gets none, including after the automation is switched on again, and once its deadline has passed the tick sets its `follow_up_dropped_at`, which takes it out of the search. Once recorded, a follow-up whose job is lost is enqueued again by reconcile, with the same input (`aiBatchFollowUpInput`). The follow-up's log starts with a `trigger` line naming the batch and the run that submitted it, and the worker logs:
+
+```
+automation-tick: batch <batch id> of automation <id> reached its deadline and started follow-up run <run id> (job <job id>)
+```
+
+The job's `result` counts `followUpsStarted` and `followUpsFailed`.
+
+```sql
+-- batches waiting for their follow-up
+SELECT batch_id, automation_id, deadline FROM ai_batches
+ WHERE follow_up_run_id IS NULL AND follow_up_dropped_at IS NULL ORDER BY deadline;
+```
 
 **Why a due run didn't start.** Check in this order:
 
@@ -1054,16 +1081,17 @@ sent to the run record. The pieces live in `packages/host/app/lib/realm-runner/`
 | Card updates          | `cards.update`                                                                        | yes; saved through `_atomic` when the script finishes, within its time limit. The realm server refuses a run's `_atomic` unless that route stages its writes, and the run then fails at the save                |
 | Operations            | `operations.invoke`, `operations.invokeBatchOperation`                                | yes; the realm server admits a `callApi` only for an operation the card declares, counts it against `callApiCalls`, and refuses a write operation it doesn't stage (_Declared operations and the per-run caps_) |
 | Resolve               | `resolve`                                                                             | yes; counted against `resolveCalls` and priced against `aiCredits` at `_request-forward` when the forward carries the run's token                                                                               |
-| Progress              | `activity`, `progress.plan`, `progress.milestone`, `progress.count`                   | yes; `progress.*` only here                                                                                                                                                                                     |
+| Batched AI            | `resolve.batch`                                                                       | yes, and only here; submitted through `/_ai-batches` with the run's token, refused unless the payer turned on `batchedAI` and the realm server turns batch submits on (_Batched AI: `realm.resolve.batch`_)     |
+| Progress              | `activity`, `progress.plan`, `progress.milestone`, `progress.task`, `progress.count`  | yes; `progress.*` only here. `progress.count` records nothing: the run's first call logs one `warn` console line naming `progress.task`, and the script runs on                                                 |
 | Console               | `console.log`, `console.info`, `console.warn`, `console.error`                        | yes; only here                                                                                                                                                                                                  |
 | Downloads and deletes | `fs.download`, `fs.delete`                                                            | no                                                                                                                                                                                                              |
 | Web, images, capture  | `web.search`, `web.read`, `images.generate`, `capture`                                | no                                                                                                                                                                                                              |
 | Session and UI        | `room.*`, `ui.*`, `workspaces.*`, `index.*`, `plan`, `ask`, `operations.capabilities` | no                                                                                                                                                                                                              |
-| Transforms            | `transform`                                                                           | no; interactive surface only                                                                                                                                                                                    |
+| Transforms            | `transform`                                                                           | yes; in the run's transform worker in the tab, outside QuickJS and outside the queue of realm calls (_`realm.transform` in a run_)                                                                              |
 
 The unit test `realm-runner-surfaces-test.ts` pins `AUTOMATION_METHODS` and
 fails when a method on it reaches anything but a realm read, a staged write,
-an operation, the model, progress or the console. Adding a method, or moving
+an operation, the model, a transform, progress or the console. Adding a method, or moving
 one between surfaces, changes that test in review. The interactive surface's
 guest has `realm` and `room`, and no `console` or `progress`.
 
@@ -1073,7 +1101,8 @@ How a method differs from the interactive surface:
   interactive surface only creates, and edits through `fs.replace`. A write
   of the content the file already holds is reported as unchanged.
 - **No interactive per-run limits**: no 20-file, 200-card-update,
-  200-operation or 3-`resolve` limit. The card's caps take their place, and
+  200-operation, 3-`resolve` or 100-`transform` limit (a run has at most 8
+  transforms waiting at once instead). The card's caps take their place, and
   the realm server counts each against the run row (_Declared operations and
   the per-run caps_).
 - **A limit on file content held**: a run keeps every file it reads, every
@@ -1085,12 +1114,63 @@ How a method differs from the interactive surface:
   it.
 - **Progress and console are one-way**: they return nothing, so a script
   needn't await them, and an unawaited one doesn't fail the run. A bad
-  argument (an empty milestone name, `count(3, 2)`) throws in the script.
+  argument (an empty milestone name, a task past `MAX_TASK_CHARS` (200)
+  characters, a task before the script's first milestone) throws in the
+  script.
   A run reports at most `MAX_RUN_NOTIFICATIONS` (5,000) of them, of
   `MAX_RUN_NOTIFICATION_CHARS` (2,000,000) characters of arguments together:
   they cost memory in a tab other runs share. The worker drops the rest
   before posting them, and the run's progress ends with one `warn` line
   saying how many it dropped.
+
+### Batched AI: `realm.resolve.batch`
+
+`realm.resolve.batch(requests, { by, milestone })` sends `realm.resolve`
+requests nobody is waiting on as one OpenRouter batch, at about half the
+price (ADR 030). The run submits the batch and goes on to finish and commit
+as usual; no tab or worker waits on the batch. A follow-up run picks up the
+answers.
+
+- **In the tab** (`RealmFsSession#resolveBatch` in `tools/run-realm-code.ts`,
+  `resolveBatchRequest` in `lib/realm-runner/research.ts`): each request is
+  read as a `realm.resolve` request and sent as the chat completion
+  `realm.resolve` would send (`resolveChatBody`), keyed by its place in the
+  list (`customId` `"0"`, `"1"`, …), at most `MAX_RESOLVE_BATCH_REQUESTS`
+  (500) and `MAX_RESOLVE_BATCH_BYTES` (4 MiB) together. `by` is the deadline,
+  an ISO time or a Date, after now and at most 24 hours away; without it the
+  deadline is the card's `batchDeadlineMinutes`, which the worker passes in
+  the script input. A run submits one batch; a second call throws. The call
+  starts the batch's run milestone (`milestone`, or `batched AI`), reports a
+  `task` line once the batch is submitted, and answers
+  `{ batchId, requests, deadline, milestone }`. The guest's
+  `realm.resolve.batch` is a method on `realm.resolve`; `onSurface` in
+  `worker.ts` keeps it only where `resolve.batch` is on the surface.
+- **The submit** (`RunAutomationTool#runTokenBatchSubmit`) posts to the
+  realm server's `/_ai-batches` with the run's token. The handler
+  (`handle-ai-batches.ts`) refuses it unless `AI_BATCH_SUBMITS_ENABLED` is
+  `true` on the realm server (`aiBatchSubmitsEnabled`), refuses a Preview and
+  an automation whose caps snapshot has `batchedAI` off, and a run that already has a batch in `ai_batches` (409, so a retried attempt can't submit a second), reserves the batch on
+  `aiCredits` (_The AI spending cap_), and counts each request against
+  `resolveCalls` in one statement (`countRunCall` with a call count): a batch
+  past the cap ends the run with `hit-a-cap`, releases its reservation and
+  sends nothing. The refusal comes back to the script as the call's error.
+- **The record** is the batch's `ai_batches` row, whose `run_id` names the
+  submitting run, whose `deadline` is the follow-up's schedule, and whose
+  `follow_up_run_id` names the follow-up once it starts.
+- **The follow-up**: once the deadline passes, the minute tick starts it
+  (_The tick: enqueueing due runs_). Its run row has trigger `batch`
+  (`BATCH_RUN_TRIGGER`, a label no card trigger may take) and the batch's id
+  as its slot; its job has `triggerKind: 'batch'`. It acts as the batch's
+  `acts_as`.
+
+```sql
+-- a run's batch, and whether its follow-up has started
+SELECT b.batch_id, b.deadline, b.state, f.id AS follow_up, f.state AS follow_up_state
+  FROM ai_batches b
+  LEFT JOIN automation_runs f
+    ON f.automation_id = b.automation_id AND f.trigger = 'batch' AND f.slot = b.batch_id
+ WHERE b.run_id = '<run id>';
+```
 
 For media from an AI vendor, author guidance is boxel-skills'
 `api-integrations` skill, _Images from an AI vendor_: an automation's own AI
@@ -1124,12 +1204,57 @@ the runner's own timer stops one that waits past it. Either way
 of N s (its seconds cap)`. A script error rejects with `RealmScriptError`,
 which names the script's line.
 
+### `realm.transform` in a run
+
+`realm.transform(input, program, { params?, spelling? })` runs one BXL
+program over JSON the script hands it, under BXL's `transform` profile, as
+on the interactive surface: `RealmTransformer` in
+`packages/host/app/lib/realm-runner/transform.ts` starts the run's transform
+worker in the prerender tab on the first call, and ends it with the run. The
+program never runs inside QuickJS.
+
+- **Per call**, the interactive surface's limits hold: a program of at most
+  16 KiB, at most 1 MB of input and params and 1 MB of output, BXL's step and
+  output limits, and 10 s of time. BXL stops a program at its time; one that
+  stalls outside BXL's metering ends the worker 5 s later, every call waiting
+  on it rejects, and the next call starts a new worker. Either way the call
+  rejects in the script, which can catch it and go on.
+- **Per run**, nothing counts the calls (the interactive surface allows
+  100): `AUTOMATION_TRANSFORM_LIMITS.calls` is `Infinity`, and the run's
+  time limit bounds them (ADR 031 §1.4). The bytes they move in and out
+  together are bounded at `MAX_TRANSFORM_BYTES_PER_RUN` (10 MB), as on the
+  interactive surface. At most `MAX_TRANSFORMS_IN_FLIGHT` (8) calls wait for
+  the worker at once, and a call past that is refused: the worker runs one
+  program at a time, and each waiting call holds its program and input in a
+  tab other runs share, so a script that starts calls without awaiting them
+  can't queue them without bound. Their time is part of the tab time the run
+  is charged.
+- **Outside the queue**: a transform touches no file, so it neither waits
+  behind the run's queued realm calls nor holds them up. The run's `idle` waits
+  for it too.
+- **One log line per run**: no realm server sees a transform, so the tab
+  reports them. The transformer tallies every call (one refused before it
+  reaches the worker too), the calls that failed, the time their programs ran
+  in the worker (from the worker's start of each, in ms), and the bytes of
+  input and params sent and of output answered. As the run settles,
+  `runAutomationScript` records one `{ kind: 'transform', at, calls, failed,
+ms, inBytes, outBytes }` event when the script made any call, before the
+  error line of a run that fails. The realm server stores it as a `script`
+  line of kind `transform`, `Transforms: N calls, F failed, T ms`, with the
+  tally in `data`. A line per call would go around the run's notification
+  cap, and a script that transforms in a loop would push its own console and
+  milestone lines out of the log. BXL reports no step count, so the line has
+  none.
+
+Author guidance for writing a transform in an automation is boxel-skills'
+`automation-authoring` skill.
+
 ### Progress and redaction
 
 The run's progress goes to the `RunProgressSink` the caller passes, one
 `RunProgressEvent` at a time, in the order the script made them: `activity`
-lines, the milestone `plan`, each `milestone` reached, `count`s within one,
-and `console` lines with their level and script line (a value that isn't a
+lines, the milestone `plan`, each `milestone` reached, the `task`s reported
+inside one, one `transform` line as the run settles (_`realm.transform` in a run_, above), and `console` lines with their level and script line (a value that isn't a
 string is shown as JSON, an `Error` as `Name: message`; a line past 10,000
 characters is cut and says how many it lost). Each event's time is `at`.
 
@@ -1174,13 +1299,13 @@ realm server's log for Loki. The code is
 
 ### Where the lines come from
 
-| `source`   | `kind`                                                       | Written by                                                                                                                                                                                                                                 |
-| ---------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `script`   | `console`, `activity`, `plan`, `milestone`, `count`, `error` | the run's tab: `RunLogSink` (`packages/host/app/lib/realm-runner/run-log-sink.ts`) sends the progress sink's events to the realm's `POST /_run-log` with the run token                                                                     |
-| `platform` | `call-api`                                                   | `callApiOperation`, through the run's `CallApiRunMeter.logCall`: operation, method, destination with query values masked, status, time and size, or why it was refused                                                                     |
-| `platform` | `resolve`                                                    | `_request-forward`, for a forward that carried the run's token: model, status, time and cost                                                                                                                                               |
-| `platform` | `commit`                                                     | `/_run-commit`: the files saved, or the refusal's code and detail                                                                                                                                                                          |
-| `platform` | `finish`                                                     | `finishAutomationRun`, `abandonAutomationRun` and `cancelAutomationRun`, once the row changes: how the run ended, with the row's `error_reason` and `error_message` (a cap that ended it, a time limit, a script error) or who canceled it |
+| `source`   | `kind`                                                                   | Written by                                                                                                                                                                                                                                 |
+| ---------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `script`   | `console`, `activity`, `plan`, `milestone`, `task`, `transform`, `error` | the run's tab: `RunLogSink` (`packages/host/app/lib/realm-runner/run-log-sink.ts`) sends the progress sink's events to the realm's `POST /_run-log` with the run token                                                                     |
+| `platform` | `call-api`                                                               | `callApiOperation`, through the run's `CallApiRunMeter.logCall`: operation, method, destination with query values masked, status, time and size, or why it was refused                                                                     |
+| `platform` | `resolve`                                                                | `_request-forward`, for a forward that carried the run's token: model, status, time and cost                                                                                                                                               |
+| `platform` | `commit`                                                                 | `/_run-commit`: the files saved, or the refusal's code and detail                                                                                                                                                                          |
+| `platform` | `finish`                                                                 | `finishAutomationRun`, `abandonAutomationRun` and `cancelAutomationRun`, once the row changes: how the run ended, with the row's `error_reason` and `error_message` (a cap that ended it, a time limit, a script error) or who canceled it |
 
 `RunLogSink` implements `FlushableRunProgressSink`. It sends a batch of at
 most `RUN_LOG_MAX_BATCH_LINES` (500) events and `RUN_LOG_MAX_BATCH_BYTES`
@@ -1360,39 +1485,51 @@ A log that reaches its cap logs one `warn` line saying later lines are
 dropped. Lines come from whichever realm-server task took the request, so
 query by the run, not by one task.
 
-### Run milestones
+### Run milestones and tasks
 
-The script is the only source of a run's milestones; the card holds no list of them, since a list kept on the card drifts from what the code does. The script declares them all up front and marks each as it reaches it:
+The script is the only source of a run's milestones and of the notable tasks inside each; the card holds no list of them, since a list kept on the card drifts from what the code does. The script declares the milestones all up front, marks each as it reaches it, and reports each notable task inside one in a few plain words:
 
 ```js
 realm.progress.plan(['Fetch issues', 'Group by label', 'Write digest']);
 realm.progress.milestone('Fetch issues');
-for (let [i, page] of pages.entries()) {
-  realm.progress.count(i + 1, pages.length); // within the milestone
-  // …
-}
+// …
+realm.progress.task(`Fetched ${issues.length} open issues`);
 realm.progress.milestone('Group by label');
+// …
+realm.progress.task(
+  `Grouped ${issues.length} issues under ${labels.size} labels`,
+);
 ```
 
-They reach the realm server as the run's `plan`, `milestone` and `count` log lines. `appendRunLog` hands each batch to `recordRunMilestones` (`packages/runtime-common/automation-run-milestones.ts`) under the run row's lock, before it checks the log's cap, so a run whose log is full still records where it got to:
+They reach the realm server as the run's `plan`, `milestone` and `task` log lines. `appendRunLog` hands each batch to `recordRunMilestones` (`packages/runtime-common/automation-run-milestones.ts`) under the run row's lock, before it checks the log's cap, so a run whose log is full still records where it got to and what it did:
 
-| Where                                | Holds                                                                                                                                                                                |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `automation_runs.milestone_plan`     | the plan the script declared last (a second `plan` replaces it), at most `RUN_MILESTONE_MAX_PLAN` (50) names of `RUN_MILESTONE_MAX_NAME_CHARS` (80) characters, the surface's limits |
-| `automation_run_milestones`          | one row per milestone the run reached, at `position` in the order reached, with `started_at` (the tab's time for the mark) and the last `count_done` / `count_total` inside it       |
-| `automation_runs.milestones_dropped` | marks past `RUN_MAX_MILESTONES` (200) a run records; the run's last recorded milestone then lasts until the run ends                                                                 |
+| Where                                | Holds                                                                                                                                                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `automation_runs.milestone_plan`     | the plan the script declared last (a second `plan` replaces it), at most `RUN_MILESTONE_MAX_PLAN` (50) names of `RUN_MILESTONE_MAX_NAME_CHARS` (80) characters, the surface's limits                           |
+| `automation_run_milestones`          | one row per milestone the run reached, at `position` in the order reached, with `started_at` (the tab's time for the mark)                                                                                     |
+| `automation_runs.milestones_dropped` | marks past `RUN_MAX_MILESTONES` (200) a run records; the run's last recorded milestone then lasts until the run ends                                                                                           |
+| `automation_run_tasks`               | one row per task the run recorded, at `position` in the order reported, with `milestone_position` (the milestone the run was in), `text` (cut to `RUN_TASK_MAX_CHARS`, 200) and `reported_at` (the tab's time) |
+| `automation_runs.tasks_dropped`      | tasks past `RUN_MAX_TASKS` (200) a run records, and tasks reported inside a milestone marked past `RUN_MAX_MILESTONES`                                                                                         |
 
-A milestone lasts until the next one starts, or until the run ends (`finished_at`). A milestone the plan doesn't name is recorded like any other and reads as unplanned; one marked twice is two rows. A count before the run's first milestone is ignored, as is one inside a milestone marked past the limit. An attempt that takes a run from another attempt (`startAutomationRunAttempt`, before the commit is claimed) clears the run's plan and milestones, since the script runs again from its start.
+A milestone lasts until the next one starts, or until the run ends (`finished_at`). A milestone the plan doesn't name is recorded like any other and reads as unplanned; one marked twice is two rows. A task belongs to the milestone the run is in when the script reports the task. The surface throws on a task before the script's first milestone, so the realm server ignores one that arrives anyway. An attempt that takes a run from another attempt (`startAutomationRunAttempt`, before the commit is claimed) clears the run's plan, milestones and tasks, since the script runs again from its start.
 
-**Reading them.** `readRunMilestones(dbAdapter, runId)` answers a run's `plan`, its `milestones` in order (`name`, `planned`, `startedAt`, `endedAt`, `ms`, and `done` / `total` when counted), `current` (the milestone a running run is in), `ahead` (the plan's milestones it hasn't reached), `failedIn` (for a run that ended with an error, the milestone it was in) and `dropped`. `readLastRunMilestones(dbAdapter, automationId)` answers the same for the automation's last run that started and has ended, leaving Previews out: what the card shows, through `_automation-status`'s `lastRun`.
+`realm.progress.count(done, total)` records nothing. The surface keeps the method, so a script written for counts runs on, and the run's first call logs one `warn` console line that names `realm.progress.task`. A `count` line from a tab whose host still sends one is stored in the log and recorded on no milestone.
+
+A realm server that reads no `task` line, or no `transform` line, refuses a whole batch that carries one with a 400. A deploy publishes the host before the realm servers roll, so a tab can reach such a server mid-rollout. `RunLogSink` then sends the batch again without its `transform` line, and then without its tasks if the realm server refuses it again, and the run's later batches leave out each kind the realm server refused, so the run's milestones and console lines still land.
+
+**Reading them.** `readRunMilestones(dbAdapter, runId)` answers a run's `plan`, its `milestones` in order (`name`, `planned`, `startedAt`, `endedAt`, `ms`, and `tasks`, each `{ text, at }` in the order reported), `current` (the milestone a running run is in), `ahead` (the plan's milestones it hasn't reached), `failedIn` (for a run that ended with an error, the milestone it was in), `dropped` and `tasksDropped`. `readLastRunMilestones(dbAdapter, automationId)` answers the same for the automation's last run that started and has ended, leaving Previews out: what the card shows, through `_automation-status`'s `lastRun`. `readRunMilestonesFor` reads a page of runs in three queries.
 
 ```sql
-SELECT r.state, r.milestone_plan, m.position, m.name, m.started_at, m.count_done, m.count_total
-  FROM automation_runs r LEFT JOIN automation_run_milestones m ON m.run_id = r.id
- WHERE r.id = '<run id>' ORDER BY m.position;
+SELECT m.position, m.name, m.started_at, t.text, t.reported_at
+  FROM automation_run_milestones m
+  LEFT JOIN automation_run_tasks t
+    ON t.run_id = m.run_id AND t.milestone_position = m.position
+ WHERE m.run_id = '<run id>' ORDER BY m.position, t.position;
 ```
 
-**Telemetry.** As a run ends (`finishAutomationRun`, `abandonAutomationRun`, `cancelAutomationRun`), `closeRunMilestones` writes each of its milestones once to the `boxel:automation-milestones` channel: one JSON line with `automation`, `realm`, `run`, `job` (the run's queue job, when it had one), `outcome`, `errorReason`, `milestone`, `position`, `planned`, `ms`, `done`, `total` and `failedHere`, the numbers flat so LogQL can `unwrap` them. `outcome` is the run's state as it ended, so a `commit-interrupted` run whose batch landed afterwards reads `error` there and `complete` on its row:
+**Live tasks.** A `/_run-log` request that records a milestone or a task sends one `job` realm event (_The `job` realm event_), which the card's Runs section and Run milestones section answer by reading the run again. The tab sends a run's lines in batches, at most one a second unless a batch fills (`RUN_LOG_FLUSH_INTERVAL_MS`, `RUN_LOG_MAX_BATCH_LINES`), so a script that reports many tasks quickly costs one event a batch. The realm event line also merges a run's queued `job` event into the run's newer one (`coalesce` in `realm-event-dispatcher.ts`), and `RUN_MAX_TASKS` bounds how many requests record a task at all.
+
+**Telemetry.** As a run ends (`finishAutomationRun`, `abandonAutomationRun`, `cancelAutomationRun`), `closeRunMilestones` writes each of its milestones once to the `boxel:automation-milestones` channel: one JSON line with `automation`, `realm`, `run`, `job` (the run's queue job, when it had one), `outcome`, `errorReason`, `milestone`, `position`, `planned`, `ms`, `tasks` (how many the run recorded in the milestone) and `failedHere`, the numbers flat so LogQL can `unwrap` them. `outcome` is the run's state as it ended, so a `commit-interrupted` run whose batch landed afterwards reads `error` there and `complete` on its row:
 
 ```bash
 packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
@@ -1430,8 +1567,11 @@ step or its run milestone changes. The event is `JobEventContent` in
   takes a run over from another clears `admitted_at`, so the retry's own
   admission reads as `admission` again.
 - **`milestone`** is the name of the run's last `automation_run_milestones`
-  row, or `null` before its first. A `count` inside a milestone sends no
-  event.
+  row, or `null` before its first. A `/_run-log` request that records a
+  task inside a milestone sends the event too, with the same `milestone`, so
+  a subscriber reads the run again and shows the new tasks: one event a
+  request, however many tasks the request carries, and the realm event line
+  merges a run's queued events.
 - **`automation`** is the card's identifier in RRI form (ADR 002 §1.3), the
   spelling the card's own id has, so a card matches the event against its id.
 - **No person is in it.** Who the run acts as, who canceled it, and its error
@@ -1468,7 +1608,7 @@ logged as `could not send the job event for automation run …`.
 | A trigger's run is created (pending)             | the `automation-tick` task                                                                                                                                                                |
 | Preview or Run now creates its run               | `startAutomationPreview` / `startAutomationRunNow`, given `reportRunChange` in their options                                                                                              |
 | An attempt starts the run, admits it, or ends it | `runAutomationAttempt` (`AutomationAttemptContext.reportRunChange`, built in the `run-command` task)                                                                                      |
-| A milestone is reached                           | the realm's `/_run-log` route, when `appendRunLog` reports `milestones > 0`                                                                                                               |
+| A milestone is reached, or a task reported       | the realm's `/_run-log` route, once a request, when `appendRunLog` reports `milestones > 0` or `tasks > 0`                                                                                |
 | The commit is claimed, released or lands         | the realm's `/_run-commit` route                                                                                                                                                          |
 | A call ends the run at a cap                     | `endRunAtCap` (the realm's `callApi` meter; the request forwarder for AI requests)                                                                                                        |
 | A pause, remove or cancel ends runs              | `withRunCancels` and `cancelAutomationRunFor`, given `reportRunChange` (`AutomationActorOptions`, `AutomationSyncOptions`, or a trailing argument); archiving and the index hook pass one |
@@ -1587,23 +1727,23 @@ The section renders only once the route answers, and only when it answers that t
 
 `GET <realm>/_automations` (`answerAutomationList` in `packages/runtime-common/automation-list.ts`, loaded on first use like `automation-status.ts`) takes the realm ACL's outcome as the status route does (see _The card's view and the status route_ for who is refused), then lists automations only to a direct writer (`isDirectWriter`, asked of `#statusViewer`'s session). Anyone else the realm admits, a caller its policy is handed included, gets HTTP 200 with `{ data: [], meta: { directWriter: false } }`, not a 403: any 401 or 403 that comes back through `authedFetch` makes the host's `authErrorEventMiddleware` send a `boxel-auth-error` event, and the guards that listen for it (the prerender routes, and `CardPrerender`, which the app mounts only under `isTesting()`) fail the loads in flight. The realm config asks while it renders, so a refusal failed the config card's other loads in the in-page test indexer; in a person's browser nothing listens. A direct writer gets `no-store` `{ data: [<automation-summary>], meta: { directWriter: true } }`, ordered by name. It holds one resource per automation card the index holds (`IndexQueryEngine.getInstanceSourcesOfType` with the `automationRef` key the declaration reader requires), switched on or not, plus any switched-on automation whose card doesn't read from the index, listed from the row with a null `title` and each trigger the row counted. Each resource's `id` is the card's URL, and its attributes are:
 
-| Attribute                            | Holds                                                                                                                                                                                                                                                |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`                              | the card's `cardInfo.name`, or null                                                                                                                                                                                                                  |
-| `switchedOn`, `state`, `pauseReason` | from the row; `state` and `pauseReason` are null when the automation isn't switched on                                                                                                                                                               |
-| `triggers`                           | each trigger as the card declares it: `label`, `kind`, and the kind's fields (`expression` and `timeZone`; `date`, `time` and `timeZone`; `webhookPath`)                                                                                             |
-| `nextRun`                            | the row's next run as an ISO time; null when none is left, or when the automation isn't switched on                                                                                                                                                  |
-| `payer`, `viewerIsPayer`             | the payer's Matrix id only when the viewer is the payer or shares a realm grant with the payer (ADR 011 §1.2), else null                                                                                                                             |
-| `monthlyCredits`                     | the monthly cap the payer agreed to (the caps snapshot) when switched on, the card's otherwise                                                                                                                                                       |
-| `spentThisMonth`                     | what the automation was charged this UTC month across every charge kind that names it: `automationCreditsSince` in `automation-spend.ts`, the sum the monthly cap's admission check compares, so the figure a viewer reads is the one the cap counts |
-| `lastResult`, `lastFinishedAt`       | the automation's last run that started and ended, leaving out Previews                                                                                                                                                                               |
-| `currentRun`                         | the run in progress, leaving out a Preview: `runId`, `startedAt`, `milestone` (the run milestone the script last reported, or null before the first) and `done` / `total` when the script counts inside the milestone; null when nothing runs        |
+| Attribute                            | Holds                                                                                                                                                                                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`                              | the card's `cardInfo.name`, or null                                                                                                                                                                                                                        |
+| `switchedOn`, `state`, `pauseReason` | from the row; `state` and `pauseReason` are null when the automation isn't switched on                                                                                                                                                                     |
+| `triggers`                           | each trigger as the card declares it: `label`, `kind`, and the kind's fields (`expression` and `timeZone`; `date`, `time` and `timeZone`; `webhookPath`)                                                                                                   |
+| `nextRun`                            | the row's next run as an ISO time; null when none is left, or when the automation isn't switched on                                                                                                                                                        |
+| `payer`, `viewerIsPayer`             | the payer's Matrix id only when the viewer is the payer or shares a realm grant with the payer (ADR 011 §1.2), else null                                                                                                                                   |
+| `monthlyCredits`                     | the monthly cap the payer agreed to (the caps snapshot) when switched on, the card's otherwise                                                                                                                                                             |
+| `spentThisMonth`                     | what the automation was charged this UTC month across every charge kind that names it: `automationCreditsSince` in `automation-spend.ts`, the sum the monthly cap's admission check compares, so the figure a viewer reads is the one the cap counts       |
+| `lastResult`, `lastFinishedAt`       | the automation's last run that started and ended, leaving out Previews                                                                                                                                                                                     |
+| `currentRun`                         | the run in progress, leaving out a Preview: `runId`, `startedAt`, `milestone` (the run milestone the script last reported, or null before the first) and `task` (the last task the script reported inside that milestone, or null); null when nothing runs |
 
 Host tests mount a virtual-network handler that answers the route (`tests/acceptance/realm-automations-test.gts`), since an in-browser test realm has no `automations` table.
 
 ## The run list
 
-The Automation card's isolated view lists the automation's runs in a **Runs** section, for the realm's direct writers alone. The section starts closed, with the number of runs beside its title, so a long history doesn't bury the rest of the card. Open, it shows one page of 20 runs, newest first, with a pager when there are more. A run is listed from the moment a trigger fires, or someone previews or runs the automation by hand. Each row has what started the run, the run's state, how far the run got through the script's milestones (the milestone a running run is in, the one a failed run failed in), and why a run that didn't complete ended as it did; a row opens to the run's milestone timeline. A waiting run says what it waits for: the automation's running run (an automation's runs go one at a time) or, with none running, a Boxel worker. A run in its admission checks says so. A slot of a schedule that joined a run before the run started (_skipped_, _The tick_) shows as its own row above that run, naming the run. The section reads `GET <realm>/_automation-runs` through the host's `authed-fetch` tool, and reads the page shown again on every `job` and `automation` realm event naming the automation.
+The Automation card's isolated view lists the automation's runs in a **Runs** section, for the realm's direct writers alone. The section starts closed, with the number of runs beside its title, so a long history doesn't bury the rest of the card. Open, it shows one page of 20 runs, newest first, with a pager when there are more. A run is listed from the moment a trigger fires, or someone previews or runs the automation by hand. Each row has what started the run, the run's state, how far the run got through the script's milestones (the milestone a running run is in with the last task the script reported there, the one a failed run failed in), and why a run that didn't complete ended as it did; a row opens to the run's timeline (_A run's timeline_): the run's steps and milestones, its log, calls, writes and cost. A running run's new tasks show without a reload: each `/_run-log` request that records a task sends one `job` event (_Run milestones and tasks_). A waiting run says what it waits for: the automation's running run (an automation's runs go one at a time) or, with none running, a Boxel worker. A run in its admission checks says so. A slot of a schedule that joined a run before the run started (_skipped_, _The tick_) shows as its own row above that run, naming the run. The section reads `GET <realm>/_automation-runs` through the host's `authed-fetch` tool, and reads the page shown again on every `job` and `automation` realm event naming the automation.
 
 ### The run list route
 
@@ -1627,7 +1767,7 @@ A direct writer gets `no-store` `{ data: [<automation-run-item>], meta: { direct
 | `actsAs`, `viewerIsActsAs`                          | who the run acts as, under the same rule                                                                                                                                                                                                                                                                                                   |
 | `createdAt`, `startedAt`, `finishedAt`              | ISO times                                                                                                                                                                                                                                                                                                                                  |
 | `joined`                                            | the slots that joined the run, each `{ trigger, slot, at }`, read from the run's `trigger` log lines with `data.skipped` (_The tick_). A line the log's cap refused leaves its slot out                                                                                                                                                    |
-| `milestones`                                        | the run's `RunMilestones` (`readRunMilestones`, _Run milestones_): the plan, each milestone reached, the `current` one of a running run and the one a failed run `failedIn`                                                                                                                                                                |
+| `milestones`                                        | the run's `RunMilestones` (`readRunMilestones`, _Run milestones and tasks_): the plan, each milestone reached with its tasks, the `current` one of a running run and the one a failed run `failedIn`                                                                                                                                       |
 | `waitingFor`                                        | for a `pending` run, what it waits for: `{ kind: 'run', runId, startedBy, trigger, slot, state }`, the automation's running run, or `{ kind: 'worker' }` when none runs; null for any other run. Only the running run is named: the queue orders an automation's waiting runs by their jobs, and a re-queued job can sit behind newer runs |
 
 How the card words each ending, each with what fixes it: `script-error` names the line; `timed-out` and `hit-a-cap` say Boxel stopped the run at the limit (naming the cap from `cap`); each refusal in _Admission_'s table says Boxel didn't start the run and who does what about it; any other admission refusal is an outside service Boxel couldn't use; a cancel names who canceled it, or the pause that canceled it. Milestones come from `readRunMilestonesFor`, two queries for the whole page.
@@ -1640,6 +1780,23 @@ curl -s -H "Authorization: Bearer $REALM_TOKEN" -H 'Accept: application/json' \
 ```
 
 Host tests mount a virtual-network handler that answers the route (`tests/acceptance/automation-view-test.gts`), since an in-browser test realm has no `automation_runs` table.
+
+### A run's timeline
+
+A run row opens to the run's timeline (`RunDetail` in the catalog's `automation/automation.gts`), live while the run goes. Reading it top to bottom:
+
+1. **One serial timeline** (Pret UI `Timeline`): **Admission**, then the script's milestones in the order the script runs them, then **Commit**. Each row is marked done, running, failed here, stopped here or not started from the listed run's `state`, `step` and milestones (_The `job` realm event_ says how `step` is read). The script's milestones stand for the script: a **Script** row shows only when the run has no milestones, saying the script reported none, or marking where a run failed or stopped before its first milestone. A step another part of a run needs goes into `RUN_STEPS` between the script and the commit; the batches a batched run waits on are that case.
+2. **Times on the timeline**, every one in the viewer's own time zone (`runClock`), which one muted line at the top of the opened run names, so no time repeats the zone. Admission says when the run started and how long the run waited (the listed run's `createdAt` to `startedAt`); each milestone, how long the milestone took or has run; the commit, how long the commit took (`timings.commitMs`). The row where an ended run ended (the commit, or the milestone or step the run failed or stopped in) adds when the run finished or ended and how long the run took in all. A Preview that completes marks the commit **Skipped**, since a Preview saves nothing. A run that ended with no attempt ever started (canceled while waiting, or ended as `job-lost`) has no `step`; its Admission reads stopped or failed, saying the run ended before Boxel started the run. Each milestone also says how long the milestone took on the automation's run before this one ("Last run took …"), read from one run: the next older run on the page shown that started and ended, isn't a Preview, and isn't a run admission refused (which never ran the script), matched by name. The ones still ahead say so too.
+3. **Five tabs**:
+   - **Log**: the run's log lines, oldest first, with the latest 200 shown and a button that shows 500 earlier ones at a time, each with its time, level, where the line came from (the script, or Boxel for a platform line), the message and the script line it points at. A segmented control picks the least severe level to show (Errors, Warnings, Info, All), and each choice shows that level and every more severe one, as log filters do; each option counts the lines it shows. The report's `log.byLevel` counts only lines that store a level, while the route's `level` filter reads a line with none as `info`, so the card counts info as `log.lines` less the log, warn and error counts. Changing the level reads the log again from the start with `level` set to that level and the more severe ones. The lines the log's cap refused (`dropped`) are counted above the lines.
+   - **Calls**: the run's `callApi` calls (operation, method and masked destination, the vendor's status or `Refused` / `Failed` when the call has a `code` instead, time to the millisecond and size) and the AI requests it resolved (model, status, the tokens read and written, time). The `resolve` log line carries `inputTokens` and `outputTokens` from the provider's `usage` (`tokensOf` in `handle-request-forward.ts`), and the report serves them; the line records no cost, in its message or its `data`, and no console route serves one (ADR 049 §1.4): an end user sees what AI costs only as the credits Boxel charged, on the Cost tab. A transform runs in the tab, so no platform line logs it; the Log tab shows the run's one `transform` line.
+   - **Writes**: the files a complete Preview staged with their sizes, or the paths a Run now or a trigger's run saved; a Preview a later Preview replaced says so. A run whose log reached the cap before the commit line counts the files and names none.
+   - **Cost**: an itemized receipt (Pret UI `StatementTable`), one line per charge kind (`run`, `ai`, `batched_ai`, `run_indexing`, and any other kind as _Other charges_) and a total that is the sum of the lines. The `run_indexing` charge lands once the commit's index pass completes, which can be after the run ends, and the tab says so; a running run's AI credits held for answers to come show below the receipt, not in it. **Storage** is no run's charge, so the tab shows it apart: the files the run saved that still exist and their size, the files the automation's runs keep in all, and what a day of their storage costs (`dailyCredits` from `/_automation-storage`, which the server prices as the daily storage charge, margin included), with the rules of _The daily storage charge_ in the `pricing` skill spelled out for the person: charged daily to the payer while the automation is switched on, paused or done included, until the automation is removed or the files deleted, in whole credits once the days add up to one, and never for a Preview. A change to those rules changes this copy too.
+   - **Limits**: one row per per-run limit the card sets (`RUN_LIMITS`: outside calls, data received, saves, AI requests, AI spending, run time), each with what the run used of the limit (`cost.callApiCalls`, `callApiResponseBytes`, `writes`, `resolveCalls`, `aiCreditsSpent`, and `timings.runMs` or the time since a running run started) and a bar, colored as the near-limit and at-limit warnings elsewhere on the card are (`LIMIT_NEAR_SHARE`). A limit the card leaves unset reads as no limit, and a limit of 0 as none allowed. The rows measure against the card's own `caps`, as the card's last-run limits do.
+
+The run's steps and milestones come from the listed run, which the run list reads again on every `job` event naming the automation. The rest comes from the realm server's console reads (_The console's reads_) through the host's `read-automation-run` tool (`packages/host/app/tools/read-automation-run.ts`), since a card's own fetch carries realm sessions only. The tool takes `{ realm, run, read: 'report' }` for `GET /_automation-run-report`, `{ realm, run, read: 'log', after, limit, levels }` for one page of `GET /_automation-run-log`, or `{ realm, automation, read: 'storage' }` for `GET /_automation-storage`, with the viewer's realm-server session, and answers `{ ok, status, body }`. The storage is read as a run opens and again with the report. A card has no realm-server fetch to hand `followAutomationRunLog`, so the card runs its own copy of that loop (`automationRunLog` in `automation/automation.gts`), and a change to the rules in _How the console reads a run's log_ belongs in both: page after page, again every 2 s while the run is pending or running, at once on a `job` event naming the run (one that comes while a read is in flight ends the next wait at once), and once more an interval after a page finds the run ended. The report is read again on every `job` event naming the run, and whenever a log page brings lines or a new run state, since a `callApi` call, an AI request or a console line sends no `job` event and Boxel writes the run's charges after the run's last event; the log's last read after the run ends reads the report once more. A read that fails on the way is tried again every 2 s, and the tab says so; a refusal (4xx) ends the reads and says only the workspace's direct writers read the run.
+
+To see why a run looks the way it does on the card, read what the card read: the run's row in the run list route, then the report and the log through the console's reads (_Calling them in development_). A row that reads not started on a run that ended means the row's `step` never reached it: an `error` at `admission` never ran the script. A milestone with no "Last run took" means the one run the card compares with (item 2) reached no milestone of that name, or the page shown holds no such run. Host tests mount virtual-network handlers that answer the three realm-server routes (`tests/acceptance/automation-view-test.gts`, the _a run opened_ module).
 
 ## The automation command
 
@@ -1749,9 +1906,11 @@ the card sets, and held to a daily or monthly cap only when the
 automation's first run after the resume falls in that day or month). The
 resume route mounts the realm if no request has yet (`findOrMountRealm`), and
 asks the Matrix server with the realm server's own admin credentials
-(`automationAccountStanding` on the `RealmServer`). So a payer with no binding of their own for a `{{userKey}}`
-slot, or a balance short of one run, can't resume an automation that would
-only refuse their first run.
+(`automationAccountStanding` on the `RealmServer`). So a payer with a balance short of one run, or an account that can't sign
+in, can't resume an automation that would only refuse their first run. A
+missing key approval is the exception: the resume goes ahead and the
+automation waits for key approval (_Key approvals: waiting for key
+approval_).
 
 The worker's own checks (`AutomationAdmissionChecks`) are built in
 `realm-server/worker.ts` by `buildAutomationAdmissionChecks`
@@ -1763,13 +1922,15 @@ spending hook. A worker without them refuses every run as
 | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `not-switched-on`                                                                 | A run of one of the card's triggers, and the automation has no row: it was removed, or never switched on                                                                                                                                                                                                                                                                                                 | A direct writer switches it on again                                                                                   |
 | `automation-paused`                                                               | A run of one of the card's triggers, and the row is `paused` (the run was enqueued before the pause)                                                                                                                                                                                                                                                                                                     | A direct writer resumes it, which also makes them the payer                                                            |
+| `waiting-for-key-approval`                                                        | A run of one of the card's triggers, and the row is `waiting-for-key-approval` (the run was enqueued before the wait)                                                                                                                                                                                                                                                                                    | Each key owner approves the automation; the next run starts once every approval matches                                |
+| `key-approval-ended`                                                              | The realm's check of every run but a Preview or Run now (`_run-admission` reads the run's row): a binding a slot needs has no automation approval matching the card and script as they read now. The automation moves to `waiting-for-key-approval`                                                                                                                                                      | The key's owner approves the automation again                                                                          |
 | `payer-changed`                                                                   | A trigger's run that acts as someone other than the automation's payer: a resume made someone else the payer after the run was enqueued                                                                                                                                                                                                                                                                  | Nothing: the automation's next run acts as the new payer                                                               |
 | `not-a-direct-writer`                                                             | The person the run acts as has no permission row of their own granting write in the realm (a `*` or `users` row, a policy grant and a bot account never count). When they are the automation's payer, the automation is paused with `payer-lost-access` too (`checkAutomationPayer`)                                                                                                                     | Another direct writer resumes the automation and becomes the payer; for a Run now, someone who writes directly runs it |
 | `session-revoked`                                                                 | `users.sessions_revoked_at` is after the run was given its identity's authority: the payer's switch-on or last resume (`automations.scheduled_since`) for a trigger's run, the submitting run's start for a batch's follow-up, the run's own start (`automation_runs.created_at`) for a manual run. A payer's revocation also pauses the automation with `payer-lost-access` (`pauseForPayerLostAccess`) | The person signs in again and a direct writer resumes the automation, which moves `scheduled_since`                    |
 | `account-deactivated`                                                             | The Matrix server's admin API says the account is deactivated or locked, or has no such user. A payer's also pauses the automation with `payer-lost-access`                                                                                                                                                                                                                                              | Another direct writer resumes the automation and becomes the payer                                                     |
 | `account-unverifiable`                                                            | The worker can't ask: it has no admission checks, no Matrix server name, no admin credentials (`MATRIX_ADMIN_USERNAME`/`MATRIX_ADMIN_PASSWORD`, set on the worker task in infra's `configs/boxel-worker`), or the Matrix server didn't answer. What the Matrix server answered goes to the worker's log (`automation-admission`), never to the run                                                       | Fix the worker's credentials or the Matrix server; the next run is admitted                                            |
 | `not-an-automation`, `missing-script`, `script-error`                             | The card doesn't read as an automation, the script can't be read with the run's token, or it is empty, too long, or doesn't parse as the Realm Runner wraps it (`scriptParseError`)                                                                                                                                                                                                                      | Fix the card or the script                                                                                             |
-| `binding-not-approved`                                                            | A declared operation has no approval for automations by the run's identity                                                                                                                                                                                                                                                                                                                               | The person approves the operation in the secure window                                                                 |
+| `binding-not-approved`                                                            | A declared operation has no approval for automations by the run's identity. A payer's trigger run also moves the automation to `waiting-for-key-approval`, as `binding-needs-reapproval` and `share-suspended` do; none of the three counts toward a pause for repeated failures                                                                                                                         | The person approves the operation in the secure window                                                                 |
 | `binding-needs-reapproval`                                                        | The operation's request changed since it was approved                                                                                                                                                                                                                                                                                                                                                    | The person reviews the changes and approves again in the secure window                                                 |
 | `share-suspended`                                                                 | The realm's share the operation's `{{apiKey}}` slot uses is suspended                                                                                                                                                                                                                                                                                                                                    | A direct writer resumes the share, or the key's owner swaps another key into it                                        |
 | `credential-rejected`                                                             | The vendor refused the key or connection the operation uses, or its OAuth client is broken (see the `oauth-connections` skill). The realm records the credential on the run (`credential_*`) before answering                                                                                                                                                                                            | Reconnect or replace the key                                                                                           |
@@ -1969,19 +2130,19 @@ URL>", "attributes": { "realm": "<realm URL>", ... } } }`; a cancel names the
 run instead, `{ "data": { "type": "automation-run", "id": "<run id>",
 "attributes": { "realm": "<realm URL>" } } }`. Answers are `no-store`.
 
-| Route                                                                | Body attributes  | Answers                                                                                                                                                                                                                                 |
-| -------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>` | —                | 200 `automation-estimate`: `switchedOn`, the card's `monthlyCredits`, and `estimate` (`estimateAutomationCost`, with `recentPreviewCredits`: what the caller's latest finished Preview of it cost). 503 while the process has no prices |
-| `POST /_automation-switch-on`                                        | `monthlyCredits` | 201 `automation` (state, pause reason, `viewerIsPayer`, next run, caps snapshot), with `meta.estimate`. The caller is the payer                                                                                                         |
-| `POST /_automation-preview`                                          | `click`          | 202 `automation-run`, pending, `dryRun` true, acting as and charged to the caller                                                                                                                                                       |
-| `POST /_automation-run-now`                                          | `click`          | 202 `automation-run`, pending, `dryRun` false                                                                                                                                                                                           |
-| `POST /_automation-pause`                                            | —                | 200 `automation`, paused `requested`; its pending and running runs are canceled                                                                                                                                                         |
-| `POST /_automation-resume`                                           | `monthlyCredits` | 200 `automation`; the caller is the payer, with a new caps snapshot. 422 with `meta.code` when admitting the caller as the payer refuses them (see _Admission_), and the automation stays paused                                        |
-| `POST /_automation-remove`                                           | —                | 200 `automation`, the row as it was; the row is gone                                                                                                                                                                                    |
-| `POST /_automation-run-cancel`                                       | —                | 200 `automation-run`, canceled by the caller                                                                                                                                                                                            |
-| `GET /_automation-run-report?realm=&run=`                            | —                | 200 `automation-run-report` (_The console's reads_, below)                                                                                                                                                                              |
-| `GET /_automation-preview-file?realm=&run=&path=`                    | —                | 200, the staged file's bytes as `application/octet-stream`                                                                                                                                                                              |
-| `GET /_automation-storage?realm=&automation=`                        | —                | 200 `automation-storage` (_The console's reads_, below)                                                                                                                                                                                 |
+| Route                                                                | Body attributes  | Answers                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>` | —                | 200 `automation-estimate`: `switchedOn`, the card's `monthlyCredits`, `estimate` (`estimateAutomationCost`, with `recentPreviewCredits`: what the caller's latest finished Preview of it cost), and `keyApprovals` with the payer (the caller before switch-on). 503 while the process has no prices |
+| `POST /_automation-switch-on`                                        | `monthlyCredits` | 201 `automation` (state, pause reason, `viewerIsPayer`, next run, caps snapshot), with `meta.estimate` and `meta.keyApprovals`. The caller is the payer; a missing key approval starts it `waiting-for-key-approval`                                                                                 |
+| `POST /_automation-preview`                                          | `click`          | 202 `automation-run`, pending, `dryRun` true, acting as and charged to the caller                                                                                                                                                                                                                    |
+| `POST /_automation-run-now`                                          | `click`          | 202 `automation-run`, pending, `dryRun` false                                                                                                                                                                                                                                                        |
+| `POST /_automation-pause`                                            | —                | 200 `automation`, paused `requested`; its pending and running runs are canceled                                                                                                                                                                                                                      |
+| `POST /_automation-resume`                                           | `monthlyCredits` | 200 `automation`, with `meta.keyApprovals`; the caller is the payer, with a new caps snapshot, and a missing key approval resumes it `waiting-for-key-approval`. 422 with `meta.code` when admitting the caller as the payer refuses them (see _Admission_), and the automation stays paused         |
+| `POST /_automation-remove`                                           | —                | 200 `automation`, the row as it was; the row is gone                                                                                                                                                                                                                                                 |
+| `POST /_automation-run-cancel`                                       | —                | 200 `automation-run`, canceled by the caller                                                                                                                                                                                                                                                         |
+| `GET /_automation-run-report?realm=&run=`                            | —                | 200 `automation-run-report` (_The console's reads_, below)                                                                                                                                                                                                                                           |
+| `GET /_automation-preview-file?realm=&run=&path=`                    | —                | 200, the staged file's bytes as `application/octet-stream`                                                                                                                                                                                                                                           |
+| `GET /_automation-storage?realm=&automation=`                        | —                | 200 `automation-storage` (_The console's reads_, below)                                                                                                                                                                                                                                              |
 
 **The monthly cap.** Switch-on and resume make the caller the payer of the
 caps the card sets (the caps snapshot), and the monthly credit cap is what
@@ -2006,6 +2167,8 @@ automations both before and after marking it archived, so a switch-on or
 resume racing an archive ends paused or refused. Preview and Run now check
 the archive at the route.
 
+**Key approvals.** `keyApprovals` is `{ approved, version, operations: [{ operation, targetType, state, missing?, refusal? }] }`: `state` is `approved`, `missing` (each `missing` entry names a credential slot and `canApprove`: `payer`, `another-key-owner` or `nobody-yet`) or `unavailable` (the operation can't be read as a `callApi` operation in the realm; `refusal` says why, and its runs' admission refuses it). `version` is what a confirmation approving the rest names (_Key approvals: waiting for key approval_).
+
 **Webhooks.** Switch-on and resume refuse a webhook trigger naming a webhook the realm can't use with 422 and each trigger's message (_Which webhooks a realm can use_), and, while `WEBHOOK_DELIVERIES_START_RUNS` is false, carry `meta.notices` saying the webhook triggers can't fire; the estimate carries the same in `attributes.notices`.
 
 **Refusals.** 403 not a direct writer; 422 a resume whose caller admission
@@ -2017,6 +2180,45 @@ paused, not paused, a click already used for another person's run or the
 other kind of run, a run that already ended or whose commit was claimed; 400
 for a malformed body, an automation outside the realm, or a missing click.
 The error body is `{ "errors": [<message>] }`.
+
+### The switch-on screen
+
+The Automation card's isolated view turns an automation on through a
+switch-on screen, a Pret UI `Dialog` (`SwitchOnDialog` in the catalog's
+`automation/automation.gts`). A direct writer opens it from the _Status_
+section: **Turn on** for an automation that isn't switched on, and **Review
+and resume** for one paused with `caps-raised` or `batched-ai-enabled`. Any
+other state offers no button. The screen:
+
+- reads `GET /_automation-switch-on` and shows the estimate: the most one run
+  can cost (`perRun.totalCredits`), the runs counted in a month, the
+  estimate's `credits`, and beside them the caller's
+  `recentPreviewCredits`, which the estimate leaves out;
+- lists what the estimate leaves out: the indexing a run's writes cause, the
+  daily storage, and runs a webhook delivery starts (naming the card's
+  `webhookTriggers`);
+- asks for the monthly limit, filled in from the card's
+  `caps.monthlyCredits`, and refuses an empty one before sending anything;
+- says the person becomes the payer, and what that means;
+- posts `POST /_automation-switch-on`, or `POST /_automation-resume` for
+  **Review and resume**, with the monthly limit, and shows a refusal's
+  message (`errors[0]`) in the screen.
+
+The routes take only the card's own monthly cap (409 otherwise), so a person
+who enters another limit gets that limit written to the card first. The
+screen then reads the estimate again until the server reads the card with the
+new limit (up to 30 seconds), and only then posts.
+
+The card calls these routes through the host's `automation-request` tool
+(`packages/host/app/tools/automation-request.ts`), which sends a request to
+one of the realm server's `/_automation-` routes with the realm-server
+session: `route`, `method`, `realm`, `automation`, `run`, `filePath`,
+`monthlyCredits` and `click` become the route's query or JSON:API body. It
+answers `ok`, `status`, the JSON document in `body`, the route's messages in
+`errors`, and a non-JSON answer's bytes (a Preview's staged file) base64 in
+`bytesBase64`. A call the AI assistant makes with any method but GET waits for the person's
+click. Host tests answer the routes with a virtual-network handler
+(`tests/acceptance/automation-view-test.gts`, the _switching on_ module).
 
 ### The console's reads
 
@@ -2040,16 +2242,19 @@ returning the lines. The attributes:
   `errorMessage`, `credentialRefusal`, `actsAs`, `canceledBy`;
 - `timings` and `cost`, as in _The run's report_ (`cost.creditsByKind` holds
   `ai`, `run`, `run_indexing` and `batched_ai`);
-- `milestones`: the run's `RunMilestones` (_Run milestones_): the plan, each
-  milestone reached with its time and count, the current one, the ones
+- `milestones`: the run's `RunMilestones` (_Run milestones and tasks_): the plan, each
+  milestone reached with its time and tasks, the current one, the ones
   ahead, and the one a failed run was in;
 - `log`: `{ lines, dropped, byLevel, byKind }`, line counts without the
   text. `/_automation-run-log` serves the lines;
 - `callApiCalls` (`operation`, `method`, masked `destination`, `status` or
   `code`, `ms`, `bytes`) and `resolveCalls` (`model`, `status`, `ms`,
-  `costInUsd`), one per `call-api` or `resolve` platform line, with the
-  line's `seq` and `at`. The automation surface has no `transform`, so a
-  run makes no transform calls;
+  `inputTokens`, `outputTokens`), one per `call-api` or `resolve` platform
+  line, with the line's `seq` and `at`. Neither the report nor
+  `/_automation-run-log` serves an AI request's cost, and the log route drops
+  a `costInUsd` from a stored line's `data` (ADR 049 §1.4). A transform runs in the tab
+  and has no platform line; the run's one `transform` script line tallies its
+  transforms;
 - `writes`: `count` (the row's `writes`), plus `staged` and
   `stagedReplacedBy` for a complete Preview and `committed` for a run whose
   commit landed, as `stagedFiles`, `stagedFilesReplacedBy` and
@@ -2126,7 +2331,8 @@ slot the click, `acts_as` the clicker, and enqueues it with
 cap for the job's timeout, `scheduledAt` the row's `created_at`). The
 declaration reader refuses a card trigger labelled `manual`
 (`reserved-label`), so a click never shares a slot and dedupe key with a
-scheduled run. A worker runs it exactly as it runs a scheduled run, through
+scheduled run; it refuses `batch`, the label of a batch's follow-up, the
+same way. A worker runs it exactly as it runs a scheduled run, through
 `runAutomationAttempt`: every check that makes before the script starts
 applies to it, as do the caps (`readRunLimits`: the card's caps, held to
 the snapshot once the automation is switched on), the automation's
@@ -2145,6 +2351,30 @@ enqueued (the job's key is the run's), and a finished one isn't enqueued
 again (`job` absent). A click that already started a run for someone else,
 or a run of the other kind, is refused (`click-reused`). Both then move
 through `pending`, `running`, and `complete` or `error`, like any run.
+
+A Preview holds back the realm writes, and its outside calls go out as in
+any run. `dryRun` reaches the script as `realm.current.automation.dryRun`,
+and the run uses the flag only to check the job against its row and to skip
+the commit (`packages/runtime-common/tasks/run-automation.ts`), so every
+`callApi` and `resolve` call in a Preview reaches the vendor and is charged.
+The one difference in charging is batched AI: `handleSubmitAIBatch` refuses
+a Preview's batch submit, so a Preview of a `batchedAI` automation sends its
+`resolve` calls at the normal price (`ceilingCaps` reserves for it with
+`batchedAI` off), where a scheduled run pays the batch price. A script
+that changes something outside the realm (sends, creates, charges) checks
+the flag before each such call. The boxel-skills `automation-authoring`
+skill, _Outside calls in a Preview_, is what authors and the AI assistant
+follow: the `dryRun` check with a log line of what the call would send,
+the data in the request body rather than a realm URL the service can't read
+before the commit, `cards.get` by key rather than `cards.search` for the
+run's own writes, and an idempotency key on each change where the service
+reads one, since a commit can fail after the call (for a service that reads
+none, such as Slack's `chat.postMessage`, the section's fallback: record
+each change on the item's card, look the item up at the service first where
+the service allows, and tell the person a failed run can repeat the
+change). When a Preview's outside call did something it
+shouldn't have, read the run's `call-api` log lines (_Comparing a Preview
+with a Run now_) and check the script against that section.
 
 ### The batch a Preview keeps
 

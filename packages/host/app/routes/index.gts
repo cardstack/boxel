@@ -10,7 +10,6 @@ import stringify from 'safe-stable-stringify';
 
 import {
   HOST_APP_QUERY_PARAMS,
-  isCardErrorJSONAPI,
   isRedirectRoutingRule,
 } from '@cardstack/runtime-common';
 import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
@@ -179,24 +178,7 @@ export default class Card extends Route {
         routed?.id ??
         `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
 
-      let model = await this.store.get(cardUrl);
-      // A card's own path is still served while the route set is
-      // incomplete; any other path is an error then, as on the server.
-      // The server also serves a realm file there (`isRealmFilePath`); the
-      // host has no counterpart, so a realm file the store does not load
-      // shows the error page here while a full page load serves the file.
-      if (
-        !routed &&
-        dynamic?.kind === 'unavailable' &&
-        isCardErrorJSONAPI(model) &&
-        model.status === 404
-      ) {
-        console.error(
-          `/${normalizedPath} resolved to nothing while a host route is dropped for a type that is not available yet`,
-        );
-        throw new HostRouteResolutionError();
-      }
-      return model;
+      return await this.store.get(cardUrl);
     }
 
     let { operatorModeState, cardPath } = params;
