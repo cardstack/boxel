@@ -878,11 +878,6 @@ return 'done';`);
     assert.strictEqual(result.batchId, 'batch_1');
     assert.strictEqual(result.requests, 2);
     assert.strictEqual(result.milestone, 'classify tickets');
-    assert.strictEqual(
-      result.firstPass,
-      'before the batch',
-      'the follow-up pass reads what the first pass staged',
-    );
     assert.false(Number.isNaN(Date.parse(result.deadline)));
     assert.deepEqual(
       events
@@ -1067,6 +1062,11 @@ return 'done';`);
         milestone: 'classify tickets',
       },
       'the script runs again as the batch’s follow-up',
+    );
+    assert.strictEqual(
+      result.firstPass,
+      'before the batch',
+      'the follow-up pass reads what the first pass staged',
     );
     assert.false(Number.isNaN(Date.parse(result.deadline)));
     assert.strictEqual(result.results[0], 'label-one');
