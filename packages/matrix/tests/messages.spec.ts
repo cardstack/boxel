@@ -27,6 +27,17 @@ import {
 import { appURL } from '../support/isolated-realm-server.ts';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants.ts';
 
+// The second message is "Message 2", Shift+Enter, "!". It shows one line
+// break between them; textContent drops a <br>, so this reads innerText.
+async function assertShiftEnterLineBreak(page: Page) {
+  let text = page.locator(
+    '[data-test-message-idx="1"] [data-test-user-message-text]',
+  );
+  await expect
+    .poll(async () => (await text.innerText()).trim())
+    .toBe('Message 2\n!');
+}
+
 test.describe('Room messages', () => {
   test(`it can send a message in a room`, async ({ page }) => {
     // TODO: Split up this test (CS-9722).
@@ -82,9 +93,10 @@ test.describe('Room messages', () => {
     await page.keyboard.press('Enter');
     const messages = [
       { from: username, message: 'Message 1' },
-      { from: username, message: 'Message 2\n\n!' },
+      { from: username, message: 'Message 2' },
     ];
     await assertMessages(page, messages);
+    await assertShiftEnterLineBreak(page);
 
     let room2 = await createRoom(page);
     await openRoom(page, room1);
@@ -92,6 +104,7 @@ test.describe('Room messages', () => {
     await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
     await assertMessages(page, messages);
+    await assertShiftEnterLineBreak(page);
 
     await logout(page);
     await login(page, username, password, {
