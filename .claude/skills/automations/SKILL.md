@@ -264,7 +264,7 @@ An incoming webhook (`incoming_webhooks`, made through the realm server's `/_inc
 - an owner who is no longer a direct writer pauses the automation with `webhook-owner-lost-access`, and starts nothing;
 - otherwise each trigger's run row is made, acting as the automation's **payer** (never the webhook's owner), with `delivery:<delivery id>` as its slot (`webhookDeliverySlot`), and `last_enqueued_at` moves.
 
-A delivery that started no run for an automation whose card names the webhook: check the row's `caps_snapshot->'webhookPaths'` first. A path missing from it means the payer never agreed to that webhook, and a resume takes a snapshot that does.
+A delivery that started no run for an automation whose card names the webhook: check the row's `state` and `pause_reason` first. `webhook-changed` means the card names a webhook the payer never agreed to, and a resume takes a snapshot that agrees to it. An `active` or `waiting-for-credits` row whose `caps_snapshot->'webhookPaths'` lacks the path hasn't been checked against its card yet: the card's next index pass pauses it with `webhook-changed`.
 
 Each pending run's job is enqueued with `enqueueAutomationRunJob`, as the tick's are, with `commandInput.webhookPayload` holding the delivery's body (its JSON, or its text when it isn't JSON) and `scheduledAt` the run's `created_at`. The script reads the body as `realm.current.automation.webhookPayload`, and `trigger.kind` is `webhook`. From there the run is any trigger's run: its admission refuses it while the automation is paused or waiting for key approval, or acts as someone other than the payer, and checks the payer's access, keys and credits.
 
