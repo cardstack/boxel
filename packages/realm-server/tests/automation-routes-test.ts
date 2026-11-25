@@ -9,6 +9,7 @@ import {
   getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
 import {
+  insertPermissions,
   archiveRealm,
   createAutomationRun,
   getAutomationRun,
@@ -2441,7 +2442,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(approved.status, 201, approved.text);
       await dbAdapter.execute(
-        `UPDATE user_key_grants SET state = 'rejected', last_probe_at = now() WHERE key_id = $1`,
+        `UPDATE user_key_grants SET state = 'rejected', rejected_at = now(), last_probe_at = now() WHERE key_id = $1`,
         { bind: [key.id] },
       );
       let keyApprovals = await statusKeyApprovals(KEYED);
@@ -2476,18 +2477,29 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a key’s owner who shares no realm grant with the viewer is not named (ADR 011)', async function (assert) {
-      await shareOwnKey(WRITER);
-      await switchOn(OWNER, SHARED);
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      await approveSharedFor(SHARED, shown.version);
+      // The share's owner leaves this realm, so the two share no realm at
+      // all.
       await dbAdapter.execute(
         `DELETE FROM realm_user_permissions WHERE username = $1 AND realm_url = $2`,
         { bind: [WRITER, realm.url] },
       );
       let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
       assert.deepEqual(
-        [slots[0].keyOwner, slots[0].actor],
-        [null, 'key-owner'],
-        'the viewer learns a key’s owner acts, not who',
+        [slots[0].share, slots[0].viewerIsKeyOwner, slots[0].keyOwner],
+        ['Vendor automation-routes-writer', false, null],
+        'the viewer learns which share the slot sends, not whose key it holds',
       );
+
+      // A grant that names both of them in another realm is enough.
+      await insertPermissions(
+        dbAdapter,
+        new URL('http://127.0.0.1:4444/automation-routes-elsewhere/'),
+        { [WRITER]: ['read'], [OWNER]: ['read'] },
+      );
+      [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.strictEqual(slots[0].keyOwner, WRITER);
     });
 
     test('an approval that lands while another is still missing tells the realm’s direct writers', async function (assert) {

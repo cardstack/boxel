@@ -4,6 +4,7 @@ import {
   reportAutomationChanges,
   rri,
   trimExecutableExtension,
+  type RealmResourceIdentifier,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { realmServerAutomationChangeReporter } from '../lib/run-change-reporter.ts';
@@ -271,11 +272,33 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
       realmServerAutomationChangeReporter(args),
       affected,
     );
-    await followAutomationKeyApprovals(
+    let followed = await followAutomationKeyApprovals(
       args,
       realmURL,
       await automationsWaitingForKeyApproval(args.dbAdapter, realmURL, args),
     );
+    // The automation the confirmation approves has a new approval whether
+    // or not its state moved: one that still waits on another key's owner
+    // is told too, so its card shows the approval without a reload. One
+    // whose state the follow moved, or whose approval the confirmation
+    // ended, was reported already.
+    if (
+      automation &&
+      !affected.some((a) => a.automationId === automation.automationId) &&
+      followed.get(automation.automationId)?.kind !== 'approved' &&
+      followed.get(automation.automationId)?.kind !== 'waiting'
+    ) {
+      let row = await getAutomation(
+        args.dbAdapter,
+        automation.automationId as RealmResourceIdentifier,
+      );
+      if (row) {
+        await reportAutomationChanges(
+          realmServerAutomationChangeReporter(args),
+          [row],
+        );
+      }
+    }
     await sendJSON(ctxt, 201, {
       data: approved.map((a) => serializeApproved(args.virtualNetwork, a)),
       meta: { batchId },

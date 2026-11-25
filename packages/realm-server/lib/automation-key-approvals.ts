@@ -216,11 +216,6 @@ export async function checkAutomationKeyApprovals(
 // Brings each automation's state in step with its key approvals, checked in
 // the realm served at `realmURL` (`Realm.followAutomationKeyApprovals`).
 // Returns what each did, keyed by automation id.
-//
-// The realm's direct writers are told of every automation followed, its
-// state moved or not: an automation that still waits can have had one of
-// several approvals land, and the card's key approvals section reads the
-// `automation` event to show it without a reload.
 export async function followAutomationKeyApprovals(
   args: CreateRoutesArgs,
   realmURL: URL,
@@ -233,14 +228,7 @@ export async function followAutomationKeyApprovals(
   if (realm?.url !== realmURL.href) {
     return new Map();
   }
-  let followed = await realm.followAutomationKeyApprovals(automationIds);
-  await reportAutomationChanges(
-    realmServerAutomationChangeReporter(args),
-    [...followed.values()]
-      .filter(({ kind }) => kind === 'unchanged')
-      .map(({ automation }) => automation),
-  );
-  return followed;
+  return await realm.followAutomationKeyApprovals(automationIds);
 }
 
 // Every switched-on automation in the realm served at `realmURL` that is
