@@ -558,7 +558,6 @@ export class PgAdapter implements DBAdapter {
     await this.started;
     // Loop in case the channel state we joined gets torn down by a concurrent
     // unsubscribe (or LISTEN failure) while we were still awaiting establishment.
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this.#isClosed) {
         throw new Error('PgAdapter is closed');
@@ -1799,7 +1798,6 @@ export class PgAdapter implements DBAdapter {
     // have picked up the corrected filenames and run the fix migration.
     await this.fixMigrationNames(config);
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
         await migrate({

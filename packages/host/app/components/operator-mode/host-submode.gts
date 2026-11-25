@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
+import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -29,6 +30,7 @@ import {
   ifConnected,
   modalFocusTrapOptions,
 } from '@cardstack/host/lib/modal-focus-trap';
+import { loadHostURLs } from '@cardstack/host/resources/host-urls';
 
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -170,6 +172,25 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return this.hostModeService.publishedRealmURLs;
   }
 
+  // Reads the host URLs of the realm the Open Site button opens, when there
+  // is one (`HostModeService.openSiteRealmURL`).
+  private hostURLs = loadHostURLs(
+    this,
+    getOwner(this)!,
+    () => this.hostModeService.openSiteRealmURL,
+  );
+
+  // The button shows when there is a site to open: a host URL, or a site
+  // published with v1. The resource starts the read of the host URLs when it
+  // is first used, and `openSiteHostURLs` decides which of them the button
+  // opens.
+  get showsOpenSiteButton() {
+    let hasHostURLs =
+      this.hostURLs.hostURLs.length > 0 &&
+      this.hostModeService.openSiteHostURLs.length > 0;
+    return hasHostURLs || this.hasPublishedSites;
+  }
+
   // With no card open, Host mode falls back to a default realm, such as the
   // user's personal workspace. The host URL manager would then act on a
   // realm the user isn't looking at, so it waits for a card.
@@ -186,10 +207,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       return 'Host URLs';
     }
     return this.hasPublishedSites ? 'Republish Site' : 'Publish Site';
-  }
-
-  get defaultPublishedRealmURL(): string | undefined {
-    return this.hostModeService.defaultPublishedRealmURL;
   }
 
   handlePublishTask = restartableTask(async (publishedRealmURLs: string[]) => {
@@ -255,8 +272,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     });
   });
 
-  get defaultPublishedSiteURL(): string | undefined {
-    return this.hostModeService.defaultPublishedSiteURL;
+  // The canonical host URL with Host Mode v2, else the last site published
+  // with v1, at the card on screen.
+  get defaultSiteURL(): string | undefined {
+    return this.hostModeService.defaultSiteURL;
   }
 
   @action
@@ -270,7 +289,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     }
 
     // If there's no default URL, prevent navigation and show popover
-    if (!this.defaultPublishedRealmURL) {
+    if (!this.defaultSiteURL) {
       mouseEvent.preventDefault();
       mouseEvent.stopPropagation();
       this.isOpenSitePopoverOpen = true;
@@ -383,8 +402,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
             />
           {{/unless}}
         </div>
-        {{#if this.hasPublishedSites}}
-
+        {{#if this.showsOpenSiteButton}}
           <div
             class='open-site-button-container'
             {{onClickOutside
@@ -398,7 +416,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
                   @as='anchor'
                   @kind='secondary'
                   @size='tall'
-                  @href={{this.defaultPublishedSiteURL}}
+                  @href={{this.defaultSiteURL}}
                   class='open-site-button'
                   target='_blank'
                   rel='noopener noreferrer'
@@ -413,7 +431,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
                 Open Site in a New Tab (Shift+Click for options)
               </:content>
             </Tooltip>
-            <OpenSitePopover @isOpen={{this.isOpenSitePopoverOpen}} />
+            <OpenSitePopover
+              @isOpen={{this.isOpenSitePopoverOpen}}
+              @hostURLs={{this.hostModeService.openSiteHostURLs}}
+            />
           </div>
         {{/if}}
 

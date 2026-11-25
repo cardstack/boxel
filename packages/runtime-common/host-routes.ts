@@ -596,7 +596,7 @@ class Validator {
     parent: ParentContext | undefined,
   ): HostRoute | undefined {
     let parentRoute = parent?.route;
-    let displayPath = joinPaths(
+    let displayPath = joinRoutingPaths(
       parentRoute?.fullPath ?? '/',
       typeof rule.path === 'string' ? rule.path : '',
     );
@@ -728,7 +728,7 @@ class Validator {
       position,
       name,
       path,
-      fullPath: joinPaths(parentRoute?.fullPath ?? '/', path),
+      fullPath: joinRoutingPaths(parentRoute?.fullPath ?? '/', path),
       paramNames: [
         ...(parentRoute?.paramNames ?? []),
         ...(pattern?.paramNames ?? []),
@@ -1276,7 +1276,7 @@ class Validator {
   ): void {
     for (let [index, rule] of (rules ?? []).entries()) {
       let childPosition = [...position, index];
-      let path = joinPaths(
+      let path = joinRoutingPaths(
         parentPath,
         typeof rule.path === 'string' ? rule.path : '',
       );
@@ -1399,7 +1399,9 @@ function walk(
   }
 }
 
-function joinPaths(parentFullPath: string, path: string): string {
+// The full path of a route, from its parent's full path and its own path,
+// which is relative to the parent's.
+export function joinRoutingPaths(parentFullPath: string, path: string): string {
   let own = normalizeRoutingPath(path);
   if (parentFullPath === '/') {
     return own;

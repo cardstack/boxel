@@ -20,7 +20,7 @@ import {
   deriveRealmServerUrl,
 } from '../../lib/seed-auth.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
-import { unpublishRealm } from './unpublish.ts';
+import { HOST_URLS_REPLACE_PUBLISH, unpublishRealm } from './unpublish.ts';
 import { cliLog } from '../../lib/cli-log.ts';
 import { createPublishProgressReporter } from '../../lib/publish-progress-reporter.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
@@ -264,6 +264,7 @@ export function registerPublishCommand(realm: Command): void {
       'Matrix id of a source-realm administrator to authorize as in seed mode (defaults to the user derived from the source realm URL)',
     )
     .option('--json', 'Output the result as JSON')
+    .addHelpText('after', `\n${HOST_URLS_REPLACE_PUBLISH}`)
     .action(
       async (
         sourceRealmURL: string,

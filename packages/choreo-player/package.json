@@ -61,7 +61,7 @@
     "@glint/ember-tsc": "catalog:",
     "@types/semver": "^7.7.0",
     "concurrently": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
     "semver": "^7.7.0",

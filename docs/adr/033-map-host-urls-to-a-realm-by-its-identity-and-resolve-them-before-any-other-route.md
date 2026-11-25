@@ -13,7 +13,10 @@ scope:
   - packages/realm-server/server.ts
   - packages/postgres/migrations/*_add-realm-host-urls.js
   - packages/realm-server/routes.ts
+  - packages/realm-server/handlers/handle-search.ts
   - packages/realm-server/lib/index-html-injection.ts
+  - packages/runtime-common/index-runner/prerender-html-visit.ts
+  - packages/runtime-common/index-writer.ts
   - packages/base/default-templates/head.gts
 ---
 
@@ -23,9 +26,10 @@ A realm can be served live at one or more host URLs: a Boxel Space path, a
 claimed site name, or a custom domain. A host URL is another address for the
 realm itself, not a copy of it. The realm server stores each host URL against
 the realm's registry id, and routes a request on one to that realm before any
-other lookup. Ids stay canonical everywhere they are stored. This ADR records
+other lookup. Ids stay canonical everywhere they are stored, but a realm's
+prerendered HTML is rendered against its canonical host URL. This ADR records
 where host URLs live, how a request finds its realm, which host URL is
-canonical, and who may change them.
+canonical, what stored HTML names, and who may change them.
 
 ## 1. Decision
 
@@ -68,23 +72,26 @@ A realm with any host URLs MUST have exactly one canonical host URL. The first
 host URL added MUST be canonical. The canonical host URL MUST NOT be removed
 while the realm has others: another one must be marked canonical first. A
 page's canonical link, its `og:url` and the realm's sitemap MUST use the
-canonical host URL, whichever host URL the request came in on.
+canonical host URL, whichever host URL the request came in on. A request
+for a page on any other host URL MUST be answered with a temporary redirect
+to the same address on the canonical host URL, and MUST NOT be answered with
+a permanent one. A request on such a host URL for anything other than a page
+MUST be served there, as §1.5 says.
 
 ### 1.5. Ids stay canonical
 
 A host URL MUST NOT replace the realm's URL in anything stored about the
 realm: its registry row, its permissions, card ids, index rows, search
-documents and files (ADR 002). Prerendered HTML MUST carry the realm's URL
-too. The canonical host URL MUST be put into it when the response leaves the
-server, so that a change to the canonical host URL needs no re-render. Code
-MUST translate between a host URL and the realm's URL only where a request
-enters the realm server or a response leaves it. A response on a host URL
-MUST name that host URL wherever it would name the realm's URL or its
-canonical host URL, except as §1.4 says. A response that serves a file's
-stored bytes, as a card-source read does, MUST NOT be translated, so that a
-client that writes the file back writes what the realm holds. A validator on
-a host URL MUST change when the translation changes, so that a change to the
-canonical host URL is never answered with a 304.
+documents and files (ADR 002). Prerendered HTML is the one exception, as
+§1.8 says. Code MUST translate between a host URL and the realm's URL only
+where a request enters the realm server, where a response leaves it, or where
+§1.8 renders HTML. A response on a host URL MUST name that host URL wherever
+it would name the realm's URL or its canonical host URL, except as §1.4 says.
+A response that serves a file's stored bytes, as a card-source read does,
+MUST NOT be translated, so that a client that writes the file back writes
+what the realm holds. A validator on a host URL MUST change when the
+translation changes, so that a change to the canonical host URL is never
+answered with a 304.
 
 ### 1.6. The realm's administrators manage its host URLs
 
@@ -119,6 +126,23 @@ names none. Whether the realm's default index card is server-rendered MUST be
 decided when the page is served, and MUST NOT be written into the realm. A
 placeholder the prerenderer stores in place of that card's render MUST NOT be
 served on a host URL.
+
+### 1.8. Prerendered HTML is rendered against the canonical host URL
+
+A realm with host URLs MUST store its prerendered HTML rendered against its
+canonical host URL, so that the HTML names the canonical host URL wherever it
+would name the realm's URL. A realm with no host URL MUST store it rendered
+against the realm's URL. Everything else stored with the HTML, card ids and
+dependencies among it, MUST keep the realm's URL (§1.5). When a realm gets
+its first host URL, when its canonical host URL changes, and when its last
+host URL is removed, the realm server MUST render the realm's HTML again.
+The realm server MUST record, with the stored HTML, the URL it was rendered
+against, so that a server that serves the HTML knows that URL after a restart,
+and for HTML that a failed render kept. A response MUST translate from that
+URL as well, so that every page stays right while the render runs. A response
+that isn't on a host URL MUST name the realm's URL wherever stored HTML names
+the canonical host URL in full, except as §1.4 says, so that the app links
+into the realm, not to its site.
 
 ## 2. Rationale
 
@@ -158,6 +182,39 @@ anonymous. A realm whose home page an anonymous visitor can't read would
 answer every visitor with a refusal, so the realm server refuses to mount it
 and names what is closed.
 
+Prerendered HTML is rendered against the canonical host URL because a card's
+template, not the server, writes most of the URLs in it, and it writes them
+in forms a translation of the response can't find: a percent-encoded share
+link, an escaped URL in JSON-LD, a root-relative path, or an address shown
+without its scheme. Each of those is wrong only on a host URL, and nothing
+reports it. Rendered against the canonical host URL, the template writes
+them right. A change to the canonical host URL is a rare action by an
+administrator, and page views never stop, so the cost belongs on the change:
+one new render of the realm, as ADR 036 §1.7 puts the cost of a routed
+address on the render rather than on each request. The translation stays for
+JSON, and while a new render runs.
+
+HTML rendered for one host URL is still wrong on another host URL whose path
+prefix differs, because a root-relative path in it names the canonical
+prefix. So a page on any host URL but the canonical one redirects to the
+canonical one, as a site's other names usually do. The redirect is
+temporary because another host URL can become canonical later. A browser can
+keep a permanent redirect with no end, and the server can't withdraw it. A
+visitor who kept a redirect from host URL B to A would then loop once A
+becomes the one that redirects to B. The canonical link already gives each
+page one address for search engines.
+
+The realm's own URL also serves pages, and a path it names in a form the
+translation can't find, such as a root-relative path, stays wrong there
+until the app boots and renders the page again against the realm's URL.
+That URL doesn't redirect to the canonical host URL as the others do,
+because it is also where the app opens the realm.
+
+The same path also stays wrong in the app's card grids. They show the stored
+fitted and embedded HTML that `/_federated-search` returns, and a card that
+doesn't hydrate never renders again in the app. So the path stays wrong
+there until that card's HTML is rendered again.
+
 ## 3. Considered options
 
 - **A stored mapping keyed by the registry id, resolved first (chosen).**
@@ -182,6 +239,21 @@ and names what is closed.
   be server-rendered, though its visitors may read its cards.
 - **Decide a page's readability in the server from the policy card.** That
   is a second evaluator of the policy, which can disagree with the realm's.
+- **Store prerendered HTML with the realm's URL, and put the canonical host
+  URL in when the response leaves the server.** No render is needed when the
+  canonical host URL changes. But the translation finds only the URL as it
+  is written in full, so a URL a template writes in another form stays wrong
+  on a host URL. It also rewrites every page on every request, which is the
+  work per request ADR 036 §3 rejects for routed addresses. The translation
+  stays, for the uses §1.8 keeps.
+- **Serve a page on every host URL, and render the HTML once for each host
+  URL.** Each page is right on every host URL, but each render of the realm
+  costs as many renders as it has host URLs, and the index stores as many
+  copies of the HTML.
+- **Serve a page on every host URL from the HTML rendered for the canonical
+  one, and accept that some links are wrong there.** A root-relative link on
+  a host URL whose path prefix differs goes to a page that doesn't exist,
+  and nothing reports it.
 - **Write `includePrerenderedDefaultRealmIndex` into `realm.json` when a host
   URL is added, as v1 publishing does.** That changes a file in the realm
   (§1.1).

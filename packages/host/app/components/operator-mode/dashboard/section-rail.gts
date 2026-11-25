@@ -197,7 +197,11 @@ export default class SectionRail extends Component<Signature> {
           var(--container-button-size) + 2 * var(--_rail-pad) + 2px
         );
         --_rail-radius: var(--boxel-border-radius-lg);
-        --_rail-glass: color-mix(in oklch, var(--boxel-800) 72%, transparent);
+        --_rail-glass: color-mix(
+          in oklch,
+          var(--host-dashboard-background) 72%,
+          transparent
+        );
         --_rail-ring: color-mix(
           in oklch,
           var(--boxel-highlight) 70%,

@@ -16,9 +16,10 @@ const CLOUD_PROVIDER_SDK_RULE = [
   { patterns: ['@aws-sdk/*', 'aws-sdk', '@google-cloud/*', '@azure/*'] },
 ];
 
-// The runtime packages ADR 003 governs that lint through an eslintrc config,
-// relative to the repository root. `host` and `ai-bot` are `root: true` and
-// `boxel-ui` uses a flat config, so each of those declares the rule itself.
+// The runtime packages ADR 003 governs that lint through `rootConfig()` in
+// `eslint/shared.mjs`, relative to the repository root; `rootConfig()` keeps
+// the globs for the package it builds a config for. `host`, `ai-bot` and
+// `boxel-ui` declare the rule themselves.
 const RUNTIME_PACKAGE_FILES = [
   'packages/realm-server/**/*',
   'packages/runtime-common/**/*',
