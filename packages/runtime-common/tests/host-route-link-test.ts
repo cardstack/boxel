@@ -36,6 +36,7 @@ const RULES: RawHostRoutingRule[] = [
 function routesFor(rules: RawHostRoutingRule[]): readonly HostRoute[] {
   let { routes, warnings } = validateHostRoutes(rules, {
     realmURL: new URL(REALM),
+    virtualNetwork: new VirtualNetwork(),
     lookupType: () => undefined,
   });
   if (warnings.length > 0) {
