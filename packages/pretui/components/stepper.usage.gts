@@ -21,6 +21,7 @@ class StepperUsage extends Component {
   setDisabled = (v: boolean) => (this.disabled = v);
   get usage() {
     let bits = [
+      "@label='Quantity'",
       `@value={{${this.value}}}`,
       `@min={{${this.min}}}`,
       `@max={{${this.max}}}`,
@@ -38,6 +39,7 @@ class StepperUsage extends Component {
     >
       <:example>
         <Stepper
+          @label='Quantity'
           @value={{this.value}}
           @min={{this.min}}
           @max={{this.max}}
