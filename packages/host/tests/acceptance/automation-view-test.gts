@@ -1150,7 +1150,7 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'paused', pauseReason: 'webhook-owner-lost-access' },
         'Paused',
-        'The person who made a trigger’s incoming webhook is no longer a realm administrator, so Boxel paused the automation. Boxel runs nothing until a realm administrator does one of two things and then resumes the automation: points the trigger at one of this workspace’s webhooks, or makes the webhook’s maker a realm administrator again. The trigger’s editor marks the webhook as “Not one of this workspace’s webhooks”.',
+        'The person who made a trigger’s incoming webhook is no longer a realm administrator, so Boxel paused the automation. Boxel runs nothing until a realm administrator does one of these two things and then resumes the automation.',
       ],
       [
         { state: 'paused', pauseReason: 'payer-lost-access' },
@@ -1227,6 +1227,27 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-state-sentence]')
         .hasText(sentence, `${label}: ${String(change.pauseReason)}`);
+      if (change.pauseReason === 'webhook-owner-lost-access') {
+        assert
+          .dom('[data-test-automation-state-steps] li')
+          .exists({ count: 2 }, 'the two ways to fix the pause are listed');
+        assert
+          .dom('[data-test-automation-state-steps] li:nth-child(1)')
+          .hasText(
+            'Edit the automation, and in the trigger’s Webhook field pick one of this workspace’s webhooks.',
+          );
+        assert
+          .dom('[data-test-automation-state-steps] li:nth-child(2)')
+          .hasText(
+            'Make the person who made the webhook a realm administrator again.',
+          );
+      } else {
+        assert
+          .dom('[data-test-automation-state-steps]')
+          .doesNotExist(
+            `${label}: ${String(change.pauseReason)} lists no steps`,
+          );
+      }
     }
     assert
       .dom('[data-test-automation-trigger-progress="nightly"]')
