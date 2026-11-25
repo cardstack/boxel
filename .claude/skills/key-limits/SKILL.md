@@ -236,7 +236,9 @@ notice waits for the next time the app asks.
 sessions) lists the user's notices whose period hasn't ended, newest first,
 with `yours` (whether they own the key) and `meta.unread`; a notice whose
 period has ended is neither listed nor counted. The app adds that count to the
-policy notices' for its badge. The secure origin's key page shows them above
+policy notices' and the key approval notices' (`GET /_key-approval-notices`,
+for an automation waiting on the user's approval; see the `automations` skill)
+for its badge. The secure origin's key page shows them above
 the keys, one per share or key and period, with what to do: the key's owner
 changes a personal key's limits on its tile and a share's on `share-limits`;
 a direct writer who doesn't own the key is sent to `share-limits` to see its
