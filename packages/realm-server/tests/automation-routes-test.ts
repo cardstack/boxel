@@ -939,6 +939,101 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(response.body.automationRunsStarted, 0);
       assert.deepEqual(await runsOfHooked(), []);
     });
+
+    // Makes every automation take of a delivery fail, by refusing the run
+    // row the take inserts, for the length of `fn`.
+    async function whileRunsAreRefused(fn: () => Promise<void>) {
+      await dbAdapter.execute(
+        `CREATE OR REPLACE FUNCTION refuse_automation_run() RETURNS trigger AS $$
+         BEGIN RAISE EXCEPTION 'the test refuses every automation run'; END
+         $$ LANGUAGE plpgsql`,
+      );
+      await dbAdapter.execute(
+        `CREATE TRIGGER refuse_automation_run BEFORE INSERT ON automation_runs
+         FOR EACH ROW EXECUTE FUNCTION refuse_automation_run()`,
+      );
+      try {
+        await fn();
+      } finally {
+        await dbAdapter.execute(
+          `DROP TRIGGER IF EXISTS refuse_automation_run ON automation_runs`,
+        );
+        await dbAdapter.execute(
+          `DROP FUNCTION IF EXISTS refuse_automation_run()`,
+        );
+      }
+    }
+
+    test('a delivery with the sender’s id that no automation could take, and that enqueued no command, answers 500', async function (assert) {
+      await switchOnHooked();
+      await whileRunsAreRefused(async () => {
+        let response = await deliver('delivery-7', { refused: true });
+        assert.strictEqual(
+          response.status,
+          500,
+          'the sender delivers it again',
+        );
+      });
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
+      let again = await deliver('delivery-7', { refused: false });
+      assert.strictEqual(again.status, 200, again.text);
+      assert.strictEqual(
+        again.body.automationRunsStarted,
+        1,
+        'the redelivery starts the run',
+      );
+      await ended((await runsOfHooked())[0].id);
+    });
+
+    test('a delivery with no id from the sender answers 200 when no automation could take it', async function (assert) {
+      await switchOnHooked();
+      let body = JSON.stringify({ unnamed: true });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', SECRET).update(body, 'utf8').digest('hex');
+      await whileRunsAreRefused(async () => {
+        let response = await request
+          .post(`/_webhooks/${HOOK_PATH}`)
+          .set('Content-Type', 'application/json')
+          .set('X-Hub-Signature-256', signature)
+          .send(body);
+        assert.strictEqual(
+          response.status,
+          200,
+          'a redelivery would get a new id and start a second run, so the sender is not asked to deliver again',
+        );
+        assert.strictEqual(response.body.automationRunsStarted, 0);
+      });
+    });
+
+    test('a delivery that enqueued a command answers 200 when no automation could take it', async function (assert) {
+      await switchOnHooked();
+      let [webhook] = (await dbAdapter.execute(
+        `SELECT id FROM incoming_webhooks WHERE webhook_path = $1`,
+        { bind: [HOOK_PATH] },
+      )) as { id: string }[];
+      await dbAdapter.execute(
+        `INSERT INTO webhook_commands (id, incoming_webhook_id, command, command_filter, created_at, updated_at)
+         VALUES ($1, $2, $3, NULL, NOW(), NOW())`,
+        {
+          bind: [
+            randomUUID(),
+            webhook.id,
+            'http://test-realm/commands/process-github-event',
+          ],
+        },
+      );
+      await whileRunsAreRefused(async () => {
+        let response = await deliver('delivery-8', { withCommand: true });
+        assert.strictEqual(
+          response.status,
+          200,
+          'a redelivery would enqueue the command twice, so the sender is not asked to deliver again',
+        );
+        assert.strictEqual(response.body.commandsExecuted, 1);
+        assert.strictEqual(response.body.automationRunsStarted, 0);
+      });
+    });
   });
 
   module('pause, resume and remove', function () {
