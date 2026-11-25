@@ -88,6 +88,22 @@ import {
   automationTimeLimitMs,
   redactSecrets,
 } from '../lib/realm-runner/automation';
+import {
+  AUTOMATION_START_CALLS,
+  automationCardURL,
+  automationEstimate,
+  automationIOFor,
+  automationRunReport,
+  keyApprovalReport,
+  loadAutomationConfirmation,
+  namedAutomationCalls,
+  startAutomationRun,
+  switchAutomationOn,
+  type AutomationConfirmation,
+  type AutomationIO,
+  type AutomationStartCall,
+  type NamedAutomationCall,
+} from '../lib/realm-runner/automations';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
 import { roomCredits, type RoomCredits } from '../lib/realm-runner/credits';
 import {
@@ -148,6 +164,7 @@ import {
 } from '../lib/realm-runner/transform';
 import { STOPPED_BY_USER } from '../lib/realm-runner/types';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
+import { secureWindowURL } from '../lib/secure-window';
 import { loadSkillSource } from '../lib/skill-tools';
 import {
   captureDeadline,
@@ -204,6 +221,7 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type RecentFilesService from '../services/recent-files-service';
+import type SecureWindowService from '../services/secure-window';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type Base64ImageFieldType from '@cardstack/base/base64-image';
@@ -584,6 +602,33 @@ interface IndexActions {
   cancelJob(): Promise<void>;
 }
 
+// The realm server's automation routes, for the person who started the run.
+// `named` is every start call the script names with a literal card path: the
+// approval panel showed the person each of those cards, and no other card is
+// started or switched on.
+interface AutomationActions {
+  named: NamedAutomationCall[];
+  estimate(cardURL: string): Promise<unknown>;
+  start(call: AutomationStartCall, cardURL: string): Promise<unknown>;
+  readRun(runId: string): Promise<unknown>;
+}
+
+const NO_AUTOMATIONS: AutomationActions = {
+  named: [],
+  estimate: () =>
+    Promise.reject(
+      new Error('realm.automations is not available to an automation run'),
+    ),
+  start: () =>
+    Promise.reject(
+      new Error('realm.automations is not available to an automation run'),
+    ),
+  readRun: () =>
+    Promise.reject(
+      new Error('realm.automations is not available to an automation run'),
+    ),
+};
+
 const MAX_INVALIDATE_PATHS = 100;
 // The index calls a run may make. Each call starts an index job on the realm
 // server, so a loop must not start many. A reindex or a full reindex covers
@@ -613,6 +658,7 @@ const CLICK_REQUIRED_CALLS = {
   'realm.index.cancelJob': "Cancels the workspace's running index job.",
   'realm.fs.download':
     'Downloads a file from an outside URL into the workspace.',
+  ...AUTOMATION_START_CALLS,
 } as const;
 type ClickRequiredCall = keyof typeof CLICK_REQUIRED_CALLS;
 
@@ -668,6 +714,13 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'images.generate': true,
   'workspaces.create': false,
   'workspaces.delete': false,
+  // The realm server's automation routes answer only a direct writer of the
+  // automation's workspace, and say so themselves.
+  'automations.estimate': false,
+  'automations.preview': false,
+  'automations.runNow': false,
+  'automations.switchOn': false,
+  'automations.readRun': false,
   'room.enableSkills': false,
   'room.disableSkills': false,
   'room.setModel': false,
@@ -724,6 +777,13 @@ const REQUIRES_READ: Record<RealmRunnerCallMethod, boolean> = {
   'images.generate': false,
   'workspaces.create': false,
   'workspaces.delete': false,
+  // The realm server's automation routes answer only a direct writer of the
+  // automation's workspace, and say so themselves.
+  'automations.estimate': false,
+  'automations.preview': false,
+  'automations.runNow': false,
+  'automations.switchOn': false,
+  'automations.readRun': false,
   'room.enableSkills': false,
   'room.disableSkills': false,
   'room.setModel': false,
@@ -955,6 +1015,7 @@ class RealmFsSession {
     private recordEntriesSearch: RecordEntriesSearch,
     private checkCapabilities: CheckCapabilities,
     readonly surface: SessionSurface = INTERACTIVE_SURFACE,
+    private automations: AutomationActions = NO_AUTOMATIONS,
   ) {
     this.captures = new RealmCaptures(captureURL);
     this.transformer = new RealmTransformer(surface.limits.transforms);
@@ -1939,6 +2000,39 @@ class RealmFsSession {
         this.goneWorkspaces.add(deleted.url);
         return { url: deleted.url, deleted: true };
       }
+      case 'automations.estimate':
+        return await this.automations.estimate(
+          this.automationURL('realm.automations.estimate', args[0]),
+        );
+      case 'automations.preview':
+      case 'automations.runNow':
+      case 'automations.switchOn': {
+        let call = `realm.${method}` as AutomationStartCall;
+        if (!this.namedCalls.has(call)) {
+          throw notNamedError(call);
+        }
+        let cardURL = this.automationURL(call, args[0]);
+        let shown = this.automations.named.some(
+          (named) =>
+            named.call === call &&
+            automationCardURL(named.path, this.realmURL) === cardURL,
+        );
+        if (!shown) {
+          throw new Error(
+            `${call} names its automation card by a literal path in the script, such as ${call}('automations/Automation/daily-digest.json'), so the person sees that card's triggers, estimate and monthly cap before the run starts. ${String(args[0])} is not named that way`,
+          );
+        }
+        return await this.automations.start(call, cardURL);
+      }
+      case 'automations.readRun': {
+        let runId = args[0];
+        if (typeof runId !== 'string' || !runId) {
+          throw new TypeError(
+            'realm.automations.readRun expects the id of a run that realm.automations.preview or realm.automations.runNow started',
+          );
+        }
+        return await this.automations.readRun(runId);
+      }
       case 'room.enableSkills':
         return await this.room.enableSkills(args[0]);
       case 'room.disableSkills':
@@ -2060,6 +2154,17 @@ class RealmFsSession {
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
     }
+  }
+
+  // An automation card's URL in the run's workspace, from the path a script
+  // names.
+  private automationURL(call: string, path: unknown): string {
+    if (typeof path !== 'string' || !path.trim()) {
+      throw new TypeError(
+        `${call} expects the path of an Automation card in this workspace, such as 'automations/Automation/daily-digest.json'`,
+      );
+    }
+    return automationCardURL(path, this.realmURL);
   }
 
   // realm.ask: the script pauses on a question in its own row, and goes on
@@ -3856,6 +3961,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private recentFilesService: RecentFilesService;
+  @service declare private secureWindow: SecureWindowService;
   @service declare private store: StoreService;
   @service declare private toolService: ToolService;
 
@@ -3975,6 +4081,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
   onEdits?: (edits: RealmFileEdit[]) => void;
   // The tool service hands a run a way to ask its reader (realm.ask).
   onAsk?: (request: ScriptAsk) => Promise<{ answer: string; label: string }>;
+  // What the reader confirmed at this call's gate for each automation the
+  // script starts or switches on, as Boxel read the card and the estimate
+  // for the gate. A start call with no confirmation here is refused.
+  confirmedAutomations: AutomationConfirmation[] = [];
   private publishEdits(session: RealmFsSession) {
     this.onEdits?.([...session.edits].map(([url, edit]) => ({ url, ...edit })));
   }
@@ -4036,6 +4146,159 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return commandModule.RunRealmCodeInput;
   }
 
+  private get automationIO(): AutomationIO {
+    return automationIOFor({
+      realmServer: this.realmServer,
+      network: this.network,
+    });
+  }
+
+  // realm.automations.*, for the person who started the run. A Preview, a
+  // Run now or a switch-on goes ahead only for a card the person confirmed at
+  // the gate, and a switch-on agrees to the monthly cap the person saw there.
+  private automationActions(rootURL: string, code: string): AutomationActions {
+    let io = this.automationIO;
+    let confirmed = (call: AutomationStartCall, cardURL: string) => {
+      let confirmation = this.confirmedAutomations.find(
+        (c) => c.call === call && c.cardURL === cardURL,
+      );
+      if (!confirmation) {
+        throw new Error(
+          `${call} needs the person to confirm ${cardURL} at this call's approval panel, which shows the automation's triggers, estimate and monthly cap; the person has not confirmed it, so nothing ran. Ask the person in the chat, then run the call again`,
+        );
+      }
+      if (confirmation.problem) {
+        throw new Error(confirmation.problem);
+      }
+      return confirmation;
+    };
+    let failed = (answer: { error: string; code?: string }) =>
+      new Error(
+        answer.code ? `${answer.error} (${answer.code})` : answer.error,
+      );
+    return {
+      named: namedAutomationCalls(code),
+      estimate: async (cardURL) => {
+        let estimate = await automationEstimate(io, cardURL, rootURL);
+        if (!estimate.ok) {
+          throw new Error(estimate.error);
+        }
+        let { switchedOn, monthlyCredits, keyApprovals } = estimate.attributes;
+        return {
+          automation: cardURL,
+          switchedOn,
+          monthlyCredits,
+          estimatedCredits: estimate.attributes.estimate?.credits,
+          perRunCredits: estimate.attributes.estimate?.perRun?.totalCredits,
+          ...(keyApprovals
+            ? { keyApprovals: keyApprovalReport(keyApprovals) }
+            : {}),
+        };
+      },
+      start: async (call, cardURL) => {
+        let confirmation = confirmed(call, cardURL);
+        if (call === 'realm.automations.switchOn') {
+          return await this.switchOn(io, confirmation, rootURL, failed);
+        }
+        let kind: 'preview' | 'runNow' =
+          call === 'realm.automations.preview' ? 'preview' : 'runNow';
+        // One click starts one run: the realm server answers the same run
+        // again for the same click id.
+        confirmation.click ??= crypto.randomUUID();
+        let answer = await startAutomationRun(
+          io,
+          kind,
+          cardURL,
+          rootURL,
+          confirmation.click,
+        );
+        if (!answer.ok) {
+          throw failed(answer);
+        }
+        return {
+          automation: cardURL,
+          run: answer.data.id,
+          state: answer.data.attributes?.state,
+          dryRun: answer.data.attributes?.dryRun === true,
+        };
+      },
+      readRun: async (runId) => {
+        let answer = await automationRunReport(io, rootURL, runId);
+        if (!answer.ok) {
+          throw failed(answer);
+        }
+        return answer.data.attributes ?? {};
+      },
+    };
+  }
+
+  // Switches the automation on for the person, who becomes its payer, at the
+  // monthly cap the person confirmed. The triggers must still be the ones the
+  // person confirmed. Key approvals the person can give open in the secure
+  // window; the answer names who gives the rest.
+  private async switchOn(
+    io: AutomationIO,
+    confirmation: AutomationConfirmation,
+    rootURL: string,
+    failed: (answer: { error: string; code?: string }) => Error,
+  ) {
+    let { cardURL } = confirmation;
+    if (confirmation.monthlyCredits === null) {
+      throw new Error(
+        `${cardURL} sets no monthly credit cap (caps.monthlyCredits), and an automation switches on only at a monthly cap the person confirms`,
+      );
+    }
+    let now = await loadAutomationConfirmation(
+      io,
+      { call: confirmation.call, path: confirmation.path },
+      rootURL,
+    );
+    if (
+      JSON.stringify(now.triggers) !== JSON.stringify(confirmation.triggers)
+    ) {
+      throw new Error(
+        `The triggers of ${cardURL} changed after the person confirmed them, so the automation was not switched on. Show the person the new triggers and ask again`,
+      );
+    }
+    let answer = await switchAutomationOn(
+      io,
+      cardURL,
+      rootURL,
+      confirmation.monthlyCredits,
+    );
+    if (!answer.ok) {
+      throw failed(answer);
+    }
+    let attributes = answer.data.attributes ?? {};
+    let approvals = keyApprovalReport(answer.meta?.keyApprovals);
+    let secureWindow: string | undefined;
+    if (approvals.forYou.length > 0) {
+      secureWindow = this.secureWindow.open(
+        secureWindowURL({
+          mode: 'approve',
+          automation: cardURL,
+          reason: 'Approve the keys this automation calls with, so it can run',
+        }),
+      );
+    }
+    return {
+      automation: cardURL,
+      state: attributes.state,
+      nextRun: attributes.nextRun ?? null,
+      monthlyCredits: confirmation.monthlyCredits,
+      estimatedCredits: answer.meta?.estimate?.credits,
+      keyApprovals: {
+        approved: approvals.approved,
+        // The secure window opened ("opened"), or the browser blocked it and
+        // the app shows the person a button that opens it ("blocked").
+        ...(secureWindow ? { secureWindow } : {}),
+        forYou: approvals.forYou,
+        byOthers: approvals.byOthers,
+        needShare: approvals.needShare,
+      },
+    };
+  }
+
   // `realm` and `roomId` fall back to the workspace and room the call came
   // from, so a model that leaves them out still gets its script run.
   requireInputFields = ['code'];
@@ -4091,6 +4354,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
 
     let namedCalls = clickRequiredCallsIn(input.code);
+    let automations = this.automationActions(rootURL, input.code);
     let extraTime = extraRunTimeMs(input.code);
     let runTimeoutMs = RUN_TIMEOUT_MS + extraTime;
     let callDeadlineMs = CALL_DEADLINE_MS + extraTime;
@@ -4184,6 +4448,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
             { ...search, tool: 'run-realm-code', realm: rootURL },
           ),
         (checks) => this.capabilities.check(rootURL, checks),
+        INTERACTIVE_SURFACE,
+        automations,
       );
     let session = newSession();
     session.onActivity = this.publishActivity;

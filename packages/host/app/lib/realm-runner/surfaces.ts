@@ -29,6 +29,9 @@ export type RealmRunnerMethodReach =
   | 'capture'
   // creates or deletes a workspace
   | 'workspace'
+  // starts a run of an automation, switches one on, or reads one's estimate
+  // or a run's report, through the realm server's automation routes
+  | 'automation'
   // changes the chat room
   | 'room'
   // changes what the person sees
@@ -69,6 +72,11 @@ export const METHOD_REACH: Record<
   'images.generate': 'image',
   'workspaces.create': 'workspace',
   'workspaces.delete': 'workspace',
+  'automations.estimate': 'automation',
+  'automations.preview': 'automation',
+  'automations.runNow': 'automation',
+  'automations.switchOn': 'automation',
+  'automations.readRun': 'automation',
   'room.enableSkills': 'room',
   'room.disableSkills': 'room',
   'room.setModel': 'room',
@@ -123,6 +131,11 @@ export const INTERACTIVE_METHODS: ReadonlySet<RealmRunnerCallMethod> =
     'images.generate',
     'workspaces.create',
     'workspaces.delete',
+    'automations.estimate',
+    'automations.preview',
+    'automations.runNow',
+    'automations.switchOn',
+    'automations.readRun',
     'room.enableSkills',
     'room.disableSkills',
     'room.setModel',

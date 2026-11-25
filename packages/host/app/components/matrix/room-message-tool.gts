@@ -54,6 +54,7 @@ import {
   getMenuItems,
   hasNothingToShow,
   isCardInstance,
+  rri,
 } from '@cardstack/runtime-common';
 
 import { describeCheckTargetCount } from '@cardstack/runtime-common/ai/correctness-targets';
@@ -63,13 +64,20 @@ import { isAskUserTool } from '@cardstack/host/lib/ask-user';
 import { cardMenuEntries } from '@cardstack/host/lib/card-menu-entries';
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import {
+  AutomationGate,
+  automationIOFor,
+  isAutomationStartCall,
+  namedAutomationCalls,
+} from '@cardstack/host/lib/realm-runner/automations';
+import type { CardFieldChange } from '@cardstack/host/lib/realm-runner/edits';
+import {
   isDiffable,
   parseCompactDiff,
   resultCardChanges,
   resultDiff,
 } from '@cardstack/host/lib/realm-runner/edits';
-import type { CardFieldChange } from '@cardstack/host/lib/realm-runner/edits';
 import { STOPPED_BY_USER } from '@cardstack/host/lib/realm-runner/types';
+
 import { runDeliveryId } from '@cardstack/host/lib/run-delivery';
 import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
 import { plainTitle, settledTitle } from '@cardstack/host/lib/tool-title';
@@ -83,6 +91,7 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 import { DENIED_BY_USER } from '@cardstack/host/services/tool-service';
@@ -90,6 +99,7 @@ import { DENIED_BY_USER } from '@cardstack/host/services/tool-service';
 import CardRenderer from '../card-renderer';
 
 import AskUserPicker from './ask-user-picker';
+import AutomationConfirmationView from './automation-confirmation';
 import FoundEntries from './found-entries';
 
 import type { AskUserOptionData } from './ask-user-picker';
@@ -486,6 +496,7 @@ export default class RoomMessageTool extends Component<Signature> {
   declare private quickLook: AssistantQuickLookService;
   @service declare private store: StoreService;
   @service declare private network: NetworkService;
+  @service declare private realmServer: RealmServerService;
 
   @consume(CardContextName) declare private cardContext: CardContext;
 
@@ -1303,21 +1314,94 @@ export default class RoomMessageTool extends Component<Signature> {
     this.toolService.denyTool(this.args.messageTool);
   };
 
+  // The automations the script previews, runs now or switches on, read from
+  // Boxel for the gate, while this tab offers the click that runs the
+  // script. Undefined for a script that names none.
+  @cached
+  private get automationGate(): AutomationGate | undefined {
+    if (
+      !this.clickReasons.some((reason) => isAutomationStartCall(reason.call))
+    ) {
+      return undefined;
+    }
+    let attributes = this.args.messageTool.arguments?.attributes as
+      | { code?: unknown; realm?: unknown }
+      | undefined;
+    let named = namedAutomationCalls(attributes?.code);
+    let realmURL = this.runRealmURL(attributes?.realm);
+    if (!named.length || !realmURL) {
+      return undefined;
+    }
+    return new AutomationGate(
+      automationIOFor({ realmServer: this.realmServer, network: this.network }),
+      named,
+      realmURL,
+    );
+  }
+
+  // The root URL of the workspace a script runs in: its `realm`, or the
+  // workspace the reader has open, as the run itself resolves it.
+  private runRealmURL(realmInput: unknown): string | undefined {
+    let input =
+      typeof realmInput === 'string' && realmInput
+        ? realmInput
+        : this.operatorModeStateService.realmURL;
+    if (!input) {
+      return undefined;
+    }
+    let { virtualNetwork } = this.network;
+    let realmId = rri(input.endsWith('/') ? input : `${input}/`);
+    let realm: string | undefined;
+    try {
+      realm =
+        this.realm.realmOf(realmId) ??
+        this.realm.realmOf(virtualNetwork.toURL(realmId));
+    } catch {
+      return undefined;
+    }
+    if (!realm) {
+      return undefined;
+    }
+    return virtualNetwork.isRegisteredPrefix(realm)
+      ? virtualNetwork.toURL(realm).href
+      : new URL(realm).href;
+  }
+
+  // The reader confirmed what the gate showed: the run gets exactly those
+  // confirmations, and starts or switches on nothing else.
+  private confirmAutomations = async (gate: AutomationGate) => {
+    let confirmations = await gate.loaded;
+    let { id } = this.args.messageTool;
+    if (id) {
+      this.toolService.confirmAutomations(id, confirmations);
+    }
+    this.args.runCommand();
+  };
+
   // The gate's answers, most likely first: run the call (once, for a
   // script that names risky calls), allow those calls for the session
   // (never for one that can't be undone), or turn it down
   private get gateActions(): ToolGateAction[] {
     let named = this.clickReasons.length > 0;
+    let automationGate = this.automationGate;
     let actions: ToolGateAction[] = [
       {
         id: 'apply',
-        label: named ? 'Allow once' : this.args.messageTool.actionVerb,
+        label: automationGate
+          ? 'Confirm'
+          : named
+            ? 'Allow once'
+            : this.args.messageTool.actionVerb,
         kind: 'primary',
-        onAct: () => this.args.runCommand(),
+        onAct: automationGate
+          ? () => this.confirmAutomations(automationGate)
+          : () => this.args.runCommand(),
       },
     ];
     if (named) {
-      if (!this.isDestructive) {
+      // A standing yes never covers a run that spends on an automation:
+      // each one is confirmed at its own gate.
+      if (!this.isDestructive && !automationGate) {
         actions.push({
           id: 'always',
           label: 'Always for this session',
@@ -3316,7 +3400,11 @@ export default class RoomMessageTool extends Component<Signature> {
               @destructive={{this.isDestructive}}
               @actions={{this.gateActions}}
               data-test-tool-call-approval
-            />
+            >
+              {{#if this.automationGate}}
+                <AutomationConfirmationView @gate={{this.automationGate}} />
+              {{/if}}
+            </ToolGate>
 
           {{/if}}
         </:gate>

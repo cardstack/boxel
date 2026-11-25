@@ -49,6 +49,10 @@ import SendAiAssistantMessageTool from '@cardstack/host/tools/send-ai-assistant-
 
 import HostBaseTool from '../lib/host-base-tool';
 import LimitedSet from '../lib/limited-set';
+import {
+  isAutomationStartCall,
+  type AutomationConfirmation,
+} from '../lib/realm-runner/automations';
 import { runDeliveryId } from '../lib/run-delivery';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
@@ -460,6 +464,19 @@ export default class ToolService extends Service {
     });
   }
 
+  // What the reader confirmed at a script's gate for each automation call
+  // the script names (the card, its triggers and its monthly cap, as Boxel
+  // read them for the gate), by tool request. The run reads it once, and
+  // starts or switches on only what the reader confirmed.
+  private automationConfirmations = new Map<string, AutomationConfirmation[]>();
+
+  confirmAutomations(
+    toolRequestId: string,
+    confirmations: AutomationConfirmation[],
+  ) {
+    this.automationConfirmations.set(toolRequestId, confirmations);
+  }
+
   // Click-required calls the reader allowed for the rest of a session, by
   // room: "Always for this session" on a script's gate. Kept for the tab.
   private alwaysAllowed = new TrackedMap<string, Set<string>>();
@@ -468,10 +485,16 @@ export default class ToolService extends Service {
     return this.alwaysAllowed.get(roomId)?.has(call) ?? false;
   }
 
+  // A call that starts an automation run or switches one on is never
+  // allowed for the session: each one spends on a card the person confirms
+  // at that call's own gate.
   allowAlways(roomId: string, calls: string[]) {
     this.alwaysAllowed.set(
       roomId,
-      new Set([...(this.alwaysAllowed.get(roomId) ?? []), ...calls]),
+      new Set([
+        ...(this.alwaysAllowed.get(roomId) ?? []),
+        ...calls.filter((call) => !isAutomationStartCall(call)),
+      ]),
     );
   }
 
@@ -1642,6 +1665,13 @@ export default class ToolService extends Service {
                 extendTimeout(this.#scriptAskMaxMs);
                 return this.askFromScript(requestId, request);
               };
+              (
+                toolToRun as {
+                  confirmedAutomations?: AutomationConfirmation[];
+                }
+              ).confirmedAutomations =
+                this.automationConfirmations.get(requestId) ?? [];
+              this.automationConfirmations.delete(requestId);
               let stoppable = toolToRun as { stop?: () => void };
               if (typeof stoppable.stop === 'function') {
                 this.stoppableTools.set(requestId, {
