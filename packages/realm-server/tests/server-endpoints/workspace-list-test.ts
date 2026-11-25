@@ -293,6 +293,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('GET /_user-realms answers an empty list for a user who never had one', async function (assert) {
+      let user = await registerListUser('list-never');
+      let response = await read(
+        context.server,
+        '/_user-realms',
+        sessionToken(user.userId),
+      );
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.data.attributes.realms, []);
+    });
+
     test('GET /_user-display-name answers the caller’s display name', async function (assert) {
       let user = await registerListUser('list-name');
       let response = await read(
@@ -310,6 +321,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
     test('a user with no Matrix account has no list or display name here', async function (assert) {
       let token = sessionToken(`@no-account-${uuidv4()}:localhost`);
+      for (let path of ['/_user-realms', '/_user-display-name'] as const) {
+        let response = await read(context.server, path, token);
+        assert.strictEqual(response.status, 404, `${path}: ${response.text}`);
+      }
+    });
+
+    test('a user of another Matrix server has no list or display name here', async function (assert) {
+      let token = sessionToken(`@someone-${uuidv4()}:elsewhere.example`);
       for (let path of ['/_user-realms', '/_user-display-name'] as const) {
         let response = await read(context.server, path, token);
         assert.strictEqual(response.status, 404, `${path}: ${response.text}`);

@@ -1,8 +1,10 @@
 // A user's workspace list: the realms the app lists for them, kept in their
 // Matrix account data (`app.boxel.realms`). The realm server reads and edits
-// it through the Synapse admin API, as the user whose list it is and no one
-// else, for a caller that holds no Matrix token of its own (an app with an
-// OAuth Boxel API token, such as boxel-cli).
+// it for a caller that holds no Matrix token of its own (an app with an OAuth
+// Boxel API token, such as boxel-cli), only ever the list of the user the
+// request is for. It reads with the shared admin token, and edits as that
+// user, with a token the Synapse admin API mints for them, since the admin
+// API can't write another user's account data.
 //
 // The admin API reaches only the users of the realm server's own homeserver
 // (ADR 004 §4), so a user of any other server has no list here: reads answer
@@ -16,6 +18,7 @@ import { isUserOfMatrixServer } from '@cardstack/runtime-common/matrix-server-na
 import {
   appendRealmToUserAccountData,
   fetchAccountData,
+  fetchAccountDataAsAdmin,
   fetchDisplayName,
   MatrixHttpError,
   removeRealmFromUserAccountData,
@@ -119,11 +122,14 @@ export async function readWorkspaceList(
   deps: WorkspaceListDeps,
   user: string,
 ): Promise<string[] | undefined> {
-  let content = await asListOwner(
-    deps,
-    user,
-    'read a list',
-    (accessToken, signal) => read(deps, user, accessToken, signal),
+  if (!keepsAccountOf(deps, user)) {
+    return undefined;
+  }
+  let admin = matrixAdmin(deps);
+  let content = await withRetries('read a list', (signal) =>
+    fetchAccountDataAsAdmin(admin, user, APP_BOXEL_REALMS_EVENT_TYPE, {
+      signal,
+    }),
   );
   return content ? realmsIn(content) : undefined;
 }
