@@ -495,6 +495,17 @@ module('Integration | approve pages', function (hooks) {
                           exportName: 'Inbox',
                         },
                         key: `${MODULE}#Inbox/listPRs`,
+                        slots: [
+                          {
+                            slot: '1.userKey',
+                            token: 'userKey',
+                            card: 'PR Inbox',
+                            key: 'userKey',
+                            status: 'new',
+                            snapshot: snapshot('{"query":"listPRs"}'),
+                            fingerprint: 'fp-listPRs',
+                          },
+                        ],
                       }),
                       operation('listIssues', 'List issues', {
                         card: {
@@ -506,7 +517,9 @@ module('Integration | approve pages', function (hooks) {
                         status: 'automation',
                         slots: [
                           {
-                            slot: 'userKey',
+                            slot: '2.userKey',
+                            token: 'userKey',
+                            card: 'Issues',
                             key: 'userKey',
                             status: 'automation',
                             snapshot: snapshot('{"query":"listIssues"}'),
@@ -556,7 +569,7 @@ module('Integration | approve pages', function (hooks) {
       );
     assert.deepEqual(
       [...document.querySelectorAll('[data-test-approve-card-type]')].map((e) =>
-        e.textContent?.trim(),
+        e.textContent?.replace(/\s+/g, ' ').trim(),
       ),
       ['on PR Inbox', 'on Issues'],
       'each operation names the card type the operation is on',
@@ -565,7 +578,17 @@ module('Integration | approve pages', function (hooks) {
       .dom(
         '[data-test-approve-operation="listIssues"] [data-test-approve-for-automation]',
       )
-      .hasText('New for the automation');
+      .hasText('Needs approval for the automation');
+    assert.deepEqual(
+      [...document.querySelectorAll('[data-test-approve-slot]')].map((e) =>
+        e.getAttribute('data-test-approve-slot'),
+      ),
+      ['1.userKey', '2.userKey'],
+      'each card type’s key is chosen apart',
+    );
+    assert
+      .dom('[data-test-approve-slot="2.userKey"]')
+      .includesText('Your own key for Issues');
     assert
       .dom('[data-test-pretui-radio-option="automations"] input')
       .isChecked('the choice starts on the scheduled runs');
@@ -589,6 +612,13 @@ module('Integration | approve pages', function (hooks) {
         ['listIssues', { module: ISSUES, name: 'Issues' }],
       ],
       'each operation on the card type the operation is on',
+    );
+    assert.deepEqual(
+      approval.operations.map((o: { slots: Record<string, unknown> }) =>
+        Object.keys(o.slots),
+      ),
+      [['userKey'], ['userKey']],
+      'each slot named by the slot’s own token',
     );
     assert
       .dom('[data-test-approve-done-automation]')

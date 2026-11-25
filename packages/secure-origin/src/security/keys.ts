@@ -778,7 +778,13 @@ export type BatchSlotStatus =
 // request it would approve and its fingerprint, and what it was last approved
 // with.
 export interface BatchSlot {
+  // The slot's choice: its token, or in an automation's batch, which spans
+  // card definitions, `<n>.<token>`, so each definition's slots are chosen
+  // apart. `token` is then the slot's own token, which an approval names,
+  // and `card` the definition's display name.
   slot: string;
+  token?: string;
+  card?: string;
   key: 'userKey' | 'apiKey';
   status: BatchSlotStatus;
   snapshot: RequestSnapshot;
