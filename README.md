@@ -179,7 +179,12 @@ This sets the following defaults (all individually overridable):
 | `PRERENDER_PAGE_POOL_MIN`    | 4      | 4     |
 | `PRERENDER_PAGE_POOL_MAX`    | 4      | 4     |
 | `WORKER_HIGH_PRIORITY_COUNT` | 0      | 4     |
+| `WORKER_SYSTEM_INDEX_COUNT`  | 1      | 1     |
 | `WORKER_ALL_PRIORITY_COUNT`  | 1      | 4     |
+
+The system-index worker takes only index jobs, so a realm's readiness and its
+writes never wait behind the HTML rendering of a large realm such as the
+catalog.
 
 To use turbo mode but override a specific value:
 

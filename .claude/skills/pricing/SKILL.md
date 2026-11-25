@@ -79,7 +79,7 @@ every prerender server. The code holds no prices and no fallbacks.
   renders can grow into: dividing by fewer tabs charges each tab a larger
   share, which never under-charges. `PRICING_WORKER_TASK_PROCESSES` is every
   worker process one worker task runs: `WORKER_ALL_PRIORITY_COUNT` plus
-  `WORKER_AUTOMATION_PRIORITY_COUNT` plus `WORKER_HIGH_PRIORITY_COUNT`, plus the worker manager's `--userIndexCount`
+  `WORKER_AUTOMATION_PRIORITY_COUNT` plus `WORKER_HIGH_PRIORITY_COUNT` plus `WORKER_SYSTEM_INDEX_COUNT`, plus the worker manager's `--userIndexCount`
   when its start script passes one. When a task definition is resized or its
   pool or worker counts change, change its shape values in the same deploy,
   or a tab's or process's share of the task is wrong.

@@ -142,6 +142,7 @@ let {
   highPriorityCount = 0,
   userIndexCount = 0,
   automationCount = 0,
+  systemIndexCount = 0,
   taskMemoryMb: configuredTaskMemoryMb,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -171,6 +172,11 @@ let {
     automationCount: {
       description:
         'The number of workers that service automation runs and user-initiated jobs, and nothing below the automation tier (default 0)',
+      type: 'number',
+    },
+    systemIndexCount: {
+      description:
+        'The number of workers that claim only indexing job types at or above the system indexing priority — an index lane that a system prerender-html sweep can never occupy, so no index job waits behind HTML rendering (default 0)',
       type: 'number',
     },
     allPriorityCount: {
@@ -273,6 +279,7 @@ if (port != null) {
         ...result,
         highPriorityWorkers: highPriorityCount,
         automationWorkers: automationCount,
+        systemIndexWorkers: systemIndexCount,
         allPriorityWorkers: allPriorityCount,
       };
     }
@@ -704,6 +711,9 @@ let secretsKeyringMessage: string | undefined;
     )}, ${automationCount} automation ${pluralize(
       'worker',
       automationCount,
+    )}, ${systemIndexCount} system-index ${pluralize(
+      'worker',
+      systemIndexCount,
     )} and ${allPriorityCount} all-priority ${pluralize(
       'worker',
       allPriorityCount,
@@ -741,8 +751,10 @@ let secretsKeyringMessage: string | undefined;
   eventSink.setAdapter(adapter);
 
   // Each lane's floor and job-type filter is described in
-  // lib/worker-lanes.ts. The user-index and automation lanes are opt-in
-  // (0 workers by default). The contended matrix test stack runs the
+  // lib/worker-lanes.ts. The user-index, automation and system-index lanes
+  // are opt-in (0 workers by default). Local stacks run a system-index worker
+  // (`WORKER_SYSTEM_INDEX_COUNT`) so a realm's readiness never waits on its
+  // HTML rendering. The contended matrix test stack runs the
   // user-index lane to keep realm provisioning responsive under indexing
   // back-pressure; deployments that leave `--userIndexCount` at 0 rely on
   // high-priority-pool capacity, plus the render-tier gap that keeps HTML
@@ -751,6 +763,7 @@ let secretsKeyringMessage: string | undefined;
     userIndexCount,
     highPriorityCount,
     automationCount,
+    systemIndexCount,
     allPriorityCount,
   });
   let taskMemoryMb = await taskMemoryLimitMb(configuredTaskMemoryMb);

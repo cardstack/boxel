@@ -5,6 +5,7 @@ import { basename } from 'path';
 import {
   automationInitiatedPriority,
   systemInitiatedPrerenderHtmlPriority,
+  systemInitiatedPriority,
   userInitiatedPrerenderHtmlPriority,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
@@ -15,6 +16,7 @@ const none = {
   userIndexCount: 0,
   highPriorityCount: 0,
   automationCount: 0,
+  systemIndexCount: 0,
   allPriorityCount: 0,
 };
 
@@ -46,6 +48,24 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a system-index worker claims every index job and no system prerender-html', function (assert) {
+      assert.deepEqual(workerSpecs({ ...none, systemIndexCount: 1 }), [
+        {
+          lane: 'system-index',
+          priority: systemInitiatedPriority,
+          indexJobsOnly: true,
+        },
+      ]);
+      assert.true(
+        systemInitiatedPriority > systemInitiatedPrerenderHtmlPriority,
+        'the floor sits above system prerender-html, so the HTML pass after a boot index never holds the lane',
+      );
+      assert.true(
+        systemInitiatedPriority <= userInitiatedPriority,
+        'the floor admits user-initiated index jobs too',
+      );
+    });
+
     test('a lane with 0 workers starts none', function (assert) {
       assert.deepEqual(workerSpecs(none), [], 'every lane at 0');
       assert.deepEqual(
@@ -61,6 +81,7 @@ module(basename(import.meta.filename), function () {
           userIndexCount: 1,
           highPriorityCount: 1,
           automationCount: 1,
+          systemIndexCount: 1,
           allPriorityCount: 1,
         }),
         [
@@ -80,6 +101,11 @@ module(basename(import.meta.filename), function () {
             indexJobsOnly: false,
           },
           {
+            lane: 'system-index',
+            priority: systemInitiatedPriority,
+            indexJobsOnly: true,
+          },
+          {
             lane: 'all-priority',
             priority: systemInitiatedPrerenderHtmlPriority,
             indexJobsOnly: false,
@@ -94,6 +120,7 @@ module(basename(import.meta.filename), function () {
           userIndexCount: 0,
           highPriorityCount: 2,
           automationCount: 3,
+          systemIndexCount: 0,
           allPriorityCount: 1,
         }).length,
         6,

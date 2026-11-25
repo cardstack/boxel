@@ -1,6 +1,7 @@
 import {
   automationInitiatedPriority,
   systemInitiatedPrerenderHtmlPriority,
+  systemInitiatedPriority,
   userInitiatedPrerenderHtmlPriority,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
@@ -10,6 +11,7 @@ export interface WorkerLaneCounts {
   userIndexCount: number;
   highPriorityCount: number;
   automationCount: number;
+  systemIndexCount: number;
   allPriorityCount: number;
 }
 
@@ -17,6 +19,7 @@ export type WorkerLaneName =
   | 'user-index'
   | 'high-priority'
   | 'automation'
+  | 'system-index'
   | 'all-priority';
 
 // One worker to start: the lane it belongs to, the priority floor it claims
@@ -40,6 +43,14 @@ export interface WorkerSpec {
 //   serves all user-initiated work and nothing below it.
 // - automation floors at the automation tier, so it serves automation runs
 //   and all user-initiated work, and never system-tier jobs.
+// - system-index floors at the system indexing tier and registers only the
+//   indexing job types, so it takes every index job — a boot index, a system
+//   repair, a user write — and never a prerender-html job, whose system tier
+//   sits one below its floor. A realm's `_readiness-check` waits on the jobs
+//   that write its index, so with one of these running, a realm's readiness
+//   never waits on HTML rendering: on a single all-priority worker, which
+//   claims oldest-first, an index job queued after a large realm's HTML pass
+//   waits out that whole pass.
 // - all-priority floors at the lowest tier and serves everything.
 const LANES: {
   lane: WorkerLaneName;
@@ -64,6 +75,12 @@ const LANES: {
     count: 'automationCount',
     priority: automationInitiatedPriority,
     indexJobsOnly: false,
+  },
+  {
+    lane: 'system-index',
+    count: 'systemIndexCount',
+    priority: systemInitiatedPriority,
+    indexJobsOnly: true,
   },
   {
     lane: 'all-priority',
