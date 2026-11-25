@@ -768,7 +768,11 @@ export class PgQueueRunner implements QueueRunner {
             //   workers (`wakeRunnersForPendingExclusive`), so an idle
             //   all-priority worker races it for the family, but a busy one
             //   scans only when it frees up. An operator reindex published at
-            //   the user tier is the way to run one on demand.
+            //   the user tier is the way to run one on demand. This describes
+            //   the deployed pools. A system-index worker, which only the local
+            //   development worker manager runs, claims user-tier writes and
+            //   system-tier passes alike, so there a pass also waits for that
+            //   worker to be free.
             //
             // Jobs published without a family are all exclusive, each in a
             // family of its own group, so for them these reduce to the first

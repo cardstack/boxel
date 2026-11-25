@@ -752,9 +752,10 @@ let secretsKeyringMessage: string | undefined;
 
   // Each lane's floor and job-type filter is described in
   // lib/worker-lanes.ts. The user-index, automation and system-index lanes
-  // are opt-in (0 workers by default). Local stacks run a system-index worker
-  // (`WORKER_SYSTEM_INDEX_COUNT`) so a realm's readiness never waits on its
-  // HTML rendering. The contended matrix test stack runs the
+  // are opt-in (0 workers by default). The local development worker manager
+  // (`mise-tasks/services/worker`) runs a system-index worker
+  // (`WORKER_SYSTEM_INDEX_COUNT`), so the readiness of the realms it serves
+  // never waits on their HTML rendering. The contended matrix test stack runs the
   // user-index lane to keep realm provisioning responsive under indexing
   // back-pressure; deployments that leave `--userIndexCount` at 0 rely on
   // high-priority-pool capacity, plus the render-tier gap that keeps HTML

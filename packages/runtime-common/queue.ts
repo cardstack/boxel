@@ -42,8 +42,9 @@ import type { Deferred } from './deferred.ts';
 // `systemInitiatedPrerenderHtmlPriority` (0) and serves everything. The
 // opt-in system-index lane (`--systemIndexCount` + `--indexJobsOnly`) floors
 // at `systemInitiatedPriority` (1) and takes only index jobs, so system
-// prerender-html (0) can never hold it; local stacks run one, so no index job
-// waits behind a realm's HTML pass.
+// prerender-html (0) can never hold it. The local development worker manager
+// (`mise-tasks/services/worker`) runs one, so no index job for the realms it
+// serves waits behind a realm's HTML pass.
 //
 // Automation runs sit between the two initiator tiers, at
 // `automationInitiatedPriority` (5): the run-command job that runs an

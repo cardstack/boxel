@@ -56,9 +56,8 @@ echo "Starting services..."
 # The readiness line below reports this count alongside the time taken, so a
 # change here is measurable against the previous run rather than guessed at.
 # Raising it trades against the runner's four vCPUs and the prerender page
-# pool the index drives, so it does not scale indefinitely. The system-index
-# worker env-vars.sh starts runs alongside them and takes only index jobs, so
-# the readiness line reports both counts.
+# pool the index drives, so it does not scale indefinitely. The readiness line
+# reports the system-index count too, which this task pins to 0 below.
 #
 # The override is its own variable, and it is assigned unconditionally.
 # `WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-2}"` looks
@@ -68,6 +67,13 @@ echo "Starting services..."
 # the old count and only the reported worker count gives it away.
 CACHE_INDEX_WORKER_COUNT="${CACHE_INDEX_WORKER_COUNT:-2}"
 export WORKER_ALL_PRIORITY_COUNT="$CACHE_INDEX_WORKER_COUNT"
+# No system-index worker here. The dump includes `prerendered_html`, and it is
+# taken soon after readiness. With all-priority workers alone, each realm's boot
+# index waits for a worker to leave the previous realm's HTML pass, so most
+# realms' HTML is rendered by the time readiness clears and lands in the dump.
+# A system-index worker would run the boot indexes back to back, and readiness
+# would clear while most HTML passes are still running.
+export WORKER_SYSTEM_INDEX_COUNT=0
 
 SKIP_BOXEL_HOMEPAGE=true \
   SKIP_CHOREO_GALLERY=true \

@@ -2535,7 +2535,7 @@ The worker manager starts one worker per count in each lane. The list lives in `
 | system-index  | `--systemIndexCount`  | (none)                             | 1     | indexing job types only, every index tier   |
 | all-priority  | `--allPriorityCount`  | `WORKER_ALL_PRIORITY_COUNT`        | 0     | everything                                  |
 
-The user-index and system-index lanes have no start-script variable: the deployed start scripts don't pass `--userIndexCount` or `--systemIndexCount`, so deployed workers run neither. Local stacks run one system-index worker, set by `WORKER_SYSTEM_INDEX_COUNT` in `mise-tasks/lib/env-vars.sh`.
+The user-index and system-index lanes have no start-script variable: the deployed start scripts don't pass `--userIndexCount` or `--systemIndexCount`, so deployed workers run neither. The local development worker manager (`mise-tasks/services/worker`) runs one system-index worker, set by `WORKER_SYSTEM_INDEX_COUNT` in `mise-tasks/lib/env-vars.sh`; the test-realm and base-only worker managers (`services/worker-test`, `services/worker-base`) don't.
 
 The automation lane defaults to 0 workers. With it at 0 an automation run is claimed only by the all-priority lane, in FIFO order with the system work there, so a deployment without the lane still runs every automation, just not ahead of a system backlog. When no run is due the automation lane's workers take user-initiated jobs. They never take system-tier work.
 
