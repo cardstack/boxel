@@ -127,6 +127,10 @@ async function initESLint(): Promise<any> {
     // them.
     ignore: false,
     overrideConfig: {
+      // Card source often has eslint-disable comments for rules host turns
+      // off. With fix: true, reporting them as unused would delete them from
+      // the returned source.
+      linterOptions: { reportUnusedDisableDirectives: 'off' },
       plugins: {
         '@cardstack/boxel': boxelPlugin,
         // Rules that run lowering's own code, so they live beside it rather
@@ -142,6 +146,13 @@ async function initESLint(): Promise<any> {
         // misreads a realm test file (foo.test.gts, no tests/ dir) as
         // production code and rejects its legitimate test-support imports.
         'ember/no-test-support-import': 'off',
+        // Rules host gets from eslint:recommended that existing card code
+        // trips. An error fails a submission, so they stay off for realm
+        // content until card code is fixed.
+        'no-constant-binary-expression': 'off',
+        'no-empty-static-block': 'off',
+        'no-new-native-nonconstructor': 'off',
+        'no-unused-private-class-members': 'off',
         // Realm-submission autofixes host's ESLint config omits (host source
         // authors its own imports; realm content gets them injected).
         '@cardstack/boxel/missing-card-api-import': [
