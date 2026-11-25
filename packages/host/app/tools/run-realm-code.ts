@@ -34,7 +34,6 @@ import {
   type LooseSingleCardDocument,
   type Query,
   type RealmIdentifier,
-  type RealmResourceIdentifier,
   type Relationship,
   type ResolvedCodeRef,
   type Saved,
@@ -93,6 +92,7 @@ import {
   automationCardURL,
   automationEstimate,
   automationIOFor,
+  automationPreviewFile,
   automationRunReport,
   keyApprovalReport,
   loadAutomationConfirmation,
@@ -137,6 +137,7 @@ import {
   RoomActions,
   type RequestedRoomChanges,
 } from '../lib/realm-runner/room-actions';
+import { runRealmOf, runRootURL } from '../lib/realm-runner/run-realm';
 import runRealmCode, {
   DeadlineExtension,
   RealmCallFailure,
@@ -608,13 +609,19 @@ interface IndexActions {
 // started or switched on.
 interface AutomationActions {
   named: NamedAutomationCall[];
+  // The files a run may not write: each named card's `.json` and the script
+  // that card links, as the gate read them. A write to one would change what
+  // the person confirmed.
+  confirmedFiles: Set<string>;
   estimate(cardURL: string): Promise<unknown>;
   start(call: AutomationStartCall, cardURL: string): Promise<unknown>;
   readRun(runId: string): Promise<unknown>;
+  readPreviewFile(runId: string, path: string): Promise<unknown>;
 }
 
 const NO_AUTOMATIONS: AutomationActions = {
   named: [],
+  confirmedFiles: new Set(),
   estimate: () =>
     Promise.reject(
       new Error('realm.automations is not available to an automation run'),
@@ -627,6 +634,21 @@ const NO_AUTOMATIONS: AutomationActions = {
     Promise.reject(
       new Error('realm.automations is not available to an automation run'),
     ),
+  readPreviewFile: () =>
+    Promise.reject(
+      new Error('realm.automations is not available to an automation run'),
+    ),
+};
+
+// The file each write method changes, by the argument that names it.
+const WRITE_TARGET_ARG: Partial<Record<RealmRunnerCallMethod, number>> = {
+  'fs.replace': 0,
+  'fs.writeText': 0,
+  'fs.writeBytes': 0,
+  'fs.delete': 0,
+  'fs.copy': 1,
+  'fs.download': 1,
+  'cards.update': 0,
 };
 
 const MAX_INVALIDATE_PATHS = 100;
@@ -721,6 +743,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'automations.runNow': false,
   'automations.switchOn': false,
   'automations.readRun': false,
+  'automations.readPreviewFile': false,
   'room.enableSkills': false,
   'room.disableSkills': false,
   'room.setModel': false,
@@ -784,6 +807,7 @@ const REQUIRES_READ: Record<RealmRunnerCallMethod, boolean> = {
   'automations.runNow': false,
   'automations.switchOn': false,
   'automations.readRun': false,
+  'automations.readPreviewFile': false,
   'room.enableSkills': false,
   'room.disableSkills': false,
   'room.setModel': false,
@@ -1086,6 +1110,7 @@ class RealmFsSession {
       if (refusal) {
         throw new Error(refusal);
       }
+      this.refuseConfirmedFileWrite(method, args);
       return this.dispatch(method, args);
     });
     this.queue = result.catch(() => undefined);
@@ -2031,8 +2056,8 @@ class RealmFsSession {
         };
         this.automationActions.push(
           call === 'realm.automations.switchOn'
-            ? `switchOn ${cardURL} ${started.state ?? ''}`.trim()
-            : `${method.slice('automations.'.length)} ${cardURL} run ${started.run ?? ''}`.trim(),
+            ? `Switched on ${cardURL} (${started.state ?? 'state unknown'})`
+            : `Started ${call === 'realm.automations.preview' ? 'a Preview of' : 'a run now of'} ${cardURL}, run ${started.run ?? 'unknown'}`,
         );
         return started;
       }
@@ -2044,6 +2069,20 @@ class RealmFsSession {
           );
         }
         return await this.automations.readRun(runId);
+      }
+      case 'automations.readPreviewFile': {
+        let [runId, path] = args;
+        if (
+          typeof runId !== 'string' ||
+          !runId ||
+          typeof path !== 'string' ||
+          !path
+        ) {
+          throw new TypeError(
+            'realm.automations.readPreviewFile expects the id of a Preview run and the path of a file the Preview staged',
+          );
+        }
+        return await this.automations.readPreviewFile(runId, path);
       }
       case 'room.enableSkills':
         return await this.room.enableSkills(args[0]);
@@ -2165,6 +2204,36 @@ class RealmFsSession {
         return await this.askReader(args[0]);
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
+    }
+  }
+
+  // A run that starts or switches on an automation never writes the card or
+  // its script: the person confirmed them as the gate read them.
+  private refuseConfirmedFileWrite(
+    method: RealmRunnerCallMethod,
+    args: unknown[],
+  ) {
+    let position = WRITE_TARGET_ARG[method];
+    let { confirmedFiles } = this.automations;
+    if (position === undefined || confirmedFiles.size === 0) {
+      return;
+    }
+    let path = args[position];
+    if (typeof path !== 'string') {
+      return;
+    }
+    let url: string;
+    try {
+      url = this.resolve(method, path);
+    } catch {
+      return;
+    }
+    let file =
+      method === 'cards.update' && !url.endsWith('.json') ? `${url}.json` : url;
+    if (confirmedFiles.has(file)) {
+      throw new Error(
+        `realm.${method} would change ${path}, which this script's automation call names or runs; the person confirmed the automation as Boxel read it before the run. Write the change in one run, then start or switch on the automation in a later one, after the person confirms again`,
+      );
     }
   }
 
@@ -4040,8 +4109,13 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'card by a literal path in each of those three calls: the run waits for ' +
     "the person's click on a panel that shows the card's triggers, Boxel's " +
     'estimate and the monthly cap, and refuses a card the panel did not ' +
-    'show. preview and runNow answer { run, state }; read the run with ' +
-    'realm.automations.readRun(run) once it finishes. switchOn answers ' +
+    'show, a card or script that changed since the panel read it, and a ' +
+    'write in the same script to the card or its script. preview and ' +
+    'runNow answer { run, state }; in a later script, ' +
+    'realm.automations.readRun(run) answers the run (state pending, ' +
+    "running, complete, error or canceled; its log lines; a Preview's " +
+    'stagedFiles), and realm.automations.readPreviewFile(run, path) the ' +
+    'content a Preview staged for one file. switchOn answers ' +
     '{ state, nextRun, keyApprovals: { forYou, byOthers, needShare, ' +
     'suspended } }: the secure window opens for the approvals in forYou; ' +
     'tell the person who must approve each one in byOthers, that a realm ' +
@@ -4207,12 +4281,44 @@ export default class RunRealmCodeTool extends HostBaseTool<
       }
       return confirmation;
     };
+    // The card and its script must still be what the person confirmed: an
+    // edit from anywhere between the gate's read and the call refuses it.
+    let unchanged = async (confirmation: AutomationConfirmation) => {
+      let now = await loadAutomationConfirmation(
+        io,
+        { call: confirmation.call, path: confirmation.path },
+        rootURL,
+      );
+      if (
+        now.declaration === undefined ||
+        now.declaration !== confirmation.declaration
+      ) {
+        throw new Error(
+          `${confirmation.cardURL} or the script the card runs changed after the person confirmed the automation, so Boxel didn't start or switch on the automation. Show the person the automation as the card is now, and ask again`,
+        );
+      }
+    };
+    let named = namedAutomationCalls(code);
+    let confirmedFiles = new Set<string>();
+    for (let call of named) {
+      try {
+        confirmedFiles.add(`${automationCardURL(call.path, rootURL)}.json`);
+      } catch {
+        // a path outside the workspace names no file of the run's
+      }
+    }
+    for (let confirmation of this.confirmedAutomations) {
+      if (confirmation.scriptURL) {
+        confirmedFiles.add(confirmation.scriptURL);
+      }
+    }
     let failed = (answer: { error: string; code?: string }) =>
       new Error(
         answer.code ? `${answer.error} (${answer.code})` : answer.error,
       );
     return {
-      named: namedAutomationCalls(code),
+      named,
+      confirmedFiles,
       estimate: async (cardURL) => {
         let estimate = await automationEstimate(io, cardURL, rootURL);
         if (!estimate.ok) {
@@ -4232,6 +4338,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       },
       start: async (call, cardURL) => {
         let confirmation = confirmed(call, cardURL);
+        await unchanged(confirmation);
         if (call === 'realm.automations.switchOn') {
           return await this.switchOn(io, confirmation, rootURL, failed);
         }
@@ -4264,12 +4371,19 @@ export default class RunRealmCodeTool extends HostBaseTool<
         }
         return answer.data.attributes ?? {};
       },
+      readPreviewFile: async (runId, path) => {
+        let answer = await automationPreviewFile(io, rootURL, runId, path);
+        if (!answer.ok) {
+          throw new Error(answer.error);
+        }
+        let { ok: _ok, ...file } = answer;
+        return file;
+      },
     };
   }
 
   // Switches the automation on for the person, who becomes its payer, at the
-  // monthly cap the person confirmed. The triggers must still be the ones the
-  // person confirmed. Key approvals the person can give open in the secure
+  // monthly cap the person confirmed. Key approvals the person can give open in the secure
   // window; the answer names who gives the rest.
   private async switchOn(
     io: AutomationIO,
@@ -4281,18 +4395,6 @@ export default class RunRealmCodeTool extends HostBaseTool<
     if (confirmation.monthlyCredits === null) {
       throw new Error(
         `${cardURL} sets no monthly credit cap (caps.monthlyCredits), and an automation switches on only at a monthly cap the person confirms`,
-      );
-    }
-    let now = await loadAutomationConfirmation(
-      io,
-      { call: confirmation.call, path: confirmation.path },
-      rootURL,
-    );
-    if (
-      JSON.stringify(now.triggers) !== JSON.stringify(confirmation.triggers)
-    ) {
-      throw new Error(
-        `The triggers of ${cardURL} changed after the person confirmed them, so the automation was not switched on. Show the person the new triggers and ask again`,
       );
     }
     let answer = await switchAutomationOn(
@@ -4312,7 +4414,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
         secureWindowURL({
           mode: 'approve',
           automation: cardURL,
-          reason: 'Approve the keys this automation calls with, so it can run',
+          reason:
+            'Approve the keys the automation calls with, so the automation can run',
         }),
       );
     }
@@ -4358,7 +4461,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     // Resolve to the realm's own identifier: the fallback realm URL can come
     // without the trailing slash a realm root has.
     let realmId = rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`);
-    let realmURL = this.realmOfInput(realmId);
+    let realmURL = runRealmOf(
+      { realm: this.realm, network: this.network },
+      realmInput,
+    );
     // Read and write are separate grants, and either one is enough to run:
     // in a workspace the user can only read, each write is refused on its
     // own. In one the user can only write, the realm refuses each read,
@@ -5595,32 +5701,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
     );
   }
 
-  // realmOf matches an identifier only in the form the realm is keyed by, and
-  // the input may name the realm by its prefix or by its URL, so a miss is
-  // retried with the identifier resolved to its URL.
-  private realmOfInput(
-    realmId: RealmResourceIdentifier,
-  ): RealmIdentifier | undefined {
-    let realm = this.realm.realmOf(realmId);
-    if (realm) {
-      return realm;
-    }
-    try {
-      return this.realm.realmOf(this.network.virtualNetwork.toURL(realmId));
-    } catch {
-      // resolves nowhere, so it names no known realm
-      return undefined;
-    }
-  }
-
   // The sandbox resolves relative paths against the realm root, and file URLs
   // are URL-form, so the root must be too — a realm may be registered under
-  // its prefix form.
+  // its prefix form. The approval gate resolves the same root with the same
+  // function, so the cards it confirms match the run's.
   private realmRootURL(realm: string): string {
-    let { virtualNetwork } = this.network;
-    return virtualNetwork.isRegisteredPrefix(realm)
-      ? virtualNetwork.toURL(realm).href
-      : new URL(realm).href;
+    return runRootURL({ realm: this.realm, network: this.network }, realm);
   }
 
   // A realm gated behind a skill feature (SKILL_FEATURE_REALMS) is searched

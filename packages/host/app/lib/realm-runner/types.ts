@@ -28,6 +28,7 @@ export type RealmRunnerCallMethod =
   | 'automations.runNow'
   | 'automations.switchOn'
   | 'automations.readRun'
+  | 'automations.readPreviewFile'
   | 'room.enableSkills'
   | 'room.disableSkills'
   | 'room.setModel'

@@ -477,6 +477,15 @@ export default class ToolService extends Service {
     this.automationConfirmations.set(toolRequestId, confirmations);
   }
 
+  // The confirmations a run of the call gets, once: a later run of the same
+  // call, such as a retry, gets none and is refused until the reader
+  // confirms again.
+  takeAutomationConfirmations(toolRequestId: string): AutomationConfirmation[] {
+    let confirmations = this.automationConfirmations.get(toolRequestId) ?? [];
+    this.automationConfirmations.delete(toolRequestId);
+    return confirmations;
+  }
+
   // Click-required calls the reader allowed for the rest of a session, by
   // room: "Always for this session" on a script's gate. Kept for the tab.
   private alwaysAllowed = new TrackedMap<string, Set<string>>();
@@ -1670,8 +1679,7 @@ export default class ToolService extends Service {
                   confirmedAutomations?: AutomationConfirmation[];
                 }
               ).confirmedAutomations =
-                this.automationConfirmations.get(requestId) ?? [];
-              this.automationConfirmations.delete(requestId);
+                this.takeAutomationConfirmations(requestId);
               let stoppable = toolToRun as { stop?: () => void };
               if (typeof stoppable.stop === 'function') {
                 this.stoppableTools.set(requestId, {

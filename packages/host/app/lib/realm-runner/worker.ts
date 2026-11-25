@@ -269,6 +269,8 @@ const BOOTSTRAP = `
             runNow: (path) => call('automations.runNow', [path]),
             switchOn: (path) => call('automations.switchOn', [path]),
             readRun: (run) => call('automations.readRun', [run]),
+            readPreviewFile: (run, path) =>
+              call('automations.readPreviewFile', [run, path]),
           },
           ui: {
             switchSubmode: (submode) => call('ui.switchSubmode', [submode]),

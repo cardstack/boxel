@@ -673,7 +673,13 @@ module('Integration | Component | RoomMessage', function (hooks) {
       .exists('a call that offers Try Anyway still says what the click allows');
   });
 
-  test('a script that switches an automation on asks the reader to confirm the trigger, the estimate and the monthly cap', async function (assert) {
+  // A run-realm-code call that switches the automation at
+  // automations/sale-end on, with the card in a workspace the reader writes.
+  // The realm server answers the estimate once `estimate` settles.
+  async function renderSwitchOnCall(
+    owner: any,
+    estimate: Promise<void> = Promise.resolve(),
+  ) {
     const realmURL = 'http://test-realm/automations/';
     getService('realm').getOrCreateRealmResource(
       realmURL,
@@ -715,10 +721,10 @@ module('Integration | Component | RoomMessage', function (hooks) {
           : null,
       { prepend: true },
     );
-    // The estimate the gate reads from the realm server.
     Object.defineProperty(getService('realm-server'), 'authedFetch', {
-      value: async () =>
-        Response.json({
+      value: async () => {
+        await estimate;
+        return Response.json({
           data: {
             type: 'automation-estimate',
             id: `${realmURL}sale-end`,
@@ -728,19 +734,10 @@ module('Integration | Component | RoomMessage', function (hooks) {
               estimate: { credits: 3, perRun: { totalCredits: 3 } },
             },
           },
-        }),
+        });
+      },
       configurable: true,
     });
-    let toolService = getService('tool-service');
-    let confirmed: { id: string; confirmations: any[] }[] = [];
-    toolService.confirmAutomations = (id, confirmations) =>
-      confirmed.push({ id, confirmations });
-    let denied: string[] = [];
-    toolService.denyTool = (tool: MessageTool) => {
-      denied.push(tool.id!);
-      return Promise.resolve();
-    };
-
     let testScenario = await setupTestScenario({
       isStreaming: false,
       minutesAgoForCreated: 2,
@@ -771,7 +768,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
         'Run',
         'ready',
         undefined,
-        this.owner,
+        owner,
         undefined,
         {
           neverAutoExecutesFor:
@@ -781,9 +778,25 @@ module('Integration | Component | RoomMessage', function (hooks) {
       ),
     ];
     await renderRoomMessageComponent(testScenario);
+    return scenario;
+  }
 
-    let gate =
-      '[data-test-tool-call-id="switch-on"] [data-test-tool-call-approval]';
+  const SWITCH_ON_GATE =
+    '[data-test-tool-call-id="switch-on"] [data-test-tool-call-approval]';
+
+  test('a script that switches an automation on asks the reader to confirm the trigger, the estimate and the monthly cap', async function (assert) {
+    let toolService = getService('tool-service');
+    let confirmed: { id: string; confirmations: any[] }[] = [];
+    toolService.confirmAutomations = (id, confirmations) =>
+      confirmed.push({ id, confirmations });
+    let denied: string[] = [];
+    toolService.denyTool = (tool: MessageTool) => {
+      denied.push(tool.id!);
+      return Promise.resolve();
+    };
+    let scenario = await renderSwitchOnCall(this.owner);
+
+    let gate = SWITCH_ON_GATE;
     let confirmation = `${gate} [data-test-automation-confirmation="realm.automations.switchOn"]`;
     await waitUntil(() => document.querySelector(confirmation));
     assert.dom(confirmation).containsText('Switch on End the sale');
@@ -796,7 +809,10 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert.dom(confirmation).containsText('25 credits');
     assert
       .dom(`${gate} [data-test-pretui-tool-gate-action="apply"]`)
-      .hasText('Confirm');
+      .hasText(
+        'Switch on End the sale',
+        'the answer names what the click starts',
+      );
     assert
       .dom(`${gate} [data-test-pretui-tool-gate-action="always"]`)
       .doesNotExist('a standing yes never covers a switch-on');
@@ -808,6 +824,54 @@ module('Integration | Component | RoomMessage', function (hooks) {
     await click(`${gate} [data-test-pretui-tool-gate-action="deny"]`);
     assert.deepEqual(denied, ['switch-on'], 'Deny declines the call');
     assert.deepEqual(confirmed, [], 'a denied call confirms nothing');
+  });
+
+  test('the switch-on gate offers no answer but Deny until Boxel has read the automation, and hands the run what it showed, once', async function (assert) {
+    let toolService = getService('tool-service');
+    let taken: any[][] = [];
+    (toolService as any).run = {
+      perform: (tool: MessageTool) => {
+        taken.push(toolService.takeAutomationConfirmations(tool.id!));
+        taken.push(toolService.takeAutomationConfirmations(tool.id!));
+      },
+    };
+    let release!: () => void;
+    let estimate = new Promise<void>((resolve) => (release = resolve));
+    await renderSwitchOnCall(this.owner, estimate);
+
+    let gate = SWITCH_ON_GATE;
+    await waitUntil(() =>
+      document.querySelector(
+        `${gate} [data-test-automation-confirmation-loading]`,
+      ),
+    );
+    assert
+      .dom(`${gate} [data-test-pretui-tool-gate-action="apply"]`)
+      .doesNotExist('nothing to confirm while Boxel reads the automation');
+    assert
+      .dom(`${gate} [data-test-pretui-tool-gate-action="deny"]`)
+      .exists('the reader can still deny');
+
+    release();
+    await waitUntil(() =>
+      document.querySelector(
+        `${gate} [data-test-pretui-tool-gate-action="apply"]`,
+      ),
+    );
+    await click(`${gate} [data-test-pretui-tool-gate-action="apply"]`);
+    assert.strictEqual(taken.length, 2, 'the click ran the call once');
+    assert.deepEqual(
+      taken[0].map((c) => [c.call, c.cardURL, c.monthlyCredits]),
+      [
+        [
+          'realm.automations.switchOn',
+          'http://test-realm/automations/sale-end',
+          25,
+        ],
+      ],
+      'the run gets the confirmation the gate showed',
+    );
+    assert.deepEqual(taken[1], [], 'a second run of the call gets none');
   });
 
   test('a message carrying only bot-executed tool calls is marked bot-tools-only', async function (assert) {

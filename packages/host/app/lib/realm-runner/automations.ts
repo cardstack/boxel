@@ -1,8 +1,13 @@
 import { tracked } from '@glimmer/tracking';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { RealmPaths, SupportedMimeType } from '@cardstack/runtime-common';
 import {
+  AUTOMATION_PREVIEW_FILE_PATH,
   AUTOMATION_PREVIEW_PATH,
+  AUTOMATION_ROUTE_PATH_PARAM,
+  AUTOMATION_RUN_LOG_LIMIT_PARAM,
+  AUTOMATION_RUN_LOG_PATH,
+  AUTOMATION_RUN_LOG_RUN_PARAM,
   AUTOMATION_RESOURCE_TYPE,
   AUTOMATION_ROUTE_AUTOMATION_PARAM,
   AUTOMATION_ROUTE_REALM_PARAM,
@@ -64,18 +69,38 @@ export function namedAutomationCalls(code: unknown): NamedAutomationCall[] {
   return [...found.values()];
 }
 
-// The card's URL for a path the script names, inside the run's realm: a
-// card's path may carry `.json` or not.
+// The card's URL for a path the script names, inside the run's realm. The
+// path follows the run's rules for every `realm.*` path: relative to the
+// realm root with no `.`, `..` or empty segment, or a full URL inside the
+// realm. A card's path may carry `.json` or not; the URL is the card's id.
 export function automationCardURL(path: string, realmURL: string): string {
-  let url = new URL(path.replace(/^\/+/, ''), realmURL);
-  if (!url.href.startsWith(realmURL)) {
+  let paths = new RealmPaths(new URL(realmURL));
+  let url: URL;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) {
+    url = new URL(path);
+  } else {
+    if (
+      path.startsWith('/') ||
+      path.includes('\\') ||
+      /[?#]/.test(path) ||
+      path.split('/').some((part) => part === '..' || part === '.' || !part)
+    ) {
+      throw new Error(
+        `An automation is named by its path from the workspace root, such as automations/Automation/daily-digest.json, not ${path}`,
+      );
+    }
+    url = paths.fileURL(path);
+  }
+  if (url.search || url.hash || !paths.inRealm(url)) {
     throw new Error(
       `An automation is named by its path inside the workspace ${realmURL}, not ${path}`,
     );
   }
-  url.search = '';
-  url.hash = '';
-  return url.href.replace(/\.json$/, '');
+  let local = paths.local(url).replace(/\.json$/, '');
+  if (!local) {
+    throw new Error(`${path} names the workspace, not an automation card`);
+  }
+  return paths.fileURL(local).href;
 }
 
 // A trigger as the Automation card holds it, read for a person: no field is
@@ -218,6 +243,13 @@ export interface AutomationConfirmation {
   // Credits one run may cost at most.
   perRunCredits?: number;
   switchedOn?: boolean;
+  // What the realm server runs and charges for, as the card held it when
+  // Boxel read the card for the gate: the triggers, caps, script link,
+  // operations, params and batched AI. A start call refuses a card whose
+  // declaration no longer matches.
+  declaration?: string;
+  // The URL of the script the card links, when the card links one.
+  scriptURL?: string;
   // Why Boxel can't show the confirmation; the call can't run.
   problem?: string;
   // The id of the click that confirmed a Preview or a Run now, once the run
@@ -231,6 +263,8 @@ export interface AutomationIO {
   realmServerURL: string;
   // Reads a card's JSON:API document from its realm.
   readCardDocument(cardURL: string): Promise<Record<string, any>>;
+  // Reads a file's source text from its realm.
+  readSourceText(url: string): Promise<string>;
   viewerTimeZone: string;
 }
 
@@ -254,6 +288,15 @@ export function automationIOFor(services: {
         throw new Error(`the workspace answered ${response.status}`);
       }
       return await response.json();
+    },
+    readSourceText: async (url) => {
+      let response = await services.network.authedFetch(url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+      if (!response.ok) {
+        throw new Error(`the workspace answered ${response.status} for ${url}`);
+      }
+      return await response.text();
     },
     viewerTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
@@ -328,20 +371,63 @@ export async function loadAutomationConfirmation(
     );
     let monthly = attributes.caps?.monthlyCredits;
     confirmation.monthlyCredits = typeof monthly === 'number' ? monthly : null;
+    let scriptLink = doc?.data?.relationships?.script?.links?.self;
+    if (typeof scriptLink === 'string') {
+      confirmation.scriptURL = new URL(scriptLink, cardURL).href;
+    }
+    let script = confirmation.scriptURL
+      ? await io.readSourceText(confirmation.scriptURL)
+      : null;
+    confirmation.declaration = declarationOf(doc, script);
   } catch (e) {
     confirmation.problem = `Boxel couldn’t read the automation card ${named.path}: ${(e as Error).message}`;
+    return confirmation;
+  }
+  if (confirmation.monthlyCredits === null) {
+    confirmation.problem = `${named.path} sets no monthly credit cap (caps.monthlyCredits), and Boxel runs or switches on an automation only at a monthly cap the person confirms`;
     return confirmation;
   }
   let estimate = await automationEstimate(io, cardURL, realmURL);
   if (!estimate.ok) {
     confirmation.problem = estimate.error;
-  } else {
-    confirmation.estimatedCredits = estimate.attributes.estimate?.credits;
-    confirmation.perRunCredits =
-      estimate.attributes.estimate?.perRun?.totalCredits;
-    confirmation.switchedOn = estimate.attributes.switchedOn === true;
+    return confirmation;
   }
+  let credits = estimate.attributes.estimate?.credits;
+  let perRun = estimate.attributes.estimate?.perRun?.totalCredits;
+  if (typeof credits !== 'number' || typeof perRun !== 'number') {
+    confirmation.problem = `The realm server gave no estimate for ${named.path}`;
+    return confirmation;
+  }
+  confirmation.estimatedCredits = credits;
+  confirmation.perRunCredits = perRun;
+  confirmation.switchedOn = estimate.attributes.switchedOn === true;
   return confirmation;
+}
+
+// The parts of an Automation card the realm server runs and charges for,
+// as one string a later read is compared with.
+export function declarationOf(
+  doc: Record<string, any>,
+  script: string | null,
+): string {
+  let attributes = doc?.data?.attributes ?? {};
+  let relationships = doc?.data?.relationships ?? {};
+  let operations = Object.fromEntries(
+    Object.entries(relationships).filter(([key]) =>
+      key.startsWith('operations'),
+    ),
+  );
+  return JSON.stringify({
+    triggers: attributes.triggers ?? null,
+    caps: attributes.caps ?? null,
+    operations: attributes.operations ?? null,
+    operationLinks: operations,
+    params: attributes.params ?? null,
+    batchedAI: attributes.batchedAI ?? null,
+    batchDeadlineMinutes: attributes.batchDeadlineMinutes ?? null,
+    script: relationships.script?.links?.self ?? null,
+    scriptSource: script,
+  });
 }
 
 type RouteAnswer =
@@ -466,17 +552,123 @@ export async function switchAutomationOn(
   });
 }
 
+// The most log lines `realm.automations.readRun` answers, from the start of
+// the run's log.
+export const READ_RUN_LOG_LINES = 200;
+// The most characters `realm.automations.readPreviewFile` answers.
+export const READ_PREVIEW_FILE_CHARS = 100_000;
+
+// A run as the script reads it: the run report (state, error, timings, cost,
+// a Preview's staged file paths, a Run now's saved paths) and the first
+// `READ_RUN_LOG_LINES` lines of the run's log.
 export async function automationRunReport(
   io: AutomationIO,
   realmURL: string,
   runId: string,
 ): Promise<RouteAnswer> {
-  return await route(io, AUTOMATION_RUN_REPORT_PATH, {
+  let report = await route(io, AUTOMATION_RUN_REPORT_PATH, {
     query: {
       [AUTOMATION_ROUTE_REALM_PARAM]: realmURL,
       [AUTOMATION_ROUTE_RUN_PARAM]: runId,
     },
   });
+  if (!report.ok) {
+    return report;
+  }
+  let log = await route(io, AUTOMATION_RUN_LOG_PATH, {
+    query: {
+      [AUTOMATION_ROUTE_REALM_PARAM]: realmURL,
+      [AUTOMATION_RUN_LOG_RUN_PARAM]: runId,
+      [AUTOMATION_RUN_LOG_LIMIT_PARAM]: String(READ_RUN_LOG_LINES),
+    },
+  });
+  let attributes = log.ok ? (log.data.attributes ?? {}) : {};
+  let lines = Array.isArray(attributes.lines) ? attributes.lines : [];
+  return {
+    ...report,
+    data: {
+      ...report.data,
+      attributes: {
+        ...(report.data.attributes ?? {}),
+        logLines: lines.map(
+          (line: {
+            level?: string;
+            message?: string;
+            scriptLine?: number;
+          }) => ({
+            level: line.level ?? 'info',
+            message: line.message ?? '',
+            ...(line.scriptLine != null ? { scriptLine: line.scriptLine } : {}),
+          }),
+        ),
+        logLinesMore: log.ok ? attributes.more === true : undefined,
+        ...(log.ok ? {} : { logError: log.error }),
+      },
+    },
+  };
+}
+
+// The content a complete Preview staged for one file, by its path in the
+// workspace. Text comes back as text, cut at `READ_PREVIEW_FILE_CHARS`; a
+// binary file comes back as its size.
+export async function automationPreviewFile(
+  io: AutomationIO,
+  realmURL: string,
+  runId: string,
+  path: string,
+): Promise<
+  | {
+      ok: true;
+      path: string;
+      text?: string;
+      truncated?: boolean;
+      bytes: number;
+    }
+  | { ok: false; error: string }
+> {
+  let url = new URL(AUTOMATION_PREVIEW_FILE_PATH.slice(1), io.realmServerURL);
+  url.searchParams.set(AUTOMATION_ROUTE_REALM_PARAM, realmURL);
+  url.searchParams.set(AUTOMATION_ROUTE_RUN_PARAM, runId);
+  url.searchParams.set(AUTOMATION_ROUTE_PATH_PARAM, path);
+  let response = await io.realmServerFetch(url.href);
+  if (!response.ok) {
+    let body: any;
+    try {
+      body = await response.json();
+    } catch {
+      body = undefined;
+    }
+    let detail = Array.isArray(body?.errors)
+      ? body.errors
+          .map((e: unknown) =>
+            typeof e === 'string'
+              ? e
+              : String((e as { detail?: string })?.detail ?? e),
+          )
+          .join('; ')
+      : '';
+    return {
+      ok: false,
+      error: detail || `The realm server answered ${response.status}`,
+    };
+  }
+  let bytes = new Uint8Array(await response.arrayBuffer());
+  let text: string | undefined;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    text = undefined;
+  }
+  if (text === undefined) {
+    return { ok: true, path, bytes: bytes.length };
+  }
+  return {
+    ok: true,
+    path,
+    bytes: bytes.length,
+    text: text.slice(0, READ_PREVIEW_FILE_CHARS),
+    ...(text.length > READ_PREVIEW_FILE_CHARS ? { truncated: true } : {}),
+  };
 }
 
 // One operation's missing key approval, as the realm server answers it

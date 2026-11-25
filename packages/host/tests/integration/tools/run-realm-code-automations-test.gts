@@ -134,6 +134,51 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
         );
       },
     },
+    {
+      route: '_automation-run-report',
+      getResponse: async () =>
+        Response.json({
+          data: {
+            type: 'automation-run-report',
+            id: 'run-1',
+            attributes: { run: { state: 'complete' }, stagedFiles: [] },
+          },
+        }),
+    },
+    {
+      route: '_automation-run-log',
+      getResponse: async () =>
+        Response.json({
+          data: {
+            type: 'automation-run-log',
+            id: 'run-1',
+            attributes: {
+              state: 'complete',
+              lines: [
+                {
+                  at: 1,
+                  source: 'script',
+                  kind: 'console',
+                  level: 'info',
+                  message: 'Ended 1 sale',
+                  scriptLine: 4,
+                },
+              ],
+              next: 1,
+              more: false,
+              total: 1,
+              dropped: 0,
+            },
+          },
+        }),
+    },
+    {
+      route: '_automation-preview-file',
+      getResponse: async (req: Request) =>
+        new URL(req.url).searchParams.get('path') === 'Sale/flash-sale.json'
+          ? new Response('{"status":"ended"}\n')
+          : new Response('{}', { status: 404 }),
+    },
     ...['_automation-preview', '_automation-run-now'].map((route) => ({
       route,
       getResponse: async (req: Request) => {
@@ -321,7 +366,9 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
         },
       },
     ]);
-    assert.deepEqual(result.automationActions, [`switchOn ${SALE_END} active`]);
+    assert.deepEqual(result.automationActions, [
+      `Switched on ${SALE_END} (active)`,
+    ]);
     assert.deepEqual(opened, [], 'no key approval was missing');
   });
 
@@ -336,9 +383,65 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
     );
     await assert.rejects(
       tool.execute({ realm: testRealmURL, roomId: '!room:example.com', code }),
-      /changed after the person confirmed them/,
+      /changed after the person confirmed the automation/,
     );
     assert.deepEqual(posted, [], 'nothing was switched on');
+  });
+
+  test('a Run now refuses a card whose caps changed after the reader confirmed it', async function (assert) {
+    let code = `return await realm.automations.runNow('automations/sale-end.json');`;
+    let tool = runTool();
+    tool.confirmedAutomations = await confirmationsFor(code);
+    let raised = saleEndJSON();
+    raised.data.attributes.caps.monthlyCredits = 2500;
+    await getService('card-service').saveSource(
+      new URL('automations/sale-end.json', testRealmURL),
+      JSON.stringify(raised, null, 2),
+      'editor',
+    );
+    await assert.rejects(
+      tool.execute({ realm: testRealmURL, roomId: '!room:example.com', code }),
+      /changed after the person confirmed the automation/,
+    );
+    assert.deepEqual(posted, [], 'no run started');
+  });
+
+  test('a script that starts an automation may not write the automation card', async function (assert) {
+    let code = `
+      await realm.cards.update('automations/sale-end', { caps: { monthlyCredits: 2500 } });
+      return await realm.automations.runNow('automations/sale-end.json');
+    `;
+    let tool = runTool();
+    tool.confirmedAutomations = await confirmationsFor(code);
+    await assert.rejects(
+      tool.execute({ realm: testRealmURL, roomId: '!room:example.com', code }),
+      /would change automations\/sale-end, which this script's automation call names/,
+    );
+    assert.deepEqual(posted, [], 'no run started');
+  });
+
+  test('a run reads a run report with its log lines, and a file a Preview staged', async function (assert) {
+    let code = `
+      let run = await realm.automations.readRun('run-1');
+      let file = await realm.automations.readPreviewFile('run-1', 'Sale/flash-sale.json');
+      return { run, file };
+    `;
+    let result = await runTool().execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code,
+    });
+    let { run, file } = JSON.parse(result.scriptResult!);
+    assert.strictEqual(run.run.state, 'complete');
+    assert.deepEqual(run.logLines, [
+      { level: 'info', message: 'Ended 1 sale', scriptLine: 4 },
+    ]);
+    assert.false(run.logLinesMore);
+    assert.deepEqual(file, {
+      path: 'Sale/flash-sale.json',
+      bytes: 19,
+      text: '{"status":"ended"}\n',
+    });
   });
 
   test('a switch-on that needs key approvals opens the secure window for the reader’s own and names who gives the rest', async function (assert) {
@@ -438,8 +541,8 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
       assert.strictEqual(typeof p.body.data.attributes.click, 'string');
     }
     assert.deepEqual(result.automationActions, [
-      `preview ${SALE_END} run run-1`,
-      `runNow ${SALE_END} run run-1`,
+      `Started a Preview of ${SALE_END}, run run-1`,
+      `Started a run now of ${SALE_END}, run run-1`,
     ]);
   });
 });

@@ -20,6 +20,29 @@ interface Shown {
   items: { key: string; value: string }[];
 }
 
+const VERBS: Record<AutomationConfirmation['call'], string> = {
+  'realm.automations.preview': 'Preview',
+  'realm.automations.runNow': 'Run now',
+  'realm.automations.switchOn': 'Switch on',
+};
+
+// The gate's primary answer names what the click starts: "Switch on End the
+// sale" for one automation, the acts in order for several.
+export function automationConfirmLabel(
+  confirmations: AutomationConfirmation[],
+): string {
+  if (confirmations.length === 1) {
+    let [confirmation] = confirmations;
+    return `${VERBS[confirmation.call]} ${confirmation.title ?? confirmation.path}`;
+  }
+  let verbs = [...new Set(confirmations.map((c) => VERBS[c.call]))];
+  let [first, ...rest] = verbs;
+  let words = [first, ...rest.map((verb) => verb.toLowerCase())];
+  return words.length === 1
+    ? `${first} ${confirmations.length} automations`
+    : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+}
+
 function credits(value: number | undefined | null): string {
   if (value === undefined || value === null) {
     return 'Unknown';
@@ -49,7 +72,10 @@ export default class AutomationConfirmationView extends Component<Signature> {
         items.push(
           {
             key: 'Estimate',
-            value: `About ${credits(confirmation.estimatedCredits)} a month, by Boxel's estimate`,
+            value:
+              confirmation.estimatedCredits === undefined
+                ? 'Unknown'
+                : `About ${credits(confirmation.estimatedCredits)} a month, by Boxel's estimate`,
           },
           {
             key: 'Monthly cap',
@@ -77,6 +103,13 @@ export default class AutomationConfirmationView extends Component<Signature> {
               confirmation.call === 'realm.automations.preview'
                 ? 'Nothing. A Preview shows what the run would save.'
                 : 'Everything the run writes, to the workspace',
+          },
+          {
+            key: 'Outside calls',
+            value:
+              confirmation.call === 'realm.automations.preview'
+                ? 'Boxel makes every outside call and AI request in the script for real, a Preview too. A call that sends, buys or deletes something does so unless the script checks dryRun first.'
+                : 'Boxel makes every outside call and AI request in the script.',
           },
           { key: 'Payer', value: 'You. Boxel charges the run to you.' },
         );
@@ -124,11 +157,11 @@ export default class AutomationConfirmationView extends Component<Signature> {
     <style scoped>
       .automation-confirmation {
         display: grid;
-        gap: var(--pretui-space-3, 0.75rem);
+        gap: var(--boxel-sp-sm);
       }
       .automation {
         display: grid;
-        gap: var(--pretui-space-2, 0.5rem);
+        gap: var(--boxel-sp-xs);
       }
       .heading {
         margin: 0;

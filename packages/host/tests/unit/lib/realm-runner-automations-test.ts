@@ -32,11 +32,27 @@ module('Unit | Lib | realm-runner automations', function () {
       `${REALM}automations/a`,
     );
     assert.strictEqual(
-      automationCardURL('/automations/a', REALM),
+      automationCardURL(`${REALM}automations/a.json`, REALM),
       `${REALM}automations/a`,
+      'a full URL inside the workspace names the card too',
     );
+    for (let path of [
+      '/automations/a',
+      'automations/../a.json',
+      './automations/a.json',
+      'automations//a.json',
+      'automations/a.json?x=1',
+      'automations/a.json#x',
+    ]) {
+      assert.throws(
+        () => automationCardURL(path, REALM),
+        /path from the workspace root/,
+        `${path} is refused`,
+      );
+    }
     assert.throws(
-      () => automationCardURL('../other/automations/a.json', REALM),
+      () =>
+        automationCardURL('http://test-realm/other/automations/a.json', REALM),
       /by its path inside the workspace/,
     );
   });
