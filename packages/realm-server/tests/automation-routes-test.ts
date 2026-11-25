@@ -1949,7 +1949,8 @@ module(basename(import.meta.filename), function (hooks) {
           'not json',
           '{}',
           '{"automationIds":[1]}',
-          '{"automationIds":[],"reportChanges":"no"}',
+          '{"automationIds":[]}',
+          '{"automationIds":["x"],"reportChanges":"no"}',
         ]) {
           let refused = await request
             .post(path)

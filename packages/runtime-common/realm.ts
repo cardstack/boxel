@@ -1990,7 +1990,8 @@ export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
 // The body of `FOLLOW_AUTOMATION_KEY_APPROVALS_PATH` after an incremental
 // pass.
 export interface FollowAutomationKeyApprovalsRequest {
-  // The automations the pass touched, by id.
+  // The automations the pass touched, by id: at least one, as an empty list
+  // is refused.
   automationIds: string[];
   // False when the writes behind the pass asked for no realm events: the
   // check moves the rows all the same, and reports nothing. Absent, it
@@ -2013,6 +2014,7 @@ function parseFollowAutomationKeyApprovalsRequest(
   let { automationIds, reportChanges } = parsed as Record<string, unknown>;
   if (
     !Array.isArray(automationIds) ||
+    automationIds.length === 0 ||
     !automationIds.every((id) => typeof id === 'string') ||
     (reportChanges !== undefined && typeof reportChanges !== 'boolean')
   ) {
@@ -15753,7 +15755,7 @@ export class Realm {
       let touched = parseFollowAutomationKeyApprovalsRequest(body);
       if (!touched) {
         return badRequest({
-          message: `the body of ${FOLLOW_AUTOMATION_KEY_APPROVALS_PATH} names no automations as { automationIds: string[], reportChanges?: boolean }`,
+          message: `the body of ${FOLLOW_AUTOMATION_KEY_APPROVALS_PATH} names no automations as { automationIds: string[] (at least one), reportChanges?: boolean }`,
           requestContext,
         });
       }
