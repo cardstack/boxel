@@ -332,6 +332,35 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('finds the realm of its root with a query, and of a percent-encoded URL', function (assert) {
+      let html = '<a href="https://store.example.test/a">a</a>';
+      let mapped = `<a href="${realmURL}a">a</a>`;
+      assert.true(
+        mapper.mapsRealmOf('https://realms.example.test/owner/store'),
+      );
+      assert.strictEqual(
+        mapper.html(
+          html,
+          'https://realms.example.test/owner/store?format=isolated',
+        ),
+        mapped,
+        'the realm root without its slash, then a query',
+      );
+      let tildeRealmURL = 'https://realms.example.test/owner/~store/';
+      let tildeMapper = new StoredHTMLBackMapper(
+        new Map([[tildeRealmURL, ['https://store.example.test/']]]),
+      );
+      assert.strictEqual(
+        tildeMapper.html(html, 'https://realms.example.test/owner/%7Estore/a'),
+        `<a href="${tildeRealmURL}a">a</a>`,
+        'a card URL that percent-encodes a character its realm URL does not',
+      );
+      assert.false(
+        mapper.mapsRealmOf('https://realms.example.test/owner/store-two/a'),
+        'a realm whose path only starts with the same text is another realm',
+      );
+    });
+
     test('maps only the markup of html resources in a JSON document', function (assert) {
       let doc = {
         data: [
@@ -993,6 +1022,44 @@ module(basename(import.meta.filename), function () {
             'item.on': { module: `${realmURL.href}person`, name: 'Person' },
           },
           fields: { entry: ['html', 'item'] },
+        });
+
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(
+        attr(
+          htmlResource(response.text, `${realmURL.href}person-1`),
+          /<a [^>]*data-person-fitted[^>]*>/,
+          'href',
+        ),
+        `${realmURL.href}person-1`,
+        'a rendering links into the realm',
+      );
+      let item = JSON.parse(response.text).included.find(
+        (resource: { type: string; id: string }) =>
+          resource.type === 'card' &&
+          resource.id === `${realmURL.href}person-1`,
+      );
+      assert.strictEqual(
+        item?.attributes.website,
+        `${CANONICAL_HOST_URL}about`,
+        "a card's data is served as the realm holds it",
+      );
+    });
+
+    test('a federated search maps only the stored HTML of the realms it searches', async function (assert) {
+      await renderAgainst(CANONICAL_HOST_URL);
+
+      let response = await request
+        .post('/_federated-search')
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .send({
+          filter: {
+            'item.on': { module: `${realmURL.href}person`, name: 'Person' },
+          },
+          fields: { entry: ['html', 'item'] },
+          realms: [realmURL.href],
         });
 
       assert.strictEqual(response.status, 200, response.text);

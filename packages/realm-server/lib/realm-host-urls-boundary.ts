@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import type Koa from 'koa';
 import type { Readable } from 'stream';
-import { HtmlResourceType } from '@cardstack/runtime-common';
+import { HtmlResourceType, RealmPaths } from '@cardstack/runtime-common';
 import {
   fullRequestURL,
   readRequestText,
@@ -471,6 +471,7 @@ export class StoredHTMLBackMapper {
   // Longest realm URL first, so a realm inside another one's path wins.
   #realms: {
     realmURL: string;
+    paths: RealmPaths;
     replacer: Replacer;
   }[];
   // The text a body must contain for the body to need mapping.
@@ -480,6 +481,7 @@ export class StoredHTMLBackMapper {
     this.#realms = [...renderedAgainstURLs]
       .map(([realmURL, urls]) => ({
         realmURL,
+        paths: new RealmPaths(new URL(realmURL)),
         replacer: new Replacer(
           urls.map((url): [string, string] => [url, realmURL]),
         ),
@@ -489,9 +491,13 @@ export class StoredHTMLBackMapper {
   }
 
   #realmOf(url: string) {
-    return this.#realms.find(
-      ({ realmURL }) => url.startsWith(realmURL) || `${url}/` === realmURL,
-    );
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return undefined;
+    }
+    return this.#realms.find(({ paths }) => paths.inRealm(parsed));
   }
 
   // Whether stored HTML of the realm that `url` is in can need mapping.
