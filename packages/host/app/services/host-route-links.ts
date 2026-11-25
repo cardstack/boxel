@@ -135,6 +135,18 @@ export default class HostRouteLinksService
   >();
   private routeReadCount = 0;
 
+  // On a page served on a host URL: the card each routed address was made
+  // for, by address, for the links rendered since `forgetLinkedCards` was
+  // last called. A click uses it only to tell a routed address whose last
+  // segment looks like a file name from a file; the address itself opens
+  // the card the routes resolve it to. Not tracked: nothing renders from it.
+  //
+  // When Host Mode v2 lands, store the key as the address on the host URL
+  // the page is served on. A click looks the key up by the link's URL on
+  // the page. Until then a site is served at its realm's URL, so the address
+  // `hrefTo` wrote, on the realm's URL, matches it.
+  private linkedCards = new Map<string, string>();
+
   constructor(owner: Owner) {
     super(owner);
     this.session.register(this);
@@ -144,6 +156,7 @@ export default class HostRouteLinksService
   resetState() {
     this.askedCards = undefined;
     this.pageRoutes = undefined;
+    this.linkedCards.clear();
     this.routeReads.clear();
     this.realmRoutes.clear();
     this.routeFailures.clear();
@@ -164,12 +177,64 @@ export default class HostRouteLinksService
     target: HostRouteAddressTarget,
     api: Omit<CardAPIForMatching, 'virtualNetwork'>,
   ): string | undefined {
-    return hostRouteLink(target, {
+    let href = hostRouteLink(target, {
       routes: this.routes(),
       api: { ...api, virtualNetwork: this.network.virtualNetwork },
       loadedCard: this.loadedCard,
       unresolved: this.reportUnresolved,
     });
+    this.rememberLinkedCard(target, href);
+    return href;
+  }
+
+  // The URL of the card a routed address on this page was made for, or
+  // `undefined` for an address no link rendered here was given.
+  linkedCard(href: string): string | undefined {
+    return this.linkedCards.get(href);
+  }
+
+  // Forgets the cards of the links rendered so far. Called once the visitor
+  // has left a page, so only the links of the page the visitor is on count.
+  forgetLinkedCards(): void {
+    this.linkedCards.clear();
+  }
+
+  // Keeps the card a link's routed address was made for: the last card
+  // given, which is the one the address serves. Only for a visitor's page on
+  // a host URL, where a click can use it, and only for an address a route
+  // gave: a card's own URL is resolved like any other path, because a route
+  // may serve another card there.
+  private rememberLinkedCard(
+    target: HostRouteAddressTarget,
+    href: string | undefined,
+  ): void {
+    if (
+      !href ||
+      target.kind !== 'cards' ||
+      this.inHTMLVisit ||
+      !this.hostModeService.isActive
+    ) {
+      return;
+    }
+    let card = target.cards[target.cards.length - 1];
+    let id =
+      typeof card === 'string' ? card : (card as CardDef | undefined)?.id;
+    if (typeof id !== 'string' || !id) {
+      return;
+    }
+    // Both as the browser writes them, which is how a click reads a link's
+    // address.
+    let cardURL: string;
+    let address: string;
+    try {
+      cardURL = this.network.virtualNetwork.toURL(id).href;
+      address = new URL(href).href;
+    } catch {
+      return;
+    }
+    if (cardURL !== address) {
+      this.linkedCards.set(address, cardURL);
+    }
   }
 
   // The routes that give this render's links their addresses, or
@@ -308,6 +373,10 @@ export default class HostRouteLinksService
     this.realmRoutes.set(realmURL, { key, routes });
   }
 
+  // When Host Mode v2 lands, give the addresses on the host URL the page is
+  // served on, and keep matching a card to its realm by the realm's URL.
+  // Until then a site is served at its realm's URL, so these routes give
+  // addresses on the realm's URL.
   private routesFromPageConfig(): HostRouteLinkRoutes | undefined {
     let config = this.hostModeService.hostDynamicRoutes;
     let pageRoutes = this.pageRoutes;
