@@ -1,4 +1,6 @@
-# Prevent duplicate imports from the same module (`@cardstack/boxel/no-duplicate-imports`)
+# @cardstack/boxel/no-duplicate-imports
+
+📝 Prevent duplicate imports from the same module.
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

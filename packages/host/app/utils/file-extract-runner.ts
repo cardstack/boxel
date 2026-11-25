@@ -22,10 +22,9 @@ import {
   type FileDefExtractResult,
 } from './file-def-attributes-extractor';
 
-import type { AuthErrorGuard } from './auth-error-guard';
-
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+import type { AuthErrorGuard } from './auth-error-guard';
 
 const log = logger('host:file-extract');
 

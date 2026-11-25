@@ -16,6 +16,10 @@ import { cliLog } from '../../lib/cli-log.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
 import { describeFetchError } from '../../lib/describe-fetch-error.ts';
 
+// The help text of `realm publish` and `realm unpublish` ends with this line.
+export const HOST_URLS_REPLACE_PUBLISH =
+  'Host URLs replace published realms. Use `boxel realm mount`, `boxel realm unmount` and `boxel realm host-urls` to serve a realm at a Boxel Space URL, a site name or a custom domain.';
+
 export interface UnpublishOptions {
   /**
    * When true, do not fail if the server reports the realm was already
@@ -155,6 +159,7 @@ export function registerUnpublishCommand(realm: Command): void {
       'Matrix id of a source-realm administrator to authorize as (required with --realm-secret-seed)',
     )
     .option('--json', 'Output the result as JSON')
+    .addHelpText('after', `\n${HOST_URLS_REPLACE_PUBLISH}`)
     .action(async (publishedRealmURL: string, opts: UnpublishCliOptions) => {
       let realmSecretSeed: string | undefined;
       try {

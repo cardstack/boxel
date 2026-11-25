@@ -29,8 +29,6 @@ import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 import {
   deriveRealmName,
   ensureTrailingSlash,
-  isCardErrorJSONAPI,
-  isCardInstance,
   nowDate,
   publishedSpaceHost,
   resolvePublishedRealmUrl,
@@ -61,6 +59,10 @@ import type {
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 import CheckDomainAvailabilityTool from '@cardstack/host/tools/check-domain-availability';
+import {
+  findDanglingRoutingRules,
+  type DanglingRoutingRule,
+} from '@cardstack/host/utils/dangling-routing-rules';
 import {
   publishProgressView,
   publishTargetHost,
@@ -127,9 +129,7 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private errorDocumentViolations: ErrorDocumentViolation[] | null =
     null;
   @tracked private warningTypes: string[] | null = null;
-  @tracked private danglingRoutingRules:
-    | { path: string; reference: string }[]
-    | null = null;
+  @tracked private danglingRoutingRules: DanglingRoutingRule[] | null = null;
 
   @tracked private initialSelectionsSet = false;
   @tracked private realmMetaLoaded = false;
@@ -608,9 +608,7 @@ export default class PublishRealmModal extends Component<Signature> {
   // Pre-publish check for host routing rules whose target card no longer
   // exists. Publishing copies the realm config verbatim, including such a
   // rule, and the published site then degrades the matched path to a 404
-  // placeholder — so warn the owner before they publish. Reads each rule's
-  // `instance` reference (preserved even when the link is broken) and
-  // confirms the target 404s.
+  // placeholder — so warn the owner before they publish.
   private checkDanglingRoutingRulesTask = restartableTask(async () => {
     this.danglingRoutingRules = null;
     let realmURL = this.currentRealmURL;
@@ -618,34 +616,11 @@ export default class PublishRealmModal extends Component<Signature> {
       return;
     }
     try {
-      let realmConfigId = `${ensureTrailingSlash(String(realmURL))}realm`;
-      let configCard = await this.store.get(realmConfigId);
-      if (!isCardInstance(configCard)) {
-        this.danglingRoutingRules = [];
-        return;
-      }
-      let api = await this.loadCardAPI();
-      let rules =
-        (configCard as unknown as { hostRoutingRules?: any[] })
-          .hostRoutingRules ?? [];
-      let dangling: { path: string; reference: string }[] = [];
-      for (let rule of rules) {
-        if (!rule) {
-          continue;
-        }
-        let slot = api.getRelationshipMembershipState(rule, 'instance')
-          .membership?.[0];
-        let reference = slot?.reference;
-        if (!reference) {
-          continue;
-        }
-        let targetId = new URL(reference, realmConfigId).href;
-        let target = await this.store.get(targetId);
-        if (isCardErrorJSONAPI(target) && target.status === 404) {
-          dangling.push({ path: rule.path ?? '/', reference: targetId });
-        }
-      }
-      this.danglingRoutingRules = dangling;
+      this.danglingRoutingRules = await findDanglingRoutingRules(
+        this.store,
+        await this.loadCardAPI(),
+        String(realmURL),
+      );
     } catch (error) {
       console.error(
         'Failed to check for dangling routing rules before publishing',

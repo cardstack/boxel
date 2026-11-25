@@ -109,9 +109,9 @@ import AutomationConfirmationView, {
 } from './automation-confirmation';
 import FoundEntries from './found-entries';
 
+import type { ApplyButtonState } from '../ai-assistant/apply-button';
 import type { AskUserOptionData } from './ask-user-picker';
 
-import type { ApplyButtonState } from '../ai-assistant/apply-button';
 import type { CardContext, CardDef } from '@cardstack/base/card-api';
 import type { CardPillItem } from '@cardstack/pretui/components/card-pills';
 import type { DiffLine } from '@cardstack/pretui/components/diff-block';

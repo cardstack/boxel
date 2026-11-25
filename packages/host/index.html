@@ -35,16 +35,21 @@
       })();
     </script>
 
-    <!-- Until the app renders, the app's page is the colour its loading
+    <!-- Until the app renders, the app's page is the color its loading
          screen is about to be (see templates/loading.gts): the dark sign-in
-         colour when no session is stored, the operator-mode colour when one
-         is. The dark colour scheme also darkens the frame the browser paints
-         before the page's stylesheets arrive. A redirect into the app, such as
-         back from the secure origin after signing in or out, then never
-         flashes white. Both come off once the app has rendered something, so
-         the app keeps its own colour scheme. A published realm's page (host
-         mode, as services/host-mode-service.ts decides it) keeps the plain
-         page. -->
+         color when no session is stored; with one, the dashboard's background
+         when the page opens on the dashboard, and the operator-mode color when
+         it opens on a card or stack. The dashboard's background is its token,
+         not a copy of it: a built page loads the stylesheets that define it
+         before its first paint, while the dev server adds boxel-ui's
+         variables from script, so there the dark color scheme shows until
+         they arrive. The dark color scheme also darkens the frame the browser
+         paints before the page's stylesheets arrive. A redirect into the app,
+         such as back from the secure origin after signing in or out, then
+         never flashes white. Both come off once the app has rendered
+         something, so the app keeps its own color scheme. A published realm's
+         page (host mode, as services/host-mode-service.ts decides it) keeps
+         the plain page. -->
     <script>
       (function () {
         try {
@@ -68,10 +73,45 @@
           if (!isApp) {
             return;
           }
+          // landsOnWorkspaceChooser in lib/secure-sign-in.ts, which this runs
+          // ahead of: keep the two in step.
+          var landsOnDashboard = function () {
+            var params = new URLSearchParams(window.location.search);
+            var serialized = params.get('operatorModeState');
+            var state;
+            if (serialized) {
+              try {
+                state = JSON.parse(serialized);
+              } catch (e) {
+                return false;
+              }
+            }
+            if (state && state.workspaceChooserOpened === true) {
+              return true;
+            }
+            if (
+              window.location.pathname !== config.rootURL ||
+              params.has('cardPath')
+            ) {
+              return false;
+            }
+            if (!state) {
+              return true;
+            }
+            return Boolean(
+              state.submode === 'interact' &&
+              Array.isArray(state.stacks) &&
+              state.stacks.length === 0,
+            );
+          };
           var root = document.documentElement;
           root.setAttribute(
             'data-boxel-boot',
-            window.localStorage.getItem('auth') ? 'signed-in' : 'signed-out',
+            !window.localStorage.getItem('auth')
+              ? 'signed-out'
+              : landsOnDashboard()
+                ? 'dashboard'
+                : 'operator-mode',
           );
           var colorScheme = document.createElement('meta');
           colorScheme.name = 'color-scheme';
@@ -99,7 +139,10 @@
       })();
     </script>
     <style>
-      [data-boxel-boot='signed-in'] body {
+      [data-boxel-boot='dashboard'] body {
+        background-color: var(--host-dashboard-background);
+      }
+      [data-boxel-boot='operator-mode'] body {
         background-color: #686283;
       }
       [data-boxel-boot='signed-out'] body {

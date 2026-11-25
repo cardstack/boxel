@@ -1,0 +1,100 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "prerender-pool-group",
+      "folder": "defd2d156sav4d",
+      "interval": "60s",
+      "rules": [
+        {
+          "uid": "prerender-server-only-aborts",
+          "title": "Prerender server aborts every render",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 900,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "(sum by (target) (count_over_time({service=\"prerender-manager\"} |= \"client-aborted\" | regexp `target=(?P<target>http://[^ \"]+)` [15m])) >= 2) unless on (target) (sum by (target) (count_over_time({service=\"prerender-manager\"} |~ \"proxied [a-z]+ \" |~ \"status=2[0-9][0-9]\" | regexp `target=(?P<target>http://[^ \"]+)` [15m])) > 0)",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "summary": "{{ if $values }}The prerender manager sent {{ printf \"%.0f\" $values.B.Value }} renders to the prerender server {{ $labels.target }} in the last 15 minutes that it aborted after 120 seconds, and got no successful response from that server. A server in this state has usually lost all its browser tabs: a standby tab creation hung, and its log shows \"cross-affinity steal\" lines with creating=1, then \"render cancelled ... in state=queued\". The manager keeps sending it the realms that have affinity with it, so their indexing, publishing and card saves fail until the task is replaced. To replace it, find the task whose IP matches the target's hostname (ip-10-100-58-167 is 10.100.58.167): aws ecs describe-tasks --cluster staging --tasks $(aws ecs list-tasks --cluster staging --service-name boxel-prerender-server-staging --query 'taskArns[]' --output text) --query \"tasks[].[taskArn, containers[0].networkInterfaces[0].privateIpv4Address]\" --output text Then stop that task: aws ecs stop-task --cluster staging --task <task id>. ECS starts a replacement. {{ else }}Grafana could not run this rule's Loki query, so this alert says nothing about the prerender servers. The fault is Loki itself (overloaded, or down): check the Loki task and the context canceled and context deadline exceeded errors in /ecs/loki-staging.{{ end }}"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Discord alarms-staging-internal"
+          }
+        }
+      ]
+    }
+  ]
+}

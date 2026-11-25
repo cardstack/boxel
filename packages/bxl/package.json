@@ -93,7 +93,6 @@
   "devDependencies": {
     "@glint/ember-tsc": "catalog:",
     "@openfga/syntax-transformer": "catalog:",
-    "@types/eslint": "catalog:",
     "@types/node": "catalog:",
     "@types/semver": "^7.7.0",
     "concurrently": "catalog:",

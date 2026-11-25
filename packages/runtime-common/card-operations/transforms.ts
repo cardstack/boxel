@@ -103,7 +103,6 @@ let bxlTransform: Promise<BxlTransformModule> | undefined;
 
 export function loadBxlTransform(): Promise<BxlTransformModule> {
   // The cast is what keeps the specifier opaque to TypeScript; see above.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   bxlTransform ??= import('@cardstack/bxl/transform' as string).then(
     (module) => module as BxlTransformModule,
   );

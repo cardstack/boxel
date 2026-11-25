@@ -101,6 +101,7 @@ async function main() {
   console.log('waiting for test tab on localhost:9333...');
   let target = await findTestTarget();
   console.log('connecting to', target.webSocketDebuggerUrl);
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins -- run with the repo's pinned Node (24, `.mise.toml`)
   let ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => {
     ws.addEventListener('open', res, { once: true });
