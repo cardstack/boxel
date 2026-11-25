@@ -28,15 +28,14 @@ interface BrowserStubOptions {
   gate: () => Promise<void>;
   // Gate that every `context.newPage` call awaits, after the context exists.
   newPageGate?: () => Promise<void>;
-  onContextCreated?: () => void;
-  onContextClosed?: () => void;
+  onContextCreated?: (context: unknown) => void;
+  onContextClosed?: (context: unknown) => void;
 }
 
 function makeBrowserStub(opts: BrowserStubOptions) {
   let browser = {
     async createBrowserContext() {
       await opts.gate();
-      opts.onContextCreated?.();
       let context: any;
       context = {
         async newPage() {
@@ -58,9 +57,10 @@ function makeBrowserStub(opts: BrowserStubOptions) {
           };
         },
         async close() {
-          opts.onContextClosed?.();
+          opts.onContextClosed?.(context);
         },
       };
+      opts.onContextCreated?.(context);
       return context;
     },
   };
@@ -537,12 +537,12 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a standby creation that finishes after its deadline is closed and never joins the pool', async function (assert) {
     let gate = makeManualGate();
-    let created = 0;
-    let closed = 0;
+    let contexts: unknown[] = [];
+    let closedContexts = new Set<unknown>();
     let browserManager = makeBrowserStub({
       gate: gate.gate,
-      onContextCreated: () => created++,
-      onContextClosed: () => closed++,
+      onContextCreated: (context) => contexts.push(context),
+      onContextClosed: (context) => closedContexts.add(context),
     });
     let pool = makePool({
       maxPages: 1,
@@ -564,18 +564,22 @@ module(basename(import.meta.filename), function (hooks) {
     // closed instead of joining the pool.
     gate.unblockAll();
     await waitUntil(
-      () => created === 1 && closed === 1,
+      () => contexts.length > 0 && closedContexts.has(contexts[0]),
       'the late standby context to be closed',
     );
+    let abandoned = contexts[0];
 
-    // The pool still makes tabs once the browser answers.
+    // The pool still makes tabs once the browser answers. The refill may make
+    // a spare standby beside the one getPage takes, so the test identifies
+    // the tab by its context rather than by counting creations.
     let result = await pool.getPage('A');
-    assert.strictEqual(
-      created,
-      2,
+    let context = result.page.browserContext();
+    assert.notStrictEqual(
+      context,
+      abandoned,
       'getPage got a tab from a new creation, not from the abandoned one',
     );
-    assert.strictEqual(closed, 1, 'the new tab is still open');
+    assert.false(closedContexts.has(context), 'the new tab is still open');
     result.release();
   });
 });
