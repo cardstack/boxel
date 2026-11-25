@@ -18,6 +18,7 @@ import { revokeUserSessions } from '@cardstack/runtime-common/db-queries/user-qu
 import {
   closeServer,
   createVirtualNetwork,
+  ensureMatrixAdminUser,
   fixtureDir,
   matrixURL,
   realmConfigCardJSON,
@@ -49,6 +50,10 @@ import {
   boxelApiResource,
   buildRegistry,
 } from '../lib/oauth-provider/registry.ts';
+import {
+  registerListUser,
+  setWorkspaceListOf,
+} from './helpers/workspace-list.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
 // The Boxel API (ADR 021): the realm and realm-server routes Boxel's own apps
@@ -352,6 +357,39 @@ module(basename(import.meta.filename), function (hooks) {
         .send({});
       assert.strictEqual(response.status, 403, response.text);
       assert.strictEqual(response.body.error, 'insufficient_scope');
+    });
+  });
+
+  module('the caller’s workspace list', function () {
+    test('a boxel:read token reads its user’s workspace list and display name', async function (assert) {
+      await ensureMatrixAdminUser();
+      let user = await registerListUser('oauth-list');
+      await setWorkspaceListOf(user, ['https://elsewhere.example/a/']);
+      let [{ id }] = (await dbAdapter.execute(
+        `INSERT INTO users (matrix_user_id) VALUES ($1) RETURNING id`,
+        { bind: [user.userId] },
+      )) as { id: string }[];
+      userIds[user.userId] = id;
+      let { token } = await oauthToken(user.userId, { scope: 'boxel:read' });
+
+      let list = await request()
+        .get('/_user-realms')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Authorization', `Bearer ${token}`);
+      assert.strictEqual(list.status, 200, list.text);
+      assert.deepEqual(list.body.data.attributes.realms, [
+        'https://elsewhere.example/a/',
+      ]);
+
+      let name = await request()
+        .get('/_user-display-name')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Authorization', `Bearer ${token}`);
+      assert.strictEqual(name.status, 200, name.text);
+      assert.strictEqual(
+        name.body.data.attributes.displayName,
+        user.displayName,
+      );
     });
   });
 

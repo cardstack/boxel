@@ -1873,6 +1873,7 @@ export async function runTestRealmServer({
   cardDocumentCache,
   published,
   history,
+  matrixAdmin,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1901,6 +1902,8 @@ export async function runTestRealmServer({
   // read path reads it off the realm, and the search fan-out reads it off the
   // server, so a test that sets it gets the setting on both legs.
   linkShapePolicy?: LinkShapePolicy;
+  // The Synapse admin account the server uses; omit for the local default.
+  matrixAdmin?: { username: string; password: string };
   // Gives the server a secure origin (see `lib/secure-origin.ts`).
   secureOriginURL?: URL;
   googleSignIn?: ConstructorParameters<typeof RealmServer>[0]['googleSignIn'];
@@ -2065,6 +2068,12 @@ export async function runTestRealmServer({
     ...(oauthTokenLimit ? { oauthTokenLimit } : {}),
     ...(secureOriginAppOrigins ? { secureOriginAppOrigins } : {}),
     ...(clientAddress ? { clientAddress } : {}),
+    ...(matrixAdmin
+      ? {
+          matrixAdminUsername: matrixAdmin.username,
+          matrixAdminPassword: matrixAdmin.password,
+        }
+      : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(realmURL.port)),
