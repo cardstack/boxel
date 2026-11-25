@@ -540,14 +540,17 @@ function noLiveJob(): string[] {
   ];
 }
 
-// The run, aliased `r`, isn't a batch's follow-up its batch records as held:
+// The run, aliased `r`, isn't a pending follow-up its batch records as held:
 // one that waits for its automation to be active again, when the tick
-// enqueues its job again, whatever job of it is or isn't still queued.
+// enqueues its job again, whatever job of it is or isn't still queued. A
+// held follow-up that is running isn't waiting for the tick: a job enqueued
+// before the hold took it, and when that job is lost the run is judged like
+// any lost follow-up, so it never stays running for good.
 function notHeld(): string[] {
   return [
-    'NOT EXISTS (SELECT 1 FROM ai_batches b WHERE',
+    "(r.state <> 'pending' OR NOT EXISTS (SELECT 1 FROM ai_batches b WHERE",
     "r.trigger = 'batch' AND b.batch_id = r.slot AND b.automation_id = r.automation_id",
-    'AND b.follow_up_held_at IS NOT NULL)',
+    'AND b.follow_up_held_at IS NOT NULL))',
   ];
 }
 

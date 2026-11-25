@@ -20,13 +20,16 @@
 // takes a run whose commit was already claimed learns that from the start
 // and finishes the run without running the script again.
 //
-// A batch's follow-up is never dropped by a pause or a wait for a key
-// approval: it is held (`holdAutomationFollowUpRuns`), a pending run with no
-// job, until its automation is active again and the follow-up is enqueued
-// once more (`ai-batch-follow-ups.ts`, ADR 030 §1.5). A follow-up that had
-// already used something when it was held ends as canceled, billed to whom
-// it acted as for what it used, and a new pending run takes the batch's slot
-// in its place (`replaceHeldFollowUp`).
+// A pause, or a wait for a key approval, holds a batch's follow-up rather
+// than dropping it, and so does the follow-up's admission when it refuses
+// for one of those (`holdAutomationFollowUpRuns`): a pending run with no job,
+// until its automation is active again and the follow-up is enqueued once
+// more (`ai-batch-follow-ups.ts`, ADR 030 §1.5). A follow-up that had already
+// used something when it was held ends as canceled, billed to whom it acted
+// as for what it used, and a new pending run takes the batch's slot in its
+// place (`replaceHeldFollowUp`). A follow-up refused while its script runs
+// (a key approval it needs, or its payer losing write access or sessions) is
+// still ended, not held: see `docs/adr/remediation/030.md`.
 
 import { v4 as uuidv4 } from '@lukeed/uuid';
 

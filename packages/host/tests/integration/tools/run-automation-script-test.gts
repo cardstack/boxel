@@ -1089,6 +1089,53 @@ return 'done';`);
     );
   });
 
+  test('a Preview whose follow-up sends a batch of its own runs that batch’s follow-up too', async function (assert) {
+    let sent: unknown[] = [];
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let { submitted, done } = previewWithBatches(
+      `
+      const automation = realm.current.automation;
+      const step = automation.trigger.kind === 'batch' ? automation.batch.milestone : 'start';
+      if (step === 'second batch') {
+        return { steps: [automation.batch.results[0].output.label] };
+      }
+      return await realm.resolve.batch(
+        [{ ...${JSON.stringify(CLASSIFY)}, input: { ticket: step } }],
+        { milestone: step === 'start' ? 'first batch' : 'second batch' },
+      );
+      `,
+      {
+        io: {
+          ...tool.automationRealmIO(testRealmURL),
+          resolveBatch: async () => {
+            throw new Error('a Preview never submits a batch');
+          },
+          resolve: async (request) => {
+            sent.push(request.input);
+            let ticket = (request.input as { ticket: string }).ticket;
+            return {
+              output: { label: `label-${ticket}` },
+              model: 'test/model',
+            };
+          },
+        },
+      },
+    );
+    let outcome = await done;
+
+    assert.strictEqual(submitted.length, 0, 'no batch is submitted');
+    assert.deepEqual(
+      sent,
+      [{ ticket: 'start' }, { ticket: 'first batch' }],
+      'each pass’s batch is sent at the normal price',
+    );
+    assert.deepEqual(
+      JSON.parse(outcome.scriptResult),
+      { steps: ['label-first batch'] },
+      'the last follow-up pass reads the answers the pass before it got',
+    );
+  });
+
   test('a Preview of an automation that doesn’t turn on batched AI refuses realm.resolve.batch, as its runs’ batches are refused', async function (assert) {
     let { submitted, done } = previewWithBatches(PREVIEW_SCRIPT, {
       batchedAI: false,

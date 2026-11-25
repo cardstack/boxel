@@ -324,7 +324,9 @@ async function startFollowUp(
     if (!created && run.state !== 'pending') {
       // A held follow-up that a job enqueued before the hold has just
       // taken keeps its hold: that job's admission holds it again, or it
-      // runs as the batch's identity and the hold clears once it ends.
+      // runs as the batch's identity and the hold clears on the first tick
+      // after it ends. If that job is lost, reconcile ends the run or holds
+      // it again (`automation-reconcile.ts`), as it does any lost follow-up.
       if (!(batch.held && run.state === 'running')) {
         await recordFollowUp(txQuery, batchId, run.id);
       }

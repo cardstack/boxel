@@ -3401,47 +3401,51 @@ export interface AutomationRunResult {
 // requests at once, at the normal price, and once the script finishes runs it
 // again as the batch's follow-up, in the same run and within the same time
 // limit, with the answers in `realm.current.automation.batch`. The
-// follow-up reads what the first pass staged, as a real follow-up reads
-// what its submitting run committed.
+// follow-up reads what the passes before it staged, as a real follow-up
+// reads what its submitting run committed. A follow-up that sends a batch of
+// its own gets a follow-up pass too, so a chain of batches runs to its end
+// unless the time limit stops it first.
 export async function runAutomationScript(
   options: AutomationRunOptions,
 ): Promise<AutomationRunResult> {
   let timeoutMs = automationTimeLimitMs(options.secondsCap);
   let endsAt = Date.now() + timeoutMs;
-  let first = await runAutomationPass(options, options.automation, timeoutMs);
-  let { inlineBatch } = first;
-  if (!inlineBatch) {
-    return first.result;
-  }
-  options.progress.record({
-    kind: 'activity',
-    at: Date.now(),
-    line: "Preview runs the batch's follow-up now, with the answers its requests got",
-  });
-  let followUp = await runAutomationPass(
-    options,
-    {
-      ...options.automation,
-      trigger: { label: BATCH_RUN_TRIGGER, kind: 'batch' },
-      scheduledAt: inlineBatch.deadline,
-      batch: {
-        id: null,
-        deadline: inlineBatch.deadline,
-        milestone: inlineBatch.milestone,
-        late: false,
-        results: inlineBatch.results,
+  let pass = await runAutomationPass(options, options.automation, timeoutMs);
+  let passes = [pass.result];
+  while (pass.inlineBatch) {
+    let { inlineBatch } = pass;
+    options.progress.record({
+      kind: 'activity',
+      at: Date.now(),
+      line: "Preview runs the batch's follow-up now, with the answers its requests got",
+    });
+    pass = await runAutomationPass(
+      options,
+      {
+        ...options.automation,
+        trigger: { label: BATCH_RUN_TRIGGER, kind: 'batch' },
+        scheduledAt: inlineBatch.deadline,
+        batch: {
+          id: null,
+          deadline: inlineBatch.deadline,
+          milestone: inlineBatch.milestone,
+          late: false,
+          results: inlineBatch.results,
+        },
       },
-    },
-    Math.max(1, endsAt - Date.now()),
-  );
-  let written = [
-    ...new Set([...first.result.written, ...followUp.result.written]),
-  ];
+      Math.max(1, endsAt - Date.now()),
+    );
+    passes.push(pass.result);
+  }
+  if (passes.length === 1) {
+    return pass.result;
+  }
+  let written = [...new Set(passes.flatMap((result) => result.written))];
   return {
-    scriptResult: followUp.result.scriptResult,
+    scriptResult: pass.result.scriptResult,
     written,
     unchanged: [
-      ...new Set([...first.result.unchanged, ...followUp.result.unchanged]),
+      ...new Set(passes.flatMap((result) => result.unchanged)),
     ].filter((url) => !written.includes(url)),
   };
 }
