@@ -691,8 +691,9 @@ const tests: SharedTests<unknown> = Object.freeze({
   'validateHostRoutes: a named query-backed link when one type is known':
     async (assert) => {
       let { routes, warnings } = validate([
-        // Only the parent route's type is known. The child's card may store
-        // a link of that name, so the route is kept for the resolver.
+        // Only the parent route's type is known, and its field of that name
+        // is query-backed. The child's card may store a link of that name,
+        // so the route is kept for the resolver, with a warning.
         fieldMatch(
           '/d/:department',
           'Department',
@@ -704,7 +705,8 @@ const tests: SharedTests<unknown> = Object.freeze({
           },
         ),
         // Only the child route's type is known, and its field of that name
-        // is query-backed: refused.
+        // is query-backed. The parent's card may store a link of that name,
+        // so the route is kept the same way.
         {
           path: '/g/:gadget',
           card: './Gadget/:gadget',
@@ -722,24 +724,35 @@ const tests: SharedTests<unknown> = Object.freeze({
         '/d/:department',
         '/d/:department/:gadget',
         '/g/:gadget',
+        '/g/:gadget/:department',
       ]);
-      let kept = routes[0]!.routes[0]!;
-      assert.deepEqual(kept.kind === 'card-id' ? kept.parentLink : undefined, {
-        field: 'gadgets',
-        side: 'unverified',
-        inferred: false,
-      });
+      for (let kept of [routes[0]!.routes[0]!, routes[1]!.routes[0]!]) {
+        assert.deepEqual(
+          kept.kind === 'card-id' || kept.kind === 'field-match'
+            ? kept.parentLink
+            : undefined,
+          { field: 'gadgets', side: 'unverified', inferred: false },
+          `${kept.fullPath} is kept with an unverified parent link`,
+        );
+      }
       assert.deepEqual(codes(warnings), [
         {
-          code: 'invalid-parent-link',
+          code: 'query-backed-parent-link',
+          path: '/d/:department/:gadget',
+          dropped: false,
+        },
+        {
+          code: 'query-backed-parent-link',
           path: '/g/:gadget/:department',
-          dropped: true,
+          dropped: false,
         },
       ]);
-      assert.true(
-        warnings[0]!.message.includes('gadgets is a query-backed link'),
-        `the warning says the named link is query-backed: ${warnings[0]!.message}`,
-      );
+      for (let warning of warnings) {
+        assert.true(
+          warning.message.includes('gadgets is a query-backed link'),
+          `the warning says the named link is query-backed: ${warning.message}`,
+        );
+      }
     },
 
   'validateHostRoutes: a subtype that stores an inherited query-backed link':

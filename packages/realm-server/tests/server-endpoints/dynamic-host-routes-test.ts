@@ -43,8 +43,9 @@ function card(
 
 // A site with one route of each dynamic kind beside fixed routes: a card id
 // template, field matches (one with a `where`, two siblings sharing `/:slug`),
-// a nested field match (one whose parent link is a computed link), and a
-// dynamic redirect. Each card's isolated template
+// a nested field match (one whose parent link is a computed link, one whose
+// parent card also has a query-backed link to its children), and a dynamic
+// redirect. Each card's isolated template
 // prints its label, so a response shows which card it served.
 function makeSiteFixture(): Record<string, string | LooseSingleCardDocument> {
   let labelled = (name: string, extra = '') => `
@@ -61,12 +62,19 @@ function makeSiteFixture(): Record<string, string | LooseSingleCardDocument> {
     }`;
   return {
     'site.gts': `
-      import { CardDef, Component, field, contains, linksTo } from "@cardstack/base/card-api";
+      import { CardDef, Component, field, contains, linksTo, linksToMany } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
       ${labelled('Person')}
       ${labelled('Post', '@field status = contains(StringField);')}
       ${labelled('Page')}
-      ${labelled('Category')}
+      ${labelled(
+        'Category',
+        // A query-backed link is not a parent link, so the product's stored
+        // category is the only one inferred.
+        `@field products = linksToMany(() => Product, {
+        query: { filter: { eq: { 'category.id': '$this.id' } } },
+      });`,
+      )}
       ${labelled('Product', '@field category = linksTo(() => Category);')}
       ${labelled('Aisle')}
       ${labelled('Bin', '@field aisle = linksTo(() => Aisle);')}
@@ -326,6 +334,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         wrongParent.status,
         404,
         'a child that does not belong to the parent is not served',
+      );
+
+      let category = hostConfig(response.text).hostDynamicRoutes?.routes.find(
+        (route: { fullPath: string }) => route.fullPath === '/c/:category',
+      );
+      assert.deepEqual(
+        category?.routes[0]?.parentLink,
+        { field: 'category', side: 'child', kind: 'linksTo', inferred: true },
+        "the stored link is inferred, and the category's query-backed products is not a candidate",
       );
     });
 

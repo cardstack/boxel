@@ -62,16 +62,20 @@ A dynamic child route's card MUST belong to its parent route's card through a
 link: a `linksTo` on the child or a `linksToMany` on the parent. The link
 MUST be named in `parent`, or inferred when exactly one link connects the two
 types. With two or more, validation MUST drop a route that doesn't name one.
-A query-backed link field stores no link, so it MUST NOT count as a link
-here: inference MUST skip it, and validation MUST drop a route whose
-`parent` names one. The exception is a `parent` checked against the parent
-route's type alone: the child's card may store a link of that name, so the
-route is kept for the resolver to read on either card. A computed link
-counts, because the index stores its value in the card's document; when its
-`computeVia` reads a query-backed field, that stored value can go stale.
 Membership MUST be checked by reading the link on one of the two loaded
-cards, with no search. A matched value only has to be unique within its
-parent.
+cards, with no search. A query-backed link field has no stored value:
+reading it runs a search, and the result stops at a page limit. So it MUST
+NOT count as a link here: inference MUST skip it, and validation MUST drop a
+route whose `parent` names one. The exception is a `parent` checked against
+one route's type alone: the other route's card may store a link of that
+name, so the route is kept, with a warning, for the resolver to read on
+either card. Validation reads only the type a route names, while a field
+match also finds cards of its subtypes, which can declare a field of the
+same name as stored or as query-backed. A computed link counts, because the
+index stores its value in the card's document. When its `computeVia` reads
+a query-backed field, the index leaves the value out, so the route finds no
+child card; validation can't tell this before the code runs. A matched value
+only has to be unique within its parent.
 
 ### 1.4. One resolver, run as the visitor
 

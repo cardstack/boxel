@@ -134,8 +134,8 @@ export interface HostRouteTypeInfo {
   // parent type. `isPrimitive` is false for a link or a compound field.
   // `target` is the key of the card type a `linksTo` or `linksToMany`
   // field points to. `isQueryBacked` is true for a link field declared with
-  // a `query`: it stores no link, so it can't be a nested route's parent
-  // link.
+  // a `query`: its value comes from a search, so it can't be a nested
+  // route's parent link.
   fields: Readonly<Record<string, HostRouteTypeField>>;
 }
 
@@ -401,7 +401,11 @@ export type HostRouteWarningCode =
   // A nested route whose cards get no address from the card alone: only
   // the parent's card holds the link, and the type has no route of its
   // own. The route is kept.
-  | 'no-address-from-one-card';
+  | 'no-address-from-one-card'
+  // A nested route whose `parent` names a query-backed link on the one card
+  // type validation can read. The other route's card may store a link of
+  // that name. The route is kept.
+  | 'query-backed-parent-link';
 
 export interface HostRouteWarning {
   code: HostRouteWarningCode;
@@ -879,7 +883,19 @@ class Validator {
           card.paramNames.includes(n),
         );
         if (!isBlank(rule.parent) || !embedsParent) {
-          let link = this.resolveParentLink(rule.parent, undefined, parent!);
+          let link = this.resolveParentLink(
+            rule.parent,
+            undefined,
+            parent!,
+            (message) =>
+              this.warn(
+                'query-backed-parent-link',
+                message,
+                position,
+                displayPath,
+                false,
+              ),
+          );
           if (typeof link === 'string') {
             return drop('invalid-parent-link', link);
           }
@@ -929,7 +945,19 @@ class Validator {
       }
       let parentLink: HostRouteParentLink | undefined;
       if (parentIsDynamic) {
-        let link = this.resolveParentLink(rule.parent, typeInfo, parent!);
+        let link = this.resolveParentLink(
+          rule.parent,
+          typeInfo,
+          parent!,
+          (message) =>
+            this.warn(
+              'query-backed-parent-link',
+              message,
+              position,
+              displayPath,
+              false,
+            ),
+        );
         if (typeof link === 'string') {
           return drop('invalid-parent-link', link);
         }
@@ -1028,11 +1056,13 @@ class Validator {
   }
 
   // The link between a dynamic child route and its dynamic parent route,
-  // named or inferred, or a warning.
+  // named or inferred, or a warning that drops the route. `warnKept` gives a
+  // warning for a route that is kept.
   private resolveParentLink(
     rawParent: unknown,
     childType: HostRouteTypeInfo | undefined,
     parent: ParentContext,
+    warnKept: (message: string) => void,
   ): HostRouteParentLink | string {
     let parentType = parent.typeInfo;
     let named =
@@ -1045,20 +1075,24 @@ class Validator {
     if (!childType || !parentType) {
       if (named) {
         // Only one side's type is known, at most. The field is on the child
-        // when the child's type has it as a link: a link from the child to
-        // its parent is the one each card can be addressed by. When only the
-        // parent's type is known, a link field of that name on it doesn't
-        // show which card holds the link, since the child's card may have a
-        // field of that name too, so it is left for the resolver to read on
+        // when the child's type has it as a stored link: a link from the
+        // child to its parent is the one each card can be addressed by.
+        // Otherwise a field of that name on the known type doesn't show which
+        // card holds the link, since the other route's card may have a field
+        // of that name too, so it is left for the resolver to read on
         // whichever card has it, as is a field the known type doesn't have.
-        // That holds when the parent's field is query-backed too. A
-        // query-backed link on the child's type is refused: it is the link
-        // this route names, and it stores nothing for the resolver to read.
-        let field = childType?.fields[named];
+        // A query-backed link on the known type can't be the one read, so
+        // the route is kept with a warning that only the other card's link
+        // can serve it.
+        let known = childType ?? parentType;
+        let field = known?.fields[named];
         if (field && isLinkType(field.type) && field.isQueryBacked) {
-          return queryBackedParent(named);
-        }
-        if (field && isLinkType(field.type)) {
+          warnKept(
+            `parent ${named} is a query-backed link on ${
+              childType ? "this route's" : "the parent route's"
+            } card type, which is not read as a parent link; the route serves a card only when the other route's card stores a link named ${named}`,
+          );
+        } else if (childType && field && isLinkType(field.type)) {
           return {
             field: named,
             side: 'child',
@@ -1071,10 +1105,13 @@ class Validator {
       return "parent must name the link field that connects this route's card to its parent route's card: a card id template has no type to infer it from";
     }
     let all = linkCandidates(childType, parentType);
-    // A query-backed link stores nothing: it is derived from the stored
-    // links, often the other side of one of them. So it is never inferred,
-    // and it can't be named either, since membership is read from the
-    // stored links on the two loaded cards, with no search.
+    // A query-backed link has no stored value: reading a card runs its
+    // query, and the result stops at a page limit. Membership is read from
+    // the stored links on the two loaded cards, with no search, so a
+    // query-backed link is never inferred, and it can't be named either.
+    // Only the route's own type is read here. A field-match search also
+    // returns cards of its subtypes, and a subtype can declare a field of
+    // the same name as stored or as query-backed.
     let candidates = all
       .filter((c) => !c.isQueryBacked)
       .map(({ isQueryBacked: _, ...link }) => link);
@@ -1325,7 +1362,7 @@ class Validator {
 }
 
 function queryBackedParent(field: string): string {
-  return `parent ${field} is a query-backed link: it stores no link that can be read on the loaded cards with no search; name a stored linksTo or linksToMany field instead`;
+  return `parent ${field} is a query-backed link: its value comes from a search that stops at a page limit, and a parent link is read on the loaded cards with no search; name a stored linksTo or linksToMany field instead`;
 }
 
 // The link fields that connect a child route's type and its parent route's
