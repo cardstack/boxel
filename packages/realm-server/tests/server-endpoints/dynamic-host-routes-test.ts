@@ -23,7 +23,7 @@ import {
 
 const realmURL = new URL('http://127.0.0.1:4444/dynamic-routes/');
 const realmPath = realmURL.pathname;
-const TYPE_NAMES = ['Post', 'Page', 'Category', 'Product'];
+const TYPE_NAMES = ['Post', 'Page', 'Category', 'Product', 'Aisle', 'Item'];
 const CARD_DEF = { module: rri('@cardstack/base/card-api'), name: 'CardDef' };
 
 function card(
@@ -43,7 +43,8 @@ function card(
 
 // A site with one route of each dynamic kind beside fixed routes: a card id
 // template, field matches (one with a `where`, two siblings sharing `/:slug`),
-// a nested field match, and a dynamic redirect. Each card's isolated template
+// a nested field match (one whose parent link is a computed link), and a
+// dynamic redirect. Each card's isolated template
 // prints its label, so a response shows which card it served.
 function makeSiteFixture(): Record<string, string | LooseSingleCardDocument> {
   let labelled = (name: string, extra = '') => `
@@ -67,6 +68,17 @@ function makeSiteFixture(): Record<string, string | LooseSingleCardDocument> {
       ${labelled('Page')}
       ${labelled('Category')}
       ${labelled('Product', '@field category = linksTo(() => Category);')}
+      ${labelled('Aisle')}
+      ${labelled('Bin', '@field aisle = linksTo(() => Aisle);')}
+      ${labelled(
+        'Item',
+        `@field bin = linksTo(() => Bin);
+      @field aisle = linksTo(() => Aisle, {
+        computeVia: function (this: Item) {
+          return this.bin?.aisle;
+        },
+      });`,
+      )}
     `,
     'Person/robin.json': card('Person', { label: 'Robin' }),
     'Post/a.json': card('Post', {
@@ -104,6 +116,19 @@ function makeSiteFixture(): Record<string, string | LooseSingleCardDocument> {
       { slug: 'trail-runner', label: 'Trail Runner' },
       { category: { links: { self: '../Category/shoes' } } },
     ),
+    // An item's aisle is computed through its bin.
+    'Aisle/front.json': card('Aisle', { slug: 'front', label: 'Front' }),
+    'Aisle/back.json': card('Aisle', { slug: 'back', label: 'Back' }),
+    'Bin/one.json': card(
+      'Bin',
+      { slug: 'one', label: 'Bin One' },
+      { aisle: { links: { self: '../Aisle/front' } } },
+    ),
+    'Item/hammer.json': card(
+      'Item',
+      { slug: 'hammer', label: 'Hammer' },
+      { bin: { links: { self: '../Bin/one' } } },
+    ),
     // A card at the realm root whose own path a `/:slug` route matches
     // without finding it.
     'loose.json': {
@@ -137,6 +162,18 @@ function makeSiteFixture(): Record<string, string | LooseSingleCardDocument> {
                   path: '/:product',
                   type: { module: './site', name: 'Product' },
                   match: { slug: ':product' },
+                },
+              ],
+            },
+            {
+              path: '/a/:aisle',
+              type: { module: './site', name: 'Aisle' },
+              match: { slug: ':aisle' },
+              routes: [
+                {
+                  path: '/:item',
+                  type: { module: './site', name: 'Item' },
+                  match: { slug: ':item' },
                 },
               ],
             },
@@ -292,6 +329,27 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('a nested route whose parent link is a computed link serves the child card', async function (assert) {
+      let response = await page('a/front/hammer');
+      assert.strictEqual(response.status, 200);
+      assert.true(response.text.includes('Served Hammer'));
+      let aisle = hostConfig(response.text).hostDynamicRoutes?.routes.find(
+        (route: { fullPath: string }) => route.fullPath === '/a/:aisle',
+      );
+      assert.deepEqual(
+        aisle?.routes[0]?.parentLink,
+        { field: 'aisle', side: 'child', kind: 'linksTo', inferred: true },
+        'the computed link is inferred as the parent link',
+      );
+
+      let wrongParent = await page('a/back/hammer');
+      assert.strictEqual(
+        wrongParent.status,
+        404,
+        'a child whose computed link names another card is not served',
+      );
+    });
+
     test('a dynamic redirect answers its status and fills its target', async function (assert) {
       let response = await page('u/robin?utm_source=newsletter');
       assert.strictEqual(response.status, 301);
@@ -372,6 +430,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           ['card-id', '/people/:id'],
           ['field-match', '/posts/:slug'],
           ['field-match', '/c/:category'],
+          ['field-match', '/a/:aisle'],
           ['redirect', '/u/:handle'],
           ['field-match', '/:slug'],
           ['field-match', '/:slug'],
