@@ -205,7 +205,6 @@ export class PrefixRealmNetwork {
     try {
       // Prefix forms return above, so this parses a URL or something that is
       // neither, which the catch keeps as written.
-
       path = new URL(identifier).pathname;
     } catch {
       return identifier.replace(/^\//, '');
@@ -231,7 +230,6 @@ export class PrefixRealmNetwork {
     }
     try {
       // Not a registered prefix, so this is a URL-form identifier or an error.
-
       return new URL(rri);
     } catch {
       throw new Error(

@@ -860,7 +860,6 @@ function canonicalizeExistingAncestor(absolutePath: string): string {
   // The loop terminates when either realpathSync resolves (every path
   // inside an existing dir hits this) or `dirname()` stops shrinking
   // at the filesystem root. eslint can't see that.
-
   while (true) {
     try {
       let real = realpathSync(current);

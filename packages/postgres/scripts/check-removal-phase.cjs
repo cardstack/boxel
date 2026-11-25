@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 'use strict';
 
 // Guard: a migration added to `migrations/` (the additive phase) must not drop

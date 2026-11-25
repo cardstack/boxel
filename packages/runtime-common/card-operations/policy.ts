@@ -2497,7 +2497,6 @@ let bxl: Promise<BxlPolicyParser> | undefined;
 
 function loadBxl(): Promise<BxlPolicyParser> {
   // The cast is what keeps the specifier opaque to TypeScript; see above.
-
   bxl ??= import('@cardstack/bxl' as string).then(
     (module) => module as BxlPolicyParser,
   );

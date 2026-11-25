@@ -14,7 +14,6 @@ async function webStreamToBytes(
   let reader = stream.getReader();
   let chunks: Uint8Array[] = [];
   let totalLength = 0;
-
   while (true) {
     let { done, value } = await reader.read();
     if (done) {
@@ -40,7 +39,6 @@ export async function webStreamToText(
   let decoder = new TextDecoder();
   let pieces: string[] = [];
   let reader = stream.getReader();
-
   while (true) {
     let { done, value } = await reader.read();
     if (done) {

@@ -6472,7 +6472,6 @@ class FallbackCardStore implements CardStore {
   }
   async loaded() {
     let observedGeneration = this.#loadGeneration;
-
     while (true) {
       if (this.#inFlight.size === 0) {
         await Promise.resolve();

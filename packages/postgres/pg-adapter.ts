@@ -519,7 +519,6 @@ export class PgAdapter implements DBAdapter {
     await this.started;
     // Loop in case the channel state we joined gets torn down by a concurrent
     // unsubscribe (or LISTEN failure) while we were still awaiting establishment.
-
     while (true) {
       if (this.#isClosed) {
         throw new Error('PgAdapter is closed');
