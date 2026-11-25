@@ -3572,11 +3572,14 @@ module('Acceptance | automation view', function (hooks) {
       };
     }
 
-    // The fragment of the secure window URL the view opened, as a record.
+    // The fragment of the secure window URL the view opened, as a record,
+    // leaving out the one line of reason the window shows, which every
+    // opening carries.
     function openedFor(url: string) {
-      return Object.fromEntries(
+      let { reason, ...fragment } = Object.fromEntries(
         new URLSearchParams(new URL(url).hash.slice(1)),
       );
+      return reason ? fragment : { ...fragment, reason: 'missing' };
     }
 
     function slotText(slot: string) {
@@ -3591,9 +3594,23 @@ module('Acceptance | automation view', function (hooks) {
         askedKeyApprovals.every(Boolean),
         'every status read of the isolated view asks for key approvals',
       );
-      askedKeyApprovals = [];
       await openFormat('fitted');
       await settled();
+      // Code mode renders the isolated view before the fitted format is
+      // picked, so only the fitted view's own reads count from here: an
+      // `automation` event makes it read again.
+      askedKeyApprovals = [];
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(testRealmURL, ME),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'automation',
+          automation: AUTOMATION,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+      await waitUntil(() => askedKeyApprovals.length > 0, { timeout: 10000 });
       assert.false(
         askedKeyApprovals.some(Boolean),
         'the fitted view, which lists in the console, checks no approvals',
@@ -3682,7 +3699,7 @@ module('Acceptance | automation view', function (hooks) {
       });
       assert.true(
         slotText('userKey')?.includes(
-          'Boxel runs the automation once you approve the automation’s use of the key.',
+          'You approve the automation’s use of the key.',
         ),
         slotText('userKey'),
       );
@@ -3723,13 +3740,13 @@ module('Acceptance | automation view', function (hooks) {
       await waitFor('[data-test-automation-key-approvals]', { timeout: 10000 });
       assert.true(
         slotText('apiKey')?.includes(
-          `Boxel runs the automation once ${COLLEAGUE} approves the automation’s use of the shared key “Team vendor”.`,
+          `${COLLEAGUE} approves the automation’s use of the shared key “Team vendor”.`,
         ),
         slotText('apiKey'),
       );
       assert.true(
         slotText('userKey')?.includes(
-          'Boxel runs the automation once the key’s owner approves the automation’s use of the key.',
+          'The key’s owner approves the automation’s use of the key.',
         ),
         'a key owner the viewer shares no realm grant with goes unnamed',
       );
@@ -3756,7 +3773,11 @@ module('Acceptance | automation view', function (hooks) {
               slot: 'apiKey',
               kind: 'apiKey',
               state: 'share-suspended',
-              share: { id: 'share-1', label: 'Team vendor' },
+              share: {
+                id: 'share-1',
+                label: 'Team vendor',
+                suspensionReason: 'owner-lost-write',
+              },
               viewerIsKeyOwner: false,
               keyOwner: COLLEAGUE,
               fix: 'swap-key',
@@ -3832,7 +3853,7 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-key-approval="shared"]')
         .includesText(
-          'Someone suspended the shared key “Team vendor”. A realm administrator swaps in another key.',
+          'Boxel suspended the shared key “Team vendor” because the key’s owner is no longer a realm administrator. A realm administrator swaps in another key.',
         );
     });
 
