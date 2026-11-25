@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Make me a weather board card. It keeps a list of places, each with a name, a latitude and a longitude. When the board is open, it shows each place's current temperature from Open-Meteo (https://api.open-meteo.com/v1/forecast, no key needed), says which places are still loading, and refreshes the temperatures every minute while it stays open. When I add a place to the list, its temperature should show up without refetching the others. Create a board with London, Tokyo and New York and show it to me. Don't ask me any follow-up questions; decide the details yourself.",
+      "followUpPrompts": [
+        "Add Sydney to my board and show it to me again."
+      ],
+      "successCriteria": "1. (problem) Every asynchronous operation the card's components start runs inside an ember-concurrency task (`task`, `restartableTask`, `enqueueTask`, `dropTask` or `keepLatestTask`): the fetch on open, the refresh every minute, and the fetch for a newly added place. The refresh waits with `await timeout(…)` or `await rawTimeout(…)` inside a task. No component, and no class a component creates, does any of these: calls `.then(…)` on a promise; starts a promise without awaiting it inside a task (`void this.load()`, a bare call of an `async` method, `Promise.resolve().then(…)`, `queueMicrotask(…)`); calls `setTimeout`, `setInterval` or `requestAnimationFrame`; checks `isDestroying` / `isDestroyed` or keeps an \"is mounted\" / \"destroyed\" flag before writing state; or clears timers in `willDestroy` or `registerDestructor`. A `fetch` or `response.json()` awaited inside a task body is fine.\n2. One weather board definition exists, holding a list of places, each with a name, a latitude and a longitude (a contained field list or linked place cards).\n3. The temperatures are kept in component state (tracked properties or task values), not written into the card's fields.\n4. One board instance exists with London, Tokyo and New York at roughly their real coordinates. It is open on screen with no error boundary, and each place shows a temperature, or a loading or error state while its fetch runs.\n5. After the follow-up: Sydney was added to the same instance (edited, not recreated), the board is open on screen again with no error boundary, and Sydney shows a temperature or a loading state alongside the other three. The code fetches a newly added place on its own, without refetching the places that already have a temperature.\n6. Every tool call applied or was repaired by the model, the assistant did not ask a question or wait for confirmation before acting, and the flow took at most 16 turns.",
+      "cardInfo": {
+        "name": "Weather board with tasks",
+        "summary": "The first prompt asks for a weather board card: a list of places with coordinates, each place's current temperature fetched from Open-Meteo when the board is open, a loading state, a refresh every minute while it stays open, and a fetch for a newly added place that leaves the others alone, with a board for London, Tokyo and New York shown on screen. The follow-up adds Sydney. This eval tests whether the model runs a component's async work (loading on render, polling, and work a render discovers) in ember-concurrency tasks, instead of loose promises, timers and isDestroying guards that keep running after the card is closed.",
+        "notes": "Use case: create card definitions. Criterion 1 is the problem criterion: judge it from the `.gts` in the workspace snapshot, never from the screenshot. Grep the files for `.then(`, `void `, `Promise.resolve`, `queueMicrotask`, `setTimeout`, `setInterval`, `requestAnimationFrame`, `isDestroy`, `willDestroy` and `registerDestructor`, and for each `async` function or method name the scope it sits in and who calls it. A card built on loose promises renders exactly like one built on tasks, so the card looking right says nothing about criterion 1. The trap is the newly added place: a getter or template finds a place with no temperature during a render and can't write state there, which is where `Promise.resolve().then`, `queueMicrotask` or `setTimeout(…, 0)` usually appears. Performing a task from that getter is fine when the task's first step is an `await`. Open-Meteo answers from the browser without a key; if it is unreachable during the run, an error state per place still satisfies criteria 4 and 5.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": [],
+      "secondsPerPrompt": 240
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}
