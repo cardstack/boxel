@@ -3431,7 +3431,7 @@ module('Acceptance | automation view', function (hooks) {
             '@writer:localhost approves the automation’s use of the key Team GitHub.',
           )
           .includesText(
-            'The automation waits and runs nothing until each approval is in place.',
+            'The automation waits and runs nothing until all approvals are in place.',
           );
         await click('[data-test-automation-switch-on-confirm]');
         await waitFor('[data-test-automation-switch-on-waiting]', {
@@ -3477,7 +3477,17 @@ module('Acceptance | automation view', function (hooks) {
           .dom('[data-test-automation-switch-on-no-share]')
           .includesText(
             'The automation calls a service with a key that a realm administrator shares with the realm, and nobody has shared a key yet.',
+          )
+          .includesText(
+            'Share a key with the realm first, and then turn on the automation.',
           );
+        assert
+          .dom('[data-test-automation-switch-on-confirm]')
+          .doesNotExist('the screen can’t turn the automation on yet');
+        assert
+          .dom('[data-test-automation-switch-on-share-key]')
+          .exists({ count: 1 })
+          .hasText('Share a key', 'Share a key is the primary action');
         await click('[data-test-automation-switch-on-share-key]');
         await waitUntil(() => calls.length > 0, { timeout: 10000 });
         let opened = new URL(calls[0].url);
@@ -3486,6 +3496,19 @@ module('Acceptance | automation view', function (hooks) {
           new URLSearchParams(opened.hash.slice(1)).get('realm'),
           testRealmURL,
         );
+
+        // A realm administrator shares a key meanwhile; coming back to the
+        // page reads the key approvals again.
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([PAYER_MISSING]),
+        });
+        window.dispatchEvent(new Event('focus'));
+        await waitUntil(() => keyStates().join() === 'You approve', {
+          timeout: 10000,
+        });
+        assert
+          .dom('[data-test-automation-switch-on-confirm]')
+          .exists('the screen can turn the automation on once a key is shared');
       });
     });
 
