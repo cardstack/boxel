@@ -52,6 +52,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=key_bindings \
   --exclude-table-and-children=key_binding_approvals \
   --exclude-table-and-children=key_binding_notices \
+  --exclude-table-and-children=automation_key_approvals \
   --exclude-table-and-children=user_key_grant_notices \
   --exclude-table-and-children=key_limit_notices \
   --exclude-table-and-children=key_uses \
@@ -60,6 +61,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=automation_preview_files \
   --exclude-table-and-children=automation_run_log \
   --exclude-table-and-children=automation_run_milestones \
+  --exclude-table-and-children=automation_run_tasks \
   --exclude-table-and-children=automations \
   --exclude-table-and-children=ai_batches \
   --exclude-table-and-children=unrecorded_ai_batches \

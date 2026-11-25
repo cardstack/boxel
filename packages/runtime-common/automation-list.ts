@@ -17,6 +17,7 @@ import {
 } from './automation-spend.ts';
 import {
   automationsInRealm,
+  lastDeclaredLabels,
   type AutomationPauseReason,
   type AutomationRow,
   type AutomationRunResult,
@@ -61,13 +62,13 @@ export interface AutomationSummaryTrigger {
 }
 
 // The run in progress, and where it is: the run milestone its script last
-// reported, with the count inside it when the script counts.
+// reported, with the last task the script reported inside that milestone.
 export interface AutomationSummaryCurrentRun {
   runId: string;
   startedAt: string | null;
   milestone: string | null;
-  done?: number;
-  total?: number;
+  // Null before the script reports a task inside the milestone.
+  task: string | null;
 }
 
 export interface AutomationSummaryAttributes {
@@ -232,7 +233,7 @@ export async function answerAutomationList({
         pauseReason: row?.pauseReason ?? null,
         triggers: instance
           ? cardTriggers(attributes)
-          : Object.keys(row?.triggerRuns ?? {}).map((label) => ({
+          : lastDeclaredLabels(row?.triggerRuns ?? {}).map((label) => ({
               label,
               kind: null,
             })),
@@ -378,7 +379,7 @@ async function readLastRunsOf(
 
 // Each automation's run in progress, leaving out Previews, as
 // `readCurrentRunMilestones` picks it, with the milestone its script last
-// reported and the count inside that milestone.
+// reported and the last task inside that milestone.
 async function readCurrentRunsOf(
   querier: Querier,
   ids: string[],
@@ -389,11 +390,15 @@ async function readCurrentRunsOf(
   }
   let rows = (await querier([
     'SELECT DISTINCT ON (r.automation_id) r.automation_id, r.id, r.started_at,',
-    'm.name, m.count_done, m.count_total',
+    'm.name, t.text AS task',
     'FROM automation_runs r LEFT JOIN LATERAL (',
-    'SELECT name, count_done, count_total FROM automation_run_milestones',
+    'SELECT position, name FROM automation_run_milestones',
     'WHERE run_id = r.id ORDER BY position DESC LIMIT 1',
-    ') m ON TRUE',
+    ') m ON TRUE LEFT JOIN LATERAL (',
+    'SELECT text FROM automation_run_tasks',
+    'WHERE run_id = r.id AND milestone_position = m.position',
+    'ORDER BY position DESC LIMIT 1',
+    ') t ON TRUE',
     'WHERE r.automation_id IN',
     ...inList(ids),
     "AND r.state = 'running' AND NOT r.dry_run",
@@ -403,19 +408,15 @@ async function readCurrentRunsOf(
     id: string;
     started_at: unknown;
     name: string | null;
-    count_done: number | null;
-    count_total: number | null;
+    task: string | null;
   }[];
   for (let row of rows) {
     let run: AutomationSummaryCurrentRun = {
       runId: row.id,
       startedAt: iso(row.started_at),
       milestone: row.name ?? null,
+      task: row.task ?? null,
     };
-    if (row.name && row.count_done !== null && row.count_total !== null) {
-      run.done = Number(row.count_done);
-      run.total = Number(row.count_total);
-    }
     currentRuns.set(row.automation_id, run);
   }
   return currentRuns;

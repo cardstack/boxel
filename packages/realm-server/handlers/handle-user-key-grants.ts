@@ -16,6 +16,7 @@ import {
   type UserKeyGrant,
 } from '../lib/user-key-grants.ts';
 import { UserKeyError } from '../lib/user-keys.ts';
+import { followEndedKeyApprovals } from '../lib/automation-key-approvals.ts';
 import {
   keysHandler,
   mayMintKeyWriteTicket,
@@ -172,11 +173,12 @@ export function handleRemoveUserKeyGrant(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let via = await secureClientOf(ctxt, args);
-    let { revokedBindings } = await removeGrant(args.dbAdapter, {
+    let { revokedBindings, affected } = await removeGrant(args.dbAdapter, {
       owner,
       grantId: ctxt.params.grantId,
       via,
     });
+    await followEndedKeyApprovals(args, affected);
     await sendJSON(ctxt, 200, { meta: { revokedBindings } });
   });
 }

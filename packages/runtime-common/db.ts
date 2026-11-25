@@ -105,4 +105,24 @@ export interface DBAdapter {
   // Adapters that do not share connections out by tenant leave it undefined,
   // and callers run `fn` as it is.
   withSharedWork?: <T>(fn: () => Promise<T>) => Promise<T>;
+  // Run `fn` holding one Matrix user's account-data lock, so that two edits of
+  // that user's account data made through this database — on any instance
+  // that shares it — never overlap. It waits for the lock no later than
+  // `deadline` (a `Date.now()` timestamp) and then rejects with
+  // `AccountDataLockTimeoutError`. PgAdapter implements it; an adapter that
+  // serves no realm server leaves it undefined, and callers run `fn` as it is.
+  withAccountDataLock?: <T>(
+    matrixUserId: string,
+    fn: () => Promise<T>,
+    opts: { deadline: number },
+  ) => Promise<T>;
+}
+
+// The account-data lock wasn't granted before its deadline: no part of the
+// work it guards has run.
+export class AccountDataLockTimeoutError extends Error {
+  constructor(matrixUserId: string) {
+    super(`another edit of ${matrixUserId}'s account data held it too long`);
+    this.name = 'AccountDataLockTimeoutError';
+  }
 }

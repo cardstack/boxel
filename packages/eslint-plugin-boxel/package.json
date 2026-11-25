@@ -11,8 +11,7 @@
     "lib"
   ],
   "exports": {
-    ".": "./lib/index.js",
-    "./config/*": "./lib/config/*.js"
+    ".": "./lib/index.js"
   },
   "scripts": {
     "lint": "eslint .",
@@ -43,20 +42,13 @@
   "devDependencies": {
     "@babel/eslint-parser": "^7.27.0",
     "@babel/plugin-proposal-class-properties": "catalog:",
-    "@eslint/eslintrc": "catalog:",
     "@eslint/js": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "eslint": "catalog:",
     "eslint-doc-generator": "catalog:",
-    "eslint-plugin-eslint-comments": "catalog:",
-    "eslint-plugin-eslint-plugin": "catalog:",
-    "eslint-plugin-filenames": "catalog:",
-    "eslint-plugin-import": "catalog:",
-    "eslint-plugin-markdown": "catalog:",
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",
-    "eslint-plugin-unicorn": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

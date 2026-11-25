@@ -1,12 +1,16 @@
 // The tick: once a minute, start a run for each trigger of a switched-on
-// automation that has come due (ADR 028 §1.5).
+// automation that has come due (ADR 028 §1.5). The same job starts each
+// batch's follow-up run once the batch's deadline passes
+// (`startDueAIBatchFollowUps` in `ai-batch-follow-ups.ts`).
 //
 // A system cron enqueues an `automation-tick` job every minute, from every
 // worker manager. The job claims each due row (`state` active or *waiting for
 // credits*, `next_run` at or before now) with `FOR UPDATE SKIP LOCKED`, so two
 // ticks never handle one automation at once, and holds the row until it has
 // advanced the row past what it enqueued. A tick that finds the row locked,
-// or no longer due, leaves it alone.
+// or no longer due, leaves it alone. An automation that is paused, *done* or
+// *waiting for key approval* is never claimed: a waiting one has no next run
+// until its approvals match (`followKeyApprovals`).
 //
 // For each trigger due at the row's next run, the tick:
 //

@@ -10,6 +10,11 @@ import {
   AutomationRunStoppedError,
   REDACTED,
 } from '@cardstack/host/lib/realm-runner/automation';
+import {
+  RESOLVE_LLM,
+  resolveChatBody,
+  resolveRequest,
+} from '@cardstack/host/lib/realm-runner/research';
 import runRealmCode, {
   RealmCallFailure,
   RealmScriptError,
@@ -21,12 +26,19 @@ import {
   MAX_RUN_NOTIFICATIONS,
   NOTIFY_METHODS,
 } from '@cardstack/host/lib/realm-runner/surfaces';
+import { setTransformTimeLimitsForTests } from '@cardstack/host/lib/realm-runner/transform';
+import {
+  MAX_TRANSFORMS_IN_FLIGHT,
+  MAX_TRANSFORMS_PER_RUN,
+} from '@cardstack/host/lib/realm-runner/transform-limits';
 import type { AutomationRunContext } from '@cardstack/host/lib/realm-runner/types';
 import { watchedScriptOutcome } from '@cardstack/host/tools/run-automation';
 import RunRealmCodeTool, {
   clickRequiredCallsIn,
   runAutomationScript,
   type AutomationRunOptions,
+  type ResolveBatchSubmit,
+  type SubmitResolveBatch,
 } from '@cardstack/host/tools/run-realm-code';
 
 import {
@@ -43,7 +55,10 @@ const otherRealmURL = 'http://test-realm/test2/';
 
 // Answers requests for `path` in the test realm with `respond`, ahead of the
 // realm, until the returned function is called.
-function answerWith(path: string, respond: () => Response): () => void {
+function answerWith(
+  path: string,
+  respond: () => Response | Promise<Response>,
+): () => void {
   let network = getService('network');
   let url = `${testRealmURL}${path}`;
   let handler = async (request: Request) =>
@@ -83,6 +98,7 @@ const SURFACE_SCRIPT = `
     for (const [key, member] of Object.entries(value)) {
       if (typeof member === 'function') {
         names.push(prefix + key);
+        walk(member, prefix + key + '.');
       } else if (key !== 'current' || prefix !== '') {
         walk(member, prefix + key + '.');
       }
@@ -243,7 +259,6 @@ module('Integration | tools | run-automation-script', function (hooks) {
       'realm.index.reindex',
       'realm.plan',
       'realm.ask',
-      'realm.transform',
       'realm.operations.capabilities',
       'room.enableSkills',
     ];
@@ -399,7 +414,7 @@ module('Integration | tools | run-automation-script', function (hooks) {
     let { events, done } = run(
       `realm.progress.plan(['fetch roster', 'write findings']);
 realm.progress.milestone('fetch roster');
-realm.progress.count(1, 2);
+realm.progress.task('Fetched the roster, key ghp_abcdefghijklmnopqrstuvwxyz0123');
 console.log('fetched', { count: 2 });
 console.warn('token', ${JSON.stringify(token)});
 console.info('key ghp_abcdefghijklmnopqrstuvwxyz0123');
@@ -417,7 +432,7 @@ return 'done';`,
     assert.deepEqual(shown, [
       { kind: 'plan', milestones: ['fetch roster', 'write findings'] },
       { kind: 'milestone', name: 'fetch roster' },
-      { kind: 'count', done: 1, total: 2 },
+      { kind: 'task', text: `Fetched the roster, key ${REDACTED}` },
       {
         kind: 'console',
         level: 'log',
@@ -659,14 +674,46 @@ return 'done';`,
       for (const call of [
         () => realm.progress.milestone(''),
         () => realm.progress.plan([]),
-        () => realm.progress.count(3, 2),
-        () => realm.progress.count(-1),
+        () => realm.progress.task('Grouped the bug label'),
+        () => realm.progress.milestone('Group by label'),
+        () => realm.progress.task(''),
+        () => realm.progress.task('x'.repeat(201)),
+        () => realm.progress.task(3),
       ]) {
         try { call(); } catch (error) { errors.push(error.message); }
       }
       return errors;
     `);
-    assert.strictEqual(JSON.parse((await done).scriptResult).length, 4);
+    assert.deepEqual(JSON.parse((await done).scriptResult), [
+      'realm.progress.milestone expects milestone names of 1 to 80 characters',
+      'realm.progress.plan expects 1 to 50 milestone names',
+      'realm.progress.task reports a task inside a milestone: call realm.progress.milestone first',
+      'realm.progress.task expects a task of 1 to 200 characters',
+      'realm.progress.task expects a task of 1 to 200 characters',
+      'realm.progress.task expects a task of 1 to 200 characters',
+    ]);
+  });
+
+  test('realm.progress.count records nothing, and the run says once that tasks take its place', async function (assert) {
+    let { events, done } = run(`realm.progress.milestone('Import');
+realm.progress.count(1, 3);
+realm.progress.count(2, 3);
+realm.progress.count(9, 3);
+return 'done';`);
+    assert.strictEqual((await done).scriptResult, JSON.stringify('done'));
+    assert.deepEqual(
+      events.map(({ at: _at, ...rest }) => rest),
+      [
+        { kind: 'milestone', name: 'Import' },
+        {
+          kind: 'console',
+          level: 'warn',
+          message:
+            'realm.progress.count records nothing. Report each notable task inside a milestone with realm.progress.task instead.',
+          line: 2,
+        },
+      ],
+    );
   });
 
   test('a script that runs past its seconds cap is stopped at its time limit', async function (assert) {
@@ -758,6 +805,177 @@ return 'done';`,
     assert.strictEqual(last.line, undefined, 'a time limit names no line');
     assert.strictEqual(last.stack, undefined);
   });
+  // An automation run whose batch submits are answered by `submit`, which
+  // records each batch it is sent.
+  function runWithBatches(
+    code: string,
+    {
+      submit = async () => ({ id: 'batch_1' }),
+      ...overrides
+    }: Partial<AutomationRunOptions> & {
+      submit?: SubmitResolveBatch;
+    } = {},
+  ) {
+    let submitted: ResolveBatchSubmit[] = [];
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let io = {
+      ...tool.automationRealmIO(testRealmURL),
+      resolveBatch: async (batch: ResolveBatchSubmit, signal: AbortSignal) => {
+        submitted.push(batch);
+        return await submit(batch, signal);
+      },
+    };
+    return { submitted, ...run(code, { io, ...overrides }) };
+  }
+
+  const CLASSIFY = {
+    instruction: 'Classify the ticket',
+    outputSchema: {
+      type: 'object',
+      properties: { label: { type: 'string' } },
+      required: ['label'],
+      additionalProperties: false,
+    },
+  };
+
+  test('realm.resolve.batch submits the requests as one batch, starts its milestone, and the script carries on to the end of the run', async function (assert) {
+    let { submitted, events, done } = runWithBatches(`
+      const batch = await realm.resolve.batch(
+        [
+          { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } },
+          { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'two' } },
+        ],
+        { by: new Date(Date.now() + 2 * 60 * 60 * 1000), milestone: 'classify tickets' },
+      );
+      realm.progress.task('saved the cursor');
+      return batch;
+    `);
+    let result = JSON.parse((await done).scriptResult);
+
+    assert.strictEqual(submitted.length, 1, 'one batch is submitted');
+    let [batch] = submitted;
+    assert.strictEqual(batch.model, RESOLVE_LLM);
+    assert.deepEqual(
+      batch.requests.map((request) => request.customId),
+      ['0', '1'],
+      'each request is keyed by its place in the list',
+    );
+    assert.deepEqual(
+      batch.requests[1].body,
+      resolveChatBody(
+        resolveRequest({ ...CLASSIFY, input: { ticket: 'two' } }),
+      ),
+      'each request is the chat completion realm.resolve would send',
+    );
+    let twoHours = 2 * 60 * 60;
+    let byTheScriptsDeadline =
+      batch.deadlineSeconds > twoHours - 30 &&
+      batch.deadlineSeconds <= twoHours;
+    assert.true(
+      byTheScriptsDeadline,
+      `the deadline is the script's \`by\` (${batch.deadlineSeconds}s)`,
+    );
+    assert.strictEqual(result.batchId, 'batch_1');
+    assert.strictEqual(result.requests, 2);
+    assert.strictEqual(result.milestone, 'classify tickets');
+    assert.false(Number.isNaN(Date.parse(result.deadline)));
+    assert.deepEqual(
+      events
+        .filter((event) => event.kind === 'milestone' || event.kind === 'task')
+        .map((event) => (event.kind === 'milestone' ? event.name : event.kind)),
+      ['classify tickets', 'task', 'task'],
+      'the batch starts its milestone, reports its submit, and the script may report tasks in it',
+    );
+  });
+
+  test("a batch with no `by` takes the card's batch deadline, and with no milestone is named batched AI", async function (assert) {
+    let { submitted, events, done } = runWithBatches(
+      `return await realm.resolve.batch([
+        { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } },
+      ]);`,
+      { batchDeadlineMinutes: 90 },
+    );
+    let result = JSON.parse((await done).scriptResult);
+
+    assert.strictEqual(submitted[0].deadlineSeconds, 90 * 60);
+    assert.strictEqual(result.milestone, 'batched AI');
+    assert.true(
+      events.some(
+        (event) => event.kind === 'milestone' && event.name === 'batched AI',
+      ),
+    );
+  });
+
+  test('a batch whose `by` is more than 24 hours away, or already past, is refused before anything is sent', async function (assert) {
+    let { submitted, done } = runWithBatches(`
+      const request = { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } };
+      const results = {};
+      for (const [name, by] of [
+        ['late', new Date(Date.now() + 25 * 60 * 60 * 1000)],
+        ['past', new Date(Date.now() - 60 * 1000)],
+        ['not a time', 'tomorrow'],
+      ]) {
+        try {
+          await realm.resolve.batch([request], { by });
+          results[name] = 'submitted';
+        } catch (error) {
+          results[name] = error.message;
+        }
+      }
+      return results;
+    `);
+    let results = JSON.parse((await done).scriptResult);
+
+    assert.true(/at most 24 hours/.test(results.late), results.late);
+    assert.true(/at most 24 hours/.test(results.past), results.past);
+    assert.true(/must be a time/.test(results['not a time']));
+    assert.strictEqual(submitted.length, 0, 'nothing was submitted');
+  });
+
+  test('a run submits at most one batch', async function (assert) {
+    let { submitted, done } = runWithBatches(`
+      const request = { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } };
+      await realm.resolve.batch([request]);
+      try {
+        await realm.resolve.batch([request]);
+        return 'submitted twice';
+      } catch (error) {
+        return error.message;
+      }
+    `);
+    let message = JSON.parse((await done).scriptResult);
+
+    assert.true(/at most one batch/.test(message), message);
+    assert.strictEqual(submitted.length, 1);
+  });
+
+  test("a batch the realm server refuses is the call's error in the script", async function (assert) {
+    let { done } = runWithBatches(
+      `return await realm.resolve.batch([
+        { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } },
+      ]);`,
+      {
+        submit: async () => {
+          throw new Error(
+            "realm.resolve.batch was refused: 403 - This automation hasn't turned on batched AI, so its runs can't submit batches",
+          );
+        },
+      },
+    );
+
+    await assert.rejects(done, /hasn't turned on batched AI/);
+  });
+
+  test('a run whose tab holds no run token to submit with refuses realm.resolve.batch', async function (assert) {
+    let { done } = run(
+      `return await realm.resolve.batch([
+        { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } },
+      ]);`,
+    );
+
+    await assert.rejects(done, /needs an automation run's token/);
+  });
+
   test("the progress sink is flushed before each call the realm server logs, so the run's log keeps one order", async function (assert) {
     let order: string[] = [];
     let { done } = run(
@@ -781,5 +999,202 @@ return 'done';`,
       order.indexOf('flush') > order.indexOf('before'),
       `the sink is flushed after the line before the call: ${order.join(', ')}`,
     );
+  });
+
+  // The transform line, without its time, which varies.
+  function transformLines(assert: Assert, events: RunProgressEvent[]) {
+    return events
+      .filter(
+        (event): event is Extract<RunProgressEvent, { kind: 'transform' }> =>
+          event.kind === 'transform',
+      )
+      .map(({ at, ms, ...rest }) => {
+        assert.strictEqual(typeof at, 'number');
+        assert.true(Number.isInteger(ms) && ms >= 0, `ms is ${ms}`);
+        return rest;
+      });
+  }
+  test('realm.transform reshapes JSON in an automation run', async function (assert) {
+    let { events, done } = run(`
+      const orders = [
+        { id: 1, total: 40, status: 'paid' },
+        { id: 2, total: 15, status: 'refunded' },
+        { id: 3, total: 25, status: 'paid' },
+      ];
+      return await realm.transform(
+        orders,
+        'map(select(.status == params("status"))) | {count: length, total: (map(.total) | add)}',
+        { params: { status: 'paid' } },
+      );
+    `);
+    let result = await done;
+    assert.deepEqual(JSON.parse(result.scriptResult), { count: 2, total: 65 });
+    assert.deepEqual(transformLines(assert, events), [
+      { kind: 'transform', calls: 1, failed: 0, inBytes: 130, outBytes: 22 },
+    ]);
+  });
+
+  test('an automation run has no limit on how many transforms it runs', async function (assert) {
+    let count = MAX_TRANSFORMS_PER_RUN + 20;
+    let { events, done } = run(`
+      let sum = 0;
+      for (let i = 0; i < ${count}; i++) {
+        sum += await realm.transform({ i }, '.i + 1');
+      }
+      return sum;
+    `);
+    let result = await done;
+    assert.strictEqual(
+      JSON.parse(result.scriptResult),
+      (count * (count + 1)) / 2,
+      `all ${count} transforms ran`,
+    );
+    let [line] = transformLines(assert, events);
+    assert.strictEqual(line?.calls, count, 'one line counts every call');
+    assert.strictEqual(line?.failed, 0);
+  });
+
+  test('an automation run has only so many transforms waiting at once, and an awaited call after them runs', async function (assert) {
+    let { events, done } = run(`
+      const settled = await Promise.allSettled(
+        Array.from({ length: ${MAX_TRANSFORMS_IN_FLIGHT + 4} }, (_, i) =>
+          realm.transform({ i }, '.i'),
+        ),
+      );
+      const after = await realm.transform({ a: 1 }, '.a');
+      return {
+        ran: settled.filter((s) => s.status === 'fulfilled').length,
+        refused: settled.filter((s) => s.status === 'rejected').map((s) => s.reason.message),
+        after,
+      };
+    `);
+    let { ran, refused, after } = JSON.parse((await done).scriptResult);
+    assert.true(
+      refused.length > 0,
+      `some calls were refused: ${refused.length}`,
+    );
+    assert.strictEqual(ran + refused.length, MAX_TRANSFORMS_IN_FLIGHT + 4);
+    assert.true(
+      refused.every((message: string) =>
+        message.includes(
+          `realm.transform runs at most ${MAX_TRANSFORMS_IN_FLIGHT} programs waiting at once`,
+        ),
+      ),
+      refused.join(' | '),
+    );
+    assert.strictEqual(after, 1, 'an awaited call after them runs');
+    let [line] = transformLines(assert, events);
+    assert.deepEqual(
+      [line?.calls, line?.failed],
+      [MAX_TRANSFORMS_IN_FLIGHT + 5, refused.length],
+    );
+  });
+
+  test("a transform doesn't wait behind the run's queue of realm calls", async function (assert) {
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    let unmount = answerWith('notes/held.md', async () => {
+      await held;
+      return new Response('# Held\n', { status: 200 });
+    });
+    try {
+      let { done } = run(
+        `
+        const order = [];
+        const read = realm.fs.readText('notes/held.md').then(() => order.push('read'));
+        order.push('transformed ' + (await realm.transform([1, 2, 3], 'length')));
+        console.log('transformed');
+        await read;
+        return order;
+      `,
+        {
+          progress: {
+            record: (event) => {
+              if (event.kind === 'console' && event.message === 'transformed') {
+                release();
+              }
+            },
+          },
+        },
+      );
+      assert.deepEqual(JSON.parse((await done).scriptResult), [
+        'transformed 3',
+        'read',
+      ]);
+    } finally {
+      release();
+      unmount();
+    }
+  });
+
+  test('a program past its time is stopped, and the run goes on to its next transform', async function (assert) {
+    setTransformTimeLimitsForTests({ timeoutMs: 100, stallGraceMs: 30_000 });
+    try {
+      let { events, done } = run(`
+        let stopped;
+        try {
+          await realm.transform(null, '[range(100000000)] | length');
+        } catch (error) {
+          stopped = error.message;
+        }
+        const after = await realm.transform({ a: 1 }, '.a + 1');
+        return { stopped, after };
+      `);
+      let { stopped, after } = JSON.parse((await done).scriptResult);
+      assert.true(
+        /exceeded the \d+ms runtime limit/.test(stopped),
+        `the program was stopped at its time: ${stopped}`,
+      );
+      assert.strictEqual(after, 2, 'the next transform ran');
+      let [line] = transformLines(assert, events);
+      assert.deepEqual(
+        [line?.calls, line?.failed],
+        [2, 1],
+        'the stopped program is a failed call',
+      );
+    } finally {
+      setTransformTimeLimitsForTests(undefined);
+    }
+  });
+
+  test('a succeeding and a failing transform report one transform line, as the run settles', async function (assert) {
+    let { events, done } = run(`
+      console.log('start');
+      await realm.transform([1, 2], 'add');
+      try {
+        await realm.transform({}, '.a |');
+      } catch {}
+      console.log('end');
+      return 'done';
+    `);
+    await done;
+    assert.deepEqual(
+      events.map((event) =>
+        event.kind === 'console' ? event.message : event.kind,
+      ),
+      ['start', 'end', 'transform'],
+      'the line comes after every line the script reported',
+    );
+    assert.deepEqual(transformLines(assert, events), [
+      { kind: 'transform', calls: 2, failed: 1, inBytes: 7, outBytes: 1 },
+    ]);
+  });
+
+  test('a run that fails reports its transforms before its error', async function (assert) {
+    let { events, done } = run(`
+      await realm.transform({ a: 1 }, '.a');
+      throw new Error('gave up');
+    `);
+    await assert.rejects(done, /gave up/);
+    assert.deepEqual(
+      events.map((event) => event.kind),
+      ['transform', 'error'],
+    );
+  });
+
+  test('a run with no transforms reports no transform line', async function (assert) {
+    let { events, done } = run(`console.log('no transforms'); return 1;`);
+    await done;
+    assert.deepEqual(transformLines(assert, events), []);
   });
 });

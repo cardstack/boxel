@@ -44,10 +44,13 @@ import {
   readAutomationDeclaration,
 } from '@cardstack/runtime-common/automation-declaration';
 import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
+import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
+import { versionKeyOf } from '@cardstack/runtime-common/automation-key-approval';
 import { automationCreditsSince } from '@cardstack/runtime-common/automation-spend';
 import {
   getAutomation,
   pauseAutomation,
+  readAutomationFailures,
   removeAutomation,
   setAutomationWaitingForCredits,
   switchOnAutomation,
@@ -342,7 +345,7 @@ module(basename(import.meta.filename), function (hooks) {
             if (property === 'fetch') {
               return (url: string | URL | Request, init?: RequestInit) => {
                 let href = String(url instanceof Request ? url.url : url);
-                return href.endsWith('_run-admission')
+                return new URL(href).pathname.endsWith('_run-admission')
                   ? Promise.resolve(realmAdmission())
                   : target.fetch(url, init);
               };
@@ -449,6 +452,32 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(result.state, 'complete');
     let row = await getAutomationRun(dbAdapter, run.id);
     assert.ok(row?.admittedAt, 'the admission is on the run row');
+    // Approvals record the version the realm computes from the card and the
+    // script it holds; the attempt's, from the script it fetched as source,
+    // has to be the same one, or no approval would ever serve a run.
+    let read = await readRunDeclaration({
+      dbAdapter,
+      definitionLookup: {} as CachingDefinitionLookup,
+      virtualNetwork,
+      automationId: automationId(CLEAN),
+    });
+    if (!read.ok) {
+      throw new Error(`the card doesn't read: ${read.message}`);
+    }
+    let realmVersion = await realm.automationVersionOf({
+      declaration: read.declaration,
+      payer: OWNER,
+    });
+    assert.deepEqual(
+      row?.version,
+      await versionKeyOf(realmVersion!),
+      'the attempt recorded the version the realm records approvals at',
+    );
+    assert.deepEqual(
+      row?.versionOperations,
+      read.declaration.operations,
+      'and the operations it read',
+    );
     assert.strictEqual(calls.length, 1, 'the script ran');
     assert.deepEqual(await admissionLines(run.id), [
       {
@@ -793,6 +822,93 @@ module(basename(import.meta.filename), function (hooks) {
       });
       await assertRefused(assert, run, result, calls, code);
     }
+  });
+
+  test('a scheduled run enqueued before its automation began waiting for key approval doesn’t start, and a run by hand still does', async function (assert) {
+    await switchOn(CLEAN);
+    let scheduled = await newRun(CLEAN, { trigger: 'nightly' });
+    await query(dbAdapter, [
+      "UPDATE automations SET state = 'waiting-for-key-approval', next_run = NULL WHERE automation_id =",
+      param(automationId(CLEAN)),
+    ]);
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(scheduled, { calls });
+    await assertRefused(
+      assert,
+      scheduled,
+      result,
+      calls,
+      'waiting-for-key-approval',
+    );
+    result = await attempt(await newRun(CLEAN));
+    assert.strictEqual(result.state, 'complete');
+  });
+
+  test('a scheduled run the realm refuses for a key approval moves its automation to waiting for key approval, and the refusal counts toward no failure streak', async function (assert) {
+    for (let code of [
+      'key-approval-ended',
+      'binding-not-approved',
+      'binding-needs-reapproval',
+      'share-suspended',
+    ]) {
+      await switchOn(NEEDS_APPROVAL);
+      let run = await newRun(NEEDS_APPROVAL, { trigger: 'nightly' });
+      let pending = await newRun(NEEDS_APPROVAL, { trigger: 'nightly' });
+      let changed: string[] = [];
+      let calls: RunCommandArgs[] = [];
+      let result = await attempt(run, {
+        calls,
+        realmAdmission: () =>
+          admissionAnswer({
+            code,
+            detail: `refused with ${code}`,
+            operation: 'list',
+            targetType: INBOX,
+          }),
+        reportAutomationChange: async ({ automationId }) => {
+          changed.push(automationId);
+        },
+      });
+      await assertRefused(assert, run, result, calls, code);
+      let row = await getAutomation(dbAdapter, automationId(NEEDS_APPROVAL));
+      assert.strictEqual(row?.state, 'waiting-for-key-approval', code);
+      assert.strictEqual(row?.nextRun, null, code);
+      assert.deepEqual(changed, [automationId(NEEDS_APPROVAL)], code);
+      let other = await getAutomationRun(dbAdapter, pending.id);
+      assert.strictEqual(other?.state, 'canceled', `${code}: pending runs end`);
+      assert.strictEqual(other?.errorReason, 'waiting-for-key-approval');
+      let failures = await readAutomationFailures(
+        dbAdapterQuerier(dbAdapter),
+        automationId(NEEDS_APPROVAL),
+      );
+      assert.strictEqual(failures.inARow, 0, `${code} isn't a failure`);
+      await removeAutomation(
+        dbAdapter,
+        { automationId: automationId(NEEDS_APPROVAL), user: OWNER },
+        { matrixServerName: 'localhost', virtualNetwork },
+      );
+    }
+  });
+
+  test('a run started by hand that the realm refuses for a key approval leaves its automation as it is', async function (assert) {
+    await switchOn(NEEDS_APPROVAL);
+    let run = await newRun(NEEDS_APPROVAL);
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(run, {
+      calls,
+      realmAdmission: () =>
+        admissionAnswer({
+          code: 'binding-not-approved',
+          detail: 'refused',
+          operation: 'list',
+          targetType: INBOX,
+        }),
+    });
+    await assertRefused(assert, run, result, calls, 'binding-not-approved');
+    assert.strictEqual(
+      (await getAutomation(dbAdapter, automationId(NEEDS_APPROVAL)))?.state,
+      'active',
+    );
   });
 
   test('a realm that can’t be asked about the operations refuses the run', async function (assert) {

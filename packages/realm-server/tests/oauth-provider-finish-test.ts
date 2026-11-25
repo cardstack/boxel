@@ -327,6 +327,47 @@ module(basename(import.meta.filename), function (hooks) {
       codeFrom(assert, landed);
     });
 
+    test('a decision posted without a secure window session finishes nothing', async function (assert) {
+      let ada = await user();
+      let app = browser();
+      let uid = await startOAuthFlow(app, await register());
+
+      for (let [name, authorization] of [
+        ['no session', undefined],
+        [
+          'a CLI secure session',
+          await secureSessionAuth(db, ada.matrixId, { client: 'cli' }),
+        ],
+      ] as const) {
+        let request = supertest(server!)
+          .post(`/_oauth-provider/consent/${uid}`)
+          .set('Host', serverURL.host)
+          .set('Origin', SECURE_ORIGIN)
+          .set('Content-Type', 'application/json');
+        if (authorization) {
+          request = request.set('Authorization', authorization);
+        }
+        let refused = await request.send(
+          JSON.stringify({ decision: 'allow', renew: true }),
+        );
+        assert.strictEqual(refused.status, 401, `refused: ${name}`);
+        assert.notOk(refused.body.ticket, `no ticket: ${name}`);
+
+        let { finished, resumed, landed } = await finishAndFollow(app, uid, {
+          ticket: randomBytes(32).toString('base64url'),
+        });
+        assert.strictEqual(
+          finished.headers.location,
+          EXPIRED_PAGE,
+          `the browser holding the cookie can't finish: ${name}`,
+        );
+        assert.strictEqual(resumed, undefined, `no resume: ${name}`);
+        assert.strictEqual(landed, EXPIRED_PAGE);
+      }
+      assert.deepEqual(await grants(), [], 'no grant');
+      assert.deepEqual(await codeAccounts(), [], 'no code');
+    });
+
     test('a ticket works once, even on a request that finishes nothing', async function (assert) {
       let ada = await user();
       let app = browser();

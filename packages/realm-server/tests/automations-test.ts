@@ -152,7 +152,10 @@ function declaration(
 function runCounts(automation: AutomationRow) {
   return Object.fromEntries(
     Object.entries(automation.triggerRuns).map(
-      ([label, { timing: _timing, live: _live, ...counts }]) => [label, counts],
+      ([
+        label,
+        { timing: _timing, live: _live, declared: _declared, ...counts },
+      ]) => [label, counts],
     ),
   );
 }
@@ -1955,6 +1958,84 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a label the card drops is recorded as not declared, while active and while paused alike', async function (assert) {
+        let hourly = {
+          kind: 'cron' as const,
+          label: 'hourly',
+          expression: '0 * * * *',
+          timeZone: 'America/Chicago',
+        };
+        await switchOn(
+          OWNER,
+          declaration({ triggers: [...declaration().triggers, hourly] }),
+        );
+        let declared = (automation: AutomationRow | undefined) =>
+          Object.fromEntries(
+            Object.entries(automation?.triggerRuns ?? {}).map(
+              ([label, { declared }]) => [label, declared],
+            ),
+          );
+
+        let dropped = await sync(indexed({ triggers: [cronTrigger()] }));
+        assert.strictEqual(dropped?.kind, 'recomputed');
+        assert.deepEqual(
+          declared(dropped?.automation),
+          { daily: true, hourly: false },
+          'an edit that drops a trigger keeps its run state, marked not declared',
+        );
+
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        let restored = await sync(
+          indexed({
+            triggers: [
+              cronTrigger(),
+              cronTrigger({ label: 'hourly', expression: '0 * * * *' }),
+            ],
+          }),
+        );
+        assert.strictEqual(
+          restored?.kind,
+          'unchanged',
+          'a paused automation keeps its schedule',
+        );
+        assert.deepEqual(
+          declared(restored?.automation),
+          { daily: true, hourly: true },
+          'an edit while paused that brings the trigger back marks it declared',
+        );
+        assert.false(
+          restored?.automation.triggerRuns.hourly.live,
+          'the paused row leaves `live` as it was, so the trigger starts at the edit that resumes it',
+        );
+
+        let droppedWhilePaused = await sync(
+          indexed({ triggers: [cronTrigger()] }),
+        );
+        assert.deepEqual(
+          declared(droppedWhilePaused?.automation),
+          { daily: true, hourly: false },
+          'an edit while paused that drops the trigger marks it not declared',
+        );
+
+        let addedWhilePaused = await sync(
+          indexed({
+            triggers: [
+              cronTrigger(),
+              cronTrigger({ label: 'weekly', expression: '0 9 * * 1' }),
+            ],
+          }),
+        );
+        assert.deepEqual(
+          addedWhilePaused?.automation.triggerRuns.weekly,
+          { runs: 0, live: false, declared: true },
+          'an edit while paused that adds a trigger records the trigger as declared, with no cursor and not live',
+        );
+      });
+
       test('a trigger the card adds starts at the edit', async function (assert) {
         let switchedOn = NOW - 3 * 86400;
         await switchOnAutomation(
@@ -2221,8 +2302,18 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(after?.payer, OWNER, 'the payer stays');
         assert.strictEqual(
           after?.scheduledSince,
-          NOW + 3600,
-          'the schedule restarts at the resume, so no slot from the pause runs',
+          paused?.scheduledSince,
+          'scheduled_since stays the payer’s switch-on, the moment a revocation of their sessions is held against',
+        );
+        assert.true(
+          Object.values(after!.triggerRuns).every(
+            ({ since }) => since === NOW + 3600,
+          ),
+          'each trigger’s cursor moves up to the resume, so no slot from the pause runs',
+        );
+        assert.true(
+          (after?.nextRun ?? 0) > NOW + 3600,
+          'the next run comes after the resume',
         );
       });
 

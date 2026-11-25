@@ -1,4 +1,6 @@
-# Disallow `@field` declarations under names the system reserves for its own getters (e.g. `captureURLs`) (`@cardstack/boxel/no-reserved-field-names`)
+# @cardstack/boxel/no-reserved-field-names
+
+📝 Disallow `@field` declarations under names the system reserves for its own getters (e.g. `captureURLs`).
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

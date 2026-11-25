@@ -80,10 +80,6 @@ import OperatorModeStack from './stack';
 
 import SubmodeLayout from './submode-layout';
 
-import type { NewFileOptions } from './new-file-button';
-
-import type { StackItemComponentAPI } from './stack-item';
-
 import type CardService from '../../services/card-service';
 import type FileUploadService from '../../services/file-upload';
 import type HostRouteLinksService from '../../services/host-route-links';
@@ -96,6 +92,8 @@ import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
 import type { SearchResultKind } from '../../utils/search/types';
+import type { NewFileOptions } from './new-file-button';
+import type { StackItemComponentAPI } from './stack-item';
 import type {
   CardContext,
   CardDef,
@@ -239,6 +237,12 @@ export default class InteractSubmode extends Component {
     // point of the shortcut: flip in/out of edit without first having
     // to click somewhere else. Modals still own the keyboard, though.
     if (document.body.classList.contains('has-modal')) return;
+    // Nor does it change a card hidden behind the workspace chooser. The
+    // shortcut is still the app's, so the browser doesn't act on it either.
+    if (this.operatorModeStateService.workspaceChooserOpened) {
+      event.preventDefault();
+      return;
+    }
     let item = this.mostRecentlyInteractedStackItem;
     // Files have no edit format; nothing to toggle.
     if (!item || item.type === 'file') return;

@@ -5,7 +5,7 @@ const { PREFIX_REALM_PREFIXES } = require('../../../lib/utils/prefix-realms');
 const RuleTester = require('eslint').RuleTester;
 
 const ruleTester = new RuleTester({
-  parserOptions: {
+  languageOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
   },
@@ -152,7 +152,7 @@ ruleTester.run('no-literal-realm-urls', rule, {
     // --- Custom realm mappings via options ---
     {
       code: `let id = '@cardstack/base/card-api';`,
-      output: `let id = '@cardstack/base/card-api';`,
+      output: null,
       options: [
         {
           realmMappings: [

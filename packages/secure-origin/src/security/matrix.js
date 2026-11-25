@@ -1,4 +1,3 @@
-/* eslint-env browser */
 // The Matrix requests the secure origin's pages make themselves: creating an
 // account (registration's user-interactive auth, the invite code and email
 // validation), and sending a password reset email. They go to the Matrix

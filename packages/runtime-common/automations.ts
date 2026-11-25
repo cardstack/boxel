@@ -5,9 +5,18 @@
 //
 //   switch on ──▶ active ──pause──▶ paused ──resume──▶ active
 //                 (done)                            (done)
+//                 (waiting for key approval)        (waiting for key approval)
 //
 // Switch-on and resume start the automation *done* instead of active when
-// every trigger is already spent. Remove deletes the row in any state. A
+// every trigger is already spent, and *waiting for key approval* when one of
+// its declared operations lacks a key approval that matches it (ADR 039). A
+// waiting automation has no next run and runs nothing; once every approval
+// matches (`followKeyApprovals`), it moves to the state its schedule gives
+// from that moment, so a slot that passed while it waited never runs. An
+// approval that stops matching moves an active, *done* or *waiting for
+// credits* automation back to waiting at once: the card's index hook finds
+// an edit to its version, and a run's admission finds an approval that
+// ended (`waitForKeyApproval`). A pause takes precedence over waiting. Remove deletes the row in any state. A
 // run's admission moves an automation between active and *waiting for
 // credits* on its payer's balance (`setAutomationWaitingForCredits`), and the
 // card's index hook (`syncAutomationWithCard`) between active and *done* as
@@ -59,6 +68,10 @@ import {
 } from './automation-declaration.ts';
 import type { AdmissionRefusal } from './automation-admission.ts';
 import {
+  KEY_APPROVAL_REFUSAL_REASONS,
+  triggerTiming,
+} from './automation-key-approval.ts';
+import {
   reportAutomationChanges,
   type ChangedAutomation,
   type ReportAutomationChange,
@@ -71,6 +84,7 @@ import {
   cancelAutomationRunIn,
   cancelUnfinishedAutomationRuns,
   getAutomationRun,
+  insertOrFindAutomationRun,
   logAutomationRunEnded,
   type AutomationRun,
 } from './automation-runs.ts';
@@ -107,6 +121,7 @@ export type AutomationState =
   | 'active'
   | 'paused'
   | 'waiting-for-credits'
+  | 'waiting-for-key-approval'
   | 'done';
 
 // Why an automation is paused:
@@ -120,6 +135,10 @@ export type AutomationState =
 // - `webhook-changed`: its card names an incoming webhook the snapshot
 //   doesn't, either a trigger pointed at another webhook or a new webhook
 //   trigger. Deliveries to that webhook would start runs the payer pays for.
+// - `webhook-owner-lost-access`: a delivery arrived at a webhook one of its
+//   triggers names, and the person who made that webhook is no longer a
+//   direct writer of its realm (see `takeWebhookDelivery`). The realm can't
+//   use the webhook, so the delivery starts no run.
 // - `realm-archived`: its realm was archived.
 // - `repeated-failures`: its own runs failed `AUTOMATION_FAILURES_BEFORE_PAUSE`
 //   times in a row (see `pauseAfterRepeatedFailures`).
@@ -134,6 +153,7 @@ export type AutomationPauseReason =
   | 'caps-raised'
   | 'batched-ai-enabled'
   | 'webhook-changed'
+  | 'webhook-owner-lost-access'
   | 'realm-archived'
   | 'repeated-failures'
   | 'invalid-declaration';
@@ -178,6 +198,7 @@ export const PLATFORM_FAILURE_REASONS = [
 const UNCOUNTED_FAILURE_REASONS: readonly string[] = [
   ...SPENDING_REFUSAL_REASONS,
   ...PLATFORM_FAILURE_REASONS,
+  ...KEY_APPROVAL_REFUSAL_REASONS,
 ];
 
 // The caps the payer agreed to pay for when they switched the automation on
@@ -198,9 +219,17 @@ export type AutomationCapsSnapshot = AutomationCaps & {
 //   followed it. A trigger that comes back (re-added, or a spent one given a
 //   higher `count` or a later `until`) starts at the edit, so the slots it
 //   missed while gone don't collapse into a make-up run.
+// - `declared`: whether the card declared the trigger when it last read as a
+//   declaration. A label an edit removed keeps its run state, so the label
+//   keeps its count if it comes back, and carries `declared: false`, so a
+//   view that reads the row while the card doesn't read leaves the label
+//   out. `live` can't tell the two apart: a spent trigger the card declares
+//   isn't live either. A run state without `declared` predates the
+//   flag and counts as declared.
 export interface AutomationTriggerRuns extends TriggerRunState {
   timing?: string;
   live?: boolean;
+  declared?: boolean;
 }
 
 // The card's committed index row as the index hook reads it.
@@ -324,7 +353,11 @@ export async function getAutomation(
 // Switches an automation on for `user`, who becomes its payer, with a snapshot
 // of the caps `declaration` sets. Its schedule starts now: the next run is the
 // first slot after now, and an automation whose triggers are all spent
-// already starts *done*.
+// already starts *done*. `keyApproved` says whether every declared operation
+// has the key approvals it needs, as checked for `user` before the change
+// (`CheckAutomationKeyApprovals`); when it hasn't, the automation starts
+// *waiting for key approval*, with no next run. Absent, the automation needs
+// none.
 //
 // `realm` must contain the automation, and `declaration` must be its card:
 // the row's realm is the one every later direct-writer check asks about, so a
@@ -336,11 +369,13 @@ export async function switchOnAutomation(
     realm,
     user,
     declaration,
+    keyApproved = true,
   }: {
     automationId: RealmResourceIdentifier;
     realm: RealmIdentifier;
     user: string;
     declaration: AutomationDeclaration;
+    keyApproved?: boolean;
   },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
@@ -351,7 +386,10 @@ export async function switchOnAutomation(
     return { ok: false, reason: 'other-card' };
   }
   let now = options.now ?? currentUnixSeconds();
-  let schedule = startSchedule(declaration, now, {});
+  let schedule = awaitingKeyApproval(
+    startSchedule(declaration, now, {}),
+    keyApproved,
+  );
   return await withChanges(dbAdapter, options, async (txQuery, changes) => {
     await lockRealmAutomations(txQuery, realm, 'shared');
     if (!(await isDirectWriterOf(txQuery, realm, user, options))) {
@@ -459,6 +497,7 @@ export async function resumeAutomation(
     user,
     declaration,
     admit,
+    keyApproved,
   }: {
     automationId: RealmResourceIdentifier;
     user: string;
@@ -467,6 +506,11 @@ export async function resumeAutomation(
       payer: string,
       firstRun: { at: number | null },
     ) => Promise<AdmissionRefusal | undefined>;
+    // Whether every declared operation has the key approvals it needs with
+    // `payer` as the payer. Asked with `admit`; when it answers false the
+    // automation resumes *waiting for key approval*. Absent, the automation
+    // needs none.
+    keyApproved?: (payer: string) => Promise<boolean>;
   },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
@@ -475,6 +519,7 @@ export async function resumeAutomation(
   }
   let now = options.now ?? currentUnixSeconds();
   let admitted = false;
+  let approved = true;
   // The first attempt admits only a resume that would go ahead as read. When
   // its transaction answers `admit-first`, the second attempt admits whatever
   // it reads, so its transaction never answers `admit-first`: either `admit`
@@ -492,12 +537,14 @@ export async function resumeAutomation(
         return { ok: false, reason: 'not-admitted', refusal };
       }
       admitted = true;
+      approved = keyApproved ? await keyApproved(user) : true;
     }
     let change = await resumeInTransaction(dbAdapter, {
       automationId,
       user,
       declaration,
       admitted,
+      keyApproved: approved,
       now,
       options,
     });
@@ -556,6 +603,7 @@ async function resumeInTransaction(
     user,
     declaration,
     admitted,
+    keyApproved,
     now,
     options,
   }: {
@@ -563,6 +611,7 @@ async function resumeInTransaction(
     user: string;
     declaration: AutomationDeclaration;
     admitted: boolean;
+    keyApproved: boolean;
     now: number;
     options: AutomationActorOptions;
   },
@@ -606,10 +655,9 @@ async function resumeInTransaction(
     if (!admitted) {
       return 'admit-first';
     }
-    let schedule = startSchedule(
-      declaration,
-      now,
-      found.automation.triggerRuns,
+    let schedule = awaitingKeyApproval(
+      startSchedule(declaration, now, found.automation.triggerRuns),
+      keyApproved,
     );
     let [row] = await txQuery([
       'UPDATE automations SET payer =',
@@ -754,9 +802,8 @@ export function capsRaisedAbove(
 // pauses with `webhook-changed`. Removing a webhook trigger asks for nothing
 // more. A snapshot without `webhookPaths` predates the record, and limits no
 // webhook. Such an automation's webhooks were never checked against the
-// ownership rule at switch-on, so whatever starts a run from a delivery checks
-// the delivery's webhook against `unusableWebhookProblems` itself rather than
-// trusting the snapshot.
+// ownership rule at switch-on, so each delivery checks the webhook's owner
+// itself (`takeWebhookDelivery`) rather than trusting the snapshot.
 export function webhooksChangedFrom(
   snapshot: AutomationCapsSnapshot,
   card: Pick<AutomationDeclaration, 'triggers'>,
@@ -1010,6 +1057,131 @@ export async function pauseAfterRepeatedFailures(
   });
 }
 
+// What a webhook delivery did to one automation (`takeWebhookDelivery`):
+//
+// - `started`: the automation takes the delivery. `runs` holds a run for each
+//   of the triggers named, acting as the payer, with the delivery's slot. A run is `created` by this call, or found: a redelivery finds the
+//   run the first delivery made, whatever its state.
+// - `paused`: the webhook's owner is no longer a direct writer of the
+//   automation's realm, so the automation paused with
+//   `webhook-owner-lost-access` and the delivery starts no run.
+// - `skipped`: the automation takes no delivery. It isn't switched
+//   on (`not-switched-on`); it is paused, waiting for key approval or *done*
+//   (`not-active`); or its card asks for more than the caps snapshot agreed
+//   to (`agreement-exceeded`), which the card's index hook pauses it for.
+export type WebhookDeliveryTaken =
+  | {
+      kind: 'started';
+      automation: AutomationRow;
+      runs: { run: AutomationRun; created: boolean }[];
+    }
+  | { kind: 'paused'; automation: AutomationRow }
+  | {
+      kind: 'skipped';
+      reason: 'not-switched-on' | 'not-active' | 'agreement-exceeded';
+      automation: AutomationRow | undefined;
+    };
+
+// Takes a delivery to an incoming webhook, which `owner` made, for the
+// automation, whose card names the webhook in the triggers labeled
+// `triggers`. Only an automation that is active or *waiting for credits*,
+// and whose card asks for no more than its caps snapshot agreed to, takes a
+// delivery; the run's admission then decides whether the run goes ahead, as
+// it does for a scheduled run.
+//
+// The webhook must be one the realm can use, which switch-on and resume
+// check (`unusableWebhookProblems`) and which can stop being true while the
+// automation is on: the owner can lose write. So each delivery asks again.
+// An owner who is no longer a direct writer pauses the automation with
+// `webhook-owner-lost-access`, cancelling its unfinished runs as any pause
+// does, and starts nothing. A direct writer resumes it once the trigger names
+// a webhook the realm can use.
+//
+// The owner's permission row is locked before the automation's row, the
+// order every change here takes them in, so an owner who loses write
+// meanwhile waits for this delivery to commit, and the next one pauses.
+export async function takeWebhookDelivery(
+  dbAdapter: DBAdapter,
+  {
+    automationId,
+    owner,
+    declaration,
+    triggers,
+    slot,
+  }: {
+    automationId: RealmResourceIdentifier;
+    // Who made the incoming webhook the delivery came to.
+    owner: string;
+    // The automation's card, as the caller read it.
+    declaration: Pick<AutomationDeclaration, 'caps' | 'batchedAI' | 'triggers'>;
+    triggers: string[];
+    // Each run's slot: the delivery's (`webhookDeliverySlot`).
+    slot: string;
+  },
+  options: Omit<AutomationActorOptions, 'now'>,
+): Promise<WebhookDeliveryTaken> {
+  return await withChanges(dbAdapter, options, async (txQuery, changes) => {
+    let seen = await selectAutomation(txQuery, automationId);
+    if (!seen) {
+      return {
+        kind: 'skipped',
+        reason: 'not-switched-on',
+        automation: undefined,
+      };
+    }
+    let { realm } = automationFromRow(seen);
+    let ownerWrites = await isDirectWriterOf(txQuery, realm, owner, options);
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return {
+        kind: 'skipped',
+        reason: 'not-switched-on',
+        automation: undefined,
+      };
+    }
+    let automation = automationFromRow(row);
+    if (
+      automation.state !== 'active' &&
+      automation.state !== 'waiting-for-credits'
+    ) {
+      return { kind: 'skipped', reason: 'not-active', automation };
+    }
+    if (agreementExceededBy(automation.capsSnapshot, declaration)) {
+      return { kind: 'skipped', reason: 'agreement-exceeded', automation };
+    }
+    if (!ownerWrites) {
+      return {
+        kind: 'paused',
+        automation: await pause(
+          txQuery,
+          changes,
+          automationId,
+          'webhook-owner-lost-access',
+        ),
+      };
+    }
+    let runs: { run: AutomationRun; created: boolean }[] = [];
+    for (let trigger of triggers) {
+      runs.push(
+        await insertOrFindAutomationRun(txQuery, {
+          automationId,
+          realm: automation.realm,
+          trigger,
+          slot,
+          actsAs: automation.payer,
+        }),
+      );
+    }
+    if (runs.some(({ created }) => created)) {
+      await txQuery([
+        'UPDATE automations SET last_enqueued_at = now(), updated_at = now() WHERE automation_id =',
+        param(automationId),
+      ]);
+    }
+    return { kind: 'started', automation, runs };
+  });
+}
+
 // Moves an active automation to *waiting for credits* (`waiting: true`), or a
 // waiting one back to active (`waiting: false`), when `payer` is still its
 // payer. A run's admission makes both moves: a run of the payer's that the
@@ -1051,20 +1223,162 @@ export async function setAutomationWaitingForCredits(
   return automation;
 }
 
+// The states an approval that stops matching moves to *waiting for key
+// approval*: those that run, or would run again. A paused automation keeps
+// its pause, which takes precedence.
+const LEAVES_FOR_KEY_APPROVAL: readonly AutomationState[] = [
+  'active',
+  'done',
+  'waiting-for-credits',
+];
+
+// What following an automation's key approvals did:
+//
+// - `approved`: it was waiting for key approval, and every approval now
+//   matches, so its schedule starts from now (active or *done*).
+// - `waiting`: an approval it needs is missing or no longer matches, so it
+//   moved to *waiting for key approval* and its pending runs were canceled.
+// - `unchanged`: it is paused, or already where its approvals put it, or
+//   `check` couldn't tell.
+export type KeyApprovalFollow = {
+  kind: 'approved' | 'waiting' | 'unchanged';
+  automation: AutomationRow;
+};
+
+// Brings a switched-on automation's state in step with its key approvals.
+// `check` reads the automation's card and script and checks every declared
+// operation's approvals against them with the row's payer
+// (`CheckAutomationKeyApprovals`), once the row is locked, so an approval
+// landing and an edit that follow each other leave the row on the later one.
+// It answers undefined when the card doesn't read as a declaration, which
+// leaves the row as it is. Returns what it did, or undefined when the
+// automation isn't switched on.
+export async function followKeyApprovals(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+  check: (
+    automation: AutomationRow,
+  ) => Promise<
+    { approved: boolean; declaration: AutomationDeclaration } | undefined
+  >,
+  options: AutomationReporters & { now?: number } = {},
+): Promise<KeyApprovalFollow | undefined> {
+  let now = options.now ?? currentUnixSeconds();
+  return await withChanges(dbAdapter, options, async (txQuery, changes) => {
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    if (automation.state === 'paused') {
+      return { kind: 'unchanged', automation };
+    }
+    let checked = await check(automation);
+    if (!checked) {
+      return { kind: 'unchanged', automation };
+    }
+    if (checked.approved) {
+      if (automation.state !== 'waiting-for-key-approval') {
+        return { kind: 'unchanged', automation };
+      }
+      let schedule = restartSchedule(checked.declaration, now, automation);
+      let [updated] = await txQuery([
+        'UPDATE automations SET state =',
+        param(schedule.state),
+        ', trigger_runs =',
+        param(JSON.stringify(schedule.triggerRuns)),
+        '::jsonb, next_run =',
+        param(schedule.nextRun),
+        '::timestamptz, updated_at = now() WHERE automation_id =',
+        param(automationId),
+        'RETURNING *',
+      ]);
+      let approved = automationFromRow(updated);
+      changes.automations.push(approved);
+      return { kind: 'approved', automation: approved };
+    }
+    if (!LEAVES_FOR_KEY_APPROVAL.includes(automation.state)) {
+      return { kind: 'unchanged', automation };
+    }
+    return {
+      kind: 'waiting',
+      automation: await toKeyApprovalWait(txQuery, changes, automationId),
+    };
+  });
+}
+
+// Moves the automation to *waiting for key approval* when `payer` is still
+// its payer and it is active, *done* or waiting for credits: a run's
+// admission found that a key approval it needs has ended or stopped
+// matching (`KEY_APPROVAL_REFUSAL_REASONS`). Its pending runs are canceled.
+// A paused automation keeps its pause, and one a resume gave another payer
+// is left alone. Returns the row when it moved, or undefined.
+export async function waitForKeyApproval(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+  { payer }: { payer: string },
+  reporters: AutomationReporters = {},
+): Promise<AutomationRow | undefined> {
+  return await withChanges(dbAdapter, reporters, async (txQuery, changes) => {
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    if (
+      automation.payer !== payer ||
+      !LEAVES_FOR_KEY_APPROVAL.includes(automation.state)
+    ) {
+      return undefined;
+    }
+    return await toKeyApprovalWait(txQuery, changes, automationId);
+  });
+}
+
+// Moves the locked row to *waiting for key approval*, with no next run, and
+// cancels its pending runs. A running run finishes: its calls are checked
+// as every call is.
+async function toKeyApprovalWait(
+  txQuery: Querier,
+  changes: AutomationChanges,
+  automationId: RealmResourceIdentifier,
+): Promise<AutomationRow> {
+  let [row] = await txQuery([
+    "UPDATE automations SET state = 'waiting-for-key-approval', next_run = NULL, updated_at = now() WHERE automation_id =",
+    param(automationId),
+    'RETURNING *',
+  ]);
+  changes.canceled.push(
+    ...(await cancelUnfinishedAutomationRuns(
+      txQuery,
+      automationId,
+      { reason: 'waiting-for-key-approval' },
+      { pendingOnly: true },
+    )),
+  );
+  let waiting = automationFromRow(row);
+  changes.automations.push(waiting);
+  return waiting;
+}
+
 // What the index hook did with an automation's row:
 //
 // - `removed`: the card is deleted (`card-deleted`), or no longer adopts from
 //   the catalog `Automation` type (`not-an-automation`), so the row is gone
 //   and its pending and running runs are canceled.
 // - `paused`: the card raised a cap or turned on `batchedAI`.
+// - `waiting`: the card or its script changed what a key's owner approved,
+//   so the automation waits for key approval.
 // - `resumed`: the automation was paused with `invalid-declaration` and the
 //   card reads again, so its schedule restarts.
 // - `recomputed`: the next run, *done* and the trigger cursors follow the
 //   card as indexed, or, for an automation paused with
 //   `invalid-declaration`, its problems follow the card.
-// - `unchanged`: the row stays as it was. It is paused, or the card failed to
-//   index or doesn't read as a declaration, so there is nothing to schedule
-//   from until a later index reads it.
+// - `unchanged`: the schedule stays as it was. It is paused or waiting for
+//   key approval, or the card failed to index or doesn't read as a
+//   declaration, so there is nothing to schedule from until a later index
+//   reads it. A card that reads still has the row record which labels it
+//   declares (`withDeclaredLabels`).
 export type AutomationSync =
   | {
       kind: 'removed';
@@ -1072,7 +1386,7 @@ export type AutomationSync =
       automation: AutomationRow;
     }
   | {
-      kind: 'paused' | 'resumed' | 'recomputed' | 'unchanged';
+      kind: 'paused' | 'waiting' | 'resumed' | 'recomputed' | 'unchanged';
       automation: AutomationRow;
     };
 
@@ -1083,6 +1397,14 @@ export interface AutomationSyncOptions extends AutomationReporters {
   virtualNetwork: Pick<VirtualNetwork, 'toURL' | 'toURLHref'>;
   // Unix seconds; the current time when absent.
   now?: number;
+  // Whether the automation's key approvals still match it with its card as
+  // just read: false when one of them no longer matches the automation's
+  // version, true or undefined when none was found that doesn't. Absent, no
+  // approval is compared.
+  keyApprovalsMatch?: (
+    automation: AutomationRow,
+    declaration: AutomationDeclaration,
+  ) => Promise<boolean | undefined>;
 }
 
 // Brings a switched-on automation's row in step with its card as just
@@ -1103,6 +1425,10 @@ export interface AutomationSyncOptions extends AutomationReporters {
 // does a card that names an incoming webhook the snapshot doesn't
 // (`webhooksChangedFrom`), and a
 // paused one keeps its reason and its schedule until a resume restarts it.
+// An edit that changes what a key's owner approved (`keyApprovalsMatch`)
+// moves an active, *done* or *waiting for credits* automation to *waiting for
+// key approval* at once, never at its next run; a waiting one keeps waiting
+// until its approvals match again (`followKeyApprovals`).
 //
 // A card that doesn't read as a declaration leaves the row as it is: the card
 // saves itself while someone edits it, so a trigger just added and not yet
@@ -1174,6 +1500,25 @@ export async function syncAutomationWithCard(
       return { kind: 'recomputed', automation: followed };
     }
     let { declaration } = read;
+    // The branches below that keep the row's schedule (a pause, a wait for
+    // key approval) leave `trigger_runs` as it is, so the labels the card
+    // declares are recorded here first. A view that reads the row while the
+    // card doesn't read then lists only the triggers of the card's last
+    // readable edit.
+    let declaredRuns = withDeclaredLabels(
+      automation.triggerRuns,
+      declaration.triggers,
+    );
+    if (declaredRuns) {
+      let [updated] = await txQuery([
+        'UPDATE automations SET trigger_runs =',
+        param(JSON.stringify(declaredRuns)),
+        '::jsonb, updated_at = now() WHERE automation_id =',
+        param(automationId),
+        'RETURNING *',
+      ]);
+      automation = automationFromRow(updated);
+    }
     if (automation.pauseReason === 'invalid-declaration') {
       let raised = agreementExceededBy(automation.capsSnapshot, declaration);
       if (raised) {
@@ -1182,15 +1527,18 @@ export async function syncAutomationWithCard(
           automation: await pause(txQuery, changes, automationId, raised),
         };
       }
-      let schedule = startSchedule(declaration, now, automation.triggerRuns);
+      // An edit made while the card didn't read can change what a key's
+      // owner approved, so the automation resumes waiting when it did.
+      let schedule = awaitingKeyApproval(
+        restartSchedule(declaration, now, automation),
+        (await options.keyApprovalsMatch?.(automation, declaration)) !== false,
+      );
       let [row] = await txQuery([
         'UPDATE automations SET state =',
         param(schedule.state),
         ', pause_reason = NULL, paused_by = NULL, pause_problems = NULL, trigger_runs =',
         param(JSON.stringify(schedule.triggerRuns)),
-        '::jsonb, scheduled_since =',
-        param(unixSecondsToISO(now)),
-        '::timestamptz, next_run =',
+        '::jsonb, next_run =',
         param(schedule.nextRun),
         '::timestamptz, updated_at = now() WHERE automation_id =',
         param(automationId),
@@ -1208,6 +1556,17 @@ export async function syncAutomationWithCard(
       return {
         kind: 'paused',
         automation: await pause(txQuery, changes, automationId, reason),
+      };
+    }
+    if (automation.state === 'waiting-for-key-approval') {
+      return { kind: 'unchanged', automation };
+    }
+    if (
+      (await options.keyApprovalsMatch?.(automation, declaration)) === false
+    ) {
+      return {
+        kind: 'waiting',
+        automation: await toKeyApprovalWait(txQuery, changes, automationId),
       };
     }
     let cursors = withEditCursors(
@@ -1370,25 +1729,6 @@ async function removeForCard(
   return { kind: 'removed', reason, automation };
 }
 
-// The fields that decide when a trigger fires, as one string to compare:
-// its kind, and its expression, time zone, `at` and `until`. `count` isn't
-// timing; it is compared with the trigger's run count as it stands.
-function triggerTiming(trigger: AutomationTriggerDeclaration): string {
-  switch (trigger.kind) {
-    case 'cron':
-      return JSON.stringify([
-        'cron',
-        trigger.expression,
-        trigger.timeZone,
-        trigger.until ?? null,
-      ]);
-    case 'once':
-      return JSON.stringify(['once', trigger.at]);
-    case 'webhook':
-      return JSON.stringify(['webhook']);
-  }
-}
-
 // Moves each trigger's cursor up to `editedAt` when the trigger starts
 // afresh: it has no run state yet, its timing differs from the one recorded,
 // or it wasn't live (removed from the card, or spent) when the row last
@@ -1416,7 +1756,8 @@ export function withEditCursors(
 }
 
 // Records, on each run state, the trigger's timing and whether it is live
-// under `schedule`. A label the card no longer has is recorded as not live.
+// under `schedule`. A label the card doesn't declare is recorded as neither
+// live nor declared.
 export function recordTriggers(
   triggerRuns: Record<string, AutomationTriggerRuns>,
   triggers: AutomationTriggerDeclaration[],
@@ -1425,16 +1766,59 @@ export function recordTriggers(
   let spent = new Map(schedule.triggers.map((t) => [t.label, t.spent]));
   let next: Record<string, AutomationTriggerRuns> = {};
   for (let [label, state] of Object.entries(triggerRuns)) {
-    next[label] = { ...state, live: false };
+    next[label] = { ...state, live: false, declared: false };
   }
   for (let trigger of triggers) {
     next[trigger.label] = {
       ...(next[trigger.label] ?? { runs: 0 }),
       timing: triggerTiming(trigger),
       live: !spent.get(trigger.label),
+      declared: true,
     };
   }
   return next;
+}
+
+// Records which labels the card declares, for a row that keeps its schedule
+// through an edit (paused, or waiting for key approval). A label the row has
+// a run state for keeps its cursor, `timing` and `live`. A label the row
+// lacks gets `{ runs: 0, live: false, declared: true }`: no cursor, so the
+// schedule reads it as it reads an absent label. Whatever ends the pause or
+// the wait (`startSchedule`, `restartSchedule`) starts it at that moment.
+// Returns undefined when the row already records the card's labels.
+export function withDeclaredLabels(
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+  triggers: AutomationTriggerDeclaration[],
+): Record<string, AutomationTriggerRuns> | undefined {
+  let declared = new Set(triggers.map((t) => t.label));
+  let next: Record<string, AutomationTriggerRuns> = {};
+  let changed = false;
+  for (let [label, state] of Object.entries(triggerRuns)) {
+    let isDeclared = declared.has(label);
+    if ((state.declared ?? true) !== isDeclared) {
+      changed = true;
+    }
+    next[label] = { ...state, declared: isDeclared };
+  }
+  for (let label of declared) {
+    if (!next[label]) {
+      changed = true;
+      next[label] = { runs: 0, live: false, declared: true };
+    }
+  }
+  return changed ? next : undefined;
+}
+
+// The labels to list for an automation whose card can't be read: each label
+// the row has a run state for that the card declared when the card last read.
+// A label an edit removed stays in the row, so the label keeps its count if
+// it comes back, and is left out here.
+export function lastDeclaredLabels(
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+): string[] {
+  return Object.entries(triggerRuns)
+    .filter(([, state]) => state.declared !== false)
+    .map(([label]) => label);
 }
 
 // Pauses the row and cancels its pending and running runs. A run a person's
@@ -1624,16 +2008,68 @@ async function selectAutomation(
   return row;
 }
 
+interface StartedSchedule {
+  state: 'active' | 'done' | 'waiting-for-key-approval';
+  nextRun: string | null;
+  triggerRuns: Record<string, AutomationTriggerRuns>;
+}
+
+// The schedule an automation starts with when its key approvals are or
+// aren't all there: one that would run waits, with no next run, until they
+// are. One with nothing left to run is *done* either way, since it needs no
+// key again.
+function awaitingKeyApproval(
+  schedule: StartedSchedule,
+  keyApproved: boolean,
+): StartedSchedule {
+  return keyApproved || schedule.state === 'done'
+    ? schedule
+    : { ...schedule, state: 'waiting-for-key-approval', nextRun: null };
+}
+
+// The state and next run of a schedule that starts again at `now` for an
+// automation that stays switched on under the same payer: a wait for key
+// approval ending, or an `invalid-declaration` pause lifting. Each trigger's
+// cursor moves up to `now`, so a slot that passed meanwhile never runs, and
+// `scheduled_since` stays as it is: it is when the payer switched the
+// automation on or last resumed it, the moment a trigger run's admission
+// holds a revocation of the payer's sessions against.
+function restartSchedule(
+  declaration: AutomationDeclaration,
+  now: number,
+  automation: Pick<AutomationRow, 'scheduledSince' | 'triggerRuns'>,
+): StartedSchedule {
+  let cursors: Record<string, AutomationTriggerRuns> = {
+    ...automation.triggerRuns,
+  };
+  for (let trigger of declaration.triggers) {
+    cursors[trigger.label] = {
+      ...(cursors[trigger.label] ?? { runs: 0 }),
+      since: now,
+    };
+  }
+  let schedule = computeAutomationSchedule({
+    triggers: declaration.triggers,
+    since: automation.scheduledSince,
+    now,
+    runState: cursors,
+  });
+  return {
+    triggerRuns: recordTriggers(cursors, declaration.triggers, schedule),
+    state: schedule.done ? 'done' : 'active',
+    nextRun:
+      schedule.nextRun === undefined
+        ? null
+        : unixSecondsToISO(schedule.nextRun),
+  };
+}
+
 // The state and next run of a schedule that starts at `now`.
 function startSchedule(
   declaration: AutomationDeclaration,
   now: number,
   triggerRuns: Record<string, AutomationTriggerRuns>,
-): {
-  state: 'active' | 'done';
-  nextRun: string | null;
-  triggerRuns: Record<string, AutomationTriggerRuns>;
-} {
+): StartedSchedule {
   let schedule = computeAutomationSchedule({
     triggers: declaration.triggers,
     since: now,

@@ -22,6 +22,10 @@ export { destinationCovers };
 import type { KeyReadiness } from './capability-wire.ts';
 import type { OperationCore } from './dispatch.ts';
 import type { ResolvedCodeRef } from '../code-ref.ts';
+import {
+  KEY_APPROVAL_REFUSAL_REASONS,
+  type CheckAutomationKeyApprovals,
+} from '../automation-key-approval.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
@@ -972,7 +976,11 @@ export interface CallApiSlotLookup {
   // address, their part of the share's budget, and the key's anonymous cap.
   anonymous?: AnonymousCallApiCaller;
   mode: CallApiMode;
-  // The automation run an `automation` invocation belongs to.
+  // The automation run an `automation` invocation belongs to. Its row says
+  // which bindings may serve the call: a run of the automation's triggers
+  // needs an automation approval matching the version its attempt read, and
+  // a Preview or a Run now a key its identity owns, an interactive binding,
+  // or such an approval.
   runId?: string;
   // The request as the definition cache holds it now, which the binding's
   // fingerprint is checked against.
@@ -1069,7 +1077,7 @@ export interface CallApiUse {
 // slot a request carries and opens its key under the grant it names, or
 // refuses with `binding-not-approved`, `share-suspended`,
 // `binding-needs-reapproval`, `interactive-use-not-approved`,
-// `anonymous-use-not-approved` or `credential-rejected`; an interactive call over its key's limits with
+// `anonymous-use-not-approved`, `key-approval-ended` or `credential-rejected`; an interactive call over its key's limits with
 // `rate-limited` or `over-budget`, or `rate-limit-unavailable` when they
 // couldn't be counted. `send` sends the request through the guarded
 // outbound client and answers with the vendor's response, its credentials
@@ -1091,8 +1099,14 @@ export interface CallApiUse {
 // any key, whether `payer` may invoke one operation the automation declares
 // as an automation call: the refusal the call would get, marked with the share
 // or key that refused it (`refusedFrom`), or `undefined` when it would be
-// served. A sender that can't tell leaves it out, and a run's
-// admission then refuses the run.
+// served. With `runId`, each slot is held to that run as the run's calls
+// are. A sender that can't tell leaves it out, and a run's admission then
+// refuses the run.
+//
+// `checkAutomationKeyApprovals` checks each operation an automation declares
+// for the key approvals a run of its triggers needs, against the automation
+// as its card and script read now (`automation-key-approval.ts`). A sender
+// that can't tell leaves it out, and the automation is taken to need none.
 export interface CallApiSender {
   fill(lookup: CallApiSlotLookup): Promise<CallApiFilledSlot[]>;
   recordUse?(use: CallApiUse): Promise<void>;
@@ -1106,7 +1120,17 @@ export interface CallApiSender {
     codeRef: ResolvedCodeRef;
     operation: string;
     payer: string;
+    runId?: string;
   }): Promise<OperationFailure | undefined>;
+  checkAutomationKeyApprovals?(
+    args: Parameters<CheckAutomationKeyApprovals>[0] & {
+      core: Pick<
+        OperationCore,
+        'resolveCodeRef' | 'definitionLookup' | 'readsRealmOf'
+      >;
+      realmURL: URL;
+    },
+  ): ReturnType<CheckAutomationKeyApprovals>;
   send(
     request: CallApiRequest,
     credentials: CallApiCredential[],
@@ -1167,6 +1191,26 @@ export interface CallApiRunMeter {
     refusal: OperationError,
     subject: CallApiUseSubject | undefined,
   ): Promise<void>;
+  // Ends the run on a slot refused for a key approval it lacks
+  // (`endsRunOnKeyApproval`), with the refusal's code, which counts
+  // toward no failure streak, and moves a run of the automation's triggers
+  // to *waiting for key approval* (ADR 039 §1.4, §1.7). A run that already
+  // ended is left as it is.
+  endOnKeyApproval(refusal: OperationError): Promise<void>;
+}
+
+// Whether a refusal is a key approval the run lacks: the automation's
+// approval ended or stopped matching, the binding a slot needs is missing,
+// changed or suspended, or, for a Preview or a Run now, the slot's key is
+// neither its starter's own, approved for interactive use, nor approved for
+// the automation with its starter as payer (`interactive-use-not-approved`,
+// which a run's call gets only then: a run of the automation's triggers is
+// refused `key-approval-ended` first). None is the script's fault.
+export function endsRunOnKeyApproval(refusal: OperationError): boolean {
+  return (
+    refusal.code === 'interactive-use-not-approved' ||
+    (KEY_APPROVAL_REFUSAL_REASONS as readonly string[]).includes(refusal.code)
+  );
 }
 
 // Whether a refusal ends an automation run: a credential the vendor no longer
@@ -1716,7 +1760,8 @@ export async function callApiOperation(
   // A refusal of the credential a run's slot is filled from, when only a
   // person can fix it, ends the run as well as the call: a script that went
   // on without the call would commit a batch that is missing what it was
-  // for. The run records the share or key it ended on.
+  // for. The run records the share or key it ended on. A slot refused for a
+  // key approval the run lacks ends it the same way, as admission would have.
   let refuseCredential = async (
     failure: OperationFailure,
     url?: string,
@@ -1726,6 +1771,8 @@ export async function callApiOperation(
         failure.error,
         subjectOfRefusal(failure) ?? subjectOfSlot(filled, failure.error),
       );
+    } else if (runMeter && endsRunOnKeyApproval(failure.error)) {
+      await runMeter.endOnKeyApproval(failure.error);
     }
     return refuse(failure.error, url);
   };

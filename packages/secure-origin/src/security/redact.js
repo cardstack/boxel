@@ -1,4 +1,3 @@
-/* eslint-env browser */
 // A response from the Matrix server goes to the app with every password
 // typed into the fields cut out of it, so a server that echoed one back, in
 // an error message say, couldn't hand it over. A successful response's

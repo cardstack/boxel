@@ -641,6 +641,11 @@ export class RealmEventDispatcher {
 // - Two `update`s merge into one listing every path either listed. A
 //   subscriber reads the lists as "these paths changed" and refreshes what
 //   contains them, so the union says everything the two said.
+// - Two `job`s for the same automation run merge into the newer one. A `job`
+//   event is a cue to read the run again, and the realm reads the run as the
+//   event is sent, so the newer one carries everything the older one did. A
+//   script that reports many tasks quickly then costs one send per run while
+//   the line is busy, not one per report.
 //
 // Completion events (`incremental`, `full`) and `prerender_html` carry what a
 // subscriber reconciles per event — request ids, versions, generations — and
@@ -669,6 +674,13 @@ export function coalesce(
       }
     }
     return merged;
+  }
+  if (
+    queued.eventName === 'job' &&
+    next.eventName === 'job' &&
+    queued.runId === next.runId
+  ) {
+    return next;
   }
   return undefined;
 }

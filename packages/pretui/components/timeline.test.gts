@@ -48,6 +48,27 @@ module('Pretui | components/timeline', function (hooks) {
     assert.strictEqual(third?.querySelector('.pretui-timeline-detail'), null);
   });
 
+  test("a status sits on the title's line, toned by statusTone when the event gives one", async function (assert) {
+    const toned: TimelineEvent[] = [
+      { id: 't1', title: 'Fetch open issues', status: 'Running', statusTone: 'info' },
+      { id: 't2', title: 'Write digest', status: 'Failed here', statusTone: 'danger' },
+      { id: 't3', title: 'Commit', status: 'Not started', statusTone: 'neutral' },
+    ];
+    await render(<template><Timeline @events={{toned}} /></template>);
+    let [first, second] = events();
+    let chip = (event: HTMLElement | undefined) => event?.querySelector<HTMLElement>('[data-test-pretui-status-chip]');
+    assert.strictEqual(chip(first)?.textContent?.trim(), 'Running');
+    assert.strictEqual(chip(first)?.getAttribute('data-tone'), 'info');
+    assert.strictEqual(chip(second)?.getAttribute('data-tone'), 'danger');
+    let third = events()[2];
+    assert.strictEqual(chip(third)?.getAttribute('data-tone'), 'neutral');
+    assert.strictEqual(
+      chip(third)?.style.getPropertyValue('--pretui-chip-hue').trim(),
+      'var(--muted-foreground)',
+      'a neutral status has a muted dot, not a hue derived from its value',
+    );
+  });
+
   test('a default block replaces the body per event, and a marker block the glyph', async function (assert) {
     await render(
       <template>

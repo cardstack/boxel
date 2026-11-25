@@ -1,4 +1,6 @@
-# Forbid pointing a realm iconURL or backgroundURL at an image host outside the allow-list (`@cardstack/host/no-remote-realm-images`)
+# @cardstack/host/no-remote-realm-images
+
+📝 Forbid pointing a realm iconURL or backgroundURL at an image host outside the allow-list.
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

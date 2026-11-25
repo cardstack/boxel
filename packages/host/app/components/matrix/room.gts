@@ -135,11 +135,10 @@ import { Submodes } from '../submode-switcher';
 
 import RoomMessage from './room-message';
 
-import type { FoldedRun } from './room-message';
-
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
 import type { Gate } from '../ai-assistant/composer-cap';
+import type { FoldedRun } from './room-message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { SessionPrepStep } from '@cardstack/pretui/components/session-prep';
@@ -185,6 +184,10 @@ const CONTINUATION_WAIT_MS = 30_000;
 // once: a session reopened later, far past any skew between the browser's
 // and the homeserver's clocks
 const CONTINUATION_STALE_MS = 10 * 60_000;
+
+// Prompt focus requests already acted on. A room rendered again keeps its
+// prompt box where the user left the focus.
+const handledPromptFocusRequests = new WeakSet<object>();
 
 interface CapState {
   gates: Gate[];
@@ -385,6 +388,7 @@ export default class Room extends Component<Signature> {
                   @onPaste={{this.handleChatInputPaste}}
                   @canSend={{this.canSend}}
                   @isSending={{this.isSending}}
+                  {{this.focusPromptOnRequest}}
                   data-test-message-field={{@roomId}}
                 />
                 {{#if this.aiAssistantPanelService.isFocusPillVisible}}
@@ -2628,6 +2632,24 @@ export default class Room extends Component<Signature> {
       this.capHeld = value;
     }
   }
+
+  // Focuses the prompt box, with the cursor after its text, once for each
+  // request that names this room. The request is recorded rather than
+  // cleared: writing tracked state the modifier has just read is an error.
+  private focusPromptOnRequest = modifier((element: HTMLTextAreaElement) => {
+    let request = this.aiAssistantPanelService.promptFocusRequest;
+    if (
+      !request ||
+      request.roomId !== this.args.roomId ||
+      handledPromptFocusRequests.has(request)
+    ) {
+      return;
+    }
+    handledPromptFocusRequests.add(request);
+    element.focus();
+    let end = element.value.length;
+    element.setSelectionRange(end, end);
+  });
 
   // A new slot opens over the same beat it closes in. A Web Animation's
   // clock starts on the first frame after it is created, so the long task

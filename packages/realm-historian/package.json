@@ -19,6 +19,7 @@
     "@types/node": "catalog:",
     "@types/qunit": "catalog:",
     "concurrently": "catalog:",
+    "eslint": "catalog:",
     "qunit": "catalog:",
     "typescript": "catalog:"
   },

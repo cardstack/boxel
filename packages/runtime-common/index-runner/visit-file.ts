@@ -362,6 +362,9 @@ export async function renderFileForIndexing({
       fileDefCodeRef,
       loaderEpoch: batch.loaderEpoch,
       ...(needCardRender ? { cardRender: true } : {}),
+      ...(needCardRender && batch.prerenderDefaultIndex
+        ? { prerenderDefaultIndex: true }
+        : {}),
       ...(needFileHtml ? { fileRender: true } : {}),
     };
     try {

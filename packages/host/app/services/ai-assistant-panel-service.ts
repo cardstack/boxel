@@ -32,6 +32,7 @@ import { titleize } from '../utils/titleize';
 
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from './operator-mode-state-service';
 
+import type { Message } from '../lib/matrix-classes/message';
 import type CodeSemanticsService from './code-semantics-service';
 import type LocalPersistenceService from './local-persistence-service';
 import type MatrixService from './matrix-service';
@@ -40,7 +41,6 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type SessionService from './session';
 import type StoreService from './store';
 import type ToolService from './tool-service';
-import type { Message } from '../lib/matrix-classes/message';
 import type { CardDef, Format } from '@cardstack/base/card-api';
 import type * as CommandModule from '@cardstack/base/command';
 import type { FileDef } from '@cardstack/base/file-api';
@@ -76,6 +76,10 @@ export default class AiAssistantPanelService extends Service {
   @tracked roomToRename: SessionRoomData | undefined = undefined;
   @tracked roomToDelete: { id: string; name: string } | undefined = undefined;
   @tracked roomDeleteError: string | undefined = undefined;
+  // The room whose prompt box should take the focus once it renders. A new
+  // object per request, so the room can tell a request it has handled from a
+  // new one for the same room.
+  @tracked promptFocusRequest: { roomId: string } | undefined = undefined;
 
   constructor(owner: Owner) {
     super(owner);
@@ -93,10 +97,12 @@ export default class AiAssistantPanelService extends Service {
   }
 
   // Enter a room if the panel is open and nothing is loaded/loading yet. Used
-  // by the session-start hook (re-arm after re-login, and boot replay); leaves
-  // an already-current room untouched so a passive broadcast never clobbers it.
-  private ensureRoomsLoaded() {
-    if (!this.isOpen) {
+  // by the session-start hook (re-arm after re-login, and boot replay), and by
+  // the panel once it renders, for a panel left open while host submode hid
+  // it; leaves an already-current room untouched so a passive call never
+  // clobbers it. A failed session leaves the retry to the user.
+  ensureRoomsLoaded() {
+    if (!this.isOpen || this.displayRoomError) {
       return;
     }
     if (!this.matrixService.currentRoomId && !this.loadRoomsTask.isRunning) {
@@ -111,6 +117,7 @@ export default class AiAssistantPanelService extends Service {
     this.roomToRename = undefined;
     this.roomToDelete = undefined;
     this.roomDeleteError = undefined;
+    this.promptFocusRequest = undefined;
     this.deletedRoomIds.clear();
     window.localStorage.removeItem(NewSessionIdPersistenceKey);
     this.loadRoomsTask.cancelAll();
@@ -139,8 +146,13 @@ export default class AiAssistantPanelService extends Service {
     return this.commandModuleResource.module as typeof CommandModule;
   }
 
+  // Host submode previews the site, so it hides the assistant. The dashboard
+  // opened over it has actions that open the panel, so it shows it.
   get isAiAssistantHidden() {
-    return this.operatorModeStateService.state.submode === Submodes.Host;
+    return (
+      this.operatorModeStateService.state.submode === Submodes.Host &&
+      !this.operatorModeStateService.workspaceChooserOpened
+    );
   }
 
   get isOpen() {
@@ -245,11 +257,14 @@ export default class AiAssistantPanelService extends Service {
     // loadRoomsTask then selects leaves the list as it is, so a list the user
     // opens while the rooms load stays open.
     this.hidePastSessions();
+    // A focus request belongs to the open that made it.
+    this.promptFocusRequest = undefined;
     return this.loadRoomsTask.perform();
   }
 
   @action
   closePanel() {
+    this.promptFocusRequest = undefined;
     this.operatorModeStateService.closeAiAssistant();
   }
 
@@ -265,6 +280,9 @@ export default class AiAssistantPanelService extends Service {
 
   @action
   enterRoom(roomId: string, hidePastSessionsList = true) {
+    if (this.promptFocusRequest?.roomId !== roomId) {
+      this.promptFocusRequest = undefined;
+    }
     this.matrixService.currentRoomId = roomId;
 
     this.localPersistenceService.setCurrentRoomId(roomId);
@@ -273,20 +291,56 @@ export default class AiAssistantPanelService extends Service {
     }
   }
 
-  // Opens the panel on a new session. A second press while the first is still
+  // Opens the panel on a new session, and resolves to its room, or to nothing
+  // when it couldn't be created. A second press while the first is still
   // opening restarts the panel's tasks and cancels the first, which is
-  // superseded rather than failed.
-  async openNewSession() {
+  // superseded rather than failed and resolves to nothing.
+  async openNewSession(): Promise<string | undefined> {
     try {
       await this.openPanel();
-      await this.createNewSession();
+      return await this.createNewSession();
     } catch (error) {
       if (!didCancel(error)) {
         throw error;
       }
+      return undefined;
     }
   }
 
+  // Opens a new session with `prompt` in its prompt box, unsent, and focuses
+  // the box. The new session may be an empty one opened before, so a draft
+  // the user typed there stays instead. The prompt is saved as the session's
+  // draft, marked as the panel's, so after a reload or in another tab it is
+  // still told apart from text the user typed.
+  async openNewSessionWithPrompt(prompt: string) {
+    let roomId = await this.openNewSession();
+    if (!roomId) {
+      return;
+    }
+    if (!this.matrixService.getMessageToSend(roomId)) {
+      this.matrixService.setMessageToSend(roomId, prompt);
+      this.localPersistenceService.setFilledPrompt(roomId, prompt);
+    }
+    this.promptFocusRequest = { roomId };
+  }
+
+  // Puts a session's saved draft in its prompt box, less a prompt the panel
+  // filled in and the user left as it was. The saved draft is what every tab
+  // shares, while the box can still hold what this tab showed before another
+  // tab changed the draft. Between tabs the last saved text wins, as it does
+  // for any draft, and only the text is taken, not the attachments.
+  private showSavedDraft(roomId: string) {
+    let saved = this.localPersistenceService.getMessageDraft(roomId);
+    let filled = this.localPersistenceService.getFilledPrompt(roomId);
+    let draft = saved === filled ? undefined : saved;
+    if ((this.matrixService.getMessageToSend(roomId) || undefined) !== draft) {
+      this.matrixService.setMessageToSend(roomId, draft);
+    }
+  }
+
+  // Enters a new session, and resolves to its room, or to nothing when it
+  // couldn't be created. A reused empty session shows its saved draft, less a
+  // prompt the panel filled in and the user left as it was.
   @action
   async createNewSession(
     opts: {
@@ -299,19 +353,21 @@ export default class AiAssistantPanelService extends Service {
       shouldCopyFileHistory: false,
       shouldSummarizeSession: false,
     },
-  ) {
+  ): Promise<string | undefined> {
     this.displayRoomError = false;
+    let newSessionId = this.newSessionId;
     if (
-      this.newSessionId &&
+      newSessionId &&
       !opts.addSameSkills &&
       !opts.shouldSummarizeSession &&
       !opts.shouldCopyFileHistory
     ) {
-      this.enterRoom(this.newSessionId);
-      return;
+      this.showSavedDraft(newSessionId);
+      this.enterRoom(newSessionId);
+      return newSessionId;
     }
 
-    await this.doCreateRoom.perform(NEW_SESSION_NAME, opts);
+    return await this.doCreateRoom.perform(NEW_SESSION_NAME, opts);
   }
 
   private get newSessionId() {
@@ -492,12 +548,12 @@ export default class AiAssistantPanelService extends Service {
             shouldCopyFileHistory,
           });
         }
+        return roomId;
       } catch (e) {
         console.error(e);
         this.displayRoomError = true;
+        return undefined;
       }
-
-      return undefined;
     },
   );
 

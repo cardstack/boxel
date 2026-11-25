@@ -45,7 +45,10 @@ set explicitly, never left at BXL's defaults. Each call MUST have a
 wall-clock limit, past which the host ends the worker. The next call then
 starts a new one. Every run MUST bound the bytes its transforms move in and
 out (ADR 022 §1.6). An interactive run MUST also bound its number of
-transforms. An automation run's time limit bounds that number instead.
+transforms. An automation run's time limit bounds that number instead. An automation run
+MUST also bound how many of its calls wait for its worker at once, since its
+time limit does not bound the memory waiting calls hold in a tab that other
+runs share.
 
 ## 2. Rationale
 

@@ -150,7 +150,7 @@ whose transitive dependencies the package carries without loading them.
   discarding other packages' diagnostics.
 - `packages/realm-server/tsconfig.json`, the module configuration to copy,
   and `eslint/erasable-syntax-selectors.cjs` with the
-  `@typescript-eslint/parameter-properties` rule in `.eslintrc.js`, the
+  `@typescript-eslint/parameter-properties` rule in `eslint/shared.mjs`, the
   syntax the lint rejects.
 - `packages/realm-server/package.json` (`start`), the realm server's unbuilt
   `node main.ts`.

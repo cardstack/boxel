@@ -172,14 +172,29 @@ Postgres holds the run's log as the console shows it:
 SELECT seq, at, source, kind, level, script_line, message, data
   FROM automation_run_log WHERE run_id = '<run>' ORDER BY seq;
 
-SELECT position, name, started_at, count_done, count_total
+SELECT position, name, started_at
   FROM automation_run_milestones WHERE run_id = '<run>' ORDER BY position;
+
+SELECT position, milestone_position, text, reported_at
+  FROM automation_run_tasks WHERE run_id = '<run>' ORDER BY position;
 ```
 
 Platform lines are the trigger, admission, each `callApi` call (status, ms,
 bytes), each `resolve` call (model, status, ms, cost), the commit (files, ms)
 and the finish. Script lines are its console, activity, plan, milestones,
-counts and its uncaught error. A log past its cap ends with how many lines were dropped.
+tasks, one `transform` line and its uncaught error. A log past its cap ends with how many lines were dropped.
+
+The `transform` line tallies the run's `realm.transform` calls, which run in
+the tab and reach no realm server: `data.calls`, `data.failed`, `data.ms` (the
+time their programs ran in the transform worker) and `data.inBytes` /
+`data.outBytes`. The tab sends it once, as the run settles, and only for a run
+that made a call. A run that ran out of time with a large `data.ms` spent its
+time transforming; failed calls are each in the script's own `error` or
+console line when the script reported them. A run whose log has no
+`transform` line made no call; or its tab never settled the run (a lost tab, a
+`job-lost` run), so it never sent the line; or its log reached its line cap
+first; or its tab reached a realm server that reads no `transform` line and
+sent the rest of the log without it.
 
 The same lines reach Loki, anchored on their tags. Whichever process stored a
 line logs it: the realm server for the tab's lines and its own calls, the

@@ -1,4 +1,3 @@
-/* eslint-env browser */
 // The secure window's own realm-server session: signed in here, kept in this
 // origin's storage, and never posted to the app. Card code runs in the app
 // page and can read the app's session; it can't read this one, because the

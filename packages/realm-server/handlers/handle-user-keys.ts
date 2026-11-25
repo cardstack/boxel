@@ -26,6 +26,7 @@ import {
 } from '../lib/user-key-grants.ts';
 import { listOwnSharedRealms, type SharedRealm } from '../lib/key-shares.ts';
 import { registrableDomain } from '../lib/secure-window.ts';
+import { followEndedKeyApprovals } from '../lib/automation-key-approvals.ts';
 import {
   addOAuthClient,
   describeOAuthKeys,
@@ -457,15 +458,18 @@ export function handleReplaceUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
   });
 }
 
-export function handleDeleteUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
+export function handleDeleteUserKey(args: CreateRoutesArgs): Handler {
+  let { dbAdapter } = args;
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let body = await readJSON(ctxt);
-    await deleteUserKey(dbAdapter, {
+    // The key's own bindings are revoked with it.
+    let affected = await deleteUserKey(dbAdapter, {
       owner,
       id: ctxt.params.keyId,
       ticket: ticketOf(body),
     });
+    await followEndedKeyApprovals(args, affected);
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }

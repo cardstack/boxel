@@ -25,6 +25,9 @@ export const RUN_LOG_MAX_BATCH_BYTES = RUN_LOG_MAX_REQUEST_BYTES - 4096;
 
 const encoder = new TextEncoder();
 
+// Event kinds a realm server may predate, newest first.
+const NEWER_KINDS: readonly RunProgressEvent['kind'][] = ['transform', 'task'];
+
 // An event's share of a batch's body: its JSON and the comma after it.
 function encodedSize(event: RunProgressEvent): number {
   return encoder.encode(JSON.stringify(event)).length + 1;
@@ -55,6 +58,10 @@ export class RunLogSink implements FlushableRunProgressSink {
   #fetch: typeof globalThis.fetch;
   #onError: (message: string) => void;
   #timeoutMs: number;
+  // Kinds the realm refused as a body it can't read: a realm server that
+  // predates them, reached while a deploy rolls out. The run's later batches
+  // leave them out, so the rest of the log lands.
+  #refusedKinds = new Set<RunProgressEvent['kind']>();
 
   constructor({
     realmURL,
@@ -173,20 +180,43 @@ export class RunLogSink implements FlushableRunProgressSink {
     });
   }
 
-  async #post(events: RunProgressEvent[]): Promise<void> {
+  async #post(batch: RunProgressEvent[]): Promise<void> {
+    let events = batch.filter((event) => !this.#refusedKinds.has(event.kind));
+    if (events.length === 0) {
+      return;
+    }
     let controller = new AbortController();
     let timer = setTimeout(() => controller.abort(), this.#timeoutMs);
     try {
-      let response = await this.#fetch(this.#url, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.api+json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.#runToken}`,
-        },
-        body: JSON.stringify({ events }),
-        signal: controller.signal,
-      });
+      let send = (body: RunProgressEvent[]) =>
+        this.#fetch(this.#url, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.api+json',
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.#runToken}`,
+          },
+          body: JSON.stringify({ events: body }),
+          signal: controller.signal,
+        });
+      let response = await send(events);
+      // A 400 for a batch that carries a kind an older realm server lacks is
+      // retried without that kind, newest first, so a realm server that reads
+      // tasks but not the transform line gets its tasks.
+      for (let kind of NEWER_KINDS) {
+        if (
+          response.status !== 400 ||
+          !events.some((event) => event.kind === kind)
+        ) {
+          continue;
+        }
+        this.#refusedKinds.add(kind);
+        events = events.filter((event) => event.kind !== kind);
+        if (events.length === 0) {
+          return;
+        }
+        response = await send(events);
+      }
       if (!response.ok) {
         this.#onError(
           `The run's log refused ${events.length} lines (${response.status}): ${await response.text().catch(() => '')}`,

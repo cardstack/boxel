@@ -799,6 +799,12 @@ export function requestUser(ctxt: Koa.Context): string | undefined {
   return token?.user;
 }
 
+// Whether a request that passed `jwtMiddleware` carries an OAuth access
+// token rather than a session token.
+export function isOAuthRequest(ctxt: Koa.Context): boolean {
+  return ctxt.state.oauthCaller !== undefined;
+}
+
 // Admits a request whose `Authorization: Bearer <token>` carries `secret`,
 // for the endpoints another service calls with a secret both sides are
 // configured with.

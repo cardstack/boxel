@@ -19,6 +19,11 @@ interface EnqueueReindexRealmJobOptions {
   // (see `fromScratchAnnounces`). Carried only when false so ordinary
   // index args keep their existing shape.
   realmEvents?: boolean;
+  // True when the caller changed something a pass reads only when it starts,
+  // such as a row's modified time or whether the realm has a host URL, so a
+  // pass that is already running can't stand in for this one (see
+  // `chooseFromScratchCoalesceDecision`). Carried only when true.
+  freshPass?: boolean;
 }
 
 export async function enqueueReindexRealmJob(
@@ -39,6 +44,7 @@ export async function enqueueReindexRealmJob(
     clearLastModified,
     ...(opts?.awaitedByPublish ? { awaitedByPublish: true } : {}),
     ...(opts?.realmEvents === false ? { realmEvents: false } : {}),
+    ...(opts?.freshPass ? { freshPass: true } : {}),
   };
   if (clearLastModified) {
     await query(dbAdapter, [

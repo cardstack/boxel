@@ -330,6 +330,7 @@ module(basename(import.meta.filename), function (hooks) {
     token ??= (
       await createAutomationRunToken(dbAdapter, realm, user, {
         automation: TEST_AUTOMATION_PATH,
+        approveBindings: true,
       })
     ).token;
     let response = (await realm.handleAutomation(
@@ -400,7 +401,7 @@ module(basename(import.meta.filename), function (hooks) {
       dbAdapter,
       realm,
       OWNER,
-      { automation: TEST_AUTOMATION_PATH },
+      { automation: TEST_AUTOMATION_PATH, approveBindings: true },
     );
     assert.strictEqual(
       (await automationCall('check', OWNER, token)).status,

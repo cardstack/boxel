@@ -20,6 +20,11 @@ import handleCreateRealmRequest, {
 } from './handlers/create-realm.ts';
 import handleDeleteRealm from './handlers/handle-delete-realm.ts';
 import {
+  handleFetchDisplayName,
+  handleEditWorkspaceList,
+  handleFetchWorkspaceList,
+} from './handlers/handle-workspace-list.ts';
+import {
   handleDataKeyReseal,
   handleDataKeyStatus,
 } from './handlers/handle-data-keys.ts';
@@ -414,7 +419,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(
     '/_create-realm',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleCreateRealmRequest(createRealmDeps, args.sendEvent),
+    handleCreateRealmRequest(createRealmDeps, args.sendEvent, args),
   );
   router.delete(
     '/_delete-realm',
@@ -453,6 +458,21 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_user',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleFetchUserRequest(args),
+  );
+  router.get(
+    '/_user-realms',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleFetchWorkspaceList(args),
+  );
+  router.patch(
+    '/_user-realms',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleEditWorkspaceList(args),
+  );
+  router.get(
+    '/_user-display-name',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleFetchDisplayName(args),
   );
   router.post(
     '/_user',
