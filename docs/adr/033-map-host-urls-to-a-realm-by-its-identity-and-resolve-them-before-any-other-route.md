@@ -13,6 +13,7 @@ scope:
   - packages/realm-server/server.ts
   - packages/postgres/migrations/*_add-realm-host-urls.js
   - packages/realm-server/routes.ts
+  - packages/realm-server/handlers/handle-search.ts
   - packages/realm-server/lib/index-html-injection.ts
   - packages/runtime-common/index-runner/prerender-html-visit.ts
   - packages/runtime-common/index-writer.ts
@@ -138,9 +139,9 @@ The realm server MUST record, with the stored HTML, the URL it was rendered
 against, so that a server that serves the HTML knows that URL after a restart,
 and for HTML that a failed render kept. A response MUST translate from that
 URL as well, so that every page stays right while the render runs. A response
-on the realm's own URL MUST name the realm's URL wherever stored HTML names
-the canonical host URL, except as §1.4 says, so that the app links into the
-realm, not to its site.
+that isn't on a host URL MUST name the realm's URL wherever stored HTML names
+the canonical host URL in full, except as §1.4 says, so that the app links
+into the realm, not to its site.
 
 ## 2. Rationale
 
@@ -197,6 +198,12 @@ prefix differs, because a root-relative path in it names the canonical
 prefix. So a page on any host URL but the canonical one redirects to the
 canonical one, as a site's other names usually do. This also gives each page
 one address for search engines.
+
+The realm's own URL also serves pages, and a path it names in a form the
+translation can't find, such as a root-relative path, stays wrong there
+until the app boots and renders the page again against the realm's URL.
+That URL doesn't redirect to the canonical host URL as the others do,
+because it is also where the app opens the realm.
 
 ## 3. Considered options
 
