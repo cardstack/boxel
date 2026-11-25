@@ -28,6 +28,9 @@ interface BrowserStubOptions {
   gate: () => Promise<void>;
   onContextCreated?: () => void;
   onContextClosed?: () => void;
+  // Stands in for the `#standby-ready` wait. A promise that never settles
+  // makes the creation run into the pool's standby timeout.
+  ready?: () => Promise<boolean>;
 }
 
 function makeBrowserStub(opts: BrowserStubOptions) {
@@ -41,7 +44,7 @@ function makeBrowserStub(opts: BrowserStubOptions) {
           return {
             async goto() {},
             async waitForFunction() {
-              return true;
+              return opts.ready ? await opts.ready() : true;
             },
             async evaluate(fn: any, ...args: any[]) {
               return fn(...args);
@@ -83,6 +86,11 @@ function makeManualGate() {
     block() {
       blocked = true;
     },
+    // Lets the oldest parked creation through and keeps the gate shut for
+    // the rest.
+    releaseOne() {
+      waiters.shift()?.();
+    },
     unblockAll() {
       blocked = false;
       let toFire = waiters.splice(0);
@@ -112,8 +120,30 @@ async function waitUntil(
 
 module(basename(import.meta.filename), function (hooks) {
   let pools: PagePool[] = [];
+  // The dynamic-pool env vars override `maxPages`, and CI and a dev shell
+  // set them, so each test starts from the fixed-size pool it asks for.
+  let poolEnvKeys = [
+    'PRERENDER_PAGE_POOL_MIN',
+    'PRERENDER_PAGE_POOL_MAX',
+    'PRERENDER_PAGE_POOL_INITIAL',
+  ];
+  let savedPoolEnv: Record<string, string | undefined> = {};
+
+  hooks.beforeEach(() => {
+    for (let key of poolEnvKeys) {
+      savedPoolEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
 
   hooks.afterEach(async () => {
+    for (let key of poolEnvKeys) {
+      if (savedPoolEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedPoolEnv[key];
+      }
+    }
     for (let pool of pools.splice(0)) {
       try {
         await pool.closeAll();
@@ -220,9 +250,7 @@ module(basename(import.meta.filename), function (hooks) {
   // running. If `closeAll` returned first, the browser would be replaced while
   // a standby was still being created, and that standby would land in the live
   // standby set holding a page on a browser that no longer exists — a tab a
-  // later `getPage` can commandeer, and a `#creatingStandbys` decrement below
-  // the zero `closeAll` resets, which under-reports pool occupancy for the
-  // life of the process.
+  // later `getPage` can commandeer.
   // The refill takes one generation snapshot and threads it downstream. It has
   // to, because it yields between taking it and reaching the retry loop: a
   // close landing in that window has already bumped the counter, so a second
@@ -434,5 +462,128 @@ module(basename(import.meta.filename), function (hooks) {
     }
     held.release();
     gate.unblockAll();
+  });
+
+  // A failed creation hands its slot back: the context it opened is closed,
+  // the in-flight count it took is returned, and the retry that follows has
+  // the whole budget to work with. The prerender server hits this whenever
+  // Chrome is too slow to boot a standby inside the standby timeout.
+  test('a standby creation that times out leaves the context budget balanced', async function (assert) {
+    let readyCalls = 0;
+    let created = 0;
+    let closed = 0;
+    let browserManager = makeBrowserStub({
+      gate: () => Promise.resolve(),
+      onContextCreated: () => created++,
+      onContextClosed: () => closed++,
+      // The first standby never boots, so its creation times out.
+      ready: () =>
+        readyCalls++ === 0
+          ? new Promise<boolean>(() => {})
+          : Promise.resolve(true),
+    });
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    await pool.warmStandbys();
+
+    let budget = pool.__test_contextBudget();
+    assert.strictEqual(budget.creating, 0, 'no creation is counted in flight');
+    assert.strictEqual(
+      budget.standbys,
+      2,
+      'the retry after the timeout filled the standby target',
+    );
+    assert.strictEqual(
+      budget.used,
+      budget.standbys,
+      'the budget counts the live standbys and nothing else',
+    );
+    assert.strictEqual(closed, 1, 'the timed-out creation closed its context');
+    assert.strictEqual(created, 3, 'one failed creation and two that landed');
+
+    let page = await pool.getPage('A');
+    assert.false(page.reused, 'the pool still hands out a fresh tab');
+    page.release();
+  });
+
+  // A browser restart closes the pool while renders keep arriving, and each
+  // of them kicks the refill. `closeAll` clears the refill slot before it
+  // waits, so one of those kicks starts a refill on the browser being
+  // replaced while the close is still running, and that creation is still in
+  // flight when the close finishes. The close used to reset the in-flight
+  // count to zero under it, so the creation's own decrement then took the
+  // count to -1 for the life of the process (seen in production as
+  // `creating=-1` and "page pool capacity -2/13"): a spent budget read as
+  // free, and callers that should have waited for a tab threw "No standby
+  // page available" instead.
+  test('a refill kicked during closeAll leaves the context budget balanced and adds no standby from the closed pool', async function (assert) {
+    let gate = makeManualGate();
+    let created = 0;
+    let closed = 0;
+    let browserManager = makeBrowserStub({
+      gate: gate.gate,
+      onContextCreated: () => created++,
+      onContextClosed: () => closed++,
+    });
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    gate.block();
+    let firstRefill = pool.warmStandbys();
+    await waitUntil(
+      () => gate.waiterCount() === 1,
+      'the first refill to park mid-creation',
+    );
+
+    let closing = pool.closeAll();
+    // Kicked after the close began, the way a render arriving mid-restart
+    // kicks it from `getPage`.
+    let lateRefill = pool.warmStandbys();
+    await waitUntil(
+      () => gate.waiterCount() === 2,
+      'the refill kicked during the close to park mid-creation',
+    );
+    assert.strictEqual(
+      pool.__test_contextBudget().creating,
+      2,
+      'both creations are counted while in flight',
+    );
+
+    // The close waits out the first refill's creation and then finishes,
+    // while the late refill's creation is still in flight.
+    gate.releaseOne();
+    await closing;
+    assert.strictEqual(
+      pool.__test_contextBudget().creating,
+      1,
+      'the creation still in flight stays counted after the close',
+    );
+
+    gate.unblockAll();
+    await lateRefill;
+    await firstRefill;
+
+    let budget = pool.__test_contextBudget();
+    assert.strictEqual(budget.creating, 0, 'the in-flight count is back to 0');
+    assert.strictEqual(
+      budget.standbys,
+      0,
+      'no standby created on the closed pool was added to it',
+    );
+    assert.strictEqual(budget.used, 0, 'the whole budget is free');
+    assert.strictEqual(
+      closed,
+      created,
+      'every context created across the close was closed',
+    );
+
+    let page = await pool.getPage('A');
+    assert.ok(page.pageId, 'the pool creates a tab again after the close');
+    let after = pool.__test_contextBudget();
+    assert.true(after.used >= 1, 'the budget counts the new tab');
+    assert.true(
+      after.used <= after.budget,
+      `the budget stays within its cap (${after.used}/${after.budget})`,
+    );
+    page.release();
   });
 });
