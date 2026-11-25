@@ -351,6 +351,11 @@ export default class RealmServerService
     add?: string[];
     remove?: string[];
   }): Promise<boolean> {
+    // With no session and no matrix client to mint one, a login can't
+    // succeed, and attempting it reports its failure as uncaught.
+    if (!this.canFetch) {
+      return false;
+    }
     try {
       await this.login();
       let response = await this.network.fetch(`${this.url.href}_user-realms`, {
