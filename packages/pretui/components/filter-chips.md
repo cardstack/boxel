@@ -1,6 +1,6 @@
 ## What it is
 
-A horizontal row of status chips that filter a list, each optionally carrying a count. Use it above a **DataGrid**, a **Feed** or a **Grid** where the filter is a single named bucket — All / Open / Blocked / Done. If the filters live in a sidebar, **FilterList**. If several can be on at once, this is not it (see below). If the filter is a structured predicate, **FilterSet**.
+A horizontal row of status chips that filter a list, each optionally carrying a count. Use it above a **DataGrid**, a **Feed** or a **Grid** where the filter is a named bucket — All / Open / Blocked / Done — or, with `@multiple`, a set of them. If the filters live in a sidebar, **FilterList**. If the filter is a structured predicate, **FilterSet**.
 
 ## The contract
 
@@ -11,7 +11,7 @@ A horizontal row of status chips that filter a list, each optionally carrying a 
 @display? 'all' (default) | 'few', @visibleCount? (3), @moreLabel? ('more filters')
 ```
 
-Hybrid controlled/uncontrolled, seeded from `@defaultValue ?? options[0].value` — so a FilterChips row always has exactly one selection and can never be in a "nothing selected" state.
+Hybrid controlled/uncontrolled. Single-select is seeded from `@defaultValue ?? options[0].value`, so it always has exactly one selection and can never be in a "nothing selected" state. `@multiple` is seeded from `@defaultValues ?? []` and may be empty.
 
 **It is single-select by default, and looks like a multi-select.** Without `@multiple` the chips behave like a **SegmentedControl** that happens to be chip-shaped: exactly one is chosen. With `@multiple` they toggle independently (`@values`, `@defaultValues`), and the group's role changes to match (see Accessibility).
 
@@ -23,11 +23,11 @@ Adopted from Beautiful UI: status chips that filter live data.
 
 ## Prior art
 
-**React Spectrum's `TagGroup`** with `selectionMode` is the closest real component: roving tabindex, arrow navigation, Delete-key removal, and proper `role="listbox"`/`option` semantics. **Web Awesome `wa-tag`** is display-only with a `with-remove` affordance. **Radix `ToggleGroup`** with `type="single"` is the structural analogue and exposes `rovingFocus` and `loop`. **shadcn** has no filter chips.
+**React Spectrum's `TagGroup`** with `selectionMode` is the closest real component: roving tabindex, arrow navigation, Delete-key removal, and proper `role="listbox"`/`option` semantics. **Web Awesome `wa-tag`** is display-only with a `with-remove` affordance. **Radix `ToggleGroup`** with `type="single"` or `type="multiple"` is the structural analogue and exposes `rovingFocus` and `loop`. **shadcn** has no filter chips.
 
 Where Pretui is ahead of the shadcn-style hand-roll: counts and hues are declared per option rather than composed, so a row of filter chips is one line derived from a model, and the hue derivation matches **Chip**'s so the whole ink territory agrees.
 
-Where it is behind Spectrum's `TagGroup`, and the gap is the same one **SegmentedControl** and **Tabs** have in this kit: **no per-option removal and no Delete-key handling**. Its roles and keyboard model are right: native radios and checkboxes inside a labelled group, so the platform supplies them.
+Where it is behind Spectrum's `TagGroup`: **no per-option removal and no Delete-key handling**. Its roles and keyboard model are right: native radios and checkboxes inside a labelled group, so the platform supplies them.
 
 ## Accessibility
 
