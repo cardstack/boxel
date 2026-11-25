@@ -5,6 +5,7 @@ import {
   type Expression,
   type Querier,
   type TransactionOptions,
+  AccountDataLockTimeoutError,
   Deferred,
   expressionToSql,
   loggableBindings,
@@ -59,6 +60,17 @@ export function hashRealmUrlForAdvisoryLock(url: string): string {
 export function hashUserIdForCostLock(matrixUserId: string): string {
   const digest = createHash('sha256')
     .update('cost-barrier:')
+    .update(matrixUserId)
+    .digest();
+  return digest.readBigInt64BE(0).toString();
+}
+
+// Lock key for one Matrix user's account data (see
+// PgAdapter.withAccountDataLock), in a space of its own so it never collides
+// with the same user's cost lock.
+export function hashUserIdForAccountDataLock(matrixUserId: string): string {
+  const digest = createHash('sha256')
+    .update('account-data:')
     .update(matrixUserId)
     .digest();
   return digest.readBigInt64BE(0).toString();
@@ -349,6 +361,9 @@ export class PgAdapter implements DBAdapter {
   // same-user user, not one per concurrent same-user request. See
   // withUserCostLock for the full rationale.
   #userCostQueue = new Map<string, Promise<void>>();
+  // The same coalescer, for edits of one user's account data. See
+  // withAccountDataLock.
+  #accountDataQueue = new Map<string, Promise<void>>();
   // The same coalescer, for writers contending over one set of files. Keyed by
   // the lock keys a call asks for, joined in the order they are taken — so two
   // writers aimed at one card chain in memory and only the head of the chain
@@ -1317,6 +1332,69 @@ export class PgAdapter implements DBAdapter {
     void myCompletion.finally(() => {
       if (this.#userCostQueue.get(matrixUserId) === myCompletion) {
         this.#userCostQueue.delete(matrixUserId);
+      }
+    });
+    return await myWork;
+  }
+
+  // Serializes the realm server's edits of one Matrix user's account data
+  // (the workspace list, `app.boxel.realms`, above all) across replicas. Matrix
+  // account data has no compare-and-set, and every edit rewrites the whole
+  // value, so two edits that overlap can each drop what the other wrote.
+  // Holding this around each read-modify-write keeps two of them from
+  // overlapping. It covers only callers that take it: a client that writes
+  // the same account data straight to Matrix is not held back by it.
+  //
+  // The same two layers as withUserCostLock, in a key space of its own: an
+  // in-process queue per user, so one replica pins at most one pool
+  // connection per user while it waits, then `pg_advisory_xact_lock` on the
+  // user's key across replicas. The holder keeps its connection, idle in its
+  // transaction, while `fn` makes its Matrix requests, and the lock ends with
+  // that transaction, whether `fn` returns or throws.
+  //
+  // `deadline` bounds only the wait for the lock: a caller still waiting then
+  // rejects with `AccountDataLockTimeoutError`, before `fn` starts. `fn` bounds
+  // its own requests. A later caller in the in-process queue waits for the
+  // earlier ones in memory, and the time it spends there counts against its
+  // own deadline too.
+  //
+  // Re-entrancy: `fn` must not take this lock for the same user again; the
+  // second take would wait on the first's transaction forever.
+  async withAccountDataLock<T>(
+    matrixUserId: string,
+    fn: () => Promise<T>,
+    { deadline }: { deadline: number },
+  ): Promise<T> {
+    const previous =
+      this.#accountDataQueue.get(matrixUserId) ?? Promise.resolve();
+    const lockKey = hashUserIdForAccountDataLock(matrixUserId);
+    const myWork = (async (): Promise<T> => {
+      await previous;
+      if (Date.now() >= deadline) {
+        throw new AccountDataLockTimeoutError(matrixUserId);
+      }
+      try {
+        return await this.#runWithAdvisoryXactLock(
+          lockKey,
+          `account-data:${matrixUserId}`,
+          () => fn(),
+          deadline,
+        );
+      } catch (err: unknown) {
+        if (err instanceof WriteLockTimeoutError) {
+          throw new AccountDataLockTimeoutError(matrixUserId);
+        }
+        throw err;
+      }
+    })();
+    const myCompletion: Promise<void> = myWork.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#accountDataQueue.set(matrixUserId, myCompletion);
+    void myCompletion.finally(() => {
+      if (this.#accountDataQueue.get(matrixUserId) === myCompletion) {
+        this.#accountDataQueue.delete(matrixUserId);
       }
     });
     return await myWork;

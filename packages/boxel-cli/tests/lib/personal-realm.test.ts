@@ -39,6 +39,9 @@ interface StubOptions {
   displaynameResponse?: Response;
   // What POST /_create-realm returns.
   createRealmResponse?: Response;
+  // What PATCH /_user-realms returns; a 404 is a server that keeps no realm
+  // list for the account, so the CLI writes it to Matrix itself.
+  userRealmsEditResponse?: Response;
 }
 
 // Routes every request ensurePersonalRealm can make, recording each so tests
@@ -81,6 +84,12 @@ function stubFetchRoutes(options: StubOptions = {}) {
           { data: { id: 'https://realms.example.com/newuser/personal' } },
           { status: 202 },
         )
+      );
+    }
+    if (method === 'PATCH' && url.pathname === '/_user-realms') {
+      return (
+        options.userRealmsEditResponse ??
+        jsonResponse({ errors: ['Not Found'] }, { status: 404 })
       );
     }
     throw new Error(`unexpected fetch: ${method} ${url.href}`);
@@ -139,6 +148,37 @@ describe('ensurePersonalRealm', () => {
     expect(JSON.parse(put.body!)).toEqual({
       realms: ['https://realms.example.com/newuser/personal/'],
     });
+  });
+
+  it('asks the realm server to record the new realm when it keeps the realm list', async () => {
+    const { calls } = stubFetchRoutes({
+      userRealmsEditResponse: jsonResponse({
+        data: {
+          type: 'user-realms-edit',
+          id: USER_ID,
+          attributes: {
+            added: ['https://realms.example.com/newuser/personal/'],
+            removed: [],
+          },
+        },
+      }),
+    });
+
+    const result = await ensurePersonalRealm(AUTH, REALM_SERVER_URL);
+
+    expect(result).toEqual({
+      outcome: 'created',
+      realmUrl: 'https://realms.example.com/newuser/personal/',
+    });
+    const [edit] = callsTo(calls, 'PATCH', '/_user-realms');
+    expect(JSON.parse(edit.body!)).toEqual({
+      data: {
+        type: 'user-realms',
+        attributes: { add: ['https://realms.example.com/newuser/personal/'] },
+      },
+    });
+    // The server made the edit, so nothing is written to Matrix directly.
+    expect(callsTo(calls, 'PUT', ACCOUNT_DATA_PATH)).toHaveLength(0);
   });
 
   it('falls back to the Matrix ID localpart when the account has no display name', async () => {

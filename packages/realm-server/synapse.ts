@@ -448,7 +448,11 @@ export async function fetchDisplayName(
 // present; if not, a concurrent PUT overwrote us and we loop. Capped at
 // 3 attempts (one extra retry after the initial GET→PUT→verify) — beyond
 // that the upstream caller logs a warning and returns 200 per the
-// best-effort contract, and re-running the upsert recovers.
+// best-effort contract, and re-running the upsert recovers. The re-GET
+// catches only an overwrite that lands before it, not one that lands after
+// it, so callers on the realm server also hold the user's account-data lock
+// (`withWorkspaceListLock` in lib/workspace-list.ts) to keep two of their
+// edits from overlapping at all.
 const APPEND_REALM_MAX_ATTEMPTS = 3;
 
 export async function appendRealmToUserAccountData({

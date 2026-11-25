@@ -9,7 +9,7 @@
 // undefined and edits change nothing. So does a user with no Matrix account.
 
 import { setTimeout as delay } from 'timers/promises';
-import { logger } from '@cardstack/runtime-common';
+import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { isUserOfMatrixServer } from '@cardstack/runtime-common/matrix-server-name';
@@ -27,6 +27,7 @@ import {
 const log = logger('realm-server:workspace-list');
 
 export interface WorkspaceListDeps {
+  dbAdapter: DBAdapter;
   matrixClient: MatrixClient;
   matrixAdminUsername?: string;
   matrixAdminPassword?: string;
@@ -63,16 +64,22 @@ export async function addToWorkspaceList(
   let what = 'add a workspace to a list';
   let writing = false;
   try {
-    let result = await asListOwner(deps, user, what, (accessToken, signal) => {
-      writing = true;
-      return appendRealmToUserAccountData({
-        matrixURL: deps.matrixClient.matrixURL,
-        userId: user,
-        userAccessToken: accessToken,
-        realmURL,
-        signal,
-      });
-    });
+    let result = await asListOwner(
+      deps,
+      user,
+      what,
+      (accessToken, signal, deadline) =>
+        whileEditing(deps, user, deadline, () => {
+          writing = true;
+          return appendRealmToUserAccountData({
+            matrixURL: deps.matrixClient.matrixURL,
+            userId: user,
+            userAccessToken: accessToken,
+            realmURL,
+            signal,
+          });
+        }),
+    );
     return { changed: result ? !result.alreadyPresent : false };
   } catch (e) {
     throw new WorkspaceListEditError(what, writing, e);
@@ -91,26 +98,89 @@ export async function removeFromWorkspaceList(
   let what = 'remove a workspace from a list';
   let held = false;
   try {
-    await asListOwner(deps, user, what, async (accessToken, signal) => {
-      // A try that fails may have written the removal already, so the next
-      // one can't tell from the list whether the realm was ever on it: each
-      // try records first whether the realm is there.
-      let content = await read(deps, user, accessToken, signal);
-      if (realmsIn(content).includes(realmURL)) {
-        held = true;
-      }
-      await removeRealmFromUserAccountData({
-        matrixURL: deps.matrixClient.matrixURL,
-        userId: user,
-        userAccessToken: accessToken,
-        realmURL,
-        signal,
-      });
-    });
+    await asListOwner(deps, user, what, (accessToken, signal, deadline) =>
+      whileEditing(deps, user, deadline, async () => {
+        // A try that fails may have written the removal already, so the next
+        // one can't tell from the list whether the realm was ever on it: each
+        // try records first whether the realm is there.
+        let content = await read(deps, user, accessToken, signal);
+        if (realmsIn(content).includes(realmURL)) {
+          held = true;
+        }
+        await removeRealmFromUserAccountData({
+          matrixURL: deps.matrixClient.matrixURL,
+          userId: user,
+          userAccessToken: accessToken,
+          realmURL,
+          signal,
+        });
+      }),
+    );
   } catch (e) {
     throw new WorkspaceListEditError(what, held, e);
   }
   return { changed: held };
+}
+
+// Adds and removes realms on the list for a caller that asks the realm server
+// to make the edit (`PATCH /_user-realms`), so that it is serialized with the
+// server's own edits. Answers which realms the edit actually added and
+// removed, or undefined when this server keeps no list for the user. Throws
+// `WorkspaceListEditError`.
+export async function editWorkspaceList(
+  deps: WorkspaceListDeps,
+  user: string,
+  { add, remove }: { add: string[]; remove: string[] },
+): Promise<{ added: string[]; removed: string[] } | undefined> {
+  let what = 'edit a list';
+  let writing = false;
+  // What the list held before any try wrote to it: a try that fails may have
+  // written part of the edit already, so a later one can't tell from the
+  // list what this edit changed.
+  let initial: string[] | undefined;
+  try {
+    let result = await asListOwner(
+      deps,
+      user,
+      what,
+      (accessToken, signal, deadline) =>
+        whileEditing(deps, user, deadline, async () => {
+          let before = realmsIn(await read(deps, user, accessToken, signal));
+          initial ??= before;
+          for (let realmURL of remove.filter((r) => before.includes(r))) {
+            writing = true;
+            await removeRealmFromUserAccountData({
+              matrixURL: deps.matrixClient.matrixURL,
+              userId: user,
+              userAccessToken: accessToken,
+              realmURL,
+              signal,
+            });
+          }
+          for (let realmURL of add.filter((r) => !before.includes(r))) {
+            writing = true;
+            await appendRealmToUserAccountData({
+              matrixURL: deps.matrixClient.matrixURL,
+              userId: user,
+              userAccessToken: accessToken,
+              realmURL,
+              signal,
+            });
+          }
+          return true;
+        }),
+    );
+    if (!result || !initial) {
+      return undefined;
+    }
+  } catch (e) {
+    throw new WorkspaceListEditError(what, writing, e);
+  }
+  let held = initial;
+  return {
+    added: add.filter((r) => !held.includes(r)),
+    removed: remove.filter((r) => held.includes(r)),
+  };
 }
 
 // The user's list, or undefined when this server keeps none for them. A list
@@ -165,29 +235,75 @@ function realmsIn(content: Record<string, unknown>): string[] {
     : [];
 }
 
-// Runs `fn` as `user`, trying again as `withRetries` does.
+// Runs `fn` as `user`, trying again as `withRetries` does. `fn` is handed
+// the operation's deadline along with its signal.
 async function asListOwner<T>(
   deps: WorkspaceListDeps,
   user: string,
   what: string,
-  fn: (accessToken: string, signal: AbortSignal) => Promise<T>,
+  fn: (
+    accessToken: string,
+    signal: AbortSignal,
+    deadline: number,
+  ) => Promise<T>,
 ): Promise<T | undefined> {
   if (!keepsAccountOf(deps, user)) {
     return undefined;
   }
   let admin = matrixAdmin(deps);
-  return await withRetries(what, (signal) =>
-    withImpersonatedUser(
-      admin,
-      user,
-      (accessToken) => fn(accessToken, signal),
-      (e: any) =>
-        log.warn(
-          `could not log out a workspace-list token: ${e?.message ?? e}`,
-        ),
-      { signal },
-    ),
+  let deadline = Date.now() + DEADLINE_MS;
+  return await withRetries(
+    what,
+    (signal) =>
+      withImpersonatedUser(
+        admin,
+        user,
+        (accessToken) => fn(accessToken, signal, deadline),
+        (e: any) =>
+          log.warn(
+            `could not log out a workspace-list token: ${e?.message ?? e}`,
+          ),
+        { signal },
+      ),
+    deadline,
   );
+}
+
+// Runs one read-modify-write of the user's list holding their account-data
+// lock, so it never overlaps another edit the realm server makes, on this
+// instance or any other (see `DBAdapter.withAccountDataLock`). Only the read,
+// write and read-back hold it: minting and logging out the token they use
+// don't. The wait counts against the operation's deadline, and one that
+// runs out fails before anything is written.
+//
+// What this doesn't cover: Matrix account data has no compare-and-set, and a
+// client that writes the list straight to Matrix takes no lock. The app and
+// boxel-cli ask the realm server to edit the list (`PATCH /_user-realms`)
+// whenever it keeps one for the user, but a released boxel-cli that predates
+// that endpoint, a user of another homeserver, and a client whose request to
+// the realm server failed all write it themselves, and an edit of theirs
+// that overlaps one of the server's can still drop the other's entry.
+function whileEditing<T>(
+  deps: WorkspaceListDeps,
+  user: string,
+  deadline: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return withWorkspaceListLock(deps.dbAdapter, user, fn, deadline);
+}
+
+// Runs `fn`, an edit of `user`'s account data that the realm server makes
+// some other way than through this module, holding the same lock as the edits
+// here, so the two never overlap. It waits for the lock until `deadline`, and
+// then rejects with `AccountDataLockTimeoutError` without running `fn`.
+export async function withWorkspaceListLock<T>(
+  dbAdapter: DBAdapter,
+  user: string,
+  fn: () => Promise<T>,
+  deadline = Date.now() + DEADLINE_MS,
+): Promise<T> {
+  let lock = dbAdapter.withAccountDataLock?.bind(dbAdapter);
+  return lock ? await lock(user, fn, { deadline }) : await fn();
 }
 
 function keepsAccountOf(deps: WorkspaceListDeps, user: string): boolean {
@@ -211,13 +327,14 @@ function matrixAdmin(deps: WorkspaceListDeps): MatrixAdmin {
 }
 
 // Tries `fn` until it succeeds, it fails in a way that won't pass, or the
-// tries run out, all within `DEADLINE_MS`; `fn`'s requests end when the
-// deadline does.
+// tries run out, all before `deadline` (by default `DEADLINE_MS` from now);
+// `fn`'s requests end when the deadline does.
 async function withRetries<T>(
   what: string,
   fn: (signal: AbortSignal) => Promise<T>,
+  deadline = Date.now() + DEADLINE_MS,
 ): Promise<T> {
-  let signal = AbortSignal.timeout(DEADLINE_MS);
+  let signal = AbortSignal.timeout(Math.max(0, deadline - Date.now()));
   for (let attempt = 1; ; attempt++) {
     try {
       return await fn(signal);

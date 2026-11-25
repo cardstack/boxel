@@ -1136,19 +1136,27 @@ export default class MatrixService extends Service {
     }
   }
 
+  // The realm server edits the list when it keeps one for this user, holding
+  // the same lock as its own edits of it, so the two never overlap. Matrix
+  // account data has no compare-and-set, so the list written here directly,
+  // when the server can't, may still overlap another writer's edit.
   public async appendRealmToAccountData(realmURLString: string) {
-    let { realms = [] } =
-      ((await this.client.getAccountDataFromServer(
-        APP_BOXEL_REALMS_EVENT_TYPE,
-      )) as { realms: string[] }) ?? {};
+    if (
+      !(await this.realmServer.editWorkspaceList({ add: [realmURLString] }))
+    ) {
+      let { realms = [] } =
+        ((await this.client.getAccountDataFromServer(
+          APP_BOXEL_REALMS_EVENT_TYPE,
+        )) as { realms: string[] }) ?? {};
 
-    // Clone the account data instead of using it directly,
-    // since mutating the original object would modify the Matrix client’s store
-    // and prevent updates from being sent back to the server.
-    let newRealms = [...realms, realmURLString];
-    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
-      realms: newRealms,
-    });
+      // Clone the account data instead of using it directly,
+      // since mutating the original object would modify the Matrix client’s store
+      // and prevent updates from being sent back to the server.
+      let newRealms = [...realms, realmURLString];
+      await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+        realms: newRealms,
+      });
+    }
     // The legacy `app.boxel.realms` write above is persistence only. On a
     // trusted-realm-servers session the in-memory list also holds realms
     // granted via `_realm-auth` that the legacy list never contained, so
@@ -1163,16 +1171,21 @@ export default class MatrixService extends Service {
     ]);
   }
 
+  // See appendRealmToAccountData for who writes the list.
   public async removeRealmFromAccountData(realmURLString: string) {
-    let { realms = [] } =
-      ((await this.client.getAccountDataFromServer(
-        APP_BOXEL_REALMS_EVENT_TYPE,
-      )) as { realms: string[] }) ?? {};
+    if (
+      !(await this.realmServer.editWorkspaceList({ remove: [realmURLString] }))
+    ) {
+      let { realms = [] } =
+        ((await this.client.getAccountDataFromServer(
+          APP_BOXEL_REALMS_EVENT_TYPE,
+        )) as { realms: string[] }) ?? {};
 
-    let newRealms = realms.filter((realmURL) => realmURL !== realmURLString);
-    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
-      realms: newRealms,
-    });
+      let newRealms = realms.filter((realmURL) => realmURL !== realmURLString);
+      await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+        realms: newRealms,
+      });
+    }
     // Drop only the removed realm from the current in-memory list; see
     // appendRealmToAccountData for why the legacy list can't be used here.
     await this.realmServer.setAvailableRealmIdentifiers(

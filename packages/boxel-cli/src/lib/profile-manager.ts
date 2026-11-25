@@ -10,6 +10,7 @@ import {
   getRealmServerToken as fetchRealmServerToken,
   getRealmTokens,
   addRealmToMatrixAccountData,
+  editUserRealmsOnRealmServer,
   removeRealmFromMatrixAccountData,
   getUserRealmsFromMatrixAccountData,
   type MatrixAuth,
@@ -17,6 +18,7 @@ import {
 import { promptPassword as defaultPromptPassword } from './prompt.ts';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
 import { realmFetch } from './realm-fetch.ts';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export interface ProfileManagerDeps {
   matrixLogin?: typeof matrixLogin;
@@ -986,15 +988,55 @@ export class ProfileManager implements RealmAuthenticator {
     }
   }
 
+  // The realm server edits the realm list when it keeps one for this user,
+  // holding the same lock as its own edits of it, so the two never overlap;
+  // otherwise the list is written to Matrix here. Matrix account data has no
+  // compare-and-set, so that direct write may still overlap another writer's
+  // edit.
   async addToUserRealms(realmUrl: string): Promise<void> {
+    if (await this.editListOnRealmServer({ add: [realmUrl] })) {
+      return;
+    }
     await this.withMatrixAuthRecovery((auth) =>
       addRealmToMatrixAccountData(auth, realmUrl),
     );
   }
 
+  // True when an entry was removed. Entries are compared with a trailing
+  // slash, so a legacy entry without one goes too.
   async removeFromUserRealms(realmUrl: string): Promise<boolean> {
+    let withSlash = ensureTrailingSlash(realmUrl);
+    let edit = await this.editListOnRealmServer({
+      remove: [...new Set([withSlash, withSlash.replace(/\/$/, ''), realmUrl])],
+    });
+    if (edit) {
+      return edit.removed.length > 0;
+    }
     return this.withMatrixAuthRecovery((auth) =>
       removeRealmFromMatrixAccountData(auth, realmUrl),
+    );
+  }
+
+  private async editListOnRealmServer(edit: {
+    add?: string[];
+    remove?: string[];
+  }) {
+    let active = this.getActiveProfile();
+    if (!active) {
+      return undefined;
+    }
+    return await editUserRealmsOnRealmServer(
+      active.profile.realmServerUrl,
+      async (url, init) => {
+        try {
+          return await this.authedRealmServerFetch(url, init);
+        } catch {
+          // No realm-server token could be had: the list is written to
+          // Matrix instead.
+          return new Response(null, { status: 503 });
+        }
+      },
+      edit,
     );
   }
 

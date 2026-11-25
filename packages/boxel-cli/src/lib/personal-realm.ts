@@ -7,6 +7,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import {
   addRealmToMatrixAccountData,
+  editUserRealmsOnRealmServer,
   getRealmServerToken,
   requireUserRealmsFromMatrixAccountData,
   type MatrixAuth,
@@ -83,7 +84,7 @@ export async function ensurePersonalRealm(
       let realmUrl = errorBody.match(/'(https?:\/\/[^']+)'/)?.[1];
       if (realmUrl) {
         realmUrl = ensureTrailingSlash(realmUrl);
-        await addRealmToMatrixAccountData(auth, realmUrl);
+        await addToRealmList(auth, realmServerUrl, serverToken, realmUrl);
         return { outcome: 'linked', realmUrl };
       }
     }
@@ -100,8 +101,31 @@ export async function ensurePersonalRealm(
     );
   }
   let realmUrl = ensureTrailingSlash(rawRealmUrl);
-  await addRealmToMatrixAccountData(auth, realmUrl);
+  await addToRealmList(auth, realmServerUrl, serverToken, realmUrl);
   return { outcome: 'created', realmUrl };
+}
+
+// The realm server adds the realm when it keeps the account's realm list,
+// so the edit never overlaps one the server makes itself; otherwise it is
+// written to Matrix here.
+async function addToRealmList(
+  auth: MatrixAuth,
+  realmServerUrl: string,
+  serverToken: string,
+  realmUrl: string,
+) {
+  let edit = await editUserRealmsOnRealmServer(
+    realmServerUrl,
+    (url, init) => {
+      let headers = new Headers(init.headers);
+      headers.set('Authorization', serverToken);
+      return fetch(url, { ...init, headers });
+    },
+    { add: [realmUrl] },
+  );
+  if (!edit) {
+    await addRealmToMatrixAccountData(auth, realmUrl);
+  }
 }
 
 function localpart(userId: string): string {

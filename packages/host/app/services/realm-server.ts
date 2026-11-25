@@ -338,6 +338,52 @@ export default class RealmServerService
     return new URL(realmURL);
   }
 
+  // Asks this realm server to add realms to the user's workspace list
+  // (`app.boxel.realms`) and remove realms from it. The server makes the edit
+  // holding the user's account-data lock, so it never overlaps an edit the
+  // server makes itself, as a write of the list straight to Matrix could.
+  // True when the server made the edit. False when the caller should write
+  // the list itself: the server keeps no list for this user (404, a user of
+  // another homeserver), or the request failed. Each edit adds a realm only
+  // when it's missing and removes one only when it's there, so writing the
+  // list after a failed request is safe even when the server made part of the
+  // edit.
+  async editWorkspaceList(edit: {
+    add?: string[];
+    remove?: string[];
+  }): Promise<boolean> {
+    try {
+      await this.login();
+      let response = await this.network.fetch(`${this.url.href}_user-realms`, {
+        method: 'PATCH',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          data: { type: 'user-realms', attributes: edit },
+        }),
+      });
+      if (response.ok) {
+        return true;
+      }
+      if (response.status !== 404) {
+        console.warn(
+          `The realm server could not edit the workspace list, so the app writes it itself: ${
+            response.status
+          } - ${await response.text()}`,
+        );
+      }
+    } catch (e) {
+      console.warn(
+        'The realm server could not be asked to edit the workspace list, so the app writes it itself',
+        e,
+      );
+    }
+    return false;
+  }
+
   async deleteRealm(realmURL: string) {
     await this.login();
 

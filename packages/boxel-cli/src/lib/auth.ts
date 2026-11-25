@@ -393,6 +393,60 @@ async function readUserRealmsFromMatrixAccountData(
   }
 }
 
+// Asks the realm server to add realms to the user's realm list
+// (`app.boxel.realms`) and remove realms from it. The server makes the edit
+// holding the user's account-data lock, so it never overlaps an edit the
+// server makes itself (creating or deleting a workspace for an OAuth caller,
+// a permission change), as a write straight to Matrix could. Answers which
+// realms the edit actually added and removed, or undefined when the caller
+// should write the list itself: the server keeps no list for this user (404,
+// a user of another homeserver), or the request failed. Each edit adds a
+// realm only when it's missing and removes one only when it's there, so
+// writing the list after a failed request is safe even when the server made
+// part of the edit.
+//
+// `fetchFn` sends the request with the caller's realm-server token.
+export async function editUserRealmsOnRealmServer(
+  realmServerUrl: string,
+  fetchFn: (url: string, init: RequestInit) => Promise<Response>,
+  edit: { add?: string[]; remove?: string[] },
+): Promise<{ added: string[]; removed: string[] } | undefined> {
+  let response: Response;
+  try {
+    response = await fetchFn(
+      `${realmServerUrl.replace(/\/$/, '')}/_user-realms`,
+      {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.api+json',
+          'Content-Type': 'application/vnd.api+json',
+        },
+        body: JSON.stringify({
+          data: { type: 'user-realms', attributes: edit },
+        }),
+      },
+    );
+  } catch {
+    return undefined;
+  }
+  if (!response.ok) {
+    return undefined;
+  }
+  try {
+    let body = (await response.json()) as {
+      data?: { attributes?: { added?: unknown; removed?: unknown } };
+    };
+    let { added, removed } = body.data?.attributes ?? {};
+    return {
+      added: Array.isArray(added) ? (added as string[]) : [],
+      removed: Array.isArray(removed) ? (removed as string[]) : [],
+    };
+  } catch {
+    // The server made the edit; only its account of it is unreadable.
+    return { added: [], removed: [] };
+  }
+}
+
 export async function addRealmToMatrixAccountData(
   matrixAuth: MatrixAuth,
   realmUrl: string,
