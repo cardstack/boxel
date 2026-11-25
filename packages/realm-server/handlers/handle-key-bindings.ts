@@ -4,7 +4,6 @@ import {
   reportAutomationChanges,
   rri,
   trimExecutableExtension,
-  type RealmResourceIdentifier,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { realmServerAutomationChangeReporter } from '../lib/run-change-reporter.ts';
@@ -42,6 +41,7 @@ import {
   automationsWaitingForKeyApproval,
   followAutomationKeyApprovals,
   followEndedKeyApprovals,
+  reportKeyApprovalChanges,
 } from '../lib/automation-key-approvals.ts';
 import { getAutomation } from '@cardstack/runtime-common/automations';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
@@ -277,28 +277,20 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
       realmURL,
       await automationsWaitingForKeyApproval(args.dbAdapter, realmURL, args),
     );
-    // The automation the confirmation approves has a new approval whether
-    // or not its state moved: one that still waits on another key's owner
-    // is told too, so its card shows the approval without a reload. One
-    // whose state the follow moved, or whose approval the confirmation
-    // ended, was reported already.
-    if (
-      automation &&
-      !affected.some((a) => a.automationId === automation.automationId) &&
-      followed.get(automation.automationId)?.kind !== 'approved' &&
-      followed.get(automation.automationId)?.kind !== 'waiting'
-    ) {
-      let row = await getAutomation(
-        args.dbAdapter,
-        automation.automationId as RealmResourceIdentifier,
-      );
-      if (row) {
-        await reportAutomationChanges(
-          realmServerAutomationChangeReporter(args),
-          [row],
-        );
-      }
-    }
+    // A confirmation changes the key approvals the realm's automations show
+    // whether or not an automation's state moved (one approval of several
+    // landing, a binding approved again after a change), so the realm's
+    // direct writers are told of each automation not reported above.
+    await reportKeyApprovalChanges(
+      args,
+      [realmURL.href],
+      new Set([
+        ...affected.map((a) => a.automationId),
+        ...[...followed]
+          .filter(([, { kind }]) => kind !== 'unchanged')
+          .map(([id]) => id),
+      ]),
+    );
     await sendJSON(ctxt, 201, {
       data: approved.map((a) => serializeApproved(args.virtualNetwork, a)),
       meta: { batchId },

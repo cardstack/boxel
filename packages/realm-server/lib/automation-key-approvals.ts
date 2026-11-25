@@ -325,14 +325,17 @@ async function slotKeyApproval(
     if (kind === 'userKey') {
       return { slot, kind, state: 'waiting', keyOwner: payer };
     }
-    // The owner of a share's key approves the slot with that share. When
-    // every share in the realm holds one person's key, that person is the
-    // one who acts.
-    let owners = await query(dbAdapter, [
-      'SELECT DISTINCT owner FROM key_shares WHERE realm_url = ',
-      param(realmURL),
-      " AND state = 'active' AND key_id IS NOT NULL",
-    ]);
+    // The owner of a share's key approves the slot with that share, as
+    // `shareApprover` counts shares: an active one whose key a call can send
+    // (`sendableKeySql`; a share of a sign-in app is never one). When every
+    // such share holds one person's key, that person is the one who acts.
+    let owners = (
+      await query(dbAdapter, [
+        'SELECT DISTINCT owner FROM key_shares WHERE realm_url = ',
+        param(realmURL),
+        ` AND state = 'active' AND key_id IS NOT NULL AND ${sendableKeySql('key_id')}`,
+      ])
+    ).map((row) => String(row.owner));
     if (owners.length === 0) {
       return { slot, kind, state: 'no-share', keyOwner: null };
     }
@@ -340,7 +343,8 @@ async function slotKeyApproval(
       slot,
       kind,
       state: 'waiting',
-      keyOwner: owners.length === 1 ? String(owners[0].owner) : null,
+      keyOwner: owners.length === 1 ? owners[0] : null,
+      shareOwners: owners,
     };
   }
   let keyOwner = binding.share_id
@@ -349,7 +353,7 @@ async function slotKeyApproval(
   let sent: Pick<SlotKeyApproval, 'share' | 'key'> = {};
   if (binding.share_id) {
     let [share] = await query(dbAdapter, [
-      'SELECT id, label, state FROM key_shares WHERE id = ',
+      'SELECT id, label, state, suspension_reason, suspended_by FROM key_shares WHERE id = ',
       param(binding.share_id),
     ]);
     if (share) {
@@ -357,6 +361,12 @@ async function slotKeyApproval(
         id: String(share.id),
         label: String(share.label),
         state: String(share.state),
+        ...(share.suspension_reason
+          ? { suspensionReason: String(share.suspension_reason) }
+          : {}),
+        ...(share.suspended_by
+          ? { suspendedBy: String(share.suspended_by) }
+          : {}),
       };
     }
   } else if (binding.key_id) {
@@ -453,4 +463,54 @@ async function shareNamed(
     param(id),
   ])) as unknown as ShareRow[];
   return rows.map(shareOf);
+}
+
+// Tells the realm's direct writers that the key approvals of the automations
+// in the realms at `realmURLs` may have changed although no automation's
+// state moved: a share was added or suspended, a key was replaced or
+// reconnected, or a binding was approved. The Automation card's key
+// approvals section re-reads its status on the `automation` event, so the
+// change shows without a reload. `except` names automations already
+// reported for the same change.
+export async function reportKeyApprovalChanges(
+  args: Pick<CreateRoutesArgs, 'dbAdapter' | 'virtualNetwork'> &
+    Parameters<typeof realmServerAutomationChangeReporter>[0],
+  realmURLs: readonly string[],
+  except: ReadonlySet<string> = new Set(),
+): Promise<void> {
+  let realms = [...new Set(realmURLs)].map((url) =>
+    args.virtualNetwork.unresolveURL(url),
+  );
+  if (realms.length === 0) {
+    return;
+  }
+  let rows = await query(args.dbAdapter, [
+    'SELECT automation_id, realm FROM automations WHERE realm IN (',
+    ...realms.flatMap((realm, i) => [...(i ? [','] : []), param(realm)]),
+    ') ORDER BY automation_id',
+  ]);
+  await reportAutomationChanges(
+    realmServerAutomationChangeReporter(args),
+    rows
+      .filter((row) => !except.has(String(row.automation_id)))
+      .map((row) => ({
+        automationId: row.automation_id as RealmResourceIdentifier,
+        realm: row.realm as ChangedAutomation['realm'],
+      })),
+  );
+}
+
+// The realms whose bindings send the key `keyId`, directly or through a
+// share that holds it.
+export async function realmsBoundToKey(
+  dbAdapter: DBAdapter,
+  keyId: string,
+): Promise<string[]> {
+  let rows = await query(dbAdapter, [
+    'SELECT DISTINCT b.realm_url FROM key_bindings b LEFT JOIN key_shares s ON s.id = b.share_id WHERE b.key_id = ',
+    param(keyId),
+    ' OR s.key_id = ',
+    param(keyId),
+  ]);
+  return rows.map((row) => String(row.realm_url));
 }

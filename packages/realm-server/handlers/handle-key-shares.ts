@@ -3,6 +3,7 @@ import {
   automationsWaitingForKeyApproval,
   followAutomationKeyApprovals,
   followEndedKeyApprovals,
+  reportKeyApprovalChanges,
 } from '../lib/automation-key-approvals.ts';
 import {
   logger,
@@ -257,6 +258,8 @@ export function handleShareKey(args: CreateRoutesArgs): Handler {
       opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       ticket,
     });
+    // A new share can fill an automation's `{{apiKey}}` slot that had none.
+    await reportKeyApprovalChanges(args, [share.realm]);
     await sendJSON(ctxt, 201, { data: serialize(share) });
   });
 }
@@ -275,15 +278,16 @@ export function handleUnshareKey(args: CreateRoutesArgs): Handler {
   });
 }
 
-export function handleSuspendKeyShare({
-  dbAdapter,
-}: CreateRoutesArgs): Handler {
+export function handleSuspendKeyShare(args: CreateRoutesArgs): Handler {
+  let { dbAdapter } = args;
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     let share = await suspendShare(dbAdapter, {
       user,
       shareId: ctxt.params.shareId,
     });
+    // The automations whose slots the share fills show it suspended.
+    await reportKeyApprovalChanges(args, [share.realm]);
     await sendJSON(ctxt, 200, { data: serialize(share) });
   });
 }

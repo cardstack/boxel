@@ -138,8 +138,20 @@ export interface SlotKeyApproval {
   // share in the realm for an unbound `{{apiKey}}` slot, and null when no
   // one person can.
   keyOwner: string | null;
-  // The share the binding sends, for an `{{apiKey}}` slot.
-  share?: { id: string; label: string; state: string };
+  // The share the binding sends, for an `{{apiKey}}` slot, and, for a
+  // suspended one, why: `suspended-by-writer` (a realm administrator,
+  // `suspendedBy`, suspended the share), `owner-lost-write` (the key's owner
+  // is no longer a realm administrator) or `key-deleted`.
+  share?: {
+    id: string;
+    label: string;
+    state: string;
+    suspensionReason?: string;
+    suspendedBy?: string;
+  };
+  // For an unbound `{{apiKey}}` slot, the owner of each share in the realm
+  // whose key a call can send: each of them can approve the slot.
+  shareOwners?: string[];
   // The personal key the binding sends, for a `{{userKey}}` slot.
   key?: { id: string; name: string };
   // ISO time the key's owner approved the automation's current version to

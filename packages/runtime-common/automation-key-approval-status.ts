@@ -4,8 +4,10 @@
 // (`SlotKeyApprovalState`), and who acts to fix it.
 //
 // A slot the viewer can fix names the secure window page that fixes it
-// (`fix`). A slot someone else must fix says who (`actor`): the key's owner,
-// or a realm administrator. The key's owner is named by Matrix id only as
+// (`fix`). A slot someone else must fix says so (`actor: 'key-owner'`). Every
+// fix that isn't the key owner's is one any realm administrator can make, and
+// every viewer of the route is one, so no slot names a realm administrator as
+// the actor. The key's owner is named by Matrix id only as
 // ADR 011 lets the viewer see them: a share's owner when a permission row of
 // the automation's realm names both of them, as the realm's key-share
 // listings name a share's owner; a personal key's owner, who is the payer, as
@@ -40,17 +42,25 @@ export type KeyApprovalFix =
   | 'swap-key'
   | 'share-key';
 
-// Who fixes a slot the viewer can't: the owner of the key the slot sends
-// (`key-owner`), or any realm administrator (`realm-administrator`).
-export type KeyApprovalActor = 'key-owner' | 'realm-administrator';
+// Who fixes a slot the viewer can't: the owner of the key the slot sends.
+export type KeyApprovalActor = 'key-owner';
 
 export interface SlotKeyApprovalStatus {
   slot: string;
   kind: 'userKey' | 'apiKey';
   state: SlotKeyApprovalState;
   // The share the slot sends, by its label, which every realm administrator
-  // sees.
-  share?: { id: string; label: string };
+  // sees, and for a suspended share why (`suspensionReason`) and, for a
+  // suspension a realm administrator made, who (`suspendedBy`, the Matrix id
+  // as ADR 011 lets the viewer see it in the realm, else null;
+  // `suspendedByViewer` when the viewer made it).
+  share?: {
+    id: string;
+    label: string;
+    suspensionReason?: string;
+    suspendedBy?: string | null;
+    suspendedByViewer?: boolean;
+  };
   // The personal key the slot sends, by its name, shown only to the key's
   // owner.
   key?: { name: string };
@@ -108,14 +118,11 @@ export async function keyApprovalStatus(
     }
     return known;
   };
-  let viewerShares: Promise<boolean> | undefined;
-  let viewerOwnsAShare = () =>
-    (viewerShares ??= ownsAShare(dbAdapter, realmURL, viewer));
   let operations: OperationKeyApprovalStatus[] = [];
   for (let operation of approvals.operations) {
     let slots: SlotKeyApprovalStatus[] = [];
     for (let slot of operation.slots ?? []) {
-      slots.push(await slotStatus(slot, { viewer, show, viewerOwnsAShare }));
+      slots.push(await slotStatus(slot, { viewer, show }));
     }
     operations.push({
       operation: operation.operation,
@@ -133,11 +140,9 @@ async function slotStatus(
   {
     viewer,
     show,
-    viewerOwnsAShare,
   }: {
     viewer: string;
     show: (person: string, kind: { share: boolean }) => Promise<string | null>;
-    viewerOwnsAShare: () => Promise<boolean>;
   },
 ): Promise<SlotKeyApprovalStatus> {
   let viewerIsKeyOwner = slot.keyOwner === viewer;
@@ -146,7 +151,23 @@ async function slotStatus(
     kind: slot.kind,
     state: slot.state,
     ...(slot.share
-      ? { share: { id: slot.share.id, label: slot.share.label } }
+      ? {
+          share: {
+            id: slot.share.id,
+            label: slot.share.label,
+            ...(slot.share.suspensionReason
+              ? { suspensionReason: slot.share.suspensionReason }
+              : {}),
+            ...(slot.share.suspendedBy
+              ? {
+                  suspendedBy: await show(slot.share.suspendedBy, {
+                    share: true,
+                  }),
+                  suspendedByViewer: slot.share.suspendedBy === viewer,
+                }
+              : {}),
+          },
+        }
       : {}),
     ...(slot.key && viewerIsKeyOwner ? { key: { name: slot.key.name } } : {}),
     viewerIsKeyOwner,
@@ -162,11 +183,11 @@ async function slotStatus(
       return status;
     case 'waiting':
       // An `{{apiKey}}` slot no share fills yet is approved with a share by
-      // the owner of its key, so any viewer who owns a share in the realm
-      // can approve it.
+      // the owner of its key, so a viewer who owns a share a call can send
+      // there (`shareOwners`) can approve it.
       if (slot.keyOwner === null) {
-        return (await viewerOwnsAShare())
-          ? { ...status, fix: 'approve' }
+        return slot.shareOwners?.includes(viewer)
+          ? { ...status, viewerIsKeyOwner: true, fix: 'approve' }
           : { ...status, actor: 'key-owner' };
       }
       return byKeyOwner('approve');
@@ -203,19 +224,4 @@ async function namedInRealm(
     ')',
   ]);
   return rows.length === 2 ? person : null;
-}
-
-async function ownsAShare(
-  dbAdapter: DBAdapter,
-  realmURL: string,
-  viewer: string,
-): Promise<boolean> {
-  let rows = await query(dbAdapter, [
-    'SELECT 1 FROM key_shares WHERE realm_url =',
-    param(realmURL),
-    'AND owner =',
-    param(viewer),
-    "AND state = 'active' AND key_id IS NOT NULL LIMIT 1",
-  ]);
-  return rows.length > 0;
 }

@@ -2942,7 +2942,14 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('an approved share names the share and its owner', async function (assert) {
       let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
-      await approveSharedFor(SHARED, shown.version);
+      let sent = await automationEventsDuring(() =>
+        approveSharedFor(SHARED, shown.version),
+      );
+      assert.deepEqual(
+        sent.filter((id) => id === automationId(SHARED)),
+        [automationId(SHARED)],
+        'an approval that makes the automation active is reported once',
+      );
       await reachesState(SHARED, 'active');
       assert.deepEqual(slotsOf(await statusKeyApprovals(SHARED)), [
         {
@@ -2983,14 +2990,33 @@ module(basename(import.meta.filename), function (hooks) {
     test('a suspended share links any realm administrator to swap a key in', async function (assert) {
       let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
       let share = await approveSharedFor(SHARED, shown.version);
-      let suspended = await request
-        .post(`/_key-shares/${share.id}/suspend`)
-        .set('Authorization', auth(OWNER));
-      assert.strictEqual(suspended.status, 200, suspended.text);
+      let sent = await automationEventsDuring(async () => {
+        let suspended = await request
+          .post(`/_key-shares/${share.id}/suspend`)
+          .set('Authorization', auth(OWNER));
+        assert.strictEqual(suspended.status, 200, suspended.text);
+      });
+      assert.deepEqual(
+        sent.filter((id) => id === automationId(SHARED)),
+        [automationId(SHARED)],
+        'suspending the share tells the realm’s direct writers once',
+      );
       let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
       assert.deepEqual(
         [slots[0].state, slots[0].share, slots[0].fix],
         ['share-suspended', 'Vendor automation-routes-writer', 'swap-key'],
+      );
+      let [full] = (await statusKeyApprovals(SHARED, OWNER)).operations;
+      assert.deepEqual(
+        full.slots[0].share,
+        {
+          id: share.id,
+          label: 'Vendor automation-routes-writer',
+          suspensionReason: 'suspended-by-writer',
+          suspendedBy: OWNER,
+          suspendedByViewer: true,
+        },
+        'the slot says why the share is suspended, and who suspended it',
       );
     });
 
@@ -3018,6 +3044,12 @@ module(basename(import.meta.filename), function (hooks) {
         keyApprovals.approved,
         'a rejected key ends no approval, so the automation is still approved',
       );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(KEYED, WRITER));
+      assert.deepEqual(
+        [slots[0].state, slots[0].fix, slots[0].actor, slots[0].keyOwner],
+        ['key-rejected', undefined, 'key-owner', OWNER],
+        'another realm administrator is told the key’s owner replaces the key',
+      );
     });
 
     test('an {{apiKey}} slot with no share links any realm administrator to share a key', async function (assert) {
@@ -3037,6 +3069,65 @@ module(basename(import.meta.filename), function (hooks) {
           ],
         },
       ]);
+    });
+
+    test('sharing a key tells the realm’s direct writers, and the slot then waits on the share’s owner', async function (assert) {
+      await switchOn(OWNER, SHARED);
+      await shareOwnKey(WRITER);
+      let key = await addKey(OWNER, 'second');
+      let routeSent = await automationEventsDuring(async () => {
+        let shared = await request
+          .post('/_key-shares')
+          .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+          .set('Origin', secureOriginURL.origin)
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'key-share',
+              attributes: {
+                realm: realmURL.href,
+                keyId: key.id,
+                label: 'Owner vendor',
+              },
+            },
+            meta: {
+              ticket: await keyWriteTicket(OWNER, 'share', { keyId: key.id }),
+            },
+          });
+        assert.strictEqual(shared.status, 201, shared.text);
+      });
+      assert.deepEqual(
+        routeSent.filter((id) => id === automationId(SHARED)),
+        [automationId(SHARED)],
+        'sharing a key through the route tells the realm’s direct writers once',
+      );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.deepEqual(
+        [
+          slots[0].state,
+          slots[0].keyOwner,
+          slots[0].viewerIsKeyOwner,
+          slots[0].fix,
+          slots[0].actor,
+        ],
+        ['waiting', null, true, 'approve', undefined],
+        'with shares of two people, no one owner is named, and the viewer who owns one approves',
+      );
+    });
+
+    test('a share of a sign-in app is no share an automation can send', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      await dbAdapter.execute(
+        `INSERT INTO oauth_clients (key_id, client_id, grant_type, token_url, token_auth) VALUES ($1, 'sign-in', 'authorization_code', $2, 'client_secret_post')`,
+        { bind: [share.keyId!, `${VENDOR}/token`] },
+      );
+      await switchOn(OWNER, SHARED);
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, WRITER));
+      assert.deepEqual(
+        [slots[0].state, slots[0].fix],
+        ['no-share', 'share-key'],
+        'the app’s owner is offered no approval the approve page has nothing for',
+      );
     });
 
     test('a key’s owner who shares no realm grant with the viewer is not named (ADR 011)', async function (assert) {
@@ -3091,9 +3182,10 @@ module(basename(import.meta.filename), function (hooks) {
         'waiting-for-key-approval',
         'the shared operation still waits',
       );
-      assert.true(
-        sent.includes(automationId(KEYED_AND_SHARED)),
-        `an automation event names the automation: ${JSON.stringify(sent)}`,
+      assert.deepEqual(
+        sent.filter((id) => id === automationId(KEYED_AND_SHARED)),
+        [automationId(KEYED_AND_SHARED)],
+        `one automation event names the automation: ${JSON.stringify(sent)}`,
       );
       assert.deepEqual(
         slotsOf(await statusKeyApprovals(KEYED_AND_SHARED)).map(
