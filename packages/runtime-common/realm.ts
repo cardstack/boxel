@@ -9963,9 +9963,18 @@ export class Realm {
       // new content up on their next load rather than reset their loader
       // mid-session (see `fromScratchAnnounces`).
       let realmEvents = isNewIndex;
-      let promise = this.#realmIndexUpdater.fullIndex(priority, {
-        realmEvents,
-      });
+      // Renders during the pass can read and cache answers from a realm with
+      // no index yet, such as the route tree before realm.json is indexed,
+      // so the pass ends by dropping this realm's index caches, as
+      // `fullIndex()` does. Only the local caches: the index job already
+      // sends realm_index_updated to every replica when it swaps the index,
+      // but that notification reaches no one where the database adapter has
+      // no notify (the browser's SQLite realm), and this process must not
+      // depend on it to stop serving what it cached during the pass.
+      // `fullIndex` here never rejects: it logs a failed pass.
+      let promise = this.#realmIndexUpdater
+        .fullIndex(priority, { realmEvents })
+        .then(() => this.clearRealmIndexCaches());
       if (isNewIndex) {
         // we only await the full indexing at boot if this is a brand new
         // index, so this event follows the pass
@@ -22610,13 +22619,24 @@ export class Realm {
   // couldn't be read then was dropped with a `type-unavailable` warning.
   // Kept until the next index. When the index can't be read, this rejects
   // with a `HostRoutesReadError`, and nothing is kept: an empty tree would
-  // read as a realm with no routes.
+  // read as a realm with no routes. When the index stores no tree, the
+  // answer is the fallback `#readHostRoutes` builds, which is temporary by
+  // design (an index of realm.json is on its way, or realm.json isn't indexed
+  // yet), so it isn't kept either: callers that share the read get it, and
+  // the next read asks the index again.
   async getHostRoutes(): Promise<HostRoutesValidation> {
     let cached = this.#cachedHostRoutes;
     if (cached) {
       return await cached;
     }
-    let read = this.#readHostRoutes();
+    let read: Promise<HostRoutesValidation> = this.#readHostRoutes().then(
+      ({ validation, stored }) => {
+        if (!stored && this.#cachedHostRoutes === read) {
+          this.#cachedHostRoutes = undefined;
+        }
+        return validation;
+      },
+    );
     this.#cachedHostRoutes = read;
     try {
       return await read;
@@ -22628,7 +22648,12 @@ export class Realm {
     }
   }
 
-  async #readHostRoutes(): Promise<HostRoutesValidation> {
+  async #readHostRoutes(): Promise<{
+    validation: HostRoutesValidation;
+    // Whether the answer is the tree the index stores, and not the fallback
+    // built from realm.json's rules when it stores none.
+    stored: boolean;
+  }> {
     let stored: StoredHostRoutes | undefined;
     let rules: RawHostRoutingRule[] = [];
     try {
@@ -22649,7 +22674,10 @@ export class Realm {
         // realm for a long time, so an index of realm.json reads it again.
         this.#indexRealmConfigForHostRoutes();
       }
-      return { routes: stored.routes, warnings: stored.warnings };
+      return {
+        validation: { routes: stored.routes, warnings: stored.warnings },
+        stored: true,
+      };
     }
     // An index written before the index stored host routes. Its rules are
     // validated without type definitions, so each field-match route is
@@ -22659,10 +22687,13 @@ export class Realm {
     if (hostRouteTypeRefs(rules).length > 0) {
       this.#indexRealmConfigForHostRoutes();
     }
-    return validateHostRoutes(rules, {
-      realmURL: new URL(this.url),
-      lookupType: () => 'unavailable',
-    });
+    return {
+      validation: validateHostRoutes(rules, {
+        realmURL: new URL(this.url),
+        lookupType: () => 'unavailable',
+      }),
+      stored: false,
+    };
   }
 
   // Starts an index of realm.json, which stores the host routes with the
