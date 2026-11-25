@@ -9,6 +9,7 @@ const COMMAND = '@cardstack/boxel-host/commands/get-card-type-schema/default';
 
 function clientAnswering(respond: () => Promise<Response>): BoxelCLIClient {
   return new BoxelCLIClient({
+    getActiveProfile: () => null,
     authedRealmServerFetch: () => respond(),
   } as unknown as ProfileManager);
 }
