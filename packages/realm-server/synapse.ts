@@ -1,47 +1,28 @@
 /* eslint-env node */
 import fsExtra from 'fs-extra';
 const { readFileSync } = fsExtra;
-import { resolve, join } from 'path';
+import { join } from 'path';
 import { createHmac } from 'crypto';
 import yaml from 'yaml';
 import { existsSync } from 'fs';
-import { sanitizeSlug } from '../../scripts/env-slug.js';
+import { synapseDataDir } from '../../scripts/synapse-data-dir.js';
 import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
 } from '@cardstack/runtime-common';
 import { SERVER_MATRIX_DEVICE_ID } from '@cardstack/runtime-common/matrix-client';
 
+// In environment mode, the environment's own synapse config, also when its
+// synapse hasn't written it yet: a missing file means an empty registration
+// secret, which the realm server refuses to start with, and never another
+// homeserver's secret. The directory name goes through the shared slug helper,
+// which caps the slug at the 63 characters a DNS label allows, the same cap the
+// stack applies when it names the directory. Outside environment mode, the
+// machine-wide dev synapse mounts the main checkout's data directory, also when
+// a linked worktree started it, so the live registration secret is there and
+// not in this checkout.
 function homeserverFile(): string {
-  if (process.env.BOXEL_ENVIRONMENT) {
-    // Through the shared helper, which caps the slug at the 63 characters a
-    // DNS label allows — the same cap the stack applies when it names this
-    // directory. Recomputing it here without the cap silently misses the
-    // directory for any branch longer than that, and an empty registration
-    // secret is what the realm server reports instead.
-    let slug = sanitizeSlug(process.env.BOXEL_ENVIRONMENT);
-    let branchFile = resolve(
-      join(
-        import.meta.dirname,
-        '..',
-        'matrix',
-        `synapse-data-${slug}`,
-        'homeserver.yaml',
-      ),
-    );
-    if (existsSync(branchFile)) {
-      return branchFile;
-    }
-  }
-  return resolve(
-    join(
-      import.meta.dirname,
-      '..',
-      'matrix',
-      'synapse-data',
-      'homeserver.yaml',
-    ),
-  );
+  return join(synapseDataDir(), 'homeserver.yaml');
 }
 
 export function getLocalConfig() {

@@ -17,6 +17,7 @@
 
 import {
   automationRef,
+  MANUAL_RUN_TRIGGER,
   readAutomationDeclaration,
   type AutomationCaps,
   type AutomationDeclaration,
@@ -24,7 +25,12 @@ import {
   type AutomationProblem,
 } from './automation-declaration.ts';
 import type { ReportRunChange } from './automation-run-events.ts';
-import { getAutomation, type AutomationCapsSnapshot } from './automations.ts';
+import type { ReportAutomationChange } from './automation-change-events.ts';
+import {
+  getAutomation,
+  waitForKeyApproval,
+  type AutomationCapsSnapshot,
+} from './automations.ts';
 import {
   addAutomationRunCounts,
   countAutomationRunCall,
@@ -311,13 +317,17 @@ export function automationRunCallApiMeter({
   virtualNetwork,
   run,
   reportRunChange,
+  reportAutomationChange,
 }: {
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   run: LimitedRun;
-  // Told when a call ends the run at a cap.
+  // Told when a call ends the run at a cap, or on a key approval it lacks.
   reportRunChange?: ReportRunChange;
+  // Told when a call's refusal moves the automation to waiting for key
+  // approval.
+  reportAutomationChange?: ReportAutomationChange;
 }): CallApiRunMeter {
   let limits: Promise<RunLimitsRead> | undefined;
   let declared = async (): Promise<RunLimits> => {
@@ -407,6 +417,40 @@ export function automationRunCallApiMeter({
     async isRunning() {
       let current = await getAutomationRun(dbAdapter, run.runId);
       return current?.state === 'running' && current.attempt === run.attempt;
+    },
+    async endOnKeyApproval(refusal) {
+      let ended = await finishAutomationRun(dbAdapter, run.runId, run.attempt, {
+        state: 'error',
+        reason: refusal.code,
+        message: refusal.detail,
+      });
+      if (!ended) {
+        log.info(
+          `run ${run.runId} attempt ${run.attempt} of ${run.automationId} was refused a key approval (${refusal.code}) after it stopped running`,
+        );
+        return;
+      }
+      log.info(
+        `run ${run.runId} attempt ${run.attempt} of ${run.automationId} ended on a key approval it lacks (${refusal.code})`,
+      );
+      // Only a run of the automation's triggers that acts as its payer speaks
+      // for the automation's approvals, as at admission; a Preview or a Run
+      // now leaves it as it is.
+      if (ended.trigger === MANUAL_RUN_TRIGGER) {
+        return;
+      }
+      try {
+        await waitForKeyApproval(
+          dbAdapter,
+          run.automationId,
+          { payer: ended.actsAs },
+          { reportRunChange, reportAutomationChange },
+        );
+      } catch (e: any) {
+        log.error(
+          `run ${run.runId}: couldn't move automation ${run.automationId} to waiting for key approval: ${e?.message ?? e}`,
+        );
+      }
     },
     async endOnCredential(refusal, subject) {
       let ended = await finishAutomationRun(dbAdapter, run.runId, run.attempt, {

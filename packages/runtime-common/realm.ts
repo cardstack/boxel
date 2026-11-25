@@ -215,7 +215,6 @@ import {
   type RunTokenClaim,
 } from './run-token.ts';
 import { automationRef } from './automation-declaration.ts';
-import { MANUAL_RUN_TRIGGER } from './automation-declaration.ts';
 import {
   addAutomationRunCounts,
   automationRunForCall,
@@ -14014,6 +14013,8 @@ export class Realm {
         virtualNetwork: this.#virtualNetwork,
         run,
         reportRunChange: (runId) => this.reportRunChange(runId),
+        reportAutomationChange: (automation) =>
+          this.reportAutomationChange(automation),
       });
       this.#callApiRunMeters.set(requestContext, meter);
     }
@@ -15333,7 +15334,13 @@ export class Realm {
   // Checks each operation the run's automation declares as the run's
   // identity, without opening any key (`CallApiSender.admitAutomation`), and
   // answers the first refusal, or none (see `automation-admission-route.ts`).
-  // A refused credential that ends the run is recorded on its row.
+  // Each slot is held to the run as its calls are: a run of the automation's
+  // triggers, or a batch's follow-up of one, needs each binding's approval for
+  // this automation, matching the version the run's attempt read and recorded
+  // on its row (ADR 039 §1.7), and a Preview or a Run now a key its identity
+  // owns, an interactive binding or such an approval. The operations checked
+  // are those the attempt recorded with that version. A refused credential
+  // that ends the run is recorded on its row.
   private async admitRunOperations(
     _request: Request,
     requestContext: RequestContext,
@@ -15385,10 +15392,17 @@ export class Realm {
         refusal: { code: 'not-an-automation', detail: limits.message },
       });
     }
+    // The operations the attempt read, with the version it read: an edit
+    // landing after the attempt's read neither adds an operation the run
+    // never read nor drops one it did.
+    let operations =
+      (await getAutomationRun(this.#dbAdapter, call.runId))
+        ?.versionOperations ?? limits.operations;
     let refusal = await this.#declaredOperationRefusal(
       admit,
-      limits.operations,
+      operations,
       call.actsAs,
+      call.runId,
       async (refused) => {
         // A credential only a person can fix is recorded on the run, with
         // the share or key the refused slot is filled from, before the
@@ -15407,41 +15421,7 @@ export class Realm {
     if (refusal) {
       return answer({ refusal });
     }
-    // A run of the automation's triggers, or a batch's follow-up of one,
-    // also needs each binding's approval for this automation, matching it as
-    // its card and script read now (ADR 039 §1.7). The run's own row says
-    // which kind it is; only a Preview or a Run now needs no automation
-    // approval.
-    let run = await getAutomationRun(this.#dbAdapter, call.runId);
-    if (run && run.trigger !== MANUAL_RUN_TRIGGER) {
-      let read = await readRunDeclaration({
-        dbAdapter: this.#dbAdapter,
-        definitionLookup: this.#definitionLookup,
-        virtualNetwork: this.#virtualNetwork,
-        automationId: call.automationId,
-      });
-      let approvals = read.ok
-        ? await this.checkAutomationKeyApprovals({
-            automationId: call.automationId,
-            declaration: read.declaration,
-            payer: call.actsAs,
-          })
-        : undefined;
-      if (approvals && !approvals.approved) {
-        let operation = approvals.operations.find(
-          ({ state }) => state === 'missing',
-        )!;
-        return answer({
-          refusal: {
-            code: 'key-approval-ended',
-            detail: `a key approval this automation needs for operation "${operation.operation}" ended, or the automation changed since its key's owner approved it, so the run waits until it is approved again`,
-            operation: operation.operation,
-            targetType: operation.targetType,
-          },
-        });
-      }
-    }
-    return answer({ refusal: null, operations: limits.operations.length });
+    return answer({ refusal: null, operations: operations.length });
   }
 
   // Checks each operation the automation declares for the key approvals a
@@ -15743,6 +15723,7 @@ export class Realm {
       declaration.operations,
       payer,
       undefined,
+      undefined,
       passOver,
     );
     return refusal
@@ -15751,12 +15732,14 @@ export class Realm {
   }
 
   // The first of `operations` that `payer` may not invoke as an automation
-  // call, as `admit` answers, told to `onRefused` before it is answered. A
-  // refusal whose code `passOver` names is skipped.
+  // call, as `admit` answers, told to `onRefused` before it is answered.
+  // With `runId`, each is held to that run as its calls are. A refusal whose
+  // code `passOver` names is skipped.
   async #declaredOperationRefusal(
     admit: NonNullable<CallApiSender['admitAutomation']>,
     operations: AutomationOperationDeclaration[],
     payer: string,
+    runId: string | undefined,
     onRefused?: (refused: OperationFailure) => Promise<void>,
     passOver: readonly string[] = [],
   ): Promise<RunAdmissionAnswer['refusal']> {
@@ -15767,6 +15750,7 @@ export class Realm {
         codeRef: declared.targetType,
         operation: declared.operation,
         payer,
+        ...(runId ? { runId } : {}),
       });
       if (refused && !passOver.includes(refused.error.code)) {
         await onRefused?.(refused);
