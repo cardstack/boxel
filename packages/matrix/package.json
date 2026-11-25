@@ -54,8 +54,9 @@
     "test:synapse-modules": "./scripts/test-synapse-modules.sh",
     "test:compact-synapse-db": "node --test scripts/compact-synapse-db.test.ts",
     "test:shard-assignment": "node --test support/shard-spec-files.test.ts",
+    "test:synapse-data-dir": "node --test scripts/synapse-data-dir.test.ts",
     "wait": "sleep 10000000",
     "lint": "ember-tsc --noEmit",
-    "clean": "rm -rf ./synapse-data"
+    "clean": "rm -rf \"$(node ../../scripts/synapse-data-dir.js)\""
   }
 }

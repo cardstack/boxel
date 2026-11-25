@@ -1799,8 +1799,15 @@ export type OperationErrorCode =
   // again.
   | 'binding-needs-reapproval'
   // A `callApi` invoked interactively — from a browser, the AI assistant or
-  // the CLI — whose binding was approved for automations only. Nothing was sent.
+  // the CLI — whose binding was approved for automations only, or by a Preview
+  // or a Run now whose starter doesn't own the key and has no automation
+  // approval as payer. Nothing was sent.
   | 'interactive-use-not-approved'
+  // A `callApi` of a run of an automation's triggers whose binding has no
+  // approval for that automation matching it as the run read it: the approval
+  // ended, or the automation changed after its key's owner approved it.
+  // Nothing was sent.
+  | 'key-approval-ended'
   // A `callApi` invoked by a caller who isn't signed in, filled from a share
   // whose key doesn't allow anonymous use. Carries a 401:
   // signing in is what serves the caller. Nothing was sent.
