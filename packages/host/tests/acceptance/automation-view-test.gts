@@ -1476,6 +1476,12 @@ module('Acceptance | automation view', function (hooks) {
       timeout: 10000,
     });
     assert.dom('[data-test-automation-fitted-next]').doesNotExist();
+    assert
+      .dom('[data-test-automation-fitted-paused]')
+      .hasText(
+        'Paused by a realm administrator',
+        'the fitted view says why Boxel paused the automation',
+      );
   });
 
   test('a direct writer gets a way into the Automations console from the isolated, embedded and fitted views', async function (assert) {
@@ -2380,7 +2386,7 @@ module('Acceptance | automation view', function (hooks) {
           assert
             .dom('[data-test-automation-notice-fix]')
             .hasText(
-              'The payer fixes what the runs fail on, checks the fix with a Preview, and resumes the automation.',
+              'The payer should fix what the runs fail on, check the fix with a Preview, and then resume the automation.',
             );
           assert
             .dom('[data-test-automation-notice-error]')
@@ -2440,7 +2446,7 @@ module('Acceptance | automation view', function (hooks) {
           assert
             .dom('[data-test-automation-notice]')
             .containsText(
-              'Boxel didn’t start a run of Nightly import because the request the operation “fetch” makes changed after the payer approved the operation.',
+              'Boxel didn’t start a run of Nightly import because the operation “fetch” now sends a different request than the one the payer approved.',
             );
           await click('[data-test-automation-notice-action="approve"]');
           assert.strictEqual(
