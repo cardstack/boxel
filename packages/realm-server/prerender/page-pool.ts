@@ -267,6 +267,14 @@ const DEFAULT_AFFINITY_TEARDOWN_WAIT_MS = 10_000;
 // and without the deadline each new affinity on the server would wait on it
 // while other affinities' tabs sit idle.
 const DEFAULT_STANDBY_REFILL_WAIT_MS = 5000;
+// A standby creation that runs normally takes at most two
+// `standbyTimeoutMs` waits: the navigation to the standby page, then the
+// wait for its readiness marker. The steps before them (getting the
+// browser, creating the context, opening the page, attaching
+// observability) are CDP calls with no timeout of their own. A creation
+// still running after both waits plus this margin is held by one of those
+// calls, on a browser that no longer answers.
+const STANDBY_CREATION_MARGIN_MS = 15_000;
 
 // How many visits of a realm must finish in time, one after another, before
 // a file-admission cap that its timeouts lowered goes up by one. See
@@ -297,6 +305,10 @@ const DEFAULT_TAB_HEALTH_PROBE_MS = 3000;
 const MIN_TAB_HEALTH_PROBE_MS = 250;
 
 export class StandbyTargetNotReadyError extends Error {}
+
+// A standby creation passed its deadline. The browser stopped answering a
+// call partway through, so the refill gives up instead of retrying.
+export class StandbyCreationTimeoutError extends Error {}
 
 // Chrome reconfigures its certificate-verifier service shortly after the
 // browser launches. Asset fetches that are in flight during that window are
@@ -628,6 +640,9 @@ export class PagePool {
   // How long a caller waits for a fresh standby before it may steal; see
   // `DEFAULT_STANDBY_REFILL_WAIT_MS`.
   #standbyRefillWaitMs: number;
+  // Bound on one standby creation from start to finish; see
+  // `#createStandby`.
+  #standbyCreationTimeoutMs: number;
 
   constructor(options: {
     maxPages: number;
@@ -658,6 +673,10 @@ export class PagePool {
     // Overrides `DEFAULT_STANDBY_REFILL_WAIT_MS`. Tests use it to drive
     // the steal deadline on millisecond timescales.
     standbyRefillWaitMs?: number;
+    // Overrides the bound on one standby creation, which by default is
+    // twice `standbyTimeoutMs` plus `STANDBY_CREATION_MARGIN_MS`. Tests use
+    // it to drive the bound on millisecond timescales.
+    standbyCreationTimeoutMs?: number;
   }) {
     // Resolve the dynamic-pool envelope. `PRERENDER_PAGE_POOL_MIN` and
     // `_MAX` are the dynamic knobs; when either is unset the pool
@@ -799,6 +818,9 @@ export class PagePool {
       options.affinityTeardownWaitMs ?? DEFAULT_AFFINITY_TEARDOWN_WAIT_MS;
     this.#standbyRefillWaitMs =
       options.standbyRefillWaitMs ?? DEFAULT_STANDBY_REFILL_WAIT_MS;
+    this.#standbyCreationTimeoutMs =
+      options.standbyCreationTimeoutMs ??
+      2 * this.#standbyTimeoutMs + STANDBY_CREATION_MARGIN_MS;
     this.#tabHealthProbeMs =
       options.tabHealthProbeMs ?? parseTabHealthProbeMs();
     // Resolve the per-affinity file-admission cap.
@@ -2009,7 +2031,14 @@ export class PagePool {
         } else {
           log.error(message, e);
         }
-        if (attempt >= STANDBY_CREATION_RETRIES) {
+        // A browser that left a call unanswered past the creation deadline
+        // won't answer a retry either, and each retry would hold parked
+        // callers for another full deadline. Failing the refill now lets
+        // them throw, which restarts the browser.
+        if (
+          e instanceof StandbyCreationTimeoutError ||
+          attempt >= STANDBY_CREATION_RETRIES
+        ) {
           return undefined;
         }
         await delay(backoffMs);
@@ -2019,8 +2048,62 @@ export class PagePool {
     return undefined;
   }
 
+  // Bounded by `#standbyCreationTimeoutMs`. While a creation runs, the refill
+  // that started it doesn't settle and `#creatingStandbys` counts it, and a
+  // caller that needs a fresh tab parks for as long as that lasts (see
+  // `#shouldAwaitFreedTab`). So one CDP call that never answers would park
+  // every such caller until its own abort, for the life of the process, with
+  // nothing reporting the refill as failed. Past the deadline the creation is
+  // abandoned: the counter is released, the refill fails, and the parked
+  // callers steal or throw. A throw from a render makes the Prerenderer
+  // restart the browser. If the abandoned creation finishes later, what it
+  // made is closed and never joins the pool.
   async #createStandby(): Promise<StandbyEntry> {
     this.#creatingStandbys++;
+    let creation = this.#openStandby();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new StandbyCreationTimeoutError(
+              `Standby creation did not finish in ${this.#standbyCreationTimeoutMs}ms; abandoning it`,
+            ),
+          ),
+        this.#standbyCreationTimeoutMs,
+      );
+    });
+    try {
+      let entry = await Promise.race([creation, deadline]);
+      this.#standbys.add(entry);
+      this.#wakeTabWaiters();
+      return entry;
+    } catch (e) {
+      if (e instanceof StandbyCreationTimeoutError) {
+        log.error(e.message);
+        creation.then(
+          (late) => {
+            log.warn(
+              `Abandoned standby creation finished after its deadline; closing pageId=${late.pageId}`,
+            );
+            return this.#closeEntry(late);
+          },
+          () => {
+            // It failed on its own, and closed its context as it did.
+          },
+        );
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      this.#creatingStandbys--;
+    }
+  }
+
+  // The steps of one standby creation, from getting the browser to the
+  // loaded standby page. On failure it closes the context it created. The
+  // caller adds the entry to the pool.
+  async #openStandby(): Promise<StandbyEntry> {
     let context: BrowserContext | undefined;
     try {
       let browser = await this.#browserManager.getBrowser();
@@ -2035,7 +2118,7 @@ export class PagePool {
       let pageId = uuidv4();
       await this.#attachPageObservability(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
-      let entry: StandbyEntry = {
+      return {
         type: 'standby',
         context,
         page,
@@ -2043,9 +2126,6 @@ export class PagePool {
         lastUsedAt: Date.now(),
         queue: new TabQueue(),
       };
-      this.#standbys.add(entry);
-      this.#wakeTabWaiters();
-      return entry;
     } catch (e) {
       if (isExpectedStandbyTargetNotReadyError(e)) {
         log.debug('Standby page target is not ready yet:', e);
@@ -2060,8 +2140,6 @@ export class PagePool {
         }
       }
       throw e;
-    } finally {
-      this.#creatingStandbys--;
     }
   }
 

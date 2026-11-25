@@ -127,6 +127,8 @@ module(basename(import.meta.filename), function (hooks) {
     maxPages: number;
     browserManager: any;
     disableStandbyRefill?: boolean;
+    standbyCreationTimeoutMs?: number;
+    standbyRefillWaitMs?: number;
   }): PagePool {
     let pool = new PagePool({
       maxPages: opts.maxPages,
@@ -136,6 +138,8 @@ module(basename(import.meta.filename), function (hooks) {
       standbyTimeoutMs: 500,
       disableFileAdmission: true,
       disableStandbyRefill: opts.disableStandbyRefill ?? false,
+      standbyCreationTimeoutMs: opts.standbyCreationTimeoutMs,
+      standbyRefillWaitMs: opts.standbyRefillWaitMs,
     });
     pools.push(pool);
     return pool;
@@ -434,5 +438,91 @@ module(basename(import.meta.filename), function (hooks) {
     }
     held.release();
     gate.unblockAll();
+  });
+
+  // A CDP call inside a standby creation that never answers used to hold the
+  // refill open for the life of the process: `#creatingStandbys` stayed at
+  // one, the refill never reported a failure, and a caller with no tab parked
+  // until its own abort. Every render on the server then failed by timeout
+  // while the server kept reporting itself healthy. The creation deadline
+  // turns that hang into a refill failure, which the caller answers by
+  // throwing, and a throw from a render makes the Prerenderer restart the
+  // browser.
+  test('a standby creation that never finishes fails the refill, and a caller with no tab throws instead of waiting for its abort', async function (assert) {
+    let gate = makeManualGate();
+    let browserManager = makeBrowserStub({ gate: gate.gate });
+    let pool = makePool({
+      maxPages: 1,
+      browserManager,
+      standbyCreationTimeoutMs: 100,
+      standbyRefillWaitMs: 50,
+    });
+    gate.block();
+
+    let abortAfterMs = 5000;
+    let controller = new AbortController();
+    let abortTimer = setTimeout(() => controller.abort(), abortAfterMs);
+    let start = Date.now();
+    try {
+      await pool.getPage('A', 'file', { signal: controller.signal });
+      assert.ok(false, 'getPage should not get a tab while creation hangs');
+    } catch (e) {
+      let elapsed = Date.now() - start;
+      assert.false(
+        controller.signal.aborted,
+        `getPage failed before its own abort (after ${elapsed}ms)`,
+      );
+      assert.true(
+        /No standby page available for prerender/.test(String(e)),
+        `getPage threw the no-tab error that restarts the browser (got: ${String(e)})`,
+      );
+    } finally {
+      clearTimeout(abortTimer);
+      gate.unblockAll();
+    }
+  });
+
+  test('a standby creation that finishes after its deadline is closed and never joins the pool', async function (assert) {
+    let gate = makeManualGate();
+    let created = 0;
+    let closed = 0;
+    let browserManager = makeBrowserStub({
+      gate: gate.gate,
+      onContextCreated: () => created++,
+      onContextClosed: () => closed++,
+    });
+    let pool = makePool({
+      maxPages: 1,
+      browserManager,
+      standbyCreationTimeoutMs: 100,
+    });
+    gate.block();
+
+    // The refill settles once its creation passes the deadline, though the
+    // browser call it made is still unanswered.
+    await pool.warmStandbys();
+    assert.strictEqual(
+      gate.waiterCount(),
+      1,
+      'the abandoned creation is still waiting on its browser call',
+    );
+
+    // The browser answers late. The creation finishes, and what it made is
+    // closed instead of joining the pool.
+    gate.unblockAll();
+    await waitUntil(
+      () => created === 1 && closed === 1,
+      'the late standby context to be closed',
+    );
+
+    // The pool still makes tabs once the browser answers.
+    let result = await pool.getPage('A');
+    assert.strictEqual(
+      created,
+      2,
+      'getPage got a tab from a new creation, not from the abandoned one',
+    );
+    assert.strictEqual(closed, 1, 'the new tab is still open');
+    result.release();
   });
 });
