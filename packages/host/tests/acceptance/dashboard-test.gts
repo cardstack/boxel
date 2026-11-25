@@ -47,6 +47,75 @@ module('Acceptance | dashboard', function (hooks) {
     assert.dom('[data-test-dashboard]').exists();
   });
 
+  test('the card under the open dashboard is inert until the dashboard closes', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+      workspaceChooserOpened: true,
+    });
+    await waitFor('[data-test-stack-card]');
+
+    let card = find('[data-test-stack-card]') as HTMLElement;
+    assert.ok(card.closest('[inert]'), 'the card under the dashboard is inert');
+    card.focus();
+    assert.notStrictEqual(
+      document.activeElement,
+      card,
+      'the card under the dashboard cannot take focus',
+    );
+    assert.notOk(
+      find('[data-test-dashboard]')!.closest('[inert]'),
+      'the dashboard is not',
+    );
+    assert.notOk(
+      find('[data-test-workspace-chooser-toggle]')!.closest('[inert]'),
+      'nor is the top bar',
+    );
+
+    await click('[data-test-workspace-chooser-toggle]');
+    assert.notOk(
+      find('[data-test-stack-card]')!.closest('[inert]'),
+      'closing the dashboard makes the card reachable again',
+    );
+    assert
+      .dom('[data-test-workspace-chooser-toggle]')
+      .isFocused('focus stays on the toggle that closed the dashboard');
+  });
+
+  test('Ctrl+E leaves the card under the open dashboard as it was', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+      workspaceChooserOpened: true,
+    });
+    await waitFor('[data-test-stack-card]');
+    const workspaceButton = '[data-test-workspace-button="Workspace A"]';
+    await waitFor(workspaceButton);
+    await focus(workspaceButton);
+
+    // Numeric keyCode 69 so the helper produces `event.key === 'e'`.
+    await triggerKeyEvent(workspaceButton, 'keydown', 69, { ctrlKey: true });
+
+    assert.strictEqual(
+      operatorModeState().state.stacks[0][0].format,
+      'isolated',
+      'the card is still in isolated format',
+    );
+  });
+
+  test('opening a workspace from the dashboard focuses its index card', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await waitFor('[data-test-workspace-button="Workspace A"]');
+
+    await click('[data-test-workspace-button="Workspace A"]');
+    await waitFor('[data-test-stack-card]');
+    await settled();
+
+    assert.dom('[data-test-dashboard]').doesNotExist();
+    assert.ok(
+      find('[data-test-stack-card]')!.contains(document.activeElement),
+      'focus is in the card',
+    );
+  });
+
   test('greets the user by first name', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
     await settled();

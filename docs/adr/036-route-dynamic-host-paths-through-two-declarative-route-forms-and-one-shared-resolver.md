@@ -13,7 +13,9 @@ scope:
   - packages/realm-server/lib/realm-routing.ts
   - packages/base/realm-config.gts
   - packages/base/**/*href-to*
+  - packages/host/app/services/host-link-navigation.ts
   - packages/host/app/services/host-mode-service.ts
+  - packages/host/app/services/host-route-links.ts
   - packages/host/app/routes/index.gts
 ---
 

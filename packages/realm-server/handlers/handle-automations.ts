@@ -48,7 +48,6 @@ import {
   RUN_LOG_LEVELS,
   type RunLogLevel,
 } from '@cardstack/runtime-common/automation-run-log';
-import { switchOnNotices } from '@cardstack/runtime-common/automation-webhooks';
 import { admitPayer } from '@cardstack/runtime-common/automation-admission';
 import {
   confirmationOf,
@@ -628,7 +627,6 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
           switchedOn: row !== undefined,
           monthlyCredits: declaration.caps.monthlyCredits,
           estimate,
-          notices: switchOnNotices(declaration),
           ...(keyApprovals
             ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
             : {}),
@@ -704,7 +702,6 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
       : undefined;
     await answerChange(ctxt, args, change, caller, 201, {
       ...(estimate ? { estimate } : {}),
-      notices: switchOnNotices(declaration),
       keyApprovals: serializeKeyApprovals(keyApprovals),
     });
   });
@@ -874,7 +871,6 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
       actorOptions(args),
     );
     await answerChange(ctxt, args, change, caller, 200, {
-      notices: switchOnNotices(declaration),
       ...(keyApprovals
         ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
         : {}),

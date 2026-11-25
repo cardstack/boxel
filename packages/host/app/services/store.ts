@@ -536,6 +536,13 @@ export default class StoreService extends Service implements StoreInterface {
   #identityEpoch = 0;
   protected isRenderStore = false;
 
+  // Which identity of the store's cards this is; see `#identityEpoch`. A
+  // reader that keeps what it learned from the store's cards keeps it only
+  // while this holds.
+  get identityEpoch(): number {
+    return this.#identityEpoch;
+  }
+
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
   // An edited card waits here, keyed by local id, until typing pauses (see

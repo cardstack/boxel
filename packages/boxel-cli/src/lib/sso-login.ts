@@ -155,6 +155,11 @@ export interface PostedSecureSession {
 //   approval that grants a key a new destination, or a swap that does),
 //   POSTing how it ended. It carries no session and no result to act on: the
 //   CLI reads what changed from the realm server.
+// - the realm server's OAuth provider redirecting the browser back with an
+//   authorization code (`boxel profile add --oauth`), only on a listener
+//   started with `oauthRedirect`. Its `state` is this listener's nonce, and
+//   `iss` names the provider that sent it. A refusal (`?error=`) fails the
+//   wait instead.
 export type LoopbackResult =
   | {
       kind: 'loginToken';
@@ -167,7 +172,8 @@ export type LoopbackResult =
       kind: 'oauth';
       outcome: { code: string; state: string } | { error: string };
     }
-  | { kind: 'window'; outcome: WindowOutcome };
+  | { kind: 'window'; outcome: WindowOutcome }
+  | { kind: 'oauthRedirect'; code: string; iss: string | null };
 
 // How a page of the secure window the CLI opened ended: the change it was
 // opened for was made (`done`), or the user cancelled or closed the window
@@ -215,9 +221,13 @@ async function readBody(req: IncomingMessage): Promise<string> {
 export async function startLoopbackCallback(opts?: {
   state?: string;
   timeoutMs?: number;
+  // Read a navigation as an OAuth authorization response (`?code=` or
+  // `?error=`) rather than as a Matrix login token.
+  oauthRedirect?: boolean;
 }): Promise<LoopbackCallback> {
   const state = opts?.state ?? randomBytes(16).toString('hex');
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const oauthRedirect = opts?.oauthRedirect ?? false;
 
   let resolveResult: (result: LoopbackResult) => void;
   let rejectResult: (err: Error) => void;
@@ -387,6 +397,29 @@ export async function startLoopbackCallback(opts?: {
         return;
       }
 
+      if (oauthRedirect) {
+        const params = requestUrl.searchParams;
+        const code = params.get('code');
+        if (code) {
+          succeed(res, { kind: 'oauthRedirect', code, iss: params.get('iss') });
+          return;
+        }
+        const error = params.get('error') ?? 'no code was returned';
+        const description = params.get('error_description');
+        fail(
+          res,
+          error === 'access_denied'
+            ? 'Boxel CLI was not allowed to sign in. You can close this tab.'
+            : 'The sign-in did not finish. You can close this tab and try again.',
+          error === 'access_denied'
+            ? 'You chose Deny in the browser, so no profile was saved.'
+            : `The sign-in did not finish: ${error}${
+                description ? ` (${description})` : ''
+              }`,
+        );
+        return;
+      }
+
       const loginToken = requestUrl.searchParams.get('loginToken');
       if (!loginToken) {
         const reason =
@@ -465,8 +498,11 @@ export async function startLoopbackCallback(opts?: {
               reject(
                 new SsoTimeoutError(
                   `Timed out after ${describeDuration(timeoutMs)} waiting for ` +
-                    'the browser sign-in to complete. Re-run with --no-browser ' +
-                    'to sign in with a username and password instead.',
+                    'the browser sign-in to complete. ' +
+                    (oauthRedirect
+                      ? 'Run `boxel profile add --oauth` again to start over.'
+                      : 'Re-run with --no-browser to sign in with a username ' +
+                        'and password instead.'),
                 ),
               ),
             timeoutMs,

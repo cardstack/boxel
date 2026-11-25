@@ -604,6 +604,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `GET ${SupportedMimeType.CardDependencies} /_card-dependencies`,
           `GET ${SupportedMimeType.JSONAPI} /_publishability`,
           `GET ${SupportedMimeType.JSONAPI} /_indexing-errors`,
+          `GET ${SupportedMimeType.JSON} /_host-routes`,
           `QUERY ${SupportedMimeType.JSON} /_lint`,
           `QUERY ${SupportedMimeType.JSON} /_sign-capture-urls`,
           `POST ${SupportedMimeType.JSONAPI} /_run-commit`,

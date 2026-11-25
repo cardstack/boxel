@@ -161,6 +161,7 @@ export default class HostModeContent extends Component<Signature> {
         @openInteractSubmode={{@openInteractSubmode}}
         class='current-card'
         inert={{this.isPrimaryCovered}}
+        data-host-mode-primary-card
       />
       {{#if (gt @stackItemCardIds.length 0)}}
         <HostModeStack

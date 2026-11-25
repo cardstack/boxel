@@ -3,6 +3,7 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import { TrackedArray } from 'tracked-built-ins';
 
+import { aiBotUsername, getMatrixUsername } from '@cardstack/runtime-common';
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
@@ -248,6 +249,10 @@ export class Message implements RoomMessageInterface {
     return markdownToHtml(escapeHtmlOutsideCodeBlocks(this.body)!, {
       sanitize: false,
       escapeHtmlInCodeBlocks: true,
+      // A person's Shift+Enter in the composer is one newline, and the
+      // message shows it as typed. The bot writes markdown, where a single
+      // newline joins the lines.
+      breaks: getMatrixUsername(this.author.userId) !== aiBotUsername,
     });
   }
 

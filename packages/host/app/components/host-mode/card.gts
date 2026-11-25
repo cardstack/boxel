@@ -178,6 +178,12 @@ export default class HostModeCard extends Component<Signature> {
         position: relative;
       }
 
+      /* The page takes focus after a navigation inside the app, as the place
+         to continue from. It is not a control, so it shows no focus ring. */
+      .host-mode-card.is-primary:focus {
+        outline: none;
+      }
+
       .message {
         display: flex;
         flex-direction: column;

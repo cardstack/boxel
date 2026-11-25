@@ -66,6 +66,18 @@ export type RunProgressEvent =
       message: string;
       line?: number;
     }
+  // what the run's realm.transform calls came to, reported once as the run
+  // settles: the calls the script made, those that failed, the time their
+  // programs ran, and the bytes sent in and answered
+  | {
+      kind: 'transform';
+      at: number;
+      calls: number;
+      failed: number;
+      ms: number;
+      inBytes: number;
+      outBytes: number;
+    }
   // the error the run ended with: an uncaught error from the script, with
   // its script line and its stack in the script's lines, or the time limit
   | {
