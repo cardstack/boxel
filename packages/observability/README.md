@@ -236,6 +236,16 @@ same channel as a `DatasourceError` alert for the rule, and the fault is Loki,
 not the collector (see [Alert rules: no data and query
 errors](#alert-rules-no-data-and-query-errors)).
 
+The alert "Prerender server aborts every render"
+(`provisioning/alerting-hosted/<env>/rules/prerender-pool-group.json`) posts
+to the `alarms-<env>-internal` Discord channel when, in 15 minutes, the
+prerender manager aborts 2 or more renders it sent to one prerender server and
+gets no successful response from that server. That server can no longer make
+browser tabs, and the manager keeps sending it the realms that have affinity
+with it. The alert names the server, and its summary gives the commands that
+find and stop its ECS task. One copy of the rule exists per environment
+because each routes to its own environment's Discord contact point.
+
 Build and deploy with the **Manual Deploy [actions-collector]** workflow. It is
 `workflow_dispatch` only — putting the deploy of a queue sampler on a CI
 trigger would make it queue behind the backlog it reports on.
