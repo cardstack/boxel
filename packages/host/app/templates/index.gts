@@ -40,6 +40,7 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
+import type HostLinkNavigationService from '@cardstack/host/services/host-link-navigation';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -65,6 +66,8 @@ export interface IndexComponentComponentSignature {
 export class IndexComponent extends Component<IndexComponentComponentSignature> {
   @service declare private capabilities: CapabilitiesService;
   @service declare private toolService: ToolService;
+  @service('host-link-navigation')
+  declare private hostLinkNavigation: HostLinkNavigationService;
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
   @service declare private matrixService: MatrixService;
@@ -244,6 +247,10 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     };
   });
 
+  // While a page served on a host URL shows, clicks on its links to other
+  // pages of the site navigate inside the app.
+  followSiteLinks = modifier(() => this.hostLinkNavigation.install());
+
   // TODO: remove in CS-9977, with rehydration
   removeIsolatedMarkup = modifier(() => {
     if (typeof document === 'undefined') {
@@ -303,6 +310,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
         @removeCardFromStack={{this.removeCardFromStack}}
         @viewCard={{this.viewCard}}
         {{this.removeIsolatedMarkup}}
+        {{this.followSiteLinks}}
       />
     {{else}}
       {{pageTitle this.operatorModeStateService.title}}
