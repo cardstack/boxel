@@ -360,12 +360,53 @@ function uncheckedKeyApprovals(retry: string): AutomationRouteError {
 
 // Key approvals as a route answers them: whether every one is there, the
 // version a confirmation approving the rest names (`confirmationOf`: the
-// version and its `callApiCalls` cap), and each operation's state.
-function serializeKeyApprovals(approvals: AutomationKeyApprovals) {
+// version and its `callApiCalls` cap), and each operation's state. The owner
+// of a share a missing approval names is shown to `caller` only as ADR 011
+// lets them see that person (`shownIdentity`), and is null otherwise.
+async function serializeKeyApprovals(
+  dbAdapter: DBAdapter,
+  caller: string,
+  approvals: AutomationKeyApprovals,
+) {
+  let shown = new Map<string, Promise<string | null>>();
+  let show = (owner: string | null) => {
+    if (owner === null) {
+      return Promise.resolve(null);
+    }
+    let found = shown.get(owner);
+    if (!found) {
+      found = shownIdentity(dbAdapter, caller, owner);
+      shown.set(owner, found);
+    }
+    return found;
+  };
   return {
     approved: approvals.approved,
     version: confirmationOf(approvals.version),
-    operations: approvals.operations,
+    operations: await Promise.all(
+      approvals.operations.map(async (operation) =>
+        operation.missing
+          ? {
+              ...operation,
+              missing: await Promise.all(
+                operation.missing.map(async (missing) =>
+                  missing.shares
+                    ? {
+                        ...missing,
+                        shares: await Promise.all(
+                          missing.shares.map(async (share) => ({
+                            ...share,
+                            owner: await show(share.owner),
+                          })),
+                        ),
+                      }
+                    : missing,
+                ),
+              ),
+            }
+          : operation,
+      ),
+    ),
   };
 }
 
@@ -628,7 +669,13 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
           monthlyCredits: declaration.caps.monthlyCredits,
           estimate,
           ...(keyApprovals
-            ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+            ? {
+                keyApprovals: await serializeKeyApprovals(
+                  args.dbAdapter,
+                  caller,
+                  keyApprovals,
+                ),
+              }
             : {}),
         },
       },
@@ -702,7 +749,11 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
       : undefined;
     await answerChange(ctxt, args, change, caller, 201, {
       ...(estimate ? { estimate } : {}),
-      keyApprovals: serializeKeyApprovals(keyApprovals),
+      keyApprovals: await serializeKeyApprovals(
+        args.dbAdapter,
+        caller,
+        keyApprovals,
+      ),
     });
   });
 }
@@ -872,7 +923,13 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
     );
     await answerChange(ctxt, args, change, caller, 200, {
       ...(keyApprovals
-        ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+        ? {
+            keyApprovals: await serializeKeyApprovals(
+              args.dbAdapter,
+              caller,
+              keyApprovals,
+            ),
+          }
         : {}),
     });
   });
