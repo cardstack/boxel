@@ -61,7 +61,10 @@ function stepFor(event: KeyboardEvent, list: HTMLElement) {
 // Scroll mode: keep the selected tab in view, and mark which physical edges
 // hide tabs so the CSS fades only those.
 const scrollTabs = modifier(
-  (list: HTMLElement, [enabled, _value]: [boolean, string | undefined]) => {
+  (
+    list: HTMLElement,
+    [enabled, _value, _count]: [boolean, string | undefined, number],
+  ) => {
     if (!enabled) {
       return;
     }
@@ -77,10 +80,13 @@ const scrollTabs = modifier(
     if (active) {
       let a = active.getBoundingClientRect();
       let l = list.getBoundingClientRect();
-      if (a.left < l.left) {
-        list.scrollLeft -= l.left - a.left;
-      } else if (a.right > l.right) {
-        list.scrollLeft += a.right - l.right;
+      // keep the tab clear of the edge fade, which masks its outer rem
+      let fade =
+        parseFloat(getComputedStyle(list).scrollPaddingInlineStart) || 0;
+      if (a.left < l.left + fade) {
+        list.scrollLeft -= l.left + fade - a.left;
+      } else if (a.right > l.right - fade) {
+        list.scrollLeft += a.right - (l.right - fade);
       }
     }
     edges();
@@ -175,7 +181,7 @@ export class Tabs extends Component<TabsSignature> {
         aria-label={{@label}}
         data-overflow={{@overflow}}
         {{slidingHighlight}}
-        {{scrollTabs this.scrolls this.value}}
+        {{scrollTabs this.scrolls this.value this.tabs.length}}
         {{listen 'keydown' this.onKeydown}}
       >
         <SlidingHighlight @variant='underline' @thickness={{2}} @radius={{0}} />
@@ -222,6 +228,7 @@ export class Tabs extends Component<TabsSignature> {
           --_tabs-fade-right: 0px;
           overflow-x: auto;
           overflow-y: hidden;
+          scroll-padding-inline: var(--pretui-tabs-fade, 1.5rem);
           scrollbar-width: none;
           mask-image: linear-gradient(
             to right,
@@ -236,6 +243,12 @@ export class Tabs extends Component<TabsSignature> {
         }
         .pretui-tabs[data-overflow='scroll']::-webkit-scrollbar {
           display: none;
+        }
+        /* forced-colors drops box-shadows, so the rail needs a real edge */
+        @media (forced-colors: active) {
+          .pretui-tabs {
+            border-bottom: 1px solid CanvasText;
+          }
         }
         .pretui-tabs[data-fade-left] {
           --_tabs-fade-left: var(--pretui-tabs-fade, 1.5rem);
