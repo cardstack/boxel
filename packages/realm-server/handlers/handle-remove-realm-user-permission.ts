@@ -20,6 +20,7 @@ import {
   removeRealmFromUserAccountData,
   resolveAdminCreds,
 } from '../synapse.ts';
+import { withWorkspaceListLock } from '../lib/workspace-list.ts';
 
 const log = logger('realm-server');
 
@@ -142,12 +143,19 @@ export default function handleRemoveRealmUserPermission({
             adminPassword: creds.password,
             userId: user,
           });
-          let { wasPresent } = await removeRealmFromUserAccountData({
-            matrixURL: matrixClient.matrixURL,
-            userId: user,
-            userAccessToken: userToken,
-            realmURL: normalizedRealmHref,
-          });
+          let token = userToken;
+          let { wasPresent } = await withWorkspaceListLock(
+            dbAdapter,
+            user,
+            (signal) =>
+              removeRealmFromUserAccountData({
+                matrixURL: matrixClient.matrixURL,
+                userId: user,
+                userAccessToken: token,
+                realmURL: normalizedRealmHref,
+                signal,
+              }),
+          );
           removedFromAccountData = wasPresent;
         } catch (e: any) {
           matrixAccountDataWarning = `account_data sync failed: ${e?.message ?? String(e)}`;

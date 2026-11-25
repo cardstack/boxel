@@ -200,8 +200,10 @@ const BOXEL_API_WRITE_ROUTES: readonly OAuthRoute[] = [
   // published copy, never on the realm published from, so neither changes
   // who can reach an existing realm of the user's (§1.6). Creating and
   // deleting a workspace with one of these tokens also edit the caller's own
-  // workspace list, which names realms and grants nothing.
+  // workspace list, which names realms and grants nothing, and so does
+  // editing that list directly.
   server('POST', '/_create-realm'),
+  server('PATCH', '/_user-realms'),
   server('DELETE', '/_delete-realm'),
   server('POST', '/_publish-realm'),
   server('POST', '/_unpublish-realm'),
