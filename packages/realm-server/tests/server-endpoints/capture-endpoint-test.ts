@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import { rri } from '@cardstack/runtime-common';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { realmSecretSeed, insertUser } from '../helpers/index.ts';
 import { colorCoverage } from '../helpers/png.ts';
@@ -223,7 +224,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           data: {
             attributes: { imageURL: `${testRealmURL.href}swatch.svg` },
             meta: {
-              adoptsFrom: { module: '../framed', name: 'Framed' },
+              adoptsFrom: { module: rri('../framed'), name: 'Framed' },
             },
           },
         },
