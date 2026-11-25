@@ -48,10 +48,19 @@ export default class ResizablePanelUsage extends Component {
   declare boxelPanelResizeHandleHoverBackgroundColor: CSSVariableInfo;
 
   <template>
-    <FreestyleUsage
-      @name='Horizontal ResizablePanelGroup'
-      @description='Split-pane layout with horizontal or vertical orientation and draggable dividers between panels — used to build resizable IDE-style or master-detail layouts.'
-    >
+    <FreestyleUsage @name='Horizontal ResizablePanelGroup'>
+      <:description>
+        Split-pane layout with horizontal or vertical orientation and draggable
+        dividers between panels — used to build resizable IDE-style or
+        master-detail layouts. A collapsible panel collapses when dragged below
+        its minSize. Double-clicking the handle beside the first or last panel
+        collapses that panel, and double-clicking again reopens it (with two
+        panels, the handle acts on the first, or the last with
+        @reverseCollapse). It reopens at the size it had before it collapsed,
+        or, with no such size, at its defaultSize, else its minSize, else half
+        the group, never below its minSize and never taking more than the other
+        panels can give.
+      </:description>
       <:example>
         <ResizablePanelGroup
           @orientation='horizontal'
@@ -105,7 +114,7 @@ export default class ResizablePanelUsage extends Component {
         />
         <Args.Number
           @name='minSize - Panel 1'
-          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible.'
+          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.horizontalPanel1MinSize}}
           @onInput={{fn (mut this.horizontalPanel1MinSize)}}
           @required={{false}}
@@ -133,7 +142,7 @@ export default class ResizablePanelUsage extends Component {
         />
         <Args.Number
           @name='minSize - Panel 2'
-          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible.'
+          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.horizontalPanel2MinSize}}
           @onInput={{fn (mut this.horizontalPanel2MinSize)}}
           @required={{false}}
@@ -161,7 +170,7 @@ export default class ResizablePanelUsage extends Component {
         />
         <Args.Number
           @name='minSize - Panel 3'
-          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible.'
+          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.horizontalPanel3MinSize}}
           @onInput={{fn (mut this.horizontalPanel3MinSize)}}
           @required={{false}}
@@ -268,7 +277,7 @@ export default class ResizablePanelUsage extends Component {
         />
         <Args.Number
           @name='minSize - Panel 1'
-          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible.'
+          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.verticalPanel1MinSize}}
           @onInput={{fn (mut this.verticalPanel1MinSize)}}
           @required={{false}}
@@ -296,7 +305,7 @@ export default class ResizablePanelUsage extends Component {
         />
         <Args.Number
           @name='minSize - Panel 2'
-          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage. In double-click event, this argumen will be ingored if the panel is collapsible.'
+          @description='The minimum width of the panel is determined by this argument. The value of the argument must be a number between 0 and 100, representing a percentage.'
           @value={{this.verticalPanel2MinSize}}
           @onInput={{fn (mut this.verticalPanel2MinSize)}}
           @required={{false}}
