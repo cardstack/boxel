@@ -81,6 +81,9 @@ function secureWindowRequest(
       `mode must be one of ${SECURE_WINDOW_MODES.map((m) => `"${m}"`).join(', ')}`,
     );
   }
+  if (input.automation?.trim() && mode !== 'approve') {
+    throw new Error('automation is for the approve mode only');
+  }
   if (mode === 'connected-apps') {
     // The page lists every app on the account, so it is opened for nothing
     // in particular, and with no line from its opener.
@@ -141,9 +144,6 @@ function secureWindowRequest(
       automation: name('automation', input.automation),
       reason,
     };
-  }
-  if (input.automation?.trim()) {
-    throw new Error('automation is for the approve mode only');
   }
   if (mode === 'approve' || mode === 'review-changes') {
     if (!target?.operation) {

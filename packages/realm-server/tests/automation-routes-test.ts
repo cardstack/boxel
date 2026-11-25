@@ -1158,7 +1158,11 @@ module(basename(import.meta.filename), function (hooks) {
       operations: {
         operation: string;
         state: string;
-        missing?: { slot: string; canApprove: string }[];
+        missing?: {
+          slot: string;
+          canApprove: string;
+          shares?: { id: string; label: string; owner: string | null }[];
+        }[];
       }[];
     }) {
       return keyApprovals.operations.map(({ operation, state, missing }) => ({
@@ -1443,10 +1447,11 @@ module(basename(import.meta.filename), function (hooks) {
             o.slots.map((s) => `${s.slot}:${s.status}`),
           ],
         ),
-        [['list', 'Inbox', ['userKey:new']]],
-        'the operation the automation is missing, on its own card type',
+        [['list', 'Inbox', ['1.userKey:new']]],
+        'the operation the automation is missing, on its own card type, its slot chosen apart from other card types’',
       );
-      assert.deepEqual(batch.fillers.automations.userKey, [key.id]);
+      assert.strictEqual(operations[0].slots[0].token, 'userKey');
+      assert.deepEqual(batch.fillers.automations['1.userKey'], [key.id]);
 
       let other = await request
         .post('/_key-bindings/batch')
@@ -1503,6 +1508,52 @@ module(basename(import.meta.filename), function (hooks) {
       let [operation] = asked.body.data.attributes.groups[0].operations;
       assert.strictEqual(operation.status, 'automation');
       assert.strictEqual(operation.slots[0].approved.keyId, key.id);
+    });
+
+    test('a share owner’s batch for an automation holds the slots the owner’s share fills, and approving the batch makes the automation active', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      let ask = async (attributes: Record<string, unknown>) =>
+        await request
+          .post('/_key-bindings/batch')
+          .set('Authorization', await secureSessionAuth(dbAdapter, WRITER))
+          .set('Content-Type', 'application/vnd.api+json')
+          .send({ data: { type: 'key-binding-batch', attributes } });
+      let asked = await ask({ automation: cardURL(SHARED) });
+      assert.strictEqual(asked.status, 200, asked.text);
+      let batch = asked.body.data.attributes;
+      let [operation] = batch.groups.flatMap(
+        (g: { operations: unknown[] }) => g.operations,
+      );
+      assert.strictEqual(operation.name, 'shared');
+      assert.deepEqual(
+        operation.slots.map((s: { slot: string; token: string }) => [
+          s.slot,
+          s.token,
+        ]),
+        [['1.apiKey', 'apiKey']],
+      );
+      assert.deepEqual(batch.fillers.automations['1.apiKey'], [share.id]);
+
+      let weighed = await ask({
+        automation: cardURL(SHARED),
+        operations: [operation.key],
+      });
+      assert.strictEqual(weighed.status, 200, weighed.text);
+      assert.deepEqual(
+        weighed.body.data.attributes.fillers.automations['1.apiKey'],
+        [share.id],
+        'the operations filter names an operation by its key',
+      );
+
+      let approved = await approveOperation(
+        WRITER,
+        'shared',
+        { shareId: share.id },
+        { id: cardURL(SHARED), version: batch.automation.version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      await reachesState(SHARED, 'active');
     });
 
     test('an automation that is not switched on has no approval batch', async function (assert) {

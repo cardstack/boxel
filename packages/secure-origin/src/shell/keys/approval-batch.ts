@@ -23,6 +23,8 @@ import {
 export interface SlotChoice {
   slot: string;
   kind: 'userKey' | 'apiKey';
+  // In an automation's batch: the card type the slot is on.
+  card?: string;
   options: SlotOption[];
 }
 
@@ -77,7 +79,12 @@ export function slotChoices(
       (a, b) =>
         b.covers.length - a.covers.length || a.name.localeCompare(b.name),
     );
-    choices.push({ slot: slot.slot, kind, options });
+    choices.push({
+      slot: slot.slot,
+      kind,
+      options,
+      ...(slot.card ? { card: slot.card } : {}),
+    });
   }
   return choices;
 }
@@ -349,7 +356,7 @@ export function approvalOf(
             let kind = choices.find((c) => c.slot === s.slot)!.kind;
             let id = chosen[s.slot]!;
             return [
-              s.slot,
+              s.token ?? s.slot,
               kind === 'userKey'
                 ? { keyId: id, expectedFingerprint: s.fingerprint }
                 : { shareId: id, expectedFingerprint: s.fingerprint },
