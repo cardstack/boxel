@@ -19,6 +19,7 @@ import { module, test } from 'qunit';
 
 import {
   Deferred,
+  isCardInstance,
   validateHostRoutes,
   type HostRoute,
   type HostRouteTypeInfo,
@@ -1792,6 +1793,9 @@ module('Acceptance | host mode tests', function (hooks) {
     // `searchStarted`.
     let searchGate: Deferred<void> | undefined;
     let searchStarted: Deferred<void> | undefined;
+    // When set, each route search adds a gate of its own here and waits for
+    // it, so a test can let searches finish in an order it chooses.
+    let heldSearches: Deferred<void>[] | undefined;
     let failingCardURL = `${testHostModeRealmURL}Pet/unavailable`;
     let handler = async (request: Request) => {
       let accept = request.headers.get('Accept') ?? '';
@@ -1806,6 +1810,11 @@ module('Acceptance | host mode tests', function (hooks) {
       if (searchGate && request.url.endsWith('_search')) {
         searchStarted?.fulfill();
         await searchGate.promise;
+      }
+      if (heldSearches && request.url.endsWith('_search')) {
+        let gate = new Deferred<void>();
+        heldSearches.push(gate);
+        await gate.promise;
       }
       if (request.method === 'GET' && request.url === failingCardURL) {
         return new Response('unavailable', { status: 503 });
@@ -1826,6 +1835,7 @@ module('Acceptance | host mode tests', function (hooks) {
       lookups = [];
       searchGate = undefined;
       searchStarted = undefined;
+      heldSearches = undefined;
       getService('network').virtualNetwork.mount(handler, { prepend: true });
     });
 
@@ -2386,6 +2396,48 @@ module('Acceptance | host mode tests', function (hooks) {
           'the visitor stays on the page they went to',
         );
         assert.dom(mango).exists();
+        assert.deepEqual(leftToBrowser, []);
+        assert.strictEqual(window.location.href, pageURL, 'no page load');
+      });
+
+      test('a click whose lookup finishes while a move to another page still waits for its own lookup does nothing', async function (assert) {
+        let held: Deferred<void>[] = [];
+        heldSearches = held;
+        // Not through `click`, which would wait for the held lookup.
+        document
+          .querySelector(link('by-hand'))!
+          .dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true }),
+          );
+        await waitUntil(() => held.length === 1);
+
+        // Back to a routed address, which the index route looks up.
+        let back = getService('router').transitionTo(
+          '/test/posts/trail-runner',
+        );
+        await waitUntil(() => held.length === 2);
+        heldSearches = undefined;
+        let [clickSearch, backSearch] = held;
+
+        // The click's lookup and its card load finish first.
+        clickSearch!.fulfill();
+        let store = getService('store');
+        await waitUntil(() =>
+          isCardInstance(store.peek(`${testHostModeRealmURL}Pet/mango`)),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        backSearch!.fulfill();
+        await back;
+        await settled();
+
+        assert.strictEqual(
+          currentURL(),
+          '/test/posts/trail-runner',
+          'the visitor ends on the page they went back to',
+        );
+        assert.dom(post).exists();
+        assert.dom(mango).doesNotExist();
         assert.deepEqual(leftToBrowser, []);
         assert.strictEqual(window.location.href, pageURL, 'no page load');
       });

@@ -15,6 +15,7 @@ import {
   normalizeRoutingPath,
   resolveHostRoute,
   resolveRedirectTarget,
+  rri,
   sanitizeHeadHTML,
   type HostRoute,
   type HostRoutingRule,
@@ -273,11 +274,10 @@ export default class HostModeService extends Service {
   // only.
   resolveRoutedPath(path: string): HostRoutingRule | null {
     this.routingDecisions++;
-    let rule = this.findRoutingRule(path);
-    return rule && !this.isBootstrapRoutingRule(rule) ? rule : null;
+    return this.fixedRoutingRule(path);
   }
 
-  // The fixed rule `resolveRoutedPath` would return for `path`, without
+  // The fixed rule for `path`, as `resolveRoutedPath` returns it, without
   // counting as a routing decision: for code that asks where a link leads
   // before anything navigates.
   fixedRoutingRule(path: string): HostRoutingRule | null {
@@ -307,10 +307,7 @@ export default class HostModeService extends Service {
       return fromConfig;
     }
     let primaryCard = this.hostModeStateService.primaryCard;
-    if (!primaryCard || !parsesAsURL(primaryCard)) {
-      return undefined;
-    }
-    let realm = this.realm.realmOf(new URL(primaryCard));
+    let realm = primaryCard ? this.realm.realmOf(rri(primaryCard)) : undefined;
     if (!realm) {
       return undefined;
     }

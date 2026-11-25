@@ -81,9 +81,9 @@ export default class HostLinkNavigationService extends Service {
   private destinations = new Map<string, Promise<Destination>>();
   // The link the pointer or the focus rests on, until its delay ends.
   private intent: { href: string; timer: ReturnType<typeof later> } | undefined;
-  // Counts the clicks taken over and the pages left, so a click that
-  // another click or a move to another page follows before it navigates is
-  // dropped.
+  // Counts the clicks taken over and the moves to another page that
+  // started, so a click that another click or such a move follows before it
+  // navigates is dropped.
   private follows = 0;
   private installs = 0;
 
@@ -93,6 +93,7 @@ export default class HostLinkNavigationService extends Service {
       document.addEventListener('click', this.onClick);
       document.addEventListener('mouseover', this.onLinkIntent);
       document.addEventListener('focusin', this.onLinkIntent);
+      this.router.on('routeWillChange', this.onRouteWillChange);
       this.router.on('routeDidChange', this.onRouteDidChange);
     }
     let installed = true;
@@ -119,6 +120,7 @@ export default class HostLinkNavigationService extends Service {
     document.removeEventListener('click', this.onClick);
     document.removeEventListener('mouseover', this.onLinkIntent);
     document.removeEventListener('focusin', this.onLinkIntent);
+    this.router.off('routeWillChange', this.onRouteWillChange);
     this.router.off('routeDidChange', this.onRouteDidChange);
     this.cancelIntent();
     this.forgetPage();
@@ -129,15 +131,22 @@ export default class HostLinkNavigationService extends Service {
     this.hostRouteLinks.forgetLinkedCards();
   }
 
-  // The visitor has left the page once a transition to another path is
-  // done. A transition that is aborted or fails leaves the visitor on the
-  // page, with its links, so nothing is forgotten before then. A change to
-  // the stack of cards open on the page keeps the path. A click still
-  // waiting for its destination is dropped, so it can't take the visitor
-  // away from the page they went to.
-  private onRouteDidChange = (transition: Transition) => {
+  // A click still waiting for its destination is dropped as soon as a move
+  // to another page starts, so it can't take the visitor away from the page
+  // they are going to. That move may itself wait for a lookup before it is
+  // done (the index route runs one for a routed address it doesn't know).
+  // A change to the stack of cards open on the page keeps the path.
+  private onRouteWillChange = (transition: Transition) => {
     if (pageOf(transition.from) !== pageOf(transition.to)) {
       this.follows++;
+    }
+  };
+
+  // The visitor has left the page once a transition to another path is
+  // done. A transition that is aborted or fails leaves the visitor on the
+  // page, with its links, so nothing is forgotten before then.
+  private onRouteDidChange = (transition: Transition) => {
+    if (pageOf(transition.from) !== pageOf(transition.to)) {
       this.cancelIntent();
       this.forgetPage();
     }
