@@ -18,7 +18,9 @@ import {
   automationRunDedupeKey,
   isWebhookDeliverySlot,
   isAutomationScriptOutcome,
+  MAX_WEBHOOK_PAYLOAD_CHARS,
   scriptErrorText,
+  WEBHOOK_PAYLOAD_TOO_LARGE_REASON,
 } from '../automation-run-command.ts';
 import type { ReportAutomationChange } from '../automation-change-events.ts';
 import type { ReportRunChange } from '../automation-run-events.ts';
@@ -305,6 +307,15 @@ async function attemptRun(
     return await fail(
       'dry-run-mismatch',
       `The run's job ${input.dryRun ? 'is' : "isn't"} a Preview and its row ${dryRun ? 'is' : "isn't"}, so the run didn't start`,
+    );
+  }
+
+  // A delivery whose body was too large to send to the tab ends its run
+  // before anything else, so a redelivery of the same body ends the same way.
+  if (input.webhookPayloadChars !== undefined) {
+    return await fail(
+      WEBHOOK_PAYLOAD_TOO_LARGE_REASON,
+      `The webhook delivery's body is ${input.webhookPayloadChars} characters, more than the ${MAX_WEBHOOK_PAYLOAD_CHARS} a run takes, so the script didn't run`,
     );
   }
 

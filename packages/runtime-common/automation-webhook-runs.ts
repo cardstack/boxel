@@ -14,7 +14,10 @@
 // - enqueues the run's job through `enqueueAutomationRunJob`, as the tick
 //   does for a scheduled run, with the delivery's body as the job's
 //   `webhookPayload`. The script reads it as
-//   `realm.current.automation.webhookPayload`. The run then goes through
+//   `realm.current.automation.webhookPayload`. A body longer than
+//   `MAX_WEBHOOK_PAYLOAD_CHARS` isn't sent: the job carries its length
+//   instead, and the worker ends the run saying the body was too large, so
+//   the run's log shows the delivery that didn't run. The run then goes through
 //   the same admission as any run of the card's triggers: a paused
 //   automation's run doesn't start, and the payer's access, keys and credits
 //   are checked.
@@ -41,7 +44,10 @@ import type { AutomationTickOptions } from './automation-tick.ts';
 import type { ReportAutomationChange } from './automation-change-events.ts';
 import type { ReportRunChange } from './automation-run-events.ts';
 import { logRunPlatformLine } from './automation-run-log.ts';
-import { webhookDeliverySlot } from './automation-run-command.ts';
+import {
+  MAX_WEBHOOK_PAYLOAD_CHARS,
+  webhookDeliverySlot,
+} from './automation-run-command.ts';
 import { emitAutomationRunEvent } from './automation-run-telemetry.ts';
 import { takeWebhookDelivery, type AutomationRow } from './automations.ts';
 import type { DBAdapter } from './db.ts';
@@ -279,7 +285,7 @@ async function startRunsOf(
         runId: run.id,
         scheduledAt: run.createdAt,
         dryRun: false,
-        webhookPayload: delivery.payload,
+        ...payloadInput(delivery.payload),
       },
     });
     runs.push({ runId: run.id, trigger: run.trigger, created, jobId: job.id });
@@ -294,6 +300,17 @@ async function startRunsOf(
     await options.reportRunChange?.(run.id);
   }
   return { kind: 'started', automationId, runs };
+}
+
+// The delivery's body as the job carries it: the body itself, or its length
+// when it is too large to send to the tab.
+function payloadInput(
+  payload: JSONTypes.Value,
+): { webhookPayload: JSONTypes.Value } | { webhookPayloadChars: number } {
+  let chars = JSON.stringify(payload).length;
+  return chars > MAX_WEBHOOK_PAYLOAD_CHARS
+    ? { webhookPayloadChars: chars }
+    : { webhookPayload: payload };
 }
 
 // The line on the run's log naming the trigger, the webhook and the delivery,

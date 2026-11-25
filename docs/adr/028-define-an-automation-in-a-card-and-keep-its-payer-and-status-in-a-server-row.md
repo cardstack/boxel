@@ -66,7 +66,9 @@ cron expression and a time zone, with an optional `until` and `count`),
 `once` (a date, time and time zone), or `webhook` (one of the realm's
 incoming webhooks). A realm's incoming webhooks MUST be the ones a direct
 writer of the realm made: switching an automation on and resuming it MUST
-refuse a webhook trigger that names any other. Each trigger MUST have a label, unique within its
+refuse a webhook trigger that names any other. Each delivery MUST check the
+webhook's owner again, start nothing when the owner is no longer a direct
+writer, and pause the automation. Each trigger MUST have a label, unique within its
 automation. Times MUST be stored as UTC. A trigger's time zone MUST be used
 only to compute its next run. A trigger's run count MUST be kept by its
 label, so that other edits to the card don't reset it. A renamed label starts
@@ -82,7 +84,9 @@ batch's id for a batched-AI follow-up run, and a new id per click for Preview
 and Run now. A run's job args MUST depend only on the automation, the trigger
 and the slot, except that a webhook run's job MUST also carry the delivery's
 body, which nothing else keeps. A webhook run's job MUST NOT start the script
-without that body.
+without that body. A body too large to send to the tab MUST NOT be carried:
+its run MUST end without starting the script, with a reason saying the body
+was too large.
 
 A system cron MUST enqueue a tick job every minute. The tick MUST claim due
 rows with `FOR UPDATE SKIP LOCKED`, and MUST hold a row's claim while it

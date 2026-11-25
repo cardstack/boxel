@@ -95,7 +95,7 @@ export async function unusableWebhookProblems(
       problems.push({
         code: 'foreign-webhook',
         path,
-        message: `The incoming webhook "${trigger.webhookPath}" doesn’t belong to a workspace administrator. Pick one of the workspace’s webhooks for the "${trigger.label}" trigger`,
+        message: `The incoming webhook "${trigger.webhookPath}" doesn’t belong to a realm administrator. Pick one of the workspace’s webhooks for the "${trigger.label}" trigger`,
       });
     }
   }

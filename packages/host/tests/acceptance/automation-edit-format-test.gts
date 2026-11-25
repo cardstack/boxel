@@ -685,7 +685,7 @@ module('Acceptance | automation edit format', function (hooks) {
       );
       assert.strictEqual(
         messageOf('Webhook', item),
-        'Each delivery to this webhook starts a run. The list shows every webhook that a workspace administrator made.',
+        'Each delivery to this webhook starts a run. The list shows every webhook that a realm administrator made.',
         'with a webhook picked, the field shows its hint and no problem',
       );
     });
@@ -698,7 +698,7 @@ module('Acceptance | automation edit format', function (hooks) {
       await waitFor('[data-test-automation-webhook-picker]');
       assert.strictEqual(
         messageOf('Webhook', item),
-        'Pick one of this workspace’s incoming webhooks: Boxel turns the automation on only with a webhook that a workspace administrator made',
+        'Pick one of this workspace’s incoming webhooks: Boxel turns the automation on only with a webhook that a realm administrator made',
       );
       let shown = await openPicker(item);
       assert.deepEqual(
@@ -718,9 +718,7 @@ module('Acceptance | automation edit format', function (hooks) {
       await waitFor('[data-test-automation-webhook-picker-empty]');
       assert
         .dom('[data-test-automation-webhook-picker-empty]', item)
-        .includesText(
-          'No workspace administrator has made an incoming webhook.',
-        );
+        .includesText('No realm administrator has made an incoming webhook.');
     });
   });
 

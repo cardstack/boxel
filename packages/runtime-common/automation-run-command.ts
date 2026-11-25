@@ -57,6 +57,16 @@ export function isWebhookDeliverySlot(slot: string): boolean {
 // storage, so it is bounded before it is sent.
 export const MAX_AUTOMATION_SCRIPT_CHARS = 100_000;
 
+// The largest webhook delivery body a run takes, in characters of its JSON.
+// The body rides the same way the script does, to the prerender server and
+// into the tab's storage, so a delivery over this starts a run that ends
+// without running the script, saying the body was too large.
+export const MAX_WEBHOOK_PAYLOAD_CHARS = 1_000_000;
+
+// The code a run ends with when its delivery's body is over
+// `MAX_WEBHOOK_PAYLOAD_CHARS`.
+export const WEBHOOK_PAYLOAD_TOO_LARGE_REASON = 'webhook-payload-too-large';
+
 // What starts a run, besides its trigger label: the kind of a run started by
 // hand or by a batch, which no trigger on the card names.
 export type AutomationRunTriggerKind =
@@ -80,6 +90,9 @@ export interface AutomationJobInput {
   triggerKind?: 'manual' | 'batch';
   // The delivery's JSON body, for a run a webhook started.
   webhookPayload?: JSONTypes.Value;
+  // Set in place of `webhookPayload` when the delivery's body is longer than
+  // `MAX_WEBHOOK_PAYLOAD_CHARS`. The run ends without running the script.
+  webhookPayloadChars?: number;
 }
 
 export function isAutomationJobInput(
@@ -97,7 +110,9 @@ export function isAutomationJobInput(
     typeof input.dryRun === 'boolean' &&
     (input.triggerKind === undefined ||
       input.triggerKind === 'manual' ||
-      input.triggerKind === 'batch')
+      input.triggerKind === 'batch') &&
+    (input.webhookPayloadChars === undefined ||
+      typeof input.webhookPayloadChars === 'number')
   );
 }
 

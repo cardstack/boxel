@@ -26,6 +26,7 @@ import {
 } from '@cardstack/runtime-common/automations';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
+import { MAX_WEBHOOK_PAYLOAD_CHARS } from '@cardstack/runtime-common/automation-run-command';
 import {
   appendRunLog,
   type RunLogLine,
@@ -679,7 +680,7 @@ module(basename(import.meta.filename), function (hooks) {
       let foreign = await switchOnHooked();
       assert.strictEqual(foreign.status, 422, foreign.text);
       assert.ok(
-        foreign.text.includes('doesn’t belong to a workspace administrator'),
+        foreign.text.includes('doesn’t belong to a realm administrator'),
         foreign.text,
       );
       assert.strictEqual(
@@ -868,6 +869,37 @@ module(basename(import.meta.filename), function (hooks) {
         'complete',
         `it runs (${ranAs.errorReason}: ${ranAs.errorMessage})`,
       );
+    });
+
+    test('a delivery whose body is too large starts a run that ends saying so, without the body', async function (assert) {
+      await switchOnHooked();
+      let payload = { blob: 'x'.repeat(MAX_WEBHOOK_PAYLOAD_CHARS) };
+      let response = await deliver('delivery-too-large', payload);
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 1);
+
+      let [run] = await runsOfHooked();
+      let [job] = (await dbAdapter.execute(
+        `SELECT args FROM jobs WHERE args->>'dedupeKey' = $1`,
+        {
+          bind: [
+            `automation:${automationId(HOOKED)}:deliveries:delivery:delivery-too-large`,
+          ],
+        },
+      )) as { args: { commandInput: Record<string, unknown> } }[];
+      assert.strictEqual(
+        job?.args.commandInput.webhookPayload,
+        undefined,
+        "the run's job doesn't carry the body",
+      );
+      assert.strictEqual(
+        job?.args.commandInput.webhookPayloadChars,
+        JSON.stringify(payload).length,
+        "the run's job carries the body's length",
+      );
+      let ranAs = await ended(run.id);
+      assert.strictEqual(ranAs.state, 'error');
+      assert.strictEqual(ranAs.errorReason, 'webhook-payload-too-large');
     });
 
     test('a redelivery joins the run the first delivery started', async function (assert) {

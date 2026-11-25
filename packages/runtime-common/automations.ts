@@ -794,9 +794,8 @@ export function capsRaisedAbove(
 // pauses with `webhook-changed`. Removing a webhook trigger asks for nothing
 // more. A snapshot without `webhookPaths` predates the record, and limits no
 // webhook. Such an automation's webhooks were never checked against the
-// ownership rule at switch-on, so whatever starts a run from a delivery checks
-// the delivery's webhook against `unusableWebhookProblems` itself rather than
-// trusting the snapshot.
+// ownership rule at switch-on, so each delivery checks the webhook's owner
+// itself (`takeWebhookDelivery`) rather than trusting the snapshot.
 export function webhooksChangedFrom(
   snapshot: AutomationCapsSnapshot,
   card: Pick<AutomationDeclaration, 'triggers'>,
