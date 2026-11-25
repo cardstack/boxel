@@ -1842,12 +1842,12 @@ module('Acceptance | automation view', function (hooks) {
       );
       assert.ok(
         runText('raised').includes(
-          'Boxel canceled the run when Boxel paused the automation: someone raised a limit above what the payer agreed to pay for.',
+          'Boxel canceled the run because someone raised a limit above what the payer agreed to pay for.',
         ),
       );
       assert.ok(
         runText('unowned').includes(
-          'Boxel canceled the run when Boxel paused the automation: the person who made a trigger’s incoming webhook is no longer a realm administrator.',
+          'Boxel canceled the run because the person who made a trigger’s incoming webhook is no longer a realm administrator.',
         ),
       );
     });
