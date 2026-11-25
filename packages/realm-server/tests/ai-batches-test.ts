@@ -12,6 +12,8 @@ import {
   getAIBatch,
   getAutomationRun,
   insertPermissions,
+  listAIBatchesForRun,
+  recordAIBatch,
   ri,
   rri,
   startAutomationRunAttempt,
@@ -69,6 +71,7 @@ function declaration(
   automationId = AUTOMATION,
   batchedAI = true,
   aiCredits = 100,
+  resolveCalls = 5,
 ): AutomationDeclaration {
   return {
     url: automationId,
@@ -86,7 +89,7 @@ function declaration(
     caps: {
       callApiCalls: 20,
       responseBytes: 1_000_000,
-      resolveCalls: 5,
+      resolveCalls,
       aiCredits,
       writes: 50,
       seconds: 300,
@@ -130,6 +133,8 @@ module(basename(import.meta.filename), function () {
     let fetchStub: sinon.SinonStub;
     let submitAnswer: { status: number; body: unknown } | 'network-error';
     let statusAnswer: { status: number; body: unknown };
+    // `AI_BATCH_SUBMITS_ENABLED` as the test found it.
+    let submitsEnabled: string | undefined;
 
     async function startRealmServer(
       dbAdapter: any,
@@ -177,6 +182,8 @@ module(basename(import.meta.filename), function () {
       templateDatabase,
       beforeEach: async (_dbAdapter, publisher, runner) => {
         dbAdapter = _dbAdapter;
+        submitsEnabled = process.env.AI_BATCH_SUBMITS_ENABLED;
+        process.env.AI_BATCH_SUBMITS_ENABLED = 'true';
         await insertProxyEndpoints(dbAdapter, [
           {
             url: 'https://openrouter.ai/api/v1/batches',
@@ -272,6 +279,11 @@ module(basename(import.meta.filename), function () {
           );
       },
       afterEach: async () => {
+        if (submitsEnabled === undefined) {
+          delete process.env.AI_BATCH_SUBMITS_ENABLED;
+        } else {
+          process.env.AI_BATCH_SUBMITS_ENABLED = submitsEnabled;
+        }
         fetchStub.restore();
         await stopRealmServer();
       },
@@ -314,6 +326,7 @@ module(basename(import.meta.filename), function () {
       automationId = AUTOMATION,
       batchedAI = true,
       aiCredits = 100,
+      resolveCalls = 5,
     ) {
       let result = await switchOnAutomation(
         dbAdapter,
@@ -321,7 +334,12 @@ module(basename(import.meta.filename), function () {
           automationId,
           realm: REALM,
           user: PAYER,
-          declaration: declaration(automationId, batchedAI, aiCredits),
+          declaration: declaration(
+            automationId,
+            batchedAI,
+            aiCredits,
+            resolveCalls,
+          ),
         },
         { matrixServerName: 'localhost', virtualNetwork: new VirtualNetwork() },
       );
@@ -621,6 +639,104 @@ module(basename(import.meta.filename), function () {
         response.body.errors[0],
       );
       assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
+    });
+
+    test('a realm server that has not turned on batch submits refuses a submit, and still answers a status read', async function (assert) {
+      await switchOn();
+      let { run, token } = await runningRun();
+      process.env.AI_BATCH_SUBMITS_ENABLED = 'false';
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(response.status, 403);
+      assert.ok(
+        response.body.errors[0].includes("Batched AI isn't turned on"),
+        response.body.errors[0],
+      );
+      assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
+      assert.deepEqual(
+        await listAIBatchesForRun(dbAdapter, run.id),
+        [],
+        'nothing is recorded',
+      );
+
+      await recordAIBatch(dbAdapter, {
+        batchId: 'batch_123',
+        runId: run.id,
+        actsAs: PAYER,
+        realm: REALM,
+        automationId: AUTOMATION,
+        model: MODEL,
+        requestCount: 2,
+        estimatedUsd: 0.01,
+        runAIReservation: 'reservation-1',
+        reservedCredits: 2,
+        deadline: new Date(Date.now() + 3_600_000),
+        expiresAt: null,
+        state: 'validating',
+      });
+      let status = await request
+        .get('/_ai-batches/batch_123')
+        .set('Accept', 'application/json')
+        .set('Authorization', `Bearer ${token}`);
+      assert.strictEqual(status.status, 200, 'a status read is answered');
+    });
+
+    test('each request of a batch counts against the run’s AI request cap', async function (assert) {
+      await switchOn(AUTOMATION, true, 100, 5);
+      let { run, token } = await runningRun();
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(response.status, 202);
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, run.id))?.resolveCalls,
+        2,
+        'the two requests count as two AI requests',
+      );
+    });
+
+    test('a run that has submitted a batch is refused a second, whichever attempt sends it', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+
+      let first = await submit(token, twoRequests());
+      assert.strictEqual(first.status, 202);
+      let second = await submit(token, twoRequests());
+
+      assert.strictEqual(second.status, 409);
+      assert.ok(
+        second.body.errors[0].includes('already submitted a batch'),
+        second.body.errors[0],
+      );
+      assert.strictEqual(
+        sent.filter((call) => call.method === 'POST').length,
+        1,
+        'one batch went to OpenRouter',
+      );
+    });
+
+    test('a batch that would pass the run’s AI request cap ends the run at the cap, and nothing is sent', async function (assert) {
+      await switchOn(AUTOMATION, true, 100, 1);
+      let { run, token } = await runningRun();
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(response.status, 403);
+      assert.ok(
+        response.body.errors[0].includes('resolveCalls cap'),
+        response.body.errors[0],
+      );
+      assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
+      let ended = await getAutomationRun(dbAdapter, run.id);
+      assert.strictEqual(ended?.state, 'error');
+      assert.strictEqual(ended?.errorReason, 'hit-a-cap');
+      assert.strictEqual(ended?.resolveCalls, 0, 'no request was counted');
+      assert.strictEqual(
+        ended?.aiCreditsReserved,
+        0,
+        'the batch’s reservation is released',
+      );
     });
 
     test('a Preview is refused a submit, since it sends its batched requests at the normal price', async function (assert) {

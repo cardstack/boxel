@@ -796,6 +796,11 @@ export class Batch {
   // (it ran once in the index pass and is seeded via
   // `seedPrerenderedHtmlInvalidations`).
   #prerenderHtmlOnly: boolean;
+  // Whether the realm has a host URL, read once when the batch is set up. A
+  // realm with one renders its default index card in full, because a page on
+  // a host URL is served from that stored HTML (ADR 033 §1.7). Always false
+  // on SQLite, which has no host URLs.
+  #realmHasHostURL = false;
   // A `prerenderHtmlOnly` batch's per-row stamps: each URL's live
   // `boxel_index` generation by row type, read once the job's spawning passes
   // have committed. Undefined until `adoptIndexGenerations` runs.
@@ -905,6 +910,14 @@ export class Batch {
     return this.#splitPrerenderHtml;
   }
 
+  // True when this batch's renders store the realm's default index card
+  // (CardsGrid or Workspace) in full rather than as a placeholder: the realm
+  // has a host URL. The visits pass it to the render route as
+  // `RenderRouteOptions.prerenderDefaultIndex`.
+  get prerenderDefaultIndex(): boolean {
+    return this.#realmHasHostURL;
+  }
+
   // The generation this batch stages its rows under (see
   // `#provisionalGeneration`). For work that runs before the pass commits.
   // Committed state is compared against `committedGeneration` instead.
@@ -996,6 +1009,7 @@ export class Batch {
   }
 
   private async setupBatch(): Promise<void> {
+    this.#realmHasHostURL = await this.readRealmHasHostURL();
     if (this.#prerenderHtmlOnly) {
       // The `prerender_html` job never advances `realm_generations`. Its
       // stamps are read from the live index once its spawning passes have
@@ -1006,6 +1020,18 @@ export class Batch {
     }
     await this.setNextGeneration();
     await this.loadResumedRows();
+  }
+
+  private async readRealmHasHostURL(): Promise<boolean> {
+    if (this.#dbAdapter.kind !== 'pg') {
+      return false;
+    }
+    let rows = await this.#query([
+      `SELECT 1 FROM realm_host_urls h JOIN realm_registry r ON r.id = h.realm_id WHERE r.url =`,
+      param(this.realmURL.href),
+      `LIMIT 1`,
+    ]);
+    return rows.length > 0;
   }
 
   private async loadResumedRows(): Promise<void> {

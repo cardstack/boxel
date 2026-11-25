@@ -22,6 +22,9 @@ type StoredMessageDraft = {
   message?: string;
   attachedCardIds?: string[];
   attachedFiles?: StoredFileDraft[];
+  // The prompt the app filled the box with. While `message` is that prompt,
+  // the text is the app's, not the user's. It alone doesn't keep a draft.
+  filledPrompt?: string;
   updatedAt: number;
 };
 
@@ -29,6 +32,7 @@ type DraftUpdate = {
   message?: string;
   attachedCardIds?: string[] | undefined;
   attachedFiles?: StoredFileDraft[] | undefined;
+  filledPrompt?: string | undefined;
 };
 
 export type StoredPendingFile = Pick<
@@ -97,6 +101,16 @@ export default class LocalPersistenceService extends Service {
     this.updateDraft(roomId, {
       message: message?.length ? message : undefined,
     });
+  }
+
+  getFilledPrompt(roomId: string) {
+    return this.getDraft(roomId)?.filledPrompt;
+  }
+
+  // Marks the saved message as the prompt the app filled the box with. Save
+  // the message first: a mark on an empty draft isn't kept.
+  setFilledPrompt(roomId: string, prompt: string | undefined) {
+    this.updateDraft(roomId, { filledPrompt: prompt });
   }
 
   getAttachedCardIds(roomId: string) {
@@ -169,6 +183,7 @@ export default class LocalPersistenceService extends Service {
     let attachedCardIds = (value as { attachedCardIds?: unknown })
       .attachedCardIds;
     let attachedFiles = (value as { attachedFiles?: unknown }).attachedFiles;
+    let filledPrompt = (value as { filledPrompt?: unknown }).filledPrompt;
 
     let sanitizedMessage = typeof message === 'string' ? message : undefined;
     let sanitizedCards = Array.isArray(attachedCardIds)
@@ -201,6 +216,7 @@ export default class LocalPersistenceService extends Service {
       message: sanitizedMessage,
       attachedCardIds: sanitizedCards,
       attachedFiles: sanitizedFiles,
+      filledPrompt: typeof filledPrompt === 'string' ? filledPrompt : undefined,
       updatedAt,
     } satisfies StoredMessageDraft;
   }
@@ -269,6 +285,7 @@ export default class LocalPersistenceService extends Service {
       message: existing?.message,
       attachedCardIds: existing?.attachedCardIds,
       attachedFiles: existing?.attachedFiles,
+      filledPrompt: existing?.filledPrompt,
       updatedAt:
         existing?.updatedAt ??
         Number((existing as { createdAt?: number })?.createdAt) ??
@@ -283,6 +300,9 @@ export default class LocalPersistenceService extends Service {
     }
     if ('attachedFiles' in updates) {
       next.attachedFiles = updates.attachedFiles;
+    }
+    if ('filledPrompt' in updates) {
+      next.filledPrompt = updates.filledPrompt;
     }
 
     if (this.isDraftEmpty(next)) {

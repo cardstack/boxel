@@ -1,5 +1,7 @@
 // The tick: once a minute, start a run for each trigger of a switched-on
-// automation that has come due (ADR 028 §1.5).
+// automation that has come due (ADR 028 §1.5). The same job starts each
+// batch's follow-up run once the batch's deadline passes
+// (`startDueAIBatchFollowUps` in `ai-batch-follow-ups.ts`).
 //
 // A system cron enqueues an `automation-tick` job every minute, from every
 // worker manager. The job claims each due row (`state` active or *waiting for

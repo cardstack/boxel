@@ -790,11 +790,11 @@ module(basename(import.meta.filename), function (hooks) {
       let status = attributesOf(
         (await statusOf(ADMIN, ['read', 'write'])).body,
       );
-      // Without a declaration the route reports each trigger the row has
-      // counted. Switch-on records every trigger the card declared, and an
-      // edit that fails to read leaves the row as it was, so all four
-      // triggers report, with only their run counts. The row keeps its
-      // labels in jsonb's key order, so they are compared by label.
+      // Without a declaration the route reports each trigger of the card's
+      // last readable edit. Switch-on records every trigger the card
+      // declared, and an edit that fails to read leaves the row as it was,
+      // so all four triggers report, with only their run counts. The row
+      // keeps its labels in jsonb's key order, so they are compared by label.
       let [row] = await query(dbAdapter, [
         'SELECT trigger_runs FROM automations WHERE automation_id =',
         param(automationURL()),
@@ -811,6 +811,60 @@ module(basename(import.meta.filename), function (hooks) {
           { label: 'push', runs: 0 },
         ],
         `each trigger the row counted reports its runs; the row's trigger_runs: ${JSON.stringify(row?.trigger_runs)}`,
+      );
+    });
+
+    test('a card that no longer reads as a declaration leaves out a trigger an earlier edit removed', async function (assert) {
+      await writeAutomation();
+      await switchOn();
+      await setRuns('hourly', 7);
+      // Spent, so not live, yet still declared.
+      await setRuns('nightly', 30);
+      function cardWith(triggers: Record<string, unknown>[]) {
+        return JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { ...attributes, triggers },
+            relationships: {
+              script: { links: { self: '../scripts/nightly-import.js' } },
+            },
+            meta: { adoptsFrom: automationRef },
+          },
+        });
+      }
+      let withoutHourly = attributes.triggers.filter(
+        (t: Record<string, unknown>) => t.label !== 'hourly',
+      );
+      // The first edit removes `hourly`, and the card reads.
+      await testRealm.write(
+        'automations/nightly.json',
+        cardWith(withoutHourly),
+      );
+      // The next edit leaves a cron trigger without an expression, so the
+      // card fails to read.
+      await testRealm.write(
+        'automations/nightly.json',
+        cardWith([...withoutHourly, trigger('cron', { label: 'half-typed' })]),
+      );
+      let status = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      let [row] = await query(dbAdapter, [
+        'SELECT trigger_runs FROM automations WHERE automation_id =',
+        param(automationURL()),
+      ]);
+      let labels = status.switchedOn
+        ? status.triggers.map(({ label }) => label).sort()
+        : [];
+      assert.deepEqual(
+        labels,
+        ['launch', 'nightly', 'push'],
+        `the removed trigger is left out; the row's trigger_runs: ${JSON.stringify(row?.trigger_runs)}`,
+      );
+      assert.strictEqual(
+        (row?.trigger_runs as Record<string, { runs: number }>)?.hourly?.runs,
+        7,
+        "the row keeps the removed trigger's count, should the label come back",
       );
     });
 
@@ -1834,6 +1888,43 @@ module(basename(import.meta.filename), function (hooks) {
             ({ label, kind }) => label === 'nightly' && kind === null,
           ),
           'each trigger the row has counted, by its label',
+        );
+      });
+
+      test('an automation whose card the index lacks leaves out a trigger an earlier edit removed', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await testRealm.write(
+          'automations/nightly.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                ...attributes,
+                triggers: attributes.triggers.filter(
+                  (t: Record<string, unknown>) => t.label !== 'hourly',
+                ),
+              },
+              relationships: {
+                script: { links: { self: '../scripts/nightly-import.js' } },
+              },
+              meta: { adoptsFrom: automationRef },
+            },
+          }),
+        );
+        await query(dbAdapter, [
+          `UPDATE boxel_index SET is_deleted = TRUE WHERE url =`,
+          param(`${automationURL()}.json`),
+          `OR file_alias =`,
+          param(automationURL()),
+        ]);
+        let [entry] = await entries();
+        assert.deepEqual(
+          entry.attributes.triggers
+            .map(({ label }: { label: string }) => label)
+            .sort(),
+          ['launch', 'nightly', 'push'],
+          'the list names the triggers of the last edit the card read in',
         );
       });
 
