@@ -172,18 +172,23 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return this.hostModeService.publishedRealmURLs;
   }
 
-  // With Host Mode v2, the realm's host URLs, which the Open Site button
-  // opens. With the flag off, nothing reads them. With no card open, the
-  // realm is a fallback the user isn't looking at, so nothing reads them
-  // either, as for the host URL manager.
-  private hostURLs = loadHostURLs(this, getOwner(this)!, () =>
-    this.needsCardForHostURLs || !this.isHostModeV2 ? undefined : this.realmURL,
+  // Reads the host URLs of the realm the Open Site button opens, when there
+  // is one (`HostModeService.openSiteRealmURL`).
+  private hostURLs = loadHostURLs(
+    this,
+    getOwner(this)!,
+    () => this.hostModeService.openSiteRealmURL,
   );
 
   // The button shows when there is a site to open: a host URL, or a site
-  // published with v1.
+  // published with v1. The resource starts the read of the host URLs when it
+  // is first used, and `openSiteHostURLs` decides which of them the button
+  // opens.
   get showsOpenSiteButton() {
-    return this.hostURLs.hostURLs.length > 0 || this.hasPublishedSites;
+    let hasHostURLs =
+      this.hostURLs.hostURLs.length > 0 &&
+      this.hostModeService.openSiteHostURLs.length > 0;
+    return hasHostURLs || this.hasPublishedSites;
   }
 
   // With no card open, Host mode falls back to a default realm, such as the

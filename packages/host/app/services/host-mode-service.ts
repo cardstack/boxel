@@ -534,19 +534,33 @@ export default class HostModeService extends Service {
     return Boolean(config.featureFlags?.hostModeV2);
   }
 
-  // Host Mode v2: the realm's host URLs, canonical first, each with the path
-  // of the card on screen. Empty until the host URL service has read them,
-  // when the flag is off, and when no card is open, since the realm is then a
-  // fallback the user isn't looking at.
-  get openSiteHostURLs(): OpenSiteHostURL[] {
+  // Host Mode v2: the realm whose host URLs the Open Site button opens. None
+  // when the flag is off, and none when no card is open, since the realm is
+  // then a fallback the user isn't looking at.
+  get openSiteRealmURL(): string | undefined {
     if (
       !this.isHostModeV2 ||
-      !this.realmURL ||
       !this.operatorModeStateService.hostModePrimaryCard
     ) {
+      return undefined;
+    }
+    return this.realmURL || undefined;
+  }
+
+  // Host Mode v2: the realm's host URLs, canonical first, each with the path
+  // of the card on screen. Empty until the host URL service has read them,
+  // when there is no `openSiteRealmURL`, and when the last read failed, so the
+  // button doesn't open a host URL that may since have been unmounted.
+  get openSiteHostURLs(): OpenSiteHostURL[] {
+    let realmURL = this.openSiteRealmURL;
+    if (!realmURL) {
       return [];
     }
-    return [...this.hostUrlService.hostURLsFor(this.realmURL)]
+    let state = this.hostUrlService.stateFor(realmURL);
+    if (!state || state.loadError) {
+      return [];
+    }
+    return [...state.hostURLs]
       .sort((a, b) => Number(b.isCanonical) - Number(a.isCanonical))
       .map(({ url, isCanonical }) => ({
         url,

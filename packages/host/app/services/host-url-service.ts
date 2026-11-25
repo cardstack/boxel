@@ -63,10 +63,6 @@ export default class HostURLService extends Service {
     return this.stateFor(realmURL)?.hostURLs ?? [];
   }
 
-  canonicalFor(realmURL: string): HostURL | undefined {
-    return this.hostURLsFor(realmURL).find((hostURL) => hostURL.isCanonical);
-  }
-
   // Reads the realm's host URLs the first time it is called for the realm. A
   // later call does nothing, also after a failed read: a failure is kept in
   // the state, not thrown, and `refresh` reads again. It is safe to call

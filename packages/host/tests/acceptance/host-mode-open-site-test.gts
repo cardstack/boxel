@@ -286,6 +286,32 @@ module('Acceptance | host mode open site', function (hooks) {
       restore();
     }
   });
+
+  test('when a later read of the host URLs fails, the button stops opening the host URL it read before', async function (assert) {
+    fake.hostURLs = [
+      { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
+    ];
+    await visitPerson();
+    await waitFor(OPEN_SITE);
+    assert.dom(OPEN_SITE).hasAttribute('href', `${SPACE_URL}${CARD_PATH}`);
+
+    let realmServer = getService('realm-server') as any;
+    let fakeList = realmServer.listHostURLs;
+    realmServer.listHostURLs = async () => {
+      throw new Error('The realm server is unreachable');
+    };
+    try {
+      await getService('host-url-service')
+        .refresh(testRealmURL)
+        .catch(() => undefined);
+      await settled();
+      assert
+        .dom(OPEN_SITE)
+        .doesNotExist('with no v1 site, there is nothing left to open');
+    } finally {
+      realmServer.listHostURLs = fakeList;
+    }
+  });
 });
 
 module('Acceptance | host mode open site, Host Mode v2 off', function (hooks) {
