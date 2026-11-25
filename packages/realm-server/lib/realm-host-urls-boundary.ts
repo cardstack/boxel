@@ -1,13 +1,20 @@
 import { createHash } from 'crypto';
 import type Koa from 'koa';
 import type { Readable } from 'stream';
+import { HtmlResourceType, RealmPaths } from '@cardstack/runtime-common';
 import {
+  fullRequestURL,
   readRequestText,
   servesStoredBytes,
   setRequestText,
 } from '../middleware/index.ts';
 import { nodeStreamToText } from '../stream.ts';
-import { requestHostURL, type HostURLMatch } from './realm-host-urls.ts';
+import {
+  requestHostURL,
+  type HostURLMatch,
+  type HostURLResolver,
+  type RenderedAgainstURLs,
+} from './realm-host-urls.ts';
 
 // The one place a request on a host URL and its response are translated
 // between the host URL and the realm's URL (ADR 033 §1.5). Everything stored
@@ -19,10 +26,20 @@ import { requestHostURL, type HostURLMatch } from './realm-host-urls.ts';
 // its JSON body, so that card ids and code refs in a `_search`, an
 // `_operations` or a `_capabilities` request name the realm's URL. On the way
 // out it translates every response header, and the body of an HTML or JSON
-// response. Both the realm's URL and its canonical host URL are translated to
-// the host URL the request came in on, so a page is right whichever of the
-// two its stored markup names. A page's canonical link and `og:url` name the
-// canonical host URL instead (ADR 033 §1.4).
+// response. The realm's URL and its canonical host URL are translated to the
+// host URL the request came in on. In stored HTML, each URL that HTML was
+// rendered against is translated too, so a page is right whichever of them
+// its markup names, also while the realm's HTML is rendered again against a
+// new canonical host URL (ADR 033 §1.8). Only stored HTML is translated from
+// those URLs: anywhere else, such as in a card's data, a URL that names one
+// of them is data the realm holds. A page's canonical link and `og:url` name
+// the canonical host URL instead (ADR 033 §1.4).
+//
+// A response on the realm's own URL names the realm's URL wherever the stored
+// HTML it serves names a URL that HTML was rendered against, so that the app
+// links into the realm, not to its site (ADR 033 §1.8). Only stored HTML is
+// changed: a served page, and the `html` resources of a search or a +html
+// read. A canonical link and an `og:url` keep the URL they name (§1.4).
 //
 // Nothing translated is stored. A response that serves a file's stored bytes
 // (a plain file read, a card-source read, or a range of either) is answered
@@ -31,10 +48,11 @@ import { requestHostURL, type HostURLMatch } from './realm-host-urls.ts';
 // asked for.
 //
 // A translated response is a different representation from the realm's, and
-// it changes when the canonical host URL changes, which the realm's ETag does
-// not see. So every ETag on a host URL carries a suffix that names the
-// translation, and a conditional request has the suffix removed before the
-// realm compares it. A validator with another suffix, or none, never matches.
+// it changes when the canonical host URL or the URLs stored HTML was rendered
+// against change, which the realm's ETag does not see. So every ETag on a host
+// URL carries a suffix that names the translation, and a conditional request
+// has the suffix removed before the realm compares it. A validator with
+// another suffix, or none, never matches.
 
 // The cache policy of a response on a host URL that sets none of its own.
 export const DEFAULT_CACHE_CONTROL = 'private, no-cache';
@@ -125,11 +143,103 @@ class Replacer {
   }
 }
 
+// The text that a body must contain to name one of `urls`: each URL without
+// its trailing slash, in the forms a `Replacer` finds.
+function needlesFor(urls: readonly string[]): string[] {
+  return urls.flatMap((url) => {
+    let bare = url.replace(/\/$/, '');
+    return [bare, encodeURIComponent(bare)];
+  });
+}
+
+function namesAny(text: string, needles: readonly string[]): boolean {
+  return needles.some((needle) => text.includes(needle));
+}
+
+// Stored HTML with its URLs mapped by `replacer`, and those in its canonical
+// link and `og:url` by `canonical`, or left as they are without one. The host
+// app's config in a page is data, not stored HTML, and is left as it is.
+function mapStoredHTML(
+  html: string,
+  replacer: Replacer,
+  canonical?: Replacer,
+): string {
+  let out = '';
+  let last = 0;
+  for (let match of html.matchAll(LINK_OR_META)) {
+    let tag = match[0];
+    out += replacer.replace(html.slice(last, match.index));
+    if (CONFIG_META.test(tag)) {
+      out += tag;
+    } else if (CANONICAL_TAG.test(tag)) {
+      out += canonical ? canonical.replace(tag) : tag;
+    } else {
+      out += replacer.replace(tag);
+    }
+    last = match.index + tag.length;
+  }
+  return out + replacer.replace(html.slice(last));
+}
+
+// A JSON:API document with the markup of each of its `html` resources mapped
+// by `map`, which gets the URL of the resource's card. The rest of the
+// document is not stored HTML, and is left as it is. A document that isn't
+// JSON, or in which nothing changes, is returned as it is.
+function mapHTMLResources(
+  text: string,
+  map: (html: string, cardURL: string) => string,
+): string {
+  let doc: { data?: unknown; included?: unknown } | null;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return text;
+  }
+  if (!doc || typeof doc !== 'object') {
+    return text;
+  }
+  let resources = [
+    ...(Array.isArray(doc.data) ? doc.data : [doc.data]),
+    ...(Array.isArray(doc.included) ? doc.included : []),
+  ] as ({
+    type?: unknown;
+    id?: unknown;
+    attributes?: { html?: unknown };
+  } | null)[];
+  let changed = false;
+  for (let resource of resources) {
+    if (
+      !resource ||
+      typeof resource !== 'object' ||
+      resource.type !== HtmlResourceType ||
+      typeof resource.id !== 'string' ||
+      typeof resource.attributes?.html !== 'string'
+    ) {
+      continue;
+    }
+    // An `html` resource's id is its card's URL, then `#` and the rendering
+    // it is.
+    let html = map(resource.attributes.html, resource.id.split('#')[0]);
+    if (html !== resource.attributes.html) {
+      resource.attributes.html = html;
+      changed = true;
+    }
+  }
+  return changed ? JSON.stringify(doc) : text;
+}
+
 export class HostURLTranslator {
   readonly match: HostURLMatch;
   #inbound: Replacer;
   #outbound: Replacer;
   #canonical: Replacer;
+  // The URLs stored HTML was rendered against, as the host URL, and in a
+  // canonical link and `og:url` as the canonical host URL. These apply only
+  // to stored HTML: anything else that names such a URL is data the realm
+  // holds, which a client can write back.
+  #fromRenderedAgainst: Replacer;
+  #fromRenderedAgainstCanonical: Replacer;
+  #renderedAgainstNeedles: string[];
   #realmPath: string;
   #hostPath: string;
   #validatorSuffix: string;
@@ -138,6 +248,9 @@ export class HostURLTranslator {
     this.match = match;
     let { hostURL, realmURL } = match;
     let canonicalHostURL = match.canonicalHostURL ?? hostURL;
+    let renderedAgainstURLs = match.renderedAgainstURLs ?? [];
+    // A visitor names only the host URLs the realm has now, so a URL that
+    // stored HTML was rendered against is translated on the way out only.
     this.#inbound = new Replacer([
       [hostURL, realmURL],
       [canonicalHostURL, realmURL],
@@ -150,10 +263,24 @@ export class HostURLTranslator {
       [realmURL, canonicalHostURL],
       [hostURL, canonicalHostURL],
     ]);
+    this.#fromRenderedAgainst = new Replacer(
+      renderedAgainstURLs.map((url): [string, string] => [url, hostURL]),
+    );
+    this.#fromRenderedAgainstCanonical = new Replacer(
+      renderedAgainstURLs.map((url): [string, string] => [
+        url,
+        canonicalHostURL,
+      ]),
+    );
+    this.#renderedAgainstNeedles = needlesFor(renderedAgainstURLs);
     this.#realmPath = new URL(realmURL).pathname;
     this.#hostPath = new URL(hostURL).pathname;
     let hash = createHash('sha256')
-      .update(`${realmURL}\n${hostURL}\n${canonicalHostURL}`)
+      .update(
+        [realmURL, hostURL, canonicalHostURL, ...renderedAgainstURLs].join(
+          '\n',
+        ),
+      )
       .digest('base64url')
       .slice(0, 12);
     this.#validatorSuffix = `.h${hash}`;
@@ -230,14 +357,31 @@ export class HostURLTranslator {
     return out + this.outbound(html.slice(last));
   }
 
+  // A response body. A page is built from stored HTML, and in a JSON
+  // document the markup of each `html` resource is stored HTML, so these are
+  // also translated from the URLs stored HTML was rendered against
+  // (ADR 033 §1.8). The rest of the body is translated from the realm's URL
+  // and its canonical host URL only.
   outboundBody(text: string, type: string): string {
     if (type === 'text/html') {
-      return this.outboundHTML(text);
+      return this.outboundHTML(this.#storedHTML(text));
     }
+    let translated = namesAny(text, this.#renderedAgainstNeedles)
+      ? mapHTMLResources(text, (html) => this.#storedHTML(html))
+      : text;
     if (isMarkupEnvelopeType(type)) {
-      return this.#outboundMarkupEnvelope(text);
+      return this.#outboundMarkupEnvelope(translated);
     }
-    return this.outbound(text);
+    return this.outbound(translated);
+  }
+
+  // Stored HTML, with the URLs it was rendered against as the host URL.
+  #storedHTML(html: string): string {
+    return mapStoredHTML(
+      html,
+      this.#fromRenderedAgainst,
+      this.#fromRenderedAgainstCanonical,
+    );
   }
 
   // Each string in the document is translated as markup, so a `head`
@@ -319,13 +463,151 @@ export class HostURLTranslator {
   }
 }
 
-// A translator depends only on the three URLs, so one is kept for each set of
-// them that requests come in on, up to a bound.
+// Names the realm's URL wherever stored HTML names a URL it was rendered
+// against, in a response on the realm's own URL (ADR 033 §1.8). Each realm's
+// HTML is mapped back only from the URLs its own HTML was rendered against.
+// A canonical link and an `og:url` keep the URL they name (ADR 033 §1.4).
+export class StoredHTMLBackMapper {
+  // Longest realm URL first, so a realm inside another one's path wins.
+  #realms: {
+    realmURL: string;
+    paths: RealmPaths;
+    replacer: Replacer;
+  }[];
+  // The text a body must contain for the body to need mapping.
+  #needles: string[];
+
+  constructor(renderedAgainstURLs: RenderedAgainstURLs) {
+    this.#realms = [...renderedAgainstURLs]
+      .map(([realmURL, urls]) => ({
+        realmURL,
+        paths: new RealmPaths(new URL(realmURL)),
+        replacer: new Replacer(
+          urls.map((url): [string, string] => [url, realmURL]),
+        ),
+      }))
+      .sort((a, b) => b.realmURL.length - a.realmURL.length);
+    this.#needles = needlesFor([...renderedAgainstURLs.values()].flat());
+  }
+
+  #realmOf(url: string) {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return undefined;
+    }
+    return this.#realms.find(({ paths }) => paths.inRealm(parsed));
+  }
+
+  // Whether stored HTML of the realm that `url` is in can need mapping.
+  mapsRealmOf(url: string): boolean {
+    return this.#realmOf(url) !== undefined;
+  }
+
+  // Stored HTML of the realm that `url` is in, naming the realm's URL.
+  html(html: string, url: string): string {
+    let realm = this.#realmOf(url);
+    return realm ? mapStoredHTML(html, realm.replacer) : html;
+  }
+
+  // A response body. A page is mapped as the realm's page at `requestURL`. In
+  // a JSON document only the markup of its `html` resources is mapped, each
+  // as its card's realm's HTML, since the rest of the document is not stored
+  // HTML.
+  body(text: string, type: string, requestURL: string): string {
+    if (type === 'text/html') {
+      return this.html(text, requestURL);
+    }
+    if (!namesAny(text, this.#needles)) {
+      return text;
+    }
+    return mapHTMLResources(text, (html, cardURL) => this.html(html, cardURL));
+  }
+}
+
+// The server's search across realms, which serves the stored HTML of the
+// realms it searches from a path in none of them.
+const FEDERATED_SEARCH_PATH = '/_federated-search';
+
+// The back-mapper for the newest read of the URLs stored HTML was rendered
+// against. Each read is a new map, so the map itself is the key.
+let lastBackMapper:
+  | { source: RenderedAgainstURLs; mapper: StoredHTMLBackMapper }
+  | undefined;
+
+function backMapperFor(
+  renderedAgainstURLs: RenderedAgainstURLs,
+): StoredHTMLBackMapper {
+  if (lastBackMapper?.source !== renderedAgainstURLs) {
+    lastBackMapper = {
+      source: renderedAgainstURLs,
+      mapper: new StoredHTMLBackMapper(renderedAgainstURLs),
+    };
+  }
+  return lastBackMapper.mapper;
+}
+
+// Whether a response's body is one that may be translated: not a file's
+// stored bytes, nor a range of them, nor compressed.
+function hasTranslatableBody(ctxt: Koa.Context): boolean {
+  // A file's stored bytes, and every range of them, are passed on as they
+  // are. Only the realm serves ranges, and only of stored bytes, so a range
+  // and the full response it is part of are never translated differently.
+  if (servesStoredBytes(ctxt) || ctxt.status === 206) {
+    return false;
+  }
+  // Koa reads an absent header as ''. A compressed body can't be read as
+  // text here.
+  return (
+    isTranslatedResponseType(ctxt.response.type) &&
+    ['', 'identity'].includes(ctxt.response.get('content-encoding'))
+  );
+}
+
+// Maps the stored HTML in a response on the realm's own URL back to the
+// realm's URL. While no realm's HTML was rendered against another URL, this
+// costs no more than a cached lookup.
+async function backMapAtRealmURL(
+  ctxt: Koa.Context,
+  resolver: HostURLResolver,
+): Promise<void> {
+  if (ctxt.body == null || !hasTranslatableBody(ctxt)) {
+    return;
+  }
+  let renderedAgainstURLs = await resolver.renderedAgainstURLs();
+  if (renderedAgainstURLs.size === 0) {
+    return;
+  }
+  let mapper = backMapperFor(renderedAgainstURLs);
+  let requestURL = fullRequestURL(ctxt).href;
+  if (!mapper.mapsRealmOf(requestURL) && ctxt.path !== FEDERATED_SEARCH_PATH) {
+    return;
+  }
+  let text = await responseText(ctxt.body);
+  if (text === undefined) {
+    return;
+  }
+  let mapped = mapper.body(text, ctxt.response.type, requestURL);
+  if (mapped !== text || typeof ctxt.body !== 'string') {
+    // Content-Type is already set, so assigning a string keeps it and sets
+    // the new length.
+    ctxt.body = mapped;
+  }
+}
+
+// A translator depends only on the URLs of its match, so one is kept for each
+// set of them that requests come in on, up to a bound.
 const TRANSLATOR_CACHE_SIZE = 500;
 const translators = new Map<string, HostURLTranslator>();
 
 function translatorFor(match: HostURLMatch): HostURLTranslator {
-  let key = `${match.hostURL}\n${match.realmURL}\n${match.canonicalHostURL ?? ''}`;
+  let key = [
+    match.hostURL,
+    match.realmURL,
+    match.canonicalHostURL ?? '',
+    ...(match.renderedAgainstURLs ?? []),
+  ].join('\n');
   let translator = translators.get(key);
   if (translator) {
     // Most recently used last, so the oldest is the first one evicted.
@@ -356,17 +638,18 @@ async function responseText(body: unknown): Promise<string | undefined> {
   return undefined;
 }
 
-// Translates a request on a host URL and its response. Runs right after
-// `resolveHostURLs`, so it is the outermost code that sees the request in the
-// realm's terms.
-export function translateAtHostURLs(): (
-  ctxt: Koa.Context,
-  next: Koa.Next,
-) => Promise<void> {
+// Translates a request on a host URL and its response, and maps stored HTML
+// in a response on the realm's own URL back to the realm's URL. Runs right
+// after `resolveHostURLs`, so it is the outermost code that sees the request
+// in the realm's terms.
+export function translateAtHostURLs(
+  resolver: HostURLResolver,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function translateAtHostURL(ctxt, next) {
     let match = requestHostURL(ctxt);
     if (!match) {
       await next();
+      await backMapAtRealmURL(ctxt, resolver);
       return;
     }
     let translator = translatorFor(match);
@@ -422,18 +705,7 @@ export function translateAtHostURLs(): (
       }
     }
     let type = ctxt.response.type;
-    if (
-      // A file's stored bytes, and every range of them, are passed on as they
-      // are. Only the realm serves ranges, and only of stored bytes, so a
-      // range and the full response it is part of are never translated
-      // differently.
-      servesStoredBytes(ctxt) ||
-      ctxt.status === 206 ||
-      !isTranslatedResponseType(type) ||
-      // Koa reads an absent header as ''. A compressed body can't be read as
-      // text here.
-      !['', 'identity'].includes(ctxt.response.get('content-encoding'))
-    ) {
+    if (!hasTranslatableBody(ctxt)) {
       return;
     }
     if (ctxt.body == null) {

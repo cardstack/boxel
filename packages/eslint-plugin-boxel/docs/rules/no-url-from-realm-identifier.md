@@ -1,4 +1,6 @@
-# Disallow passing a realm identifier to a URL constructor or parse probe, which mishandles the canonical prefix form (`@cardstack/boxel/no-url-from-realm-identifier`)
+# @cardstack/boxel/no-url-from-realm-identifier
+
+📝 Disallow passing a realm identifier to a URL constructor or parse probe, which mishandles the canonical prefix form.
 
 <!-- end auto-generated rule header -->
 

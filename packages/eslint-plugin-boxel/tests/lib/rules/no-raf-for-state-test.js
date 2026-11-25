@@ -4,7 +4,7 @@ const rule = require('../../../lib/rules/no-raf-for-state');
 const RuleTester = require('eslint').RuleTester;
 
 const ruleTester = new RuleTester({
-  parserOptions: {
+  languageOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
   },

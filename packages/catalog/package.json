@@ -28,7 +28,7 @@
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
     "eslint-plugin-ember": "catalog:",
-    "eslint-plugin-import": "catalog:",
+    "eslint-plugin-import-x": "catalog:",
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",
     "lodash-es": "catalog:",

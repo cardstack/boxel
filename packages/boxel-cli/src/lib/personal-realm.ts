@@ -7,6 +7,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import {
   addRealmToMatrixAccountData,
+  editUserRealmsOnRealmServer,
   getRealmServerToken,
   requireUserRealmsFromMatrixAccountData,
   type MatrixAuth,
@@ -38,17 +39,20 @@ export async function ensurePersonalRealm(
   auth: MatrixAuth,
   realmServerUrl: string,
 ): Promise<EnsurePersonalRealmResult> {
+  let serverToken: string | undefined;
+  let getServerToken = async () =>
+    (serverToken ??= await getRealmServerToken(auth, realmServerUrl));
   return bootstrapPersonalRealm({
     readRealms: () => requireUserRealmsFromMatrixAccountData(auth),
     displayName: async () =>
       (await fetchMatrixDisplayName(auth)) ?? localpart(auth.userId),
     createRealm: async (init) => {
-      let serverToken = await getRealmServerToken(auth, realmServerUrl);
       let headers = new Headers(init.headers);
-      headers.set('Authorization', serverToken);
+      headers.set('Authorization', await getServerToken());
       return fetch(createRealmUrl(realmServerUrl), { ...init, headers });
     },
-    addToList: (realmUrl) => addRealmToMatrixAccountData(auth, realmUrl),
+    addToList: async (realmUrl) =>
+      addToRealmList(auth, realmServerUrl, await getServerToken(), realmUrl),
   });
 }
 
@@ -199,6 +203,31 @@ async function bootstrapPersonalRealm(
   let realmUrl = ensureTrailingSlash(rawRealmUrl);
   await access.addToList?.(realmUrl);
   return { outcome: 'created', realmUrl };
+}
+
+// The realm server adds the realm when it keeps the account's realm list,
+// so the edit never overlaps one the server makes itself; otherwise it is
+// written to Matrix here.
+async function addToRealmList(
+  auth: MatrixAuth,
+  realmServerUrl: string,
+  serverToken: string,
+  realmUrl: string,
+) {
+  let edit = await editUserRealmsOnRealmServer(
+    realmServerUrl,
+    (url, init) => {
+      let headers = new Headers(init.headers);
+      headers.set('Authorization', serverToken);
+      return fetch(url, { ...init, headers });
+    },
+    { add: [realmUrl] },
+  );
+  if (edit.outcome !== 'edited') {
+    // Adds the realm only when it's missing, so a failed request that added
+    // it already leaves no duplicate.
+    await addRealmToMatrixAccountData(auth, realmUrl);
+  }
 }
 
 function localpart(userId: string): string {

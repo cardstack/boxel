@@ -1,4 +1,6 @@
-# Remove unused import bindings while preserving module evaluation (`@cardstack/boxel/no-unused-imports`)
+# @cardstack/boxel/no-unused-imports
+
+📝 Remove unused import bindings while preserving module evaluation.
 
 🔧 This rule is automatically fixable by the [`--fix` CLI option](https://eslint.org/docs/latest/user-guide/command-line-interface#--fix).
 

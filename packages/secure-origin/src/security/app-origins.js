@@ -1,4 +1,3 @@
-/* eslint-env browser */
 // Whether `origin` is one of the app origins the realm server lists for the
 // credential fields. A listed origin whose host starts with `*.` stands for
 // every subdomain of the rest, and one whose port is `*` for every port of

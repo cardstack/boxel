@@ -135,11 +135,10 @@ import { Submodes } from '../submode-switcher';
 
 import RoomMessage from './room-message';
 
-import type { FoldedRun } from './room-message';
-
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
 import type { Gate } from '../ai-assistant/composer-cap';
+import type { FoldedRun } from './room-message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { SessionPrepStep } from '@cardstack/pretui/components/session-prep';

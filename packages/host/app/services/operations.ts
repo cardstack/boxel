@@ -41,13 +41,13 @@ import OperationLedger from '../lib/operation-ledger';
 
 import { getSearchEntriesResource } from '../resources/search-entries';
 
+import type { LoweredOperation } from '../lib/operation-ledger';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type RealmService from './realm';
 import type StoreService from './store';
-import type { LoweredOperation } from '../lib/operation-ledger';
 
 import type { CardDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';

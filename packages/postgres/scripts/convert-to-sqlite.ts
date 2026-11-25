@@ -1,4 +1,3 @@
-/* eslint-env node */
 import { readFileSync, readdirSync, writeFileSync } from 'fs';
 import { resolve, join } from 'path';
 import {
