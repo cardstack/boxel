@@ -433,11 +433,12 @@ export default function handleCreateRealmRequest(
       }
     }
 
-    // A caller with an OAuth token holds no Matrix token to keep its owner's
-    // workspace list with, so the new realm joins the list here, before the
-    // response, and the two succeed or fail together: a realm the list can't
-    // take is deleted again. A caller with a session token keeps the list
-    // itself, as the app and every boxel-cli signed in to Matrix do.
+    // For a caller with an OAuth token the new realm joins its owner's
+    // workspace list here, before the response, so that the realm and the
+    // list edit succeed or fail together: a realm the list can't take is
+    // deleted again. A caller with a session token edits the list itself
+    // after the response, as the app and every boxel-cli signed in to Matrix
+    // do.
     if (isOAuthRequest(ctxt)) {
       try {
         await addToWorkspaceList(requestDeps, ownerUserId, url!);
