@@ -1,9 +1,12 @@
 // Run with: pnpm --dir packages/catalog test:deploy-check
 
 import { strict as assert } from 'node:assert';
-import { test } from 'node:test';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { after, before, beforeEach, test } from 'node:test';
 
 import {
+  assessAgainstBoxel,
   assessRollout,
   boxelPullState,
   keptMessages,
@@ -240,7 +243,7 @@ test('a catalog pull request counts once it has merged, into any branch', () => 
   assert.equal(merged({ merged_at: null }), false);
 });
 
-test('a boxel pull request merged into a stack parent holds until its merge commit is on main', () => {
+test('a boxel pull request merged into a stack parent holds unless its change is on main', () => {
   let main = { ref: 'main' };
   let at = '2026-10-01T00:00:00Z';
   assert.deepEqual(
@@ -263,18 +266,13 @@ test('a boxel pull request merged into a stack parent holds until its merge comm
   );
   assert.equal(result.holds[0]?.reason, 'unmerged');
 
-  let landed = boxelPullState(
-    { merged_at: at, state: 'closed', base: { ref: 'cs-1-parent' } },
-    true,
+  assert.deepEqual(
+    boxelPullState(
+      { merged_at: at, state: 'closed', base: { ref: 'cs-1-parent' } },
+      true,
+    ),
+    { merged: true, closed: false },
   );
-  assert.deepEqual(landed, { merged: true, closed: false });
-  let catalogPulls = [catalogPull(1, 'Merges after: cardstack/boxel#10')];
-  let boxelPulls = [{ ...boxelPull(10), ...landed }];
-  assert.equal(
-    assess(catalogPulls, boxelPulls).holds[0]?.reason,
-    'not-deployed',
-  );
-  assert.deepEqual(assess(catalogPulls, boxelPulls, [10]).holds, []);
   assert.deepEqual(
     boxelPullState(
       { merged_at: null, state: 'open', base: { ref: 'cs-1-parent' } },
@@ -312,4 +310,177 @@ test('a kept catalog change names the boxel pull request the environment lacks',
     /catalog \(at 0123456789ab\) has cardstack\/boxel-catalog#1 .*merges after cardstack\/boxel#10 .*runs cardstack\/boxel@abcdef012345/,
   );
   assert.match(messages[1], /never moves production's catalog backwards/);
+});
+
+// A stub of the GitHub endpoints the check reads a boxel pull request's
+// landing from.
+interface StubBoxelPull {
+  number: number;
+  base: string;
+  head: string;
+  mergedAt?: string;
+  mergeCommit?: string | null;
+}
+
+const DEPLOYED = 'd'.repeat(40);
+const CHILD_MERGE = 'c'.repeat(40);
+const PARENT_MERGE = 'e'.repeat(40);
+
+let stubPulls: StubBoxelPull[] = [];
+// GitHub's compare status for `<base>...<head>`; a pair it doesn't list is a
+// commit GitHub doesn't have.
+let comparisons = new Map<string, string>();
+let requested: string[] = [];
+let server: Server;
+
+function restPull(pull: StubBoxelPull) {
+  return {
+    number: pull.number,
+    title: `boxel change ${pull.number}`,
+    html_url: `https://github.com/cardstack/boxel/pull/${pull.number}`,
+    state: pull.mergedAt ? 'closed' : 'open',
+    merged_at: pull.mergedAt ?? null,
+    merge_commit_sha: pull.mergeCommit ?? null,
+    body: '',
+    base: { ref: pull.base },
+    head: {
+      label: `cardstack:${pull.head}`,
+      repo: { full_name: 'cardstack/boxel' },
+    },
+  };
+}
+
+before(async () => {
+  server = createServer((req, res) => {
+    let url = new URL(req.url ?? '/', 'http://stub');
+    requested.push(url.pathname);
+    res.setHeader('content-type', 'application/json');
+    let compared = /^\/repos\/cardstack\/boxel\/compare\/(.+)$/.exec(
+      url.pathname,
+    );
+    let one = /^\/repos\/cardstack\/boxel\/pulls\/(\d+)$/.exec(url.pathname);
+    if (compared && comparisons.has(compared[1])) {
+      res.end(JSON.stringify({ status: comparisons.get(compared[1]) }));
+    } else if (one && stubPulls.some((p) => p.number === Number(one![1]))) {
+      res.end(
+        JSON.stringify(
+          restPull(stubPulls.find((p) => p.number === Number(one![1]))!),
+        ),
+      );
+    } else if (url.pathname === '/repos/cardstack/boxel/pulls') {
+      let head = url.searchParams.get('head');
+      res.end(
+        JSON.stringify(
+          stubPulls.map(restPull).filter((p) => p.head.label === head),
+        ),
+      );
+    } else {
+      res.statusCode = 404;
+      res.end('{}');
+    }
+  });
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  let { port } = server.address() as AddressInfo;
+  process.env.GITHUB_API_URL = `http://127.0.0.1:${port}`;
+});
+
+after(() => {
+  server.close();
+});
+
+beforeEach(() => {
+  stubPulls = [];
+  comparisons = new Map();
+  requested = [];
+});
+
+// What holds a catalog change that merges after boxel #10, when the
+// environment runs DEPLOYED.
+async function holdOn10() {
+  let { holds } = await assessAgainstBoxel(
+    [catalogPull(1, 'Merges after: cardstack/boxel#10')],
+    DEPLOYED,
+    ships,
+  );
+  return holds[0]?.reason;
+}
+
+const stackedChild: StubBoxelPull = {
+  number: 10,
+  base: 'cs-1-parent',
+  head: 'cs-2-child',
+  mergedAt: '2026-10-01T12:00:00Z',
+  mergeCommit: CHILD_MERGE,
+};
+
+test('a boxel pull request merged into main is deployed once the environment has its merge commit', async () => {
+  stubPulls = [{ ...stackedChild, base: 'main' }];
+  comparisons.set(`${CHILD_MERGE}...${DEPLOYED}`, 'behind');
+  assert.equal(await holdOn10(), 'not-deployed');
+  assert.deepEqual(
+    requested.filter((path) => path.endsWith('...main')),
+    [],
+    'main is not asked about a pull request that merged into it',
+  );
+  comparisons.set(`${CHILD_MERGE}...${DEPLOYED}`, 'ahead');
+  assert.equal(await holdOn10(), undefined);
+});
+
+test('a boxel pull request merged into another branch has landed when main has its merge commit', async () => {
+  stubPulls = [stackedChild];
+  for (let status of ['ahead', 'identical']) {
+    comparisons.set(`${CHILD_MERGE}...main`, status);
+    comparisons.set(`${CHILD_MERGE}...${DEPLOYED}`, 'diverged');
+    assert.equal(await holdOn10(), 'not-deployed');
+    comparisons.set(`${CHILD_MERGE}...${DEPLOYED}`, 'identical');
+    assert.equal(await holdOn10(), undefined);
+  }
+});
+
+test('a boxel pull request merged into a branch that has not reached main holds as unmerged', async () => {
+  stubPulls = [stackedChild, { number: 9, base: 'main', head: 'cs-1-parent' }];
+  for (let status of ['diverged', 'behind']) {
+    comparisons.set(`${CHILD_MERGE}...main`, status);
+    comparisons.set(`${CHILD_MERGE}...${DEPLOYED}`, 'ahead');
+    assert.equal(await holdOn10(), 'unmerged');
+  }
+});
+
+test('a merge commit GitHub does not have holds as unmerged', async () => {
+  stubPulls = [stackedChild];
+  assert.equal(await holdOn10(), 'unmerged');
+});
+
+test('a boxel pull request whose stack parent merged after it has landed as the parent', async () => {
+  stubPulls = [
+    stackedChild,
+    {
+      number: 9,
+      base: 'main',
+      head: 'cs-1-parent',
+      mergedAt: '2026-10-01T13:00:00Z',
+      mergeCommit: PARENT_MERGE,
+    },
+  ];
+  comparisons.set(`${CHILD_MERGE}...main`, 'diverged');
+  comparisons.set(`${PARENT_MERGE}...${DEPLOYED}`, 'behind');
+  assert.equal(await holdOn10(), 'not-deployed');
+  comparisons.set(`${PARENT_MERGE}...${DEPLOYED}`, 'ahead');
+  assert.equal(await holdOn10(), undefined);
+});
+
+test('a boxel pull request merged into a branch whose pull request had already merged holds as unmerged', async () => {
+  stubPulls = [
+    stackedChild,
+    {
+      number: 9,
+      base: 'main',
+      head: 'cs-1-parent',
+      mergedAt: '2026-10-01T11:00:00Z',
+      mergeCommit: PARENT_MERGE,
+    },
+  ];
+  comparisons.set(`${CHILD_MERGE}...main`, 'diverged');
+  comparisons.set(`${PARENT_MERGE}...${DEPLOYED}`, 'ahead');
+  assert.equal(await holdOn10(), 'unmerged');
 });
