@@ -340,6 +340,29 @@ module('Integration | Command | show-card', function (hooks) {
       assert.strictEqual(added.stackIndex, 1, 'in the same stack');
     });
 
+    test('a card already on top of the target stack stays as it is', async function (assert) {
+      const cardId = `${testRealmURL}Person/alice`;
+      let below = new StackItem({
+        id: `${testRealmURL}Person/bob`,
+        stackIndex: 1,
+        format: 'isolated',
+      });
+      let top = new StackItem({ id: cardId, stackIndex: 1, format: 'edit' });
+      mockOperatorModeStateService.state = {
+        submode: 'interact',
+        codeSelection: undefined,
+        stacks: [[], [below, top]],
+      };
+
+      await command.execute({ cardId });
+
+      assert.deepEqual(
+        mockOperatorModeStateService.trimmedStackItems,
+        [],
+        'nothing in the stack closes',
+      );
+    });
+
     test('calculates correct stack index based on numberOfStacks', async function (assert) {
       const cardId = `${testRealmURL}Person/alice`;
       mockOperatorModeStateService.state = {

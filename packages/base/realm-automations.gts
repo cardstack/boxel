@@ -1,6 +1,8 @@
 import { getComponent, type CardContext, type CreateCardFn } from './card-api';
 import { isLiveRender } from './render-context';
+import { now } from './helpers/clock';
 import {
+  ensureTrailingSlash,
   realmConfigCardURL,
   rri,
   subscribeToRealm,
@@ -65,19 +67,24 @@ export const AutomationsConsoleContextName = 'automations-console-context';
 // never see it, so the config card the request opens is the one that reveals
 // the automation. Plain state rather than tracked, since nothing re-renders
 // when it changes.
-let consoleRequest: { realm: string; automation: string } | undefined;
+//
+// A request lasts `CONSOLE_REQUEST_LIFETIME_MS`. A ShowCard call that opens
+// no console (in code mode the tool previews the card rather than stacking
+// it) leaves its request untaken, and the lifetime keeps that leftover from
+// marking a console opened later for another reason. The opened config card
+// mounts its console within seconds, well inside the lifetime.
+const CONSOLE_REQUEST_LIFETIME_MS = 30_000;
+let consoleRequest:
+  | { realm: string; automation: string; expires: number }
+  | undefined;
 
 function takeConsoleRequest(realm: string | undefined): string | undefined {
-  if (!realm || consoleRequest?.realm !== withSlash(realm)) {
+  let request = consoleRequest;
+  if (!realm || !request || request.realm !== ensureTrailingSlash(realm)) {
     return undefined;
   }
-  let { automation } = consoleRequest;
   consoleRequest = undefined;
-  return automation;
-}
-
-function withSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
+  return now() <= request.expires ? request.automation : undefined;
 }
 
 // Opens the realm's config card on its Automations section with the given
@@ -89,7 +96,11 @@ export async function showAutomationInConsole(
   realm: string,
   automation: string,
 ): Promise<void> {
-  let request = { realm: withSlash(realm), automation };
+  let request = {
+    realm: ensureTrailingSlash(realm),
+    automation,
+    expires: now() + CONSOLE_REQUEST_LIFETIME_MS,
+  };
   consoleRequest = request;
   try {
     await new ShowCardTool(toolContext).execute({
@@ -597,6 +608,7 @@ class AutomationSlot extends GlimmerComponent<AutomationSlotSignature> {
     <div
       class={{cn 'slot' slot--marked=@focused}}
       data-test-automation-slot={{@automation.id}}
+      aria-current={{if @focused 'true'}}
       data-test-automation-slot-focused={{if @focused 'true'}}
       ...attributes
     >

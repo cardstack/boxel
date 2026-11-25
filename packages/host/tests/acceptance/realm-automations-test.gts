@@ -6,6 +6,8 @@ import { module, test } from 'qunit';
 import { rri, testRealmInfo } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
+import ShowCardTool from '@cardstack/host/tools/show-card';
+
 import {
   realmConfigCardJSON,
   setupAcceptanceTestRealm,
@@ -415,6 +417,41 @@ module('Acceptance | realm config | Automations', function (hooks) {
       assert
         .dom(`${slot}[data-test-automation-slot-focused="true"]`)
         .doesNotExist('opening another automation clears the mark');
+    });
+
+    test('Show in Automations that fails to open the config card leaves no mark for a console opened later', async function (assert) {
+      answer = {
+        status: 200,
+        data: [ACTIVE, summary(DIGEST, { title: 'Issue digest' })],
+      };
+      statusForWriter = true;
+      let originalExecute = ShowCardTool.prototype.execute;
+      let attempts = 0;
+      ShowCardTool.prototype.execute = async function () {
+        attempts++;
+        throw new Error('the config card could not open');
+      };
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: DIGEST, format: 'isolated' }]],
+        });
+        let action =
+          '[data-test-automation] header [data-test-automation-show-in-console]';
+        await waitFor(action, { timeout: 10000 });
+        await click(action);
+        assert.strictEqual(attempts, 1, 'the action tried to open the card');
+      } finally {
+        ShowCardTool.prototype.execute = originalExecute;
+      }
+
+      await visitConfig();
+      let slot = `[data-test-automation-slot="${DIGEST}"]`;
+      await waitFor(`${slot} [data-test-automation-slot-fitted]`, {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-slot-focused]')
+        .doesNotExist('the failed request marks nothing');
     });
 
     test("New automation opens a new automation in its edit view, in the config card's own stack", async function (assert) {

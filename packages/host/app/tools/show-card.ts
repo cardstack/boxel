@@ -56,13 +56,13 @@ export default class ShowCardTool extends HostBaseTool<
         newStackIndex,
         (input.format as 'isolated' | 'edit') || 'isolated',
       );
-      // A card already in that stack is shown again on top: the cards above
+      // A card buried in that stack is shown again on top: the cards above
       // it close, and the card opens fresh in their place. Adding it as it is
-      // would leave the card where it was, under whatever covers it.
-      let existing = operatorModeStateService.state?.stacks?.[
-        newStackIndex
-      ]?.find((item) => item.id === newStackItem.id);
-      if (existing) {
+      // would leave the card under whatever covers it. A card already on top
+      // stays as it is, with its format and scroll position.
+      let stack = operatorModeStateService.state?.stacks?.[newStackIndex];
+      let existing = stack?.find((item) => item.id === newStackItem.id);
+      if (existing && existing !== stack?.[stack.length - 1]) {
         operatorModeStateService.trimItemsFromStack(existing);
         newStackItem = await operatorModeStateService.createStackItem(
           input.cardId,
