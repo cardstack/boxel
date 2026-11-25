@@ -5,6 +5,7 @@ import {
   runActsAsDirectWriter,
   getAIBatch,
   isLateAIBatch,
+  listAIBatchesForRun,
   recordAIBatchReadByRun,
   reserveAutomationRunAICredits,
   isSessionRevoked,
@@ -50,7 +51,9 @@ import {
   readOpenRouterBatch,
 } from '../lib/openrouter-batches.ts';
 import { verifyRunToken } from '../lib/run-token.ts';
+import { aiBatchSubmitsEnabled } from '../lib/ai-batch-submits-config.ts';
 import { runTokenOf } from '@cardstack/runtime-common/run-token';
+import { countRunCall } from '@cardstack/runtime-common/automation-run-limits';
 
 const log = logger('ai-batches');
 
@@ -67,6 +70,16 @@ const log = logger('ai-batches');
 // or last resumed it (the automation row's caps snapshot); a status read
 // doesn't, so a follow-up run can always read a batch that is already paid
 // for.
+//
+// A submit is refused unless the realm server turns batch submits on
+// (`AI_BATCH_SUBMITS_ENABLED`, `aiBatchSubmitsEnabled`). A status read never
+// is, so a batch already submitted can always be read.
+//
+// A run submits at most one batch, whichever attempt sends it.
+//
+// A batch counts each of its requests against the run's `resolveCalls` cap,
+// as a plain `resolve` counts its one. A batch that would pass the cap ends
+// the run at the cap, as a plain `resolve` past it does, and nothing is sent.
 //
 // A submit charges nothing. OpenRouter reports a batch's cost only once it
 // ends, so the submit records the batch (its run, the person that run acts
@@ -95,9 +108,12 @@ export interface AIBatchHandlerArgs {
   realmSecretSeed: string;
   virtualNetwork: VirtualNetwork;
   matrixServerName: string;
-  // Told when a batch call ends its run because the run's person is no
-  // longer a direct writer of its realm.
+  // Told when a batch call ends its run: the run's person is no longer a
+  // direct writer of its realm, or the batch passes the run's `resolveCalls`
+  // cap.
   reportRunChange?: ReportRunChange;
+  // Whether this server submits batches. `aiBatchSubmitsEnabled` when absent.
+  submitsEnabled?: () => boolean;
 }
 
 export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
@@ -107,7 +123,14 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
     if (!caller) {
       return;
     }
-    let { run, automation } = caller;
+    let { run, automation, attempt } = caller;
+    if (!(args.submitsEnabled ?? aiBatchSubmitsEnabled)()) {
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        "Batched AI isn't turned on on this realm server, so it submits no batches",
+      );
+      return;
+    }
     if (run.dryRun) {
       await sendResponseForForbiddenRequest(
         ctxt,
@@ -119,6 +142,19 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       await sendResponseForForbiddenRequest(
         ctxt,
         "This automation hasn't turned on batched AI, so its runs can't submit batches",
+      );
+      return;
+    }
+    // A run submits one batch, which gets one follow-up. The tab holds a
+    // script to one call; this holds a run to one batch across its attempts,
+    // so an attempt that takes over a run whose batch is already submitted
+    // can't submit, and pay for, a second.
+    if ((await listAIBatchesForRun(dbAdapter, run.id)).length > 0) {
+      await sendResponseForError(
+        ctxt,
+        409,
+        'Conflict',
+        'This run has already submitted a batch, and a run submits one batch',
       );
       return;
     }
@@ -176,6 +212,22 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
         reservationId,
         costInUsd: 0,
       });
+    let counted = await countRunCall(
+      dbAdapter,
+      { runId: run.id, attempt, automationId: run.automationId },
+      'resolveCalls',
+      automation.capsSnapshot.resolveCalls,
+      args.reportRunChange,
+      requests.length,
+    );
+    if (!counted.ok) {
+      await release();
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        `${counted.error.detail}: a batch of ${requests.length} requests counts ${requests.length} AI requests`,
+      );
+      return;
+    }
     // What an operator needs to record a batch that may have been submitted
     // with no row (`/_grafana-record-ai-batch`). Every report of such a
     // submit carries the `ai-batch-submit` tag, whatever its title, so an
@@ -365,7 +417,9 @@ async function batchCaller(
     matrixServerName,
     reportRunChange,
   }: AIBatchHandlerArgs,
-): Promise<{ run: AutomationRun; automation: AutomationRow } | undefined> {
+): Promise<
+  { run: AutomationRun; automation: AutomationRow; attempt: number } | undefined
+> {
   let authorization = ctxt.req.headers['authorization'] ?? null;
   if (!authorization) {
     await sendResponseForUnauthorizedRequest(
@@ -439,7 +493,7 @@ async function batchCaller(
     );
     return undefined;
   }
-  return { run, automation };
+  return { run, automation, attempt: token.attempt };
 }
 
 // Reserves the batch on the run's AI spending cap, in one statement, at twice

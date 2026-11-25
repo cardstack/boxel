@@ -26,6 +26,7 @@ import { claimsFromRawToken } from '../services/realm';
 import RunRealmCodeTool, {
   runAutomationScript,
   type AutomationRealmIO,
+  type SubmitResolveBatch,
 } from './run-realm-code';
 
 import type NetworkService from '../services/network';
@@ -105,6 +106,7 @@ export default class RunAutomationTool extends HostBaseTool<
     let io: AutomationRealmIO = {
       ...runner.automationRealmIO(realmURL),
       resolve: (request, signal) => resolveJSON(request, send, signal),
+      resolveBatch: this.runTokenBatchSubmit(runToken),
     };
 
     // The run's time limit counts from its start, so the time it waited for
@@ -140,6 +142,7 @@ export default class RunAutomationTool extends HostBaseTool<
               realmURL,
               automation: scriptInput.automation,
               secondsCap,
+              batchDeadlineMinutes: scriptInput.batchDeadlineMinutes,
               io,
               progress,
               secrets,
@@ -168,13 +171,7 @@ export default class RunAutomationTool extends HostBaseTool<
   // cap, prices it against its `aiCredits` cap and bills it to the run's
   // identity. The token names the realm server that minted it.
   private runTokenSend(runToken: string): ProxySend {
-    let { realmServerURL } = claimsFromRawToken(runToken) as {
-      realmServerURL?: string;
-    };
-    if (!realmServerURL) {
-      throw new Error('The run token names no realm server');
-    }
-    let forwardURL = `${ensureTrailingSlash(realmServerURL)}_request-forward`;
+    let forwardURL = `${realmServerOf(runToken)}_request-forward`;
     return async ({ url, requestBody, signal }) => {
       let response = await this.network.fetch(forwardURL, {
         method: 'POST',
@@ -203,6 +200,77 @@ export default class RunAutomationTool extends HostBaseTool<
       return response;
     };
   }
+
+  // `realm.resolve.batch`'s submit carries the run's token to the realm
+  // server's batch path, which refuses it unless the automation turns on
+  // batched AI, counts each request against the run's `resolve` cap,
+  // reserves the batch on its `aiCredits` cap and records it for its
+  // follow-up run and its bill. A refusal comes back as the call's error,
+  // with the server's reason.
+  private runTokenBatchSubmit(runToken: string): SubmitResolveBatch {
+    let batchesURL = `${realmServerOf(runToken)}_ai-batches`;
+    return async (submit, signal) => {
+      let response = await this.network.fetch(batchesURL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${runToken}`,
+        },
+        body: JSON.stringify(submit),
+        signal,
+      });
+      let text = await response.text();
+      if (!response.ok) {
+        throw new Error(
+          `realm.resolve.batch was refused: ${response.status} - ${batchRefusal(text)}`,
+        );
+      }
+      let id: unknown;
+      try {
+        id = JSON.parse(text)?.id;
+      } catch {
+        id = undefined;
+      }
+      if (typeof id !== 'string' || id.length === 0) {
+        throw new Error(
+          'realm.resolve.batch: the batch path answered with no batch id',
+        );
+      }
+      return { id };
+    };
+  }
+}
+
+// The reason in a refusal from the batch path: its JSON:API `errors`, or the
+// body as it came.
+function batchRefusal(text: string): string {
+  try {
+    let errors = JSON.parse(text)?.errors;
+    if (Array.isArray(errors) && errors.length > 0) {
+      return errors
+        .map((error) =>
+          typeof error === 'string'
+            ? error
+            : (error?.detail ?? JSON.stringify(error)),
+        )
+        .join('; ');
+    }
+  } catch {
+    // not JSON
+  }
+  return text;
+}
+
+// The realm server the run token names, ending in a slash.
+function realmServerOf(runToken: string): string {
+  let { realmServerURL } = claimsFromRawToken(runToken) as {
+    realmServerURL?: string;
+  };
+  if (!realmServerURL) {
+    throw new Error('The run token names no realm server');
+  }
+  return ensureTrailingSlash(realmServerURL);
 }
 
 // Resolves once `progress` has sent what it holds, or at `deadline` (ms since
