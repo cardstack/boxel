@@ -6,6 +6,7 @@ import {
   dbAdapterQuerier,
   param,
   query,
+  separatedByCommas,
   type Expression,
   type Querier,
   upsert,
@@ -578,6 +579,92 @@ export async function fetchUserPermissions(
     },
     {} as { [realm: string]: RealmAction[] },
   );
+}
+
+export interface ReachableRealm {
+  url: string;
+  archived: boolean;
+}
+
+// Which of `realmURLs` the user can still open, in the order given, each
+// marked archived or not. A realm counts while the permissions it enforces
+// for the user (`effectiveRealmPermissions`: their own row, `*` and `users`)
+// include read or write. An archived realm is sealed, so it counts only for a
+// user whose own row can write it, who may restore it, as
+// `fetchArchivedRealmsForAdministrator` decides. Published snapshots, and
+// realms with no permission rows (a deleted realm loses them all), don't
+// count.
+export async function fetchReachableRealms(
+  dbAdapter: DBAdapter,
+  {
+    userId,
+    realmURLs,
+    matrixServerName,
+  }: { userId: string; realmURLs: string[]; matrixServerName: string },
+): Promise<ReachableRealm[]> {
+  if (realmURLs.length === 0) {
+    return [];
+  }
+  let rows = (await query(dbAdapter, [
+    `SELECT rup.realm_url, rup.username, rup.read, rup.write, rup.realm_owner, rm.archived_at
+     FROM realm_user_permissions rup
+     LEFT JOIN realm_metadata rm ON rm.url = rup.realm_url
+     WHERE rup.realm_url IN (`,
+    ...separatedByCommas(realmURLs.map((url) => [param(url)])),
+    `) AND rup.username IN (`,
+    param(userId),
+    `, '*', 'users')
+     AND rup.realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')`,
+  ] as Expression)) as {
+    realm_url: string;
+    username: string;
+    read: boolean;
+    write: boolean;
+    realm_owner: boolean;
+    archived_at: string | null;
+  }[];
+
+  let byRealm = new Map<
+    string,
+    { permissions: RealmPermissions; archived: boolean }
+  >();
+  for (let row of rows) {
+    let realm = byRealm.get(row.realm_url);
+    if (!realm) {
+      realm = { permissions: {}, archived: row.archived_at != null };
+      byRealm.set(row.realm_url, realm);
+    }
+    let actions: RealmAction[] = [];
+    if (row.read) actions.push('read');
+    if (row.write) actions.push('write');
+    if (row.realm_owner) actions.push('realm-owner');
+    realm.permissions[row.username] = actions;
+  }
+
+  let hasAccount = accountCheck(dbAdapter, userId);
+  let reachable: ReachableRealm[] = [];
+  for (let url of realmURLs) {
+    let realm = byRealm.get(url);
+    if (!realm) {
+      continue;
+    }
+    if (realm.archived) {
+      if (realm.permissions[userId]?.includes('write')) {
+        reachable.push({ url, archived: true });
+      }
+      continue;
+    }
+    let actions = await effectiveRealmPermissions(
+      realm.permissions,
+      userId,
+      matrixServerName,
+      hasAccount,
+    );
+    if (actions.includes('read') || actions.includes('write')) {
+      reachable.push({ url, archived: false });
+    }
+  }
+  return reachable;
 }
 
 // The active realms whose indexed `realm.json` names a policy card. A realm a

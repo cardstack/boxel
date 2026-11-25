@@ -1,6 +1,12 @@
 import type Koa from 'koa';
 import * as Sentry from '@sentry/node';
-import { logger, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  fetchReachableRealms,
+  logger,
+  SupportedMimeType,
+  type DBAdapter,
+} from '@cardstack/runtime-common';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
   requestUser,
   sendResponseForError,
@@ -19,15 +25,31 @@ const log = logger('realm-server');
 // `GET /_user-realms`: the caller's workspace list (`app.boxel.realms`), for
 // a caller that holds no Matrix token of its own. Only ever the caller's: the
 // user comes from the request's token, and nothing in the request names one.
+//
+// `realms` is the list as the account stores it. `reachableRealms` is the
+// part of it the caller can still open, each marked archived or not, without
+// the realms whose permission was revoked or that were deleted
+// (`fetchReachableRealms`): what a caller that can't ask `_realm-auth` lists
+// as the user's workspaces.
 export function handleFetchWorkspaceList(
-  deps: WorkspaceListDeps,
+  deps: WorkspaceListDeps & { dbAdapter: DBAdapter },
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     await answer(ctxt, 'workspace list', async (user) => {
       let realms = await readWorkspaceList(deps, user);
-      return realms === undefined
-        ? undefined
-        : { type: 'user-realms', id: user, attributes: { realms } };
+      if (realms === undefined) {
+        return undefined;
+      }
+      let reachableRealms = await fetchReachableRealms(deps.dbAdapter, {
+        userId: user,
+        realmURLs: [...new Set(realms.map(ensureTrailingSlash))],
+        matrixServerName: deps.matrixClient.serverName,
+      });
+      return {
+        type: 'user-realms',
+        id: user,
+        attributes: { realms, reachableRealms },
+      };
     });
   };
 }
@@ -48,8 +70,8 @@ export function handleFetchDisplayName(
 }
 
 // Answers with what `read` finds for the caller: 404 when this server keeps
-// no account for them, and 503 when the Matrix server can't be read, never an
-// empty answer that a caller could take for the real one.
+// no account for them, and 503 when the Matrix server or the database can't
+// be read, never an empty answer that a caller could take for the real one.
 async function answer(
   ctxt: Koa.Context,
   what: string,
