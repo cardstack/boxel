@@ -177,11 +177,12 @@ interface ApproveArgs {
 
 // What kind of key a slot's section is for.
 function slotLabel(choice: SlotChoice): string {
+  let forCard = choice.card ? ` for ${choice.card}` : '';
   if (choice.kind === 'userKey') {
-    return 'Your own key';
+    return `Your own key${forCard}`;
   }
   let [, name] = choice.slot.split(':');
-  return name ? `Shared key: ${name}` : 'Shared key';
+  return name ? `Shared key: ${name}${forCard}` : `Shared key${forCard}`;
 }
 
 // "A", "A and B", "A, B and C".
@@ -538,7 +539,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                           <span
                             class='automations-only'
                             data-test-approve-for-automation
-                          >New for the automation</span>
+                          >Needs approval for the automation</span>
                         {{/if}}
                         {{#if (approvedForOpenCards operation)}}
                           <span

@@ -26,6 +26,7 @@ import {
 import { bindingType, checkSlots, slotToken } from './key-bindings.ts';
 import { lookupGrantOperation } from './user-key-grants.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
+import { sendableKeySql } from './oauth.ts';
 
 // Automation approvals (ADR 039 §1.2): a key owner's approval for one
 // automation, named by its card, to use one of their bindings, as the
@@ -284,11 +285,13 @@ async function shareApprover(
   realmURL: string,
   payer: string,
 ): Promise<{ canApprove: KeyApprover; shares: MissingShare[] }> {
+  // The shares a call can send, as the approval batch offers them
+  // (`sendableKeySql`): a share of a sign-in app is never one.
   let rows = (await query(dbAdapter, [
-    'SELECT id, label, owner FROM key_shares WHERE realm_url = ',
+    'SELECT id, label, owner, state FROM key_shares WHERE realm_url = ',
     param(realmURL),
-    " AND state = 'active' AND key_id IS NOT NULL ORDER BY label, id",
-  ])) as { id: string; label: string; owner: string }[];
+    ` AND state = 'active' AND key_id IS NOT NULL AND ${sendableKeySql('key_id')} ORDER BY label, id`,
+  ])) as unknown as ShareRow[];
   let own = rows.filter((row) => row.owner === payer);
   if (own.length) {
     return { canApprove: 'payer', shares: own.map(shareOf) };
@@ -300,12 +303,20 @@ async function shareApprover(
 
 type MissingShare = NonNullable<MissingKeyApproval['shares']>[number];
 
-function shareOf(row: {
+interface ShareRow {
   id: string;
   label: string;
   owner: string;
-}): MissingShare {
-  return { id: row.id, label: row.label, owner: row.owner };
+  state: string;
+}
+
+function shareOf(row: ShareRow): MissingShare {
+  return {
+    id: row.id,
+    label: row.label,
+    owner: row.owner,
+    ...(row.state !== 'active' ? { suspended: true as const } : {}),
+  };
 }
 
 // The share `id` names, as a missing approval names it.
@@ -314,8 +325,8 @@ async function shareNamed(
   id: string,
 ): Promise<MissingShare[]> {
   let rows = (await query(dbAdapter, [
-    'SELECT id, label, owner FROM key_shares WHERE id = ',
+    'SELECT id, label, owner, state FROM key_shares WHERE id = ',
     param(id),
-  ])) as { id: string; label: string; owner: string }[];
+  ])) as unknown as ShareRow[];
   return rows.map(shareOf);
 }
