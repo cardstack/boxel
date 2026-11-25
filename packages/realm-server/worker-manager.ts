@@ -733,7 +733,7 @@ let secretsKeyringMessage: string | undefined;
     log.error(`Secrets-at-rest self-check failed: ${e.message}`);
     process.exit(-1);
   }
-  adapter = new PgAdapter({ autoMigrate });
+  adapter = new PgAdapter({ autoMigrate, poolRole: 'worker-manager' });
   // Wire the indexing-progress write-through. The sink was constructed
   // at module load (above) so that log lines and event handling work
   // before this point; the periodic flush only starts once an adapter
