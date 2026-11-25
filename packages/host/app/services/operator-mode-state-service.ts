@@ -73,6 +73,8 @@ import {
 import { normalizeDirPath } from '../utils/normalized-dir-path';
 import { removeCardJsonExtension } from '../utils/search/types';
 
+import type { Stack } from '../components/operator-mode/interact-submode';
+import type IndexController from '../controllers';
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';
 import type ErrorDisplayService from './error-display';
@@ -82,9 +84,7 @@ import type { RecentFile } from './recent-files-service';
 import type SessionService from './session';
 import type SpecPanelService from './spec-panel-service';
 import type StoreService from './store';
-import type { Stack } from '../components/operator-mode/interact-submode';
 
-import type IndexController from '../controllers';
 import type { CardDef, Format } from '@cardstack/base/card-api';
 import type {
   BoxelContext,

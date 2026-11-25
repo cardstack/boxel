@@ -1,4 +1,6 @@
-# Enforce use of wrapped setup helpers that use ember-window-mock (`@cardstack/host/wrapped-setup-helpers-only`)
+# @cardstack/host/wrapped-setup-helpers-only
+
+📝 Enforce use of wrapped setup helpers that use ember-window-mock.
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

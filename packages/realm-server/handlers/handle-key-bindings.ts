@@ -1,10 +1,9 @@
 import type Koa from 'koa';
 import {
   fetchRealmPermissions,
-  param,
+  reportAutomationChanges,
   rri,
   trimExecutableExtension,
-  type RealmIdentifier,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { realmServerAutomationChangeReporter } from '../lib/run-change-reporter.ts';
@@ -39,9 +38,8 @@ import {
 import { findRealm } from '../lib/realm-routing.ts';
 import {
   automationsWaitingForKeyApproval,
-  automationsServedBy,
   followAutomationKeyApprovals,
-  followServedAutomations,
+  followEndedKeyApprovals,
 } from '../lib/automation-key-approvals.ts';
 import { getAutomation } from '@cardstack/runtime-common/automations';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
@@ -250,7 +248,7 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
     let automation = named
       ? await approvedAutomation(args, target, realmURL, named)
       : undefined;
-    let { batchId, approved } = await approveBindings(
+    let { batchId, approved, affected } = await approveBindings(
       args.dbAdapter,
       secretsKeyring(),
       {
@@ -264,6 +262,13 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
         dailyBudgets: (dailyBudgets ?? {}) as Record<string, number>,
         ...(automation ? { automation } : {}),
       },
+    );
+    // A slot approved again with another key or share ended the automation
+    // approvals of its binding; their automations' realm's direct writers are
+    // told, and each waiting automation of the realm is checked again.
+    await reportAutomationChanges(
+      realmServerAutomationChangeReporter(args),
+      affected,
     );
     await followAutomationKeyApprovals(
       args,
@@ -579,19 +584,12 @@ export function handleRevokeKeyBinding(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let via = await secureClientOf(ctxt, args, 'approvals are revoked');
-    let bindingId = ctxt.params.bindingId;
-    let served = UUID_PATTERN.test(bindingId)
-      ? await automationsServedBy(args.dbAdapter, [param(bindingId), '::uuid'])
-      : [];
-    await revokeBinding(args.dbAdapter, { owner, bindingId, via });
-    let report = realmServerAutomationChangeReporter(args);
-    for (let { automationId, realm } of served) {
-      await report({ automationId, realm: realm as RealmIdentifier });
-    }
-    await followServedAutomations(args, served);
+    let affected = await revokeBinding(args.dbAdapter, {
+      owner,
+      bindingId: ctxt.params.bindingId,
+      via,
+    });
+    await followEndedKeyApprovals(args, affected);
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

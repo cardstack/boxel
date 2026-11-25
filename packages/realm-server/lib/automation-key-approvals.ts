@@ -1,23 +1,16 @@
 import {
-  logger,
   param,
   query,
+  reportAutomationChanges,
   rri,
+  type ChangedAutomation,
   type DBAdapter,
-  type Expression,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
-import {
-  followKeyApprovals,
-  type KeyApprovalFollow,
-} from '@cardstack/runtime-common/automations';
-import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
+import type { KeyApprovalFollow } from '@cardstack/runtime-common/automations';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { findOrMountRealm } from './realm-routing.ts';
-import {
-  realmServerAutomationChangeReporter,
-  realmServerRunChangeReporter,
-} from './run-change-reporter.ts';
+import { realmServerAutomationChangeReporter } from './run-change-reporter.ts';
 import type { OperationCore } from '@cardstack/runtime-common/card-operations';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
@@ -46,8 +39,6 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // approval of that binding for this automation that matches its version.
 // Switch-on, resume and an approval landing check that here; a run's
 // admission checks it again in the realm.
-
-const log = logger('realm-server:automation-key-approvals');
 
 type Core = Pick<
   OperationCore,
@@ -188,63 +179,22 @@ export async function checkAutomationKeyApprovals(
   };
 }
 
-// Brings each automation's state in step with its key approvals
-// (`followKeyApprovals`), checked in the realm served at `realmURL`, with the
-// automation's card as indexed and its payer as the row names them. Each
-// automation follows on its own, so one that fails is logged and the rest
-// still follow. Returns what each did, keyed by automation id.
+// Brings each automation's state in step with its key approvals, checked in
+// the realm served at `realmURL` (`Realm.followAutomationKeyApprovals`).
+// Returns what each did, keyed by automation id.
 export async function followAutomationKeyApprovals(
   args: CreateRoutesArgs,
   realmURL: URL,
   automationIds: RealmResourceIdentifier[],
 ): Promise<Map<string, KeyApprovalFollow>> {
-  let followed = new Map<string, KeyApprovalFollow>();
   if (automationIds.length === 0) {
-    return followed;
+    return new Map();
   }
   let realm = await findOrMountRealm(realmURL, args);
   if (realm?.url !== realmURL.href) {
-    return followed;
+    return new Map();
   }
-  for (let automationId of automationIds) {
-    try {
-      let result = await followKeyApprovals(
-        args.dbAdapter,
-        automationId,
-        async (automation) => {
-          let read = await readRunDeclaration({
-            dbAdapter: args.dbAdapter,
-            definitionLookup: args.definitionLookup,
-            virtualNetwork: args.virtualNetwork,
-            automationId,
-          });
-          if (!read.ok) {
-            return undefined;
-          }
-          let approvals = await realm.checkAutomationKeyApprovals({
-            automationId,
-            declaration: read.declaration,
-            payer: automation.payer,
-          });
-          return approvals
-            ? { approved: approvals.approved, declaration: read.declaration }
-            : undefined;
-        },
-        {
-          reportRunChange: realmServerRunChangeReporter(args),
-          reportAutomationChange: realmServerAutomationChangeReporter(args),
-        },
-      );
-      if (result) {
-        followed.set(automationId, result);
-      }
-    } catch (e: any) {
-      log.warn(
-        `couldn't follow the key approvals of automation ${automationId}: ${e?.message ?? e}`,
-      );
-    }
-  }
-  return followed;
+  return await realm.followAutomationKeyApprovals(automationIds);
 }
 
 // Every switched-on automation in the realm served at `realmURL` that is
@@ -262,42 +212,23 @@ export async function automationsWaitingForKeyApproval(
   return rows.map((row) => row.automation_id as RealmResourceIdentifier);
 }
 
-// An automation an approval of a binding serves, with its realm.
-export interface ServedAutomation {
-  automationId: RealmResourceIdentifier;
-  realm: string;
-}
-
-// The automations an approval of the bindings `bindings` selects (an
-// expression yielding binding ids) serves, read before the bindings are
-// revoked so `followServedAutomations` can check each again once the
-// revocation commits.
-export async function automationsServedBy(
-  dbAdapter: DBAdapter,
-  bindings: Expression,
-): Promise<ServedAutomation[]> {
-  let rows = await query(dbAdapter, [
-    'SELECT DISTINCT a.automation_id, au.realm FROM automation_key_approvals a JOIN automations au ON au.automation_id = a.automation_id WHERE a.binding_id IN (',
-    ...bindings,
-    ') ORDER BY a.automation_id',
-  ]);
-  return rows.map((row) => ({
-    automationId: row.automation_id as RealmResourceIdentifier,
-    realm: String(row.realm),
-  }));
-}
-
-// Checks each of `served` again once a revocation of its bindings has
-// committed. The revocation moved it to waiting for key approval, but the
-// approval it ended may be one for an operation its card no longer declares:
-// then nothing is missing, and it runs again rather than waiting for an
-// approval no one can give.
-export async function followServedAutomations(
+// Once a change that ended key approvals has committed, tells the direct
+// writers of each automation's realm that the approvals of the automations in
+// `affected` (the ones the ended approvals served, as the change answers
+// them) changed, then checks each again. The change moved each that was
+// running to waiting for key approval; when the approval that ended was for
+// an operation its card no longer declares, nothing is missing, and it runs
+// again rather than waiting for an approval no one can give.
+export async function followEndedKeyApprovals(
   args: CreateRoutesArgs,
-  served: ServedAutomation[],
+  affected: readonly ChangedAutomation[],
 ): Promise<void> {
+  await reportAutomationChanges(
+    realmServerAutomationChangeReporter(args),
+    affected,
+  );
   let byRealm = new Map<string, RealmResourceIdentifier[]>();
-  for (let { automationId, realm } of served) {
+  for (let { automationId, realm } of affected) {
     byRealm.set(realm, [...(byRealm.get(realm) ?? []), automationId]);
   }
   for (let [realm, automationIds] of byRealm) {

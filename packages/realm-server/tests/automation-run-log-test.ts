@@ -291,6 +291,43 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("the run's transforms are stored as one transform line, with their tally", async function (assert) {
+    let { token, run } = await runOf();
+    let sent = await sendLog(token, {
+      events: [
+        {
+          kind: 'transform',
+          at: Date.now(),
+          calls: 2,
+          failed: 1,
+          ms: 340,
+          inBytes: 1200,
+          outBytes: 80,
+        },
+      ],
+    });
+    assert.strictEqual(sent.status, 200, JSON.stringify(sent.json));
+    let { lines } = await logOf(run.id);
+    assert.deepEqual(
+      lines.map(({ source, kind, level, message, data }) => ({
+        source,
+        kind,
+        level,
+        message,
+        data,
+      })),
+      [
+        {
+          source: 'script',
+          kind: 'transform',
+          level: undefined,
+          message: 'Transforms: 2 calls, 1 failed, 340 ms',
+          data: { calls: 2, failed: 1, ms: 340, inBytes: 1200, outBytes: 80 },
+        },
+      ],
+    );
+  });
+
   test("the script's lines are redacted as they are stored, the run's own token included", async function (assert) {
     let { token, run } = await runOf();
     let sent = await sendLog(token, {
@@ -789,6 +826,25 @@ module(basename(import.meta.filename), function (hooks) {
       scriptRunLogLines({ events: [{ kind: 'task', at: 1, text: 3 }] }).ok,
       'a task that is not text is refused',
     );
+    let tally = { calls: 1, failed: 0, ms: 5, inBytes: 10, outBytes: 2 };
+    assert.true(
+      scriptRunLogLines({ events: [{ kind: 'transform', at: 1, ...tally }] })
+        .ok,
+      'a transform line with its whole tally is taken',
+    );
+    for (let [field, value] of [
+      ['calls', -1],
+      ['ms', 1.5],
+      ['failed', '1'],
+      ['outBytes', undefined],
+    ] as const) {
+      assert.false(
+        scriptRunLogLines({
+          events: [{ kind: 'transform', at: 1, ...tally, [field]: value }],
+        }).ok,
+        `a transform line whose ${field} is ${String(value)} is refused`,
+      );
+    }
   });
   module('milestones', function (hooks) {
     let telemetry: AutomationMilestoneEvent[];

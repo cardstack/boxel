@@ -8,20 +8,22 @@ const fixtures = path.join(__dirname, 'fixtures');
 
 // This rule reads types, so the tester needs a real TypeScript program.
 const ruleTester = new RuleTester({
-  parser: require.resolve('@typescript-eslint/parser'),
-  parserOptions: {
+  languageOptions: {
+    parser: require('@typescript-eslint/parser'),
     ecmaVersion: 2022,
     sourceType: 'module',
-    project: path.join(fixtures, 'tsconfig.json'),
-    tsconfigRootDir: fixtures,
-    // The parser infers a one-shot CLI run from the environment — `CI=true` is
-    // one of the signals — and a one-shot run builds its program from disk. The
-    // tester supplies each case's source in memory against a fixture path whose
-    // file on disk is empty, so an inferred single run types every case against
-    // that empty file: the rule sees the right syntax and no types, and reports
-    // nothing. Asking for the watch-style program keeps the supplied source
-    // visible to the type checker.
-    disallowAutomaticSingleRunInference: true,
+    parserOptions: {
+      project: path.join(fixtures, 'tsconfig.json'),
+      tsconfigRootDir: fixtures,
+      // The parser infers a one-shot CLI run from the environment — `CI=true` is
+      // one of the signals — and a one-shot run builds its program from disk. The
+      // tester supplies each case's source in memory against a fixture path whose
+      // file on disk is empty, so an inferred single run types every case against
+      // that empty file: the rule sees the right syntax and no types, and reports
+      // nothing. Asking for the watch-style program keeps the supplied source
+      // visible to the type checker.
+      disallowAutomaticSingleRunInference: true,
+    },
   },
 });
 

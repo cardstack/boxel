@@ -338,7 +338,7 @@ module('Acceptance | automation edit format', function (hooks) {
                 verificationType: 'HMAC_SHA256_HEADER',
               },
             })),
-            meta: { directWriter: true, webhookDeliveriesStartRuns: false },
+            meta: { directWriter: true },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
@@ -665,11 +665,6 @@ module('Acceptance | automation edit format', function (hooks) {
         messageOf('Webhook', item),
         'Required: pick one of this workspace’s incoming webhooks',
       );
-      assert
-        .dom('[data-test-automation-webhook-notice]', item)
-        .hasText(
-          'This trigger can’t fire, Boxel doesn’t run automations from webhooks.',
-        );
       let options = await openPicker(item);
       assert.deepEqual(
         options.map((option) =>
@@ -690,7 +685,7 @@ module('Acceptance | automation edit format', function (hooks) {
       );
       assert.strictEqual(
         messageOf('Webhook', item),
-        'Each delivery to this webhook starts a run. The list shows every webhook that a workspace administrator made.',
+        'Each delivery to this webhook starts a run. The list shows every webhook that a realm administrator made.',
         'with a webhook picked, the field shows its hint and no problem',
       );
     });
@@ -703,7 +698,7 @@ module('Acceptance | automation edit format', function (hooks) {
       await waitFor('[data-test-automation-webhook-picker]');
       assert.strictEqual(
         messageOf('Webhook', item),
-        'Pick one of this workspace’s incoming webhooks: Boxel turns the automation on only with a webhook that a workspace administrator made',
+        'Pick one of this workspace’s incoming webhooks: Boxel turns the automation on only with a webhook that a realm administrator made',
       );
       let shown = await openPicker(item);
       assert.deepEqual(
@@ -723,9 +718,7 @@ module('Acceptance | automation edit format', function (hooks) {
       await waitFor('[data-test-automation-webhook-picker-empty]');
       assert
         .dom('[data-test-automation-webhook-picker-empty]', item)
-        .includesText(
-          'No workspace administrator has made an incoming webhook.',
-        );
+        .includesText('No realm administrator has made an incoming webhook.');
     });
   });
 

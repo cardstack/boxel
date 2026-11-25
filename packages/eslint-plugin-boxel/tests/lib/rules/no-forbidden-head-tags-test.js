@@ -2,8 +2,11 @@ const rule = require('../../../lib/rules/no-forbidden-head-tags');
 const RuleTester = require('eslint').RuleTester;
 
 const ruleTester = new RuleTester({
-  parser: require.resolve('ember-eslint-parser'),
-  parserOptions: { ecmaVersion: 2022, sourceType: 'module' },
+  languageOptions: {
+    parser: require('ember-eslint-parser'),
+    ecmaVersion: 2022,
+    sourceType: 'module',
+  },
 });
 
 ruleTester.run('no-forbidden-head-tags', rule, {

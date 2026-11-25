@@ -60,7 +60,7 @@ module.exports = {
    * @returns {object} The rule listeners.
    */
   create(context) {
-    const sourceCode = context.sourceCode ?? context.getSourceCode();
+    const sourceCode = context.sourceCode;
     const options = context.options[0] || {};
     /** @type {string[]} */
     const sideEffectFreeModules = options.sideEffectFreeModules || [];
@@ -96,7 +96,7 @@ module.exports = {
      * by whether their binding has any reference.
      */
     function partitionSpecifiers(node) {
-      const variables = context.getDeclaredVariables(node);
+      const variables = sourceCode.getDeclaredVariables(node);
       const used = [];
       const unused = [];
       for (const spec of node.specifiers) {

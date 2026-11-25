@@ -139,6 +139,7 @@ import {
   withTimersBlocked,
 } from '../utils/render-timer-stub';
 
+import type { SearchResource } from '../resources/search';
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
 import type ClientTelemetryService from './client-telemetry';
@@ -153,7 +154,6 @@ import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type ToolService from './tool-service';
-import type { SearchResource } from '../resources/search';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
@@ -535,6 +535,13 @@ export default class StoreService extends Service implements StoreInterface {
   // which identity it started in and which one it finished against.
   #identityEpoch = 0;
   protected isRenderStore = false;
+
+  // Which identity of the store's cards this is; see `#identityEpoch`. A
+  // reader that keeps what it learned from the store's cards keeps it only
+  // while this holds.
+  get identityEpoch(): number {
+    return this.#identityEpoch;
+  }
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;

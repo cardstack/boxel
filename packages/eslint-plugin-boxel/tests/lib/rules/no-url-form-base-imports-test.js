@@ -15,7 +15,7 @@ const RuleTester = require('eslint').RuleTester;
 //------------------------------------------------------------------------------
 
 const ruleTester = new RuleTester({
-  parserOptions: {
+  languageOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
   },
@@ -359,8 +359,8 @@ ruleTester.run('no-url-form-base-imports', rule, {
 
 // Type positions need a TypeScript parser.
 const typeScriptRuleTester = new RuleTester({
-  parser: require.resolve('@typescript-eslint/parser'),
-  parserOptions: {
+  languageOptions: {
+    parser: require('@typescript-eslint/parser'),
     ecmaVersion: 2022,
     sourceType: 'module',
   },
@@ -408,8 +408,11 @@ typeScriptRuleTester.run('no-url-form-base-imports (TypeScript)', rule, {
 
 // `<template>` content needs the Ember parser.
 const templateRuleTester = new RuleTester({
-  parser: require.resolve('ember-eslint-parser'),
-  parserOptions: { ecmaVersion: 2022, sourceType: 'module' },
+  languageOptions: {
+    parser: require('ember-eslint-parser'),
+    ecmaVersion: 2022,
+    sourceType: 'module',
+  },
 });
 
 templateRuleTester.run('no-url-form-base-imports (templates)', rule, {
