@@ -1,5 +1,4 @@
 import { on } from '@ember/modifier';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
@@ -11,15 +10,15 @@ import perform from 'ember-concurrency/helpers/perform';
 import { RealmIcon } from '@cardstack/boxel-ui/components';
 
 import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
-import type {
-  ArchivedRealmInfo,
-  default as RealmServerService,
-} from '@cardstack/host/services/realm-server';
+import type { ArchivedRealmInfo } from '@cardstack/host/services/realm-server';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     archivedRealm: ArchivedRealmInfo;
+    // Restores the workspace, answering with the error to show, if any. The
+    // list's owner runs it, since a restore that succeeds removes this row.
+    onRestore: (url: string) => Promise<string | undefined>;
   };
 }
 
@@ -28,8 +27,6 @@ interface Signature {
 // metadata `GET /_archived-realms` returns and offers Restore alone. It stays
 // out of the keyboard cursor's walk.
 export default class ArchivedWorkspace extends Component<Signature> {
-  @service declare private realmServer: RealmServerService;
-
   @tracked private restoreError: string | undefined;
 
   @cached
@@ -47,12 +44,8 @@ export default class ArchivedWorkspace extends Component<Signature> {
 
   private restoreTask = dropTask(async () => {
     this.restoreError = undefined;
-    try {
-      await this.realmServer.unarchiveRealm(this.args.archivedRealm.url);
-    } catch (error: any) {
-      // Restoring can fail, as for a non-owner, so the row says so.
-      this.restoreError = error.message;
-    }
+    // Restoring can fail, as for a non-owner, so the row says so.
+    this.restoreError = await this.args.onRestore(this.args.archivedRealm.url);
   });
 
   <template>

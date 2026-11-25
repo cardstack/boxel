@@ -1,6 +1,7 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -16,7 +17,7 @@ import { Collapsible } from '@cardstack/pretui/components/collapsible';
 import { SegmentedControl } from '@cardstack/pretui/components/segmented-control';
 import { Spinner } from '@cardstack/pretui/components/spinner';
 import { add, and, eq, gt, not, or } from '@cardstack/pretui/helpers';
-import { didCancel, dropTask } from 'ember-concurrency';
+import { didCancel, dropTask, task } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
 import { cn } from '@cardstack/boxel-ui/helpers';
@@ -26,7 +27,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
-import { logger, nowDate } from '@cardstack/runtime-common';
+import { logger, nowDate, ri } from '@cardstack/runtime-common';
 
 import {
   isHostedRealm,
@@ -72,6 +73,11 @@ interface Signature {
 }
 
 const log = logger('component:dashboard');
+
+// A workspace tile's or row's key in the keyboard cursor's walk.
+function workspaceWalkKey(realmIdentifier: string) {
+  return `workspace:${realmIdentifier}`;
+}
 
 const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -206,6 +212,73 @@ export default class Dashboard extends Component<Signature> {
     if (this.isArchivedExpanded) {
       this.loadArchivedRealms();
     }
+  }
+
+  private dashboardElement: HTMLElement | undefined;
+
+  private captureDashboard = modifier((element: HTMLElement) => {
+    this.dashboardElement = element;
+    return () => {
+      if (this.dashboardElement === element) {
+        this.dashboardElement = undefined;
+      }
+    };
+  });
+
+  // Restores an archived workspace for its row, answering with the error to
+  // show, if any. The dashboard runs it because a restore that succeeds
+  // removes the row, taking its focused Restore button with it.
+  @action private async restoreWorkspace(url: string) {
+    return await this.restoreTask.perform(url);
+  }
+
+  private restoreTask = task(
+    async (url: string): Promise<string | undefined> => {
+      try {
+        await this.realmServer.unarchiveRealm(url);
+      } catch (error: any) {
+        return error.message;
+      }
+      await this.focusRestoredWorkspace(url);
+      return undefined;
+    },
+  );
+
+  // Focus fell to the page when the restored workspace's row left. Unless the
+  // user has put it somewhere since, it goes to the restored workspace once
+  // that has loaded, or, when the scope hides the workspace, to the Archived
+  // toggle.
+  private async focusRestoredWorkspace(url: string) {
+    let realmIdentifier = ri(url);
+    try {
+      // Loads the realm as its workspace does: the Hosted filter and the
+      // recent tiles' order read its info, so the walk only places it after.
+      await this.realm.login(realmIdentifier);
+      await this.realm.ensureRealmMeta(realmIdentifier);
+    } catch {
+      // The workspace reports its own load failure.
+    }
+    await new Promise<void>((resolve) =>
+      schedule('afterRender', () => resolve()),
+    );
+    let active = document.activeElement;
+    let container = this.dashboardElement;
+    // The cursor's container holds focus while its item is out of view.
+    if (
+      !container ||
+      (active && active !== document.body && active !== container)
+    ) {
+      return;
+    }
+    let index = this.walkKeys.indexOf(workspaceWalkKey(realmIdentifier));
+    let target =
+      index >= 0
+        ? container.querySelector<HTMLElement>(`[data-nav-index="${index}"]`)
+        : container
+            .querySelector('[data-archived-section]')
+            ?.querySelector<HTMLElement>('button[aria-expanded]');
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: 'nearest' });
   }
 
   @action private loadArchivedRealms() {
@@ -427,8 +500,8 @@ export default class Dashboard extends Component<Signature> {
     return [
       ...this.favoriteRealmIdentifiers.map((url) => `desk:${url}`),
       ...(this.isAddWorkspaceShown ? ['new-workspace'] : []),
-      ...this.recentRealmIdentifiers.map((url) => `workspace:${url}`),
-      ...this.visibleRowRealmIdentifiers.map((url) => `workspace:${url}`),
+      ...this.recentRealmIdentifiers.map(workspaceWalkKey),
+      ...this.visibleRowRealmIdentifiers.map(workspaceWalkKey),
       ...this.filteredCatalogRealmIdentifiers.map((url) => `catalog:${url}`),
     ];
   }
@@ -535,6 +608,7 @@ export default class Dashboard extends Component<Signature> {
       aria-label='Dashboard'
       data-theme='dark'
       data-keyboard-cursor
+      {{this.captureDashboard}}
       {{on 'keydown' this.cursor.onKeydown}}
       {{on 'focusin' this.cursor.onFocusIn}}
       {{on 'pointerup' this.cursor.onPointerUp}}
@@ -808,7 +882,7 @@ export default class Dashboard extends Component<Signature> {
               {{/if}}
             </div>
 
-            <div class='group' data-test-archived-section>
+            <div class='group' data-archived-section data-test-archived-section>
               <Collapsible
                 @open={{this.isArchivedExpanded}}
                 @onOpenChange={{this.setArchivedExpanded}}
@@ -843,6 +917,7 @@ export default class Dashboard extends Component<Signature> {
                           <li class='list-item'>
                             <ArchivedWorkspace
                               @archivedRealm={{archivedRealm}}
+                              @onRestore={{this.restoreWorkspace}}
                             />
                           </li>
                         {{/each}}
