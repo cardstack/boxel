@@ -190,12 +190,23 @@ export default class Workspace extends Component<Signature> {
                   {{focusWhenSelected @isSelected scrollOnOpen='never'}}
                   data-test-workspace-button={{this.workspace.name}}
                 >
-                  {{! The name beside it labels the button. }}
-                  <RealmIcon
-                    class='desk-pill-icon'
-                    @realmInfo={{this.workspace.realmInfo}}
-                    aria-hidden='true'
-                  />
+                  {{! The name beside it labels the button. While an
+                      automation in the workspace needs the user, the icon
+                      carries the count. }}
+                  <Badge
+                    @count={{this.automationNoticeCount}}
+                    @label={{this.automationNoticeLabel}}
+                    data-test-workspace-automation-notices={{if
+                      this.automationNoticeCount
+                      this.automationNoticeCount
+                    }}
+                  >
+                    <RealmIcon
+                      class='desk-pill-icon'
+                      @realmInfo={{this.workspace.realmInfo}}
+                      aria-hidden='true'
+                    />
+                  </Badge>
                   <span
                     class='desk-pill-name'
                     data-test-workspace-name
@@ -301,12 +312,21 @@ export default class Workspace extends Component<Signature> {
               @realmURL={{@realmIdentifier}}
               {{on 'click' this.workspace.openWorkspace}}
             >
-              <span class='realm-icon-wrapper'>
-                <RealmIcon
-                  class='workspace-realm-icon'
-                  @realmInfo={{this.workspace.realmInfo}}
-                />
-              </span>
+              <Badge
+                @count={{this.automationNoticeCount}}
+                @label={{this.automationNoticeLabel}}
+                data-test-workspace-automation-notices={{if
+                  this.automationNoticeCount
+                  this.automationNoticeCount
+                }}
+              >
+                <span class='realm-icon-wrapper'>
+                  <RealmIcon
+                    class='workspace-realm-icon'
+                    @realmInfo={{this.workspace.realmInfo}}
+                  />
+                </span>
+              </Badge>
             </RealmURLTooltip>
           </span>
         {{else}}
@@ -320,13 +340,22 @@ export default class Workspace extends Component<Signature> {
           >
             <span class='wallpaper'>
               <RealmURLTooltip @realmURL={{@realmIdentifier}}>
-                <span class='realm-icon-wrapper'>
-                  <RealmIcon
-                    class='workspace-realm-icon'
-                    @realmInfo={{this.workspace.realmInfo}}
-                    @canAnimate={{true}}
-                  />
-                </span>
+                <Badge
+                  @count={{this.automationNoticeCount}}
+                  @label={{this.automationNoticeLabel}}
+                  data-test-workspace-automation-notices={{if
+                    this.automationNoticeCount
+                    this.automationNoticeCount
+                  }}
+                >
+                  <span class='realm-icon-wrapper'>
+                    <RealmIcon
+                      class='workspace-realm-icon'
+                      @realmInfo={{this.workspace.realmInfo}}
+                      @canAnimate={{true}}
+                    />
+                  </span>
+                </Badge>
               </RealmURLTooltip>
             </span>
           </ItemContainer>
@@ -363,33 +392,19 @@ export default class Workspace extends Component<Signature> {
           </IconButton>
         </div>
         {{! The options menu uses BoxelDropdown: Pret UI's Menu takes items
-            alone, with no room for the dates under them. While an
-            automation in the workspace needs the user, the menu's button
-            stays in view with a count on it, and the menu's Realm Settings
-            item carries the same count. }}
-        <div
-          class={{cn 'menu-btn' has-notices=this.automationNoticeCount}}
-          data-test-workspace-automation-notices={{if
-            this.automationNoticeCount
-            this.automationNoticeCount
-          }}
-        >
+            alone, with no room for the dates under them. }}
+        <div class='menu-btn'>
           <BoxelDropdown @contentClass='workspace-menu-dropdown'>
             <:trigger as |bindings|>
-              <Badge
-                @count={{this.automationNoticeCount}}
-                @label={{this.automationNoticeLabel}}
+              <IconButton
+                @label='Options'
+                @appearance='plain'
+                {{bindings}}
+                {{this.workspace.captureMenuTrigger}}
+                data-test-workspace-menu-trigger={{@realmIdentifier}}
               >
-                <IconButton
-                  @label='Options'
-                  @appearance='plain'
-                  {{bindings}}
-                  {{this.workspace.captureMenuTrigger}}
-                  data-test-workspace-menu-trigger={{@realmIdentifier}}
-                >
-                  <DotsHorizontal class='control-icon' width='16' height='16' />
-                </IconButton>
-              </Badge>
+                <DotsHorizontal class='control-icon' width='16' height='16' />
+              </IconButton>
             </:trigger>
             <:content as |dd|>
               <Menu
@@ -691,7 +706,6 @@ export default class Workspace extends Component<Signature> {
       .workspace:has(:focus-visible:not([data-nav-index]))
         :is(.favorite-btn, .menu-btn),
       .menu-btn:has([aria-expanded='true']),
-      .menu-btn.has-notices,
       .favorite-btn.is-favorited {
         opacity: 1;
         background-color: var(--_workspace-glass);

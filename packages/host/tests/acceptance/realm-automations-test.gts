@@ -344,6 +344,56 @@ module('Acceptance | realm config | Automations', function (hooks) {
         .doesNotExist('the notice ends once the automation runs again');
     });
 
+    test('the realm config edit view leads with the notices for the viewer, whose Show opens the console on the automation', async function (assert) {
+      answer = {
+        status: 200,
+        data: [
+          summary(NIGHTLY, {
+            ...(ACTIVE.attributes as Record<string, unknown>),
+            state: 'waiting-for-credits',
+            notice: {
+              reason: 'waiting-for-credits',
+              audience: 'payer',
+              forViewer: true,
+              run: null,
+              operation: null,
+              credential: null,
+            },
+          }),
+          PAUSED,
+        ],
+      };
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}realm`, format: 'edit' }]],
+      });
+      await waitFor('[data-test-realm-config-automation-notices]');
+      assert
+        .dom('[data-test-realm-config-automation-notices]')
+        .containsText('An automation needs attention');
+      assert
+        .dom(`[data-test-realm-config-automation-notice="${NIGHTLY}"]`)
+        .containsText(
+          'Boxel holds every run of Nightly import because the payer has no credits left.',
+        );
+      assert
+        .dom('[data-test-realm-config-automation-notice]')
+        .exists({ count: 1 });
+
+      await click(
+        `[data-test-realm-config-automation-notice-show="${NIGHTLY}"]`,
+      );
+      await waitFor(
+        `[data-test-automation-slot="${NIGHTLY}"][data-test-automation-slot-focused="true"]`,
+      );
+      assert
+        .dom(`[data-test-automation-slot="${NIGHTLY}"]`)
+        .hasAttribute(
+          'aria-current',
+          'true',
+          'the console opens with the automation marked',
+        );
+    });
+
     test('sees an empty state when the realm has no automations', async function (assert) {
       answer = { status: 200, data: [] };
       await visitConfig();

@@ -732,6 +732,146 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
   </template>
 }
 
+interface RealmAutomationNoticesSignature {
+  Args: {
+    // The realm's URL.
+    realm: string | undefined;
+    context: CardContext | undefined;
+  };
+}
+
+// The realm's automation notices for the viewer, on a view of the realm
+// config that has no Automations console (the edit view, which the
+// dashboard's Realm Settings opens): a call to action listing each automation
+// that needs the viewer, with Show, which opens the realm config on its
+// Automations console with that automation in view and marked. Renders
+// nothing while no automation needs the viewer. It reads the same route the
+// console reads, again on each realm event that can change a notice.
+export class RealmAutomationNotices extends GlimmerComponent<RealmAutomationNoticesSignature> {
+  @tracked private noticed: Automation[] = [];
+
+  private follow = modifier((element, [realm]: [string | undefined]) => {
+    if (!realm || !isLiveRender(element)) {
+      return;
+    }
+    this.load.perform(realm);
+    let unsubscribe = subscribeToRealm(realm, (event) => {
+      if (event.eventName === 'job' || event.eventName === 'automation') {
+        this.load.perform(realm, { settle: true });
+      }
+    });
+    return () => unsubscribe();
+  });
+
+  private load = restartableTask(
+    async (realm: string, { settle = false }: { settle?: boolean } = {}) => {
+      let toolContext = this.args.context?.toolContext;
+      if (!toolContext) {
+        return;
+      }
+      if (settle) {
+        await timeout(250);
+      }
+      try {
+        let result = await new AuthedFetchTool(toolContext).execute({
+          url: `${realm}${AUTOMATION_LIST_PATH}`,
+          acceptHeader: 'application/json',
+        });
+        let document = result.ok
+          ? (result.body as AutomationListDocument)
+          : undefined;
+        this.noticed =
+          document?.meta?.directWriter === true
+            ? (document.data ?? []).filter(
+                (automation) => automation.attributes.notice?.forViewer,
+              )
+            : [];
+      } catch {
+        // The notices are a pointer to the console: a failed read leaves the
+        // last ones shown, and the console says when it can't read the list.
+      }
+    },
+  );
+
+  private happened = (automation: Automation) => {
+    let notice = automation.attributes.notice;
+    return notice
+      ? automationNoticeText(notice, automationTitle(automation)).happened
+      : undefined;
+  };
+
+  private show = task(async (automation: Automation) => {
+    let realm = this.args.realm;
+    let toolContext = this.args.context?.toolContext;
+    if (!realm || !toolContext) {
+      return;
+    }
+    await showAutomationInConsole(toolContext, realm, automation.id);
+  });
+
+  private showAutomation = (automation: Automation) => {
+    this.show.perform(automation);
+  };
+
+  <template>
+    <div class='realm-automation-notices' {{this.follow @realm}}>
+      {{#if this.noticed.length}}
+        <Alert
+          @tone='warning'
+          @title={{if
+            (eq this.noticed.length 1)
+            'An automation needs attention'
+            (concat this.noticed.length ' automations need attention')
+          }}
+          data-test-realm-config-automation-notices
+        >
+          <ul class='notices'>
+            {{#each this.noticed as |automation|}}
+              <li
+                class='notice'
+                data-test-realm-config-automation-notice={{automation.id}}
+              >
+                <span>{{this.happened automation}}</span>
+                <Button
+                  @size='s'
+                  @appearance='link'
+                  {{on 'click' (fn this.showAutomation automation)}}
+                  data-test-realm-config-automation-notice-show={{automation.id}}
+                >
+                  Show
+                  {{automationTitle automation}}
+                  in Automations
+                </Button>
+              </li>
+            {{/each}}
+          </ul>
+        </Alert>
+      {{/if}}
+    </div>
+    <style scoped>
+      .realm-automation-notices:empty {
+        display: none;
+      }
+      .realm-automation-notices {
+        padding: var(--boxel-sp) var(--boxel-sp-lg) 0;
+      }
+      .notices {
+        display: grid;
+        gap: var(--boxel-sp-4xs);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .notice {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+}
+
 interface AutomationGlanceSignature {
   Args: { automation: Automation };
 }

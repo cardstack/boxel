@@ -109,29 +109,28 @@ module('Acceptance | dashboard automation notices', function (hooks) {
     await visitOperatorMode({ workspaceChooserOpened: true });
     await waitFor('[data-test-workspace-automation-notices="2"]');
 
-    let badged = document.querySelectorAll(
-      '[data-test-workspace-automation-notices]',
-    );
+    let badged = [
+      ...document.querySelectorAll('[data-test-workspace-automation-notices]'),
+    ];
     assert.ok(badged.length > 0, 'a workspace is badged');
     for (let element of badged) {
-      assert.ok(
-        element.querySelector(
-          `[data-test-workspace-menu-trigger="${realmAURL}"]`,
-        ),
+      assert.strictEqual(
+        element
+          .closest('[data-test-workspace]')
+          ?.getAttribute('data-test-workspace'),
+        'Workspace A',
         'only Workspace A is badged',
       );
     }
-    let menu = document.querySelector(
-      '[data-test-workspace-automation-notices="2"]',
-    )!;
+    let badge = badged[0];
     assert
-      .dom(menu.querySelector('[data-test-pretui-badge-mark]'))
-      .hasText('2', 'the options button shows the count');
+      .dom(badge.querySelector('[data-test-pretui-badge-mark]'))
+      .hasText('2', 'the workspace icon shows the count');
     assert
-      .dom(menu.querySelector('[data-test-pretui-badge-spoken]'))
+      .dom(badge.querySelector('[data-test-pretui-badge-spoken]'))
       .hasText(
         '2 automations need attention',
-        'the options button says what the count means',
+        'the count says what the count means',
       );
 
     await click(tileOf(realmAURL));
