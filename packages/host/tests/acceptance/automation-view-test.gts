@@ -1234,7 +1234,7 @@ module('Acceptance | automation view', function (hooks) {
         assert
           .dom('[data-test-automation-state-steps] li:nth-child(1)')
           .hasText(
-            'Edit the automation, and in the trigger’s Webhook field pick one of this workspace’s webhooks.',
+            'Edit the automation, and in the trigger’s Webhook field pick one of this workspace’s webhooks, or',
           );
         assert
           .dom('[data-test-automation-state-steps] li:nth-child(2)')
