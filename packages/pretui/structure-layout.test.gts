@@ -522,7 +522,11 @@ module('Pretui | structure-layout | Collapsible', function (hooks) {
     );
   });
 
-  test('an open panel does not clip its content; a closed one does', async function (assert) {
+  // `boxel test` applies no `<style scoped>`, so the clipping itself (an open
+  // panel's `overflow: visible`, a closed one's `hidden`) is a CSS claim this
+  // harness can't see. It asserts the state the rules key off: each panel's
+  // fold carries its own open/closed `data-state`.
+  test('each panel fold reflects its open or closed state', async function (assert) {
     await render(
       <template>
         <Collapsible @label='Open' @defaultOpen={{true}}><p>a</p></Collapsible>
@@ -532,16 +536,8 @@ module('Pretui | structure-layout | Collapsible', function (hooks) {
     let [open, closed] = [
       ...root().querySelectorAll('[data-test-pretui-collapsible-inner]'),
     ] as HTMLElement[];
-    assert.strictEqual(
-      getComputedStyle(open!).overflow,
-      'visible',
-      'a ring on a child at the edge shows in full',
-    );
-    assert.strictEqual(
-      getComputedStyle(closed!).overflow,
-      'hidden',
-      `the closed and animating panel still clips (closed=${getComputedStyle(closed!).overflow} open=${getComputedStyle(open!).overflow})`,
-    );
+    assert.strictEqual(open!.parentElement?.getAttribute('data-state'), 'open');
+    assert.strictEqual(closed!.parentElement?.getAttribute('data-state'), 'closed');
   });
 
   test('uncontrolled: a click toggles state and fires the callback', async function (assert) {
