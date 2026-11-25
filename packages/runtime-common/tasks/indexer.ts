@@ -865,8 +865,15 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     // The realm checks the automations' key approvals in full, which the
     // hook can't, as the worker reads no operation definitions. It hears of
     // the pass from here whoever started it, a reindex no realm awaits
-    // included.
-    if (synced.size > 0) {
+    // included. It isn't asked when the hook left nothing to check (every
+    // automation paused or just removed), since asking mounts the realm. A
+    // failed sync still asks, as the hook can't say what state its row is in.
+    let followable = [...synced.values()].some(
+      (outcome) =>
+        outcome.kind === 'failed' ||
+        (outcome.kind !== 'removed' && outcome.automation.state !== 'paused'),
+    );
+    if (followable) {
       await followAutomationKeyApprovalsInRealm(log, jobInfo, _fetch, realmURL);
     }
     reportStatus(args.jobInfo, 'finish');

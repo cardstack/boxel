@@ -1721,14 +1721,18 @@ module(basename(import.meta.filename), function (hooks) {
       );
       editUnwatched(`${KEYED}-script.js`, `return 'ok';`);
 
-      await fromScratchPass();
+      assert.strictEqual(
+        await fromScratchPass(),
+        0,
+        'the worker asks nothing of a realm whose automations are all paused',
+      );
       assert.strictEqual(
         (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
         'paused',
       );
     });
 
-    test('the request to check the automations’ key approvals takes a direct writer of the realm', async function (assert) {
+    test('the request to check the automations’ key approvals takes a caller the realm grants write', async function (assert) {
       let path = `${new URL(realm.url).pathname}_follow-automation-key-approvals`;
       let refused = await request
         .post(path)
