@@ -147,12 +147,13 @@ export default function handleRemoveRealmUserPermission({
           let { wasPresent } = await withWorkspaceListLock(
             dbAdapter,
             user,
-            () =>
+            (signal) =>
               removeRealmFromUserAccountData({
                 matrixURL: matrixClient.matrixURL,
                 userId: user,
                 userAccessToken: token,
                 realmURL: normalizedRealmHref,
+                signal,
               }),
           );
           removedFromAccountData = wasPresent;

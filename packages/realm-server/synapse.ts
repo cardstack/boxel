@@ -487,11 +487,13 @@ export async function appendRealmServerToUserAccountData({
   userId,
   userAccessToken,
   realmServerURL,
+  signal,
 }: {
   matrixURL: URL;
   userId: string;
   userAccessToken: string;
   realmServerURL: string;
+  signal?: AbortSignal;
 }): Promise<{ alreadyPresent: boolean }> {
   return appendStringToUserAccountDataArray({
     matrixURL,
@@ -500,6 +502,7 @@ export async function appendRealmServerToUserAccountData({
     eventType: APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
     arrayKey: 'realmServers',
     value: realmServerURL,
+    signal,
   });
 }
 
@@ -703,7 +706,7 @@ export async function fetchAccountData(
   return (await response.json()) as Record<string, unknown>;
 }
 
-async function putAccountData(
+export async function putAccountData(
   matrixURL: URL,
   userId: string,
   userAccessToken: string,

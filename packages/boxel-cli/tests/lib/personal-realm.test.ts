@@ -35,6 +35,8 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
 interface StubOptions {
   // What the initial realm-list read returns; a 404 is "never set".
   realmsResponse?: Response;
+  // What each realm-list read returns, in order, ahead of `realmsResponse`.
+  realmsResponses?: Response[];
   // What GET .../displayname returns.
   displaynameResponse?: Response;
   // What POST /_create-realm returns.
@@ -56,6 +58,7 @@ function stubFetchRoutes(options: StubOptions = {}) {
 
     if (method === 'GET' && url.pathname === ACCOUNT_DATA_PATH) {
       return (
+        options.realmsResponses?.shift() ??
         options.realmsResponse ??
         jsonResponse({ errcode: 'M_NOT_FOUND' }, { status: 404 })
       );
@@ -178,6 +181,32 @@ describe('ensurePersonalRealm', () => {
       },
     });
     // The server made the edit, so nothing is written to Matrix directly.
+    expect(callsTo(calls, 'PUT', ACCOUNT_DATA_PATH)).toHaveLength(0);
+  });
+
+  it('leaves the realm list alone when a failed request to the realm server recorded the realm anyway', async () => {
+    const { calls } = stubFetchRoutes({
+      realmsResponses: [
+        jsonResponse({ errcode: 'M_NOT_FOUND' }, { status: 404 }),
+        // The server added the realm before its answer was lost.
+        jsonResponse({
+          realms: ['https://realms.example.com/newuser/personal/'],
+        }),
+      ],
+      userRealmsEditResponse: jsonResponse(
+        { errors: ['Service Unavailable'] },
+        { status: 503 },
+      ),
+    });
+
+    const result = await ensurePersonalRealm(AUTH, REALM_SERVER_URL);
+
+    expect(result).toEqual({
+      outcome: 'created',
+      realmUrl: 'https://realms.example.com/newuser/personal/',
+    });
+    expect(callsTo(calls, 'PATCH', '/_user-realms')).toHaveLength(1);
+    // The realm is already on the list, so no duplicate is written.
     expect(callsTo(calls, 'PUT', ACCOUNT_DATA_PATH)).toHaveLength(0);
   });
 

@@ -76,6 +76,30 @@ export function hashUserIdForAccountDataLock(matrixUserId: string): string {
   return digest.readBigInt64BE(0).toString();
 }
 
+// Whether `promise` settles before `deadline` (a `Date.now()` timestamp).
+async function settlesBefore(
+  promise: Promise<unknown>,
+  deadline: number,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise.then(
+        () => true,
+        () => true,
+      ),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(
+          () => resolve(false),
+          Math.max(0, deadline - Date.now()),
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Lock key for one file within one realm (see PgAdapter.withFileWriteLocks).
 // Namespaced away from both the realm-write and user-cost spaces: a file lock
 // and its realm's lock must never collide, or a writer holding a file would
@@ -1352,11 +1376,13 @@ export class PgAdapter implements DBAdapter {
   // transaction, while `fn` makes its Matrix requests, and the lock ends with
   // that transaction, whether `fn` returns or throws.
   //
-  // `deadline` bounds only the wait for the lock: a caller still waiting then
-  // rejects with `AccountDataLockTimeoutError`, before `fn` starts. `fn` bounds
-  // its own requests. A later caller in the in-process queue waits for the
-  // earlier ones in memory, and the time it spends there counts against its
-  // own deadline too.
+  // `deadline` bounds the whole wait for the lock, in the in-process queue
+  // behind this replica's earlier callers and then in postgres behind other
+  // replicas': a caller still waiting then rejects with
+  // `AccountDataLockTimeoutError`, before `fn` starts. `fn` bounds its own
+  // requests. A caller that gives up still holds its place in the queue for
+  // the callers behind it, which wait for the callers ahead of it as well, so
+  // the queue keeps one replica to one waiter in postgres per user.
   //
   // Re-entrancy: `fn` must not take this lock for the same user again; the
   // second take would wait on the first's transaction forever.
@@ -1369,8 +1395,7 @@ export class PgAdapter implements DBAdapter {
       this.#accountDataQueue.get(matrixUserId) ?? Promise.resolve();
     const lockKey = hashUserIdForAccountDataLock(matrixUserId);
     const myWork = (async (): Promise<T> => {
-      await previous;
-      if (Date.now() >= deadline) {
+      if (!(await settlesBefore(previous, deadline))) {
         throw new AccountDataLockTimeoutError(matrixUserId);
       }
       try {
@@ -1387,10 +1412,13 @@ export class PgAdapter implements DBAdapter {
         throw err;
       }
     })();
-    const myCompletion: Promise<void> = myWork.then(
-      () => undefined,
-      () => undefined,
-    );
+    const myCompletion: Promise<void> = Promise.all([
+      previous,
+      myWork.then(
+        () => undefined,
+        () => undefined,
+      ),
+    ]).then(() => undefined);
     this.#accountDataQueue.set(matrixUserId, myCompletion);
     void myCompletion.finally(() => {
       if (this.#accountDataQueue.get(matrixUserId) === myCompletion) {

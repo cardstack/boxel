@@ -123,7 +123,9 @@ async function addToRealmList(
     },
     { add: [realmUrl] },
   );
-  if (!edit) {
+  if (edit.outcome !== 'edited') {
+    // Adds the realm only when it's missing, so a failed request that added
+    // it already leaves no duplicate.
     await addRealmToMatrixAccountData(auth, realmUrl);
   }
 }

@@ -11,7 +11,9 @@ import {
   getRealmTokens,
   addRealmToMatrixAccountData,
   editUserRealmsOnRealmServer,
+  type RealmServerListEdit,
   removeRealmFromMatrixAccountData,
+  requireUserRealmsFromMatrixAccountData,
   getUserRealmsFromMatrixAccountData,
   type MatrixAuth,
 } from './auth.ts';
@@ -994,9 +996,12 @@ export class ProfileManager implements RealmAuthenticator {
   // compare-and-set, so that direct write may still overlap another writer's
   // edit.
   async addToUserRealms(realmUrl: string): Promise<void> {
-    if (await this.editListOnRealmServer({ add: [realmUrl] })) {
+    let edit = await this.editListOnRealmServer({ add: [realmUrl] });
+    if (edit.outcome === 'edited') {
       return;
     }
+    // Adds the realm only when it's missing, so a failed request that added
+    // it already leaves no duplicate.
     await this.withMatrixAuthRecovery((auth) =>
       addRealmToMatrixAccountData(auth, realmUrl),
     );
@@ -1009,21 +1014,36 @@ export class ProfileManager implements RealmAuthenticator {
     let edit = await this.editListOnRealmServer({
       remove: [...new Set([withSlash, withSlash.replace(/\/$/, ''), realmUrl])],
     });
-    if (edit) {
+    if (edit.outcome === 'edited') {
       return edit.removed.length > 0;
     }
-    return this.withMatrixAuthRecovery((auth) =>
+    let removed = await this.withMatrixAuthRecovery((auth) =>
       removeRealmFromMatrixAccountData(auth, realmUrl),
     );
+    if (removed || edit.outcome === 'not-kept') {
+      return removed;
+    }
+    // The request to the realm server failed, and may have removed the
+    // entry before it did: an entry that is gone now counts as removed. The
+    // read is strict, since a failed read must not pass for an empty list.
+    let remaining: string[];
+    try {
+      remaining = await this.withMatrixAuthRecovery((auth) =>
+        requireUserRealmsFromMatrixAccountData(auth),
+      );
+    } catch {
+      return false;
+    }
+    return !remaining.some((url) => ensureTrailingSlash(url) === withSlash);
   }
 
   private async editListOnRealmServer(edit: {
     add?: string[];
     remove?: string[];
-  }) {
+  }): Promise<RealmServerListEdit> {
     let active = this.getActiveProfile();
     if (!active) {
-      return undefined;
+      return { outcome: 'failed' };
     }
     return await editUserRealmsOnRealmServer(
       active.profile.realmServerUrl,

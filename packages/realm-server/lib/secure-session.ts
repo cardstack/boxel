@@ -1387,12 +1387,13 @@ async function setUpFirstSignIn(
         }
       }
     }
-    await withWorkspaceListLock(deps.dbAdapter, user, () =>
+    await withWorkspaceListLock(deps.dbAdapter, user, (signal) =>
       appendRealmToUserAccountData({
         matrixURL: deps.matrixClient.matrixURL,
         userId: user,
         userAccessToken: accessToken,
         realmURL,
+        signal,
       }),
     );
   });

@@ -415,7 +415,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
   // Every edit rewrites the whole list, and Matrix account data has no
   // compare-and-set, so the realm server holds each user's account-data lock
-  // around its edits: two that overlap must both stay on the list.
+  // around its edits: two that overlap must both stay on the list. Concurrent
+  // PATCH edits overlap reliably and are what shows the lock at work; a
+  // create or delete spends most of its time on the realm, so its list edit
+  // rarely meets another's, and those tests check the outcome rather than the
+  // lock. The lock itself, its deadline included, is tested in
+  // realm-advisory-locks-test.
   module('overlapping edits of one user’s list', function (hooks) {
     let context = setupServer(hooks, `${import.meta.filename}#overlap`);
 

@@ -18,6 +18,7 @@ import {
   fetchAccountData,
   fetchDisplayName,
   MatrixHttpError,
+  putAccountData,
   removeRealmFromUserAccountData,
   resolveAdminCreds,
   withImpersonatedUser,
@@ -42,6 +43,9 @@ const RETRY_DELAYS_MS = [250, 750];
 // create or delete request open, so a Matrix server that stops answering
 // fails it rather than hanging it.
 const DEADLINE_MS = 15_000;
+// How many times one try of an edit writes the list when a writer that takes
+// no lock keeps overwriting it in between.
+const EDIT_ATTEMPTS = 3;
 
 // A list edit that failed. Matrix may have taken a write whose answer, or
 // every read after it, never came back, so the list may hold the edit even so.
@@ -145,29 +149,47 @@ export async function editWorkspaceList(
       what,
       (accessToken, signal, deadline) =>
         whileEditing(deps, user, deadline, async () => {
-          let before = realmsIn(await read(deps, user, accessToken, signal));
-          initial ??= before;
-          for (let realmURL of remove.filter((r) => before.includes(r))) {
+          // One read, one write of the whole edited list and one read-back,
+          // however many realms the edit names. The read-back catches a
+          // client that wrote the list straight to Matrix in between, which
+          // the lock can't hold back, and the edit is made again on what it
+          // left.
+          for (let attempt = 1; ; attempt++) {
+            let content = await read(deps, user, accessToken, signal);
+            let before = realmsIn(content);
+            initial ??= before;
+            let after = [
+              ...before.filter((r) => !remove.includes(r)),
+              ...add.filter((r) => !before.includes(r)),
+            ];
+            if (
+              after.length === before.length &&
+              after.every((r, i) => r === before[i])
+            ) {
+              return true;
+            }
             writing = true;
-            await removeRealmFromUserAccountData({
-              matrixURL: deps.matrixClient.matrixURL,
-              userId: user,
-              userAccessToken: accessToken,
-              realmURL,
+            await putAccountData(
+              deps.matrixClient.matrixURL,
+              user,
+              accessToken,
+              APP_BOXEL_REALMS_EVENT_TYPE,
+              { ...content, realms: after },
               signal,
-            });
+            );
+            let written = realmsIn(await read(deps, user, accessToken, signal));
+            if (
+              add.every((r) => written.includes(r)) &&
+              !remove.some((r) => written.includes(r))
+            ) {
+              return true;
+            }
+            if (attempt >= EDIT_ATTEMPTS) {
+              throw new Error(
+                `the edit lost to another writer of the list ${EDIT_ATTEMPTS} times`,
+              );
+            }
           }
-          for (let realmURL of add.filter((r) => !before.includes(r))) {
-            writing = true;
-            await appendRealmToUserAccountData({
-              matrixURL: deps.matrixClient.matrixURL,
-              userId: user,
-              userAccessToken: accessToken,
-              realmURL,
-              signal,
-            });
-          }
-          return true;
         }),
     );
     if (!result || !initial) {
@@ -295,15 +317,19 @@ function whileEditing<T>(
 // Runs `fn`, an edit of `user`'s account data that the realm server makes
 // some other way than through this module, holding the same lock as the edits
 // here, so the two never overlap. It waits for the lock until `deadline`, and
-// then rejects with `AccountDataLockTimeoutError` without running `fn`.
+// then rejects with `AccountDataLockTimeoutError` without running `fn`. `fn`
+// is handed a signal that aborts at the deadline, and must end its requests
+// with it: the lock, and the pool connection it pins, are held until `fn`
+// settles, and every other edit of the user's list waits on them.
 export async function withWorkspaceListLock<T>(
   dbAdapter: DBAdapter,
   user: string,
-  fn: () => Promise<T>,
+  fn: (signal: AbortSignal) => Promise<T>,
   deadline = Date.now() + DEADLINE_MS,
 ): Promise<T> {
+  let run = () => fn(AbortSignal.timeout(Math.max(0, deadline - Date.now())));
   let lock = dbAdapter.withAccountDataLock?.bind(dbAdapter);
-  return lock ? await lock(user, fn, { deadline }) : await fn();
+  return lock ? await lock(user, run, { deadline }) : await run();
 }
 
 function keepsAccountOf(deps: WorkspaceListDeps, user: string): boolean {

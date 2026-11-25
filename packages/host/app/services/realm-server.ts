@@ -344,10 +344,9 @@ export default class RealmServerService
   // server makes itself, as a write of the list straight to Matrix could.
   // True when the server made the edit. False when the caller should write
   // the list itself: the server keeps no list for this user (404, a user of
-  // another homeserver), or the request failed. Each edit adds a realm only
-  // when it's missing and removes one only when it's there, so writing the
-  // list after a failed request is safe even when the server made part of the
-  // edit.
+  // another homeserver), or the request failed. A failed request may still
+  // have made the edit, so a caller that writes the list after one adds a
+  // realm only when it's missing.
   async editWorkspaceList(edit: {
     add?: string[];
     remove?: string[];

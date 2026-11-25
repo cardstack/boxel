@@ -1149,13 +1149,17 @@ export default class MatrixService extends Service {
           APP_BOXEL_REALMS_EVENT_TYPE,
         )) as { realms: string[] }) ?? {};
 
-      // Clone the account data instead of using it directly,
-      // since mutating the original object would modify the Matrix client’s store
-      // and prevent updates from being sent back to the server.
-      let newRealms = [...realms, realmURLString];
-      await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
-        realms: newRealms,
-      });
+      // A request to the realm server that failed may have added the realm
+      // already, so it is added only when it's missing.
+      if (!realms.includes(realmURLString)) {
+        // Clone the account data instead of using it directly,
+        // since mutating the original object would modify the Matrix client’s store
+        // and prevent updates from being sent back to the server.
+        let newRealms = [...realms, realmURLString];
+        await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+          realms: newRealms,
+        });
+      }
     }
     // The legacy `app.boxel.realms` write above is persistence only. On a
     // trusted-realm-servers session the in-memory list also holds realms

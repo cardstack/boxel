@@ -188,12 +188,13 @@ export default function handleUpsertRealmUserPermission({
           let token = userToken;
           // Held around both writes, so neither overlaps another edit the
           // realm server makes of this user's account data.
-          await withWorkspaceListLock(dbAdapter, user, async () => {
+          await withWorkspaceListLock(dbAdapter, user, async (signal) => {
             let { alreadyPresent } = await appendRealmToUserAccountData({
               matrixURL: matrixClient.matrixURL,
               userId: user,
               userAccessToken: token,
               realmURL: normalizedRealmHref,
+              signal,
             });
             appendedToAccountData = !alreadyPresent;
             // Keep `app.boxel.realm-servers` in lockstep with `app.boxel.realms`
@@ -208,6 +209,7 @@ export default function handleUpsertRealmUserPermission({
               realmServerURL: ensureTrailingSlash(
                 new URL(normalizedRealmHref).origin,
               ),
+              signal,
             });
           });
         } catch (e: any) {
