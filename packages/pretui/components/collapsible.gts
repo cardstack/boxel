@@ -287,11 +287,16 @@ export class Collapsible extends Component<CollapsibleSignature> {
           min-inline-size: 0;
           overflow: hidden;
         }
-        .pretui-collapsible-fold[data-state='open']
-          > .pretui-collapsible-inner {
-          overflow: visible;
-          transition: overflow 0s linear var(--pretui-dur-morph, 300ms);
-          transition-behavior: allow-discrete;
+        /* Only where the delayed step is supported: without it the lift
+           would be immediate and the content would spill out of the
+           still-growing fold, so those browsers keep the clip. */
+        @supports (transition-behavior: allow-discrete) {
+          .pretui-collapsible-fold[data-state='open']
+            > .pretui-collapsible-inner {
+            overflow: visible;
+            transition: overflow 0s linear var(--pretui-dur-morph, 300ms);
+            transition-behavior: allow-discrete;
+          }
         }
         /* Reduced motion lands on the END state — open is open, closed is
            closed, never a frozen midpoint of the row track. */

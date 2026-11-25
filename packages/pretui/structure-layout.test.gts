@@ -537,7 +537,10 @@ module('Pretui | structure-layout | Collapsible', function (hooks) {
       ...root().querySelectorAll('[data-test-pretui-collapsible-inner]'),
     ] as HTMLElement[];
     assert.strictEqual(open!.parentElement?.getAttribute('data-state'), 'open');
-    assert.strictEqual(closed!.parentElement?.getAttribute('data-state'), 'closed');
+    assert.strictEqual(
+      closed!.parentElement?.getAttribute('data-state'),
+      'closed',
+    );
   });
 
   test('uncontrolled: a click toggles state and fires the callback', async function (assert) {
