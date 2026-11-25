@@ -145,6 +145,7 @@ import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts
 import type { HostURLResolver } from './lib/realm-host-urls.ts';
 import type { HostURLDomains } from './lib/realm-host-urls-domains.ts';
 import {
+  KEY_APPROVAL_NOTICES_PATH,
   KEY_BINDINGS_PATH,
   KEY_LIMIT_NOTICES_PATH,
   KEY_POLICY_NOTICES_PATH,

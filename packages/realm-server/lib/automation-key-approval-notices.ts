@@ -30,9 +30,12 @@ const log = logger('automation-key-approval-notices');
 // touched the automation's card or script. So a notice ends when the approval
 // it asks for lands, when the operation leaves the card, or when the
 // automation stops waiting, and goes with the automation's row when the
-// automation is removed. Each recipient whose notice was recorded, changed or
+// automation is removed, from the console or because its card was deleted or
+// stopped being an automation. Each recipient whose notice was recorded, changed or
 // ended is sent `KEY_NOTICES_UPDATED_EVENT_TYPE`, so a session they have open
-// reads the badge count again.
+// reads the badge count again. A row an index pass removes is gone before
+// any realm server checks it, so its recipients read the count the next time
+// their session asks.
 //
 // A notice is listed only while its automation waits for key approval, and an
 // operation that asks a realm's direct writer to share a key only while the
@@ -169,25 +172,30 @@ export async function followKeyApprovalNotices(
   tell(told);
 }
 
-// Ends every notice about the automation, before its row is removed, and
-// tells their recipients. Removing the row ends them too (`ON DELETE
-// CASCADE`); reading them first is what lets the recipients be told.
-export async function endKeyApprovalNotices(
+// The recipients of the automation's notices, read before a change that
+// removes its row (and with it, `ON DELETE CASCADE`, its notices), so they
+// can be told once the change commits (`tellKeyApprovalNoticesChanged`).
+export async function keyApprovalNoticeRecipients(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
-): Promise<void> {
+): Promise<string[]> {
   try {
     let rows = await query(dbAdapter, [
-      'DELETE FROM automation_key_approval_notices WHERE automation_id =',
+      'SELECT recipient FROM automation_key_approval_notices WHERE automation_id =',
       param(automationId),
-      'RETURNING recipient',
     ]);
-    tell(rows.map((row) => String(row.recipient)));
+    return rows.map((row) => String(row.recipient));
   } catch (error) {
     log.warn(
-      `could not end the key approval notices of automation ${automationId}: ${error instanceof Error ? error.message : String(error)}`,
+      `could not read the key approval notices of automation ${automationId}: ${error instanceof Error ? error.message : String(error)}`,
     );
+    return [];
   }
+}
+
+// Tells each recipient their key notices changed.
+export function tellKeyApprovalNoticesChanged(recipients: string[]): void {
+  tell(recipients);
 }
 
 // Each recipient's operations, in the order the check answered them, one

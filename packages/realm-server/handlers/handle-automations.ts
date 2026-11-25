@@ -87,6 +87,11 @@ import {
 import { buildAdmitPayerSpending } from '../lib/automation-spending.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
 import { followAutomationKeyApprovals } from '../lib/automation-key-approvals.ts';
+import {
+  followKeyApprovalNotices,
+  keyApprovalNoticeRecipients,
+  tellKeyApprovalNoticesChanged,
+} from '../lib/automation-key-approval-notices.ts';
 import { exactMeteredCredits } from '../lib/metered-charge.ts';
 import { currentPricing } from '../lib/pricing.ts';
 import {
@@ -844,6 +849,16 @@ export function handleAutomationPause(args: CreateRoutesArgs): Handler {
       { automationId, user: caller },
       actorOptions(args),
     );
+    if (change.ok) {
+      // A paused automation waits on nobody, so its key approval notices
+      // end; a resume checks its approvals again.
+      await followKeyApprovalNotices(args.dbAdapter, {
+        automationId,
+        automationURL: args.virtualNetwork.toURLHref(automationId),
+        realmURL: args.virtualNetwork.toURLHref(change.automation.realm),
+        awaiting: undefined,
+      });
+    }
     await answerChange(ctxt, args, change, caller);
   });
 }
@@ -941,11 +956,19 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
 export function handleAutomationRemove(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let { caller, automationId } = await automationRequest(ctxt, args);
+    let noticed = await keyApprovalNoticeRecipients(
+      args.dbAdapter,
+      automationId,
+    );
     let change = await removeAutomation(
       args.dbAdapter,
       { automationId, user: caller },
       actorOptions(args),
     );
+    if (change.ok) {
+      // Removing the row ended its key approval notices.
+      tellKeyApprovalNoticesChanged(noticed);
+    }
     await answerChange(ctxt, args, change, caller);
   });
 }
