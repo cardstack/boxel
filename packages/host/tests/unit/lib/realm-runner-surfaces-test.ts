@@ -25,13 +25,14 @@ import {
 // What an automation run may reach (ADR 025 §1.4): its own realm's reads,
 // writes the realm server stages for the one batch the run commits, card
 // operations (a `callApi` is the run's only way to an outside API), the
-// `resolve` model call and its batch, and its own progress and console
-// lines.
+// `resolve` model call and its batch, BXL transforms in a worker that
+// touch nothing outside it, and its own progress and console lines.
 const AUTOMATION_MAY_REACH = new Set<RealmRunnerMethodReach>([
   'realm-read',
   'realm-write',
   'operation',
   'model',
+  'transform',
   'progress',
   'log',
 ]);
@@ -65,6 +66,7 @@ module('Unit | Lib | realm-runner surfaces', function () {
       'progress.task',
       'resolve',
       'resolve.batch',
+      'transform',
     ]);
   });
 
