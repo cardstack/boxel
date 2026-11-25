@@ -3,6 +3,19 @@ import * as readline from 'readline';
 import { Writable } from 'stream';
 import * as tty from 'tty';
 
+// Ctrl+C at a prompt stops the command as Ctrl+C anywhere else does. A
+// prompt reads the terminal in raw mode, so the keypress never becomes a
+// signal on its own: it is passed to the process's SIGINT handlers, so a
+// command's cleanup runs (they exit when done), and without any the command
+// exits as an interrupted one.
+export function interruptCommand(): void {
+  if (process.listenerCount('SIGINT') > 0) {
+    process.emit('SIGINT', 'SIGINT');
+    return;
+  }
+  process.exit(130);
+}
+
 // A question whose input ended before it was answered. The CLI's entry point
 // prints its message without a stack, since it describes how the command was
 // run rather than a fault in it.
@@ -56,7 +69,7 @@ export function prompt(
     rl.on('SIGINT', () => {
       answered = true;
       rl.close();
-      process.exit(130);
+      interruptCommand();
     });
     rl.question(question, (answer) => {
       answered = true;
@@ -179,7 +192,7 @@ export function promptPassword(
           } else if (c === '\u0003') {
             // Ctrl+C
             cleanup();
-            process.exit();
+            interruptCommand();
           } else if (c === '\u007F' || c === '\b') {
             // Backspace
             if (password.length > 0) {

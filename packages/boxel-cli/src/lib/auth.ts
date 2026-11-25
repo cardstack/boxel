@@ -75,6 +75,29 @@ export async function matrixLogin(
   };
 }
 
+// Signs a Matrix access token out, ending its device. A token that is already
+// signed out answers 401, which counts as done.
+export async function matrixLogout(
+  matrixUrl: string,
+  accessToken: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<void> {
+  let response = await fetchFn(
+    new URL('_matrix/client/v3/logout', matrixUrl).href,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    },
+  );
+  if (!response.ok && response.status !== 401) {
+    throw new Error(`Matrix logout failed: ${response.status}`);
+  }
+}
+
 export interface LoginToken {
   loginToken: string;
   // How long the token is valid, in milliseconds, as reported by the server.

@@ -17,6 +17,13 @@ import {
   getUserRealmsFromMatrixAccountData,
   type MatrixAuth,
 } from './auth.ts';
+import { withFileLock } from './file-lock.ts';
+import { readWorkspaceListResponse } from './personal-realm.ts';
+import {
+  boxelApiResource,
+  OAuthConnectionEndedError,
+  refreshTokens,
+} from './oauth-login.ts';
 import { promptPassword as defaultPromptPassword } from './prompt.ts';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
 import { realmFetch } from './realm-fetch.ts';
@@ -28,6 +35,9 @@ export interface ProfileManagerDeps {
   isTty?: () => boolean;
   // Moves the written profiles file into place.
   renameFile?: (from: string, to: string) => void;
+  // Renews an OAuth profile's tokens at the realm server.
+  refreshTokens?: typeof refreshTokens;
+  now?: () => number;
 }
 
 // What a rename over the profiles file throws on Windows while another
@@ -36,6 +46,11 @@ const RENAME_REFUSED_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
+
+// An OAuth access token this close to its expiry is renewed before it is
+// sent, rather than sent to be refused. A request it is refused on is retried
+// once with a renewed one.
+const OAUTH_ACCESS_EXPIRY_MARGIN_MS = 60_000;
 
 /**
  * Re-mint a realm-server token when this little of its life is left, so a
@@ -109,13 +124,19 @@ function aliasedRealmName(realmUrl: string): string | undefined {
   return match?.[1];
 }
 
+// A profile signs in one of two ways. A Matrix profile holds the user's
+// Matrix access token, and the realm-server and per-realm tokens minted from
+// it. An OAuth profile (`boxel profile add --oauth`) holds only the tokens of
+// its OAuth connection to the realm server's Boxel API, and no Matrix token.
+// Both keep the user's Matrix ID, which names the profile.
 export interface Profile {
   displayName: string;
   matrixUrl: string;
   realmServerUrl: string;
-  matrixAccessToken: string;
+  matrixAccessToken?: string;
   matrixUserId: string;
-  matrixDeviceId: string;
+  matrixDeviceId?: string;
+  oauth?: OAuthSessionRecord;
   realmTokens?: Record<string, string>;
   realmServerToken?: string;
   // A session signed in on the secure origin, through the browser (`boxel
@@ -128,6 +149,26 @@ export interface SecureSessionRecord {
   token: string;
   userId: string;
   expiresAt: string;
+}
+
+// An OAuth profile's connection: where its tokens are refreshed and revoked,
+// and the tokens themselves. Times are ISO 8601.
+export interface OAuthSessionRecord {
+  issuer: string;
+  tokenEndpoint: string;
+  revocationEndpoint?: string;
+  accessToken: string;
+  // Absent on a connection that doesn't renew.
+  refreshToken?: string;
+  accessExpiresAt: string;
+  connectionEndsAt: string;
+  scope?: string;
+}
+
+export type SignInKind = 'matrix' | 'oauth';
+
+export function signInKind(profile: Profile): SignInKind {
+  return profile.oauth ? 'oauth' : 'matrix';
 }
 
 export interface ProfilesConfig {
@@ -201,6 +242,12 @@ export class ProfileManager implements RealmAuthenticator {
   private promptPasswordFn: (question: string) => Promise<string>;
   private isTtyFn: () => boolean;
   private renameFileFn: (from: string, to: string) => void;
+  private refreshTokensFn: typeof refreshTokens;
+  private now: () => number;
+  // OAuth access tokens this process has seen the realm server accept, or
+  // has just been given by a renewal. A 401 on one of these is about the
+  // route, not the token (see `oauthFetch`).
+  private liveOAuthTokens = new Set<string>();
   // Set when a profiles file exists on disk but couldn't be read as a profiles
   // store (unparseable, or a shape we don't recognize). The manager still
   // starts empty so `profile add` can recover, but discovery callers must be
@@ -221,6 +268,8 @@ export class ProfileManager implements RealmAuthenticator {
     this.promptPasswordFn = deps?.promptPassword ?? defaultPromptPassword;
     this.isTtyFn = deps?.isTty ?? (() => Boolean(process.stdin.isTTY));
     this.renameFileFn = deps?.renameFile ?? fs.renameSync;
+    this.refreshTokensFn = deps?.refreshTokens ?? refreshTokens;
+    this.now = deps?.now ?? Date.now;
   }
 
   private ensureConfigDir(): void {
@@ -394,7 +443,7 @@ export class ProfileManager implements RealmAuthenticator {
     if (!profile) {
       throw new Error(unknownProfileMessage(profileId, this.listProfiles()));
     }
-    if (!profile.matrixAccessToken) {
+    if (!profile.matrixAccessToken && !profile.oauth) {
       throw new Error(noSessionMessage(profileId));
     }
     this.selectedProfileId = profileId;
@@ -503,6 +552,37 @@ export class ProfileManager implements RealmAuthenticator {
         // it carries over a re-authentication against the same one.
         secureSession:
           secureSession ?? (urlsChanged ? undefined : existing?.secureSession),
+      };
+      if (!config.activeProfile) {
+        config.activeProfile = matrixId;
+      }
+    });
+  }
+
+  // Persist a profile signed in with OAuth. It replaces whatever the profile
+  // held: a Matrix token and the tokens minted from it, an earlier OAuth
+  // connection, and a secure session (an OAuth profile never stores one). The
+  // caller ends what it replaces on the server. The profile becomes the
+  // active one when no profile is.
+  addOAuthProfile(
+    matrixId: string,
+    oauth: OAuthSessionRecord,
+    urls: { matrixUrl: string; realmServerUrl: string },
+    displayName?: string,
+  ): void {
+    const slots = this.resolveProfileSlots(
+      matrixId,
+      displayName,
+      urls.matrixUrl,
+      urls.realmServerUrl,
+    );
+    this.commit((config) => {
+      config.profiles[matrixId] = {
+        displayName: slots.displayName,
+        matrixUrl: slots.matrixUrl,
+        realmServerUrl: slots.realmServerUrl,
+        matrixUserId: matrixId,
+        oauth,
       };
       if (!config.activeProfile) {
         config.activeProfile = matrixId;
@@ -677,13 +757,18 @@ export class ProfileManager implements RealmAuthenticator {
     if (!targetId || !profile) {
       throw new Error(NO_ACTIVE_PROFILE_ERROR);
     }
+    if (profile.oauth) {
+      throw new Error(
+        `Profile "${targetId}" is signed in with OAuth, so it has no Matrix session.`,
+      );
+    }
     if (!profile.matrixAccessToken) {
       throw new Error(noSessionMessage(targetId));
     }
     return {
       accessToken: profile.matrixAccessToken,
       userId: profile.matrixUserId,
-      deviceId: profile.matrixDeviceId,
+      deviceId: profile.matrixDeviceId ?? '',
       matrixUrl: profile.matrixUrl,
     };
   }
@@ -791,6 +876,154 @@ export class ProfileManager implements RealmAuthenticator {
     }
   }
 
+  // A live access token for the active profile's OAuth connection. It is
+  // renewed first when it is about to run out, or when it is `rejected`, the
+  // token a request was just refused with.
+  async getOAuthAccessToken(rejected?: string): Promise<string> {
+    let active = this.getActiveProfile();
+    let oauth = active?.profile.oauth;
+    if (!active || !oauth) {
+      throw new Error(
+        active
+          ? `Profile "${active.id}" is signed in with Matrix, not OAuth.`
+          : NO_ACTIVE_PROFILE_ERROR,
+      );
+    }
+    if (oauth.accessToken !== rejected && !this.isOAuthNearExpiry(oauth)) {
+      return oauth.accessToken;
+    }
+    return this.renewOAuth(active.id, oauth.accessToken);
+  }
+
+  // A connection that doesn't renew keeps its access token to the end: with
+  // nothing to renew it with, giving it up early only loses the last minute.
+  private isOAuthNearExpiry(oauth: OAuthSessionRecord): boolean {
+    let margin = oauth.refreshToken ? OAUTH_ACCESS_EXPIRY_MARGIN_MS : 0;
+    return Date.parse(oauth.accessExpiresAt) - this.now() < margin;
+  }
+
+  // Renews a profile's OAuth tokens, `stale` being the access token this
+  // process holds. The provider rotates refresh tokens and ends the whole
+  // connection when one is presented twice, so renewals are serialized across
+  // processes by a lock beside the profiles file, and each starts from the
+  // file as it is: when another boxel command has renewed already, its
+  // tokens are used, and the refresh token this process loaded, which that
+  // renewal spent, is never sent.
+  private async renewOAuth(profileId: string, stale: string): Promise<string> {
+    return withFileLock(`${this.profilesFile}.lock`, async () => {
+      let read = this.readProfilesFile();
+      let profile = read.kind === 'ok' ? read.config.profiles[profileId] : null;
+      let current = profile?.oauth;
+      if (!profile || !current) {
+        throw new OAuthConnectionEndedError(
+          `Profile "${profileId}" no longer has an OAuth connection: another boxel command signed it out or replaced it. ` +
+            `Run \`boxel profile add --oauth\` to sign in again.`,
+        );
+      }
+      if (current.accessToken !== stale && !this.isOAuthNearExpiry(current)) {
+        let held = this.config.profiles[profileId];
+        if (held) {
+          held.oauth = current;
+        }
+        return current.accessToken;
+      }
+      if (!current.refreshToken) {
+        throw new OAuthConnectionEndedError(
+          `The OAuth connection for ${profileId} didn't renew, so it ended with its access token at ${current.accessExpiresAt}. ` +
+            `Run \`boxel profile add --oauth\` to sign in again, and allow it to renew to keep it for 30 days.`,
+        );
+      }
+      if (Date.parse(current.connectionEndsAt) <= this.now()) {
+        throw new OAuthConnectionEndedError(
+          `The OAuth connection for ${profileId} ended at ${current.connectionEndsAt}, 30 days after it was signed in. ` +
+            `Run \`boxel profile add --oauth\` to sign in again.`,
+        );
+      }
+      let renewed;
+      try {
+        renewed = await this.refreshTokensFn(
+          {
+            resource: boxelApiResource(profile.realmServerUrl),
+            tokenEndpoint: current.tokenEndpoint,
+          },
+          current.refreshToken,
+          { now: this.now },
+        );
+      } catch (e) {
+        if (e instanceof OAuthConnectionEndedError) {
+          throw new OAuthConnectionEndedError(
+            `The OAuth connection for ${profileId} has ended: it was disconnected, or its 30 days ran out. ` +
+              `Run \`boxel profile add --oauth\` to sign in again.`,
+          );
+        }
+        throw e;
+      }
+      let next: OAuthSessionRecord = {
+        ...current,
+        ...renewed,
+        refreshToken: renewed.refreshToken ?? current.refreshToken,
+      };
+      let spent = current.refreshToken;
+      this.updateProfile(profileId, (p) => {
+        // In the file, only the connection this renewal spent is replaced: a
+        // sign-in that replaced it meanwhile is kept. This process's copy
+        // takes the renewed tokens whatever it held.
+        if (
+          p.oauth &&
+          (p === this.config.profiles[profileId] ||
+            p.oauth.refreshToken === spent)
+        ) {
+          p.oauth = next;
+        }
+      });
+      return next.accessToken;
+    });
+  }
+
+  // A request with the active profile's OAuth access token. The Boxel API
+  // answers 401 both for a token that no longer works and for a route it
+  // doesn't offer. A 401 on a token this process hasn't seen work is retried
+  // once with a renewed token. A 401 on one it has seen work, or was just
+  // given by a renewal, is returned as it is: the route refused it, and
+  // renewing for every such request would spend the provider's limit on
+  // renewals, which the connection needs to keep working. A connection that
+  // doesn't renew has nothing to retry with.
+  private async oauthFetch(
+    input: string | URL | Request,
+    init: RequestInit | undefined,
+    fetchFn: (
+      input: string | URL | Request,
+      init: RequestInit,
+    ) => Promise<Response>,
+  ): Promise<Response> {
+    // The token is for the realm server and its realms alone: a request
+    // anywhere else goes without it.
+    if (!this.isRealmServerOrigin(input)) {
+      return fetchFn(input, init ?? {});
+    }
+    let token = await this.getOAuthAccessToken();
+    let response = await fetchFn(input, {
+      ...init,
+      headers: this.buildHeaders(input, init, `Bearer ${token}`),
+    });
+    if (response.status !== 401) {
+      this.liveOAuthTokens.add(token);
+      return response;
+    }
+    if (
+      this.liveOAuthTokens.has(token) ||
+      !this.getActiveProfile()?.profile.oauth?.refreshToken
+    ) {
+      return response;
+    }
+    let renewed = await this.getOAuthAccessToken(token);
+    this.liveOAuthTokens.add(renewed);
+    return fetchFn(input, {
+      ...init,
+      headers: this.buildHeaders(input, init, `Bearer ${renewed}`),
+    });
+  }
+
   private findRealmTokenForUrl(url: string): string | undefined {
     let active = this.getActiveProfile();
     if (!active?.profile.realmTokens) {
@@ -827,6 +1060,9 @@ export class ProfileManager implements RealmAuthenticator {
   // bootstrap realm's token is keyed by its `https://cardstack.com/<name>/`
   // id and served at `<realm server>/<name>/`, which is what this answers.
   async realmUrlFor(url: string): Promise<string | undefined> {
+    if (this.getActiveProfile()?.profile.oauth) {
+      return this.oauthRealmUrlFor(url);
+    }
     let find = () => {
       let active = this.getActiveProfile();
       if (!active) {
@@ -856,7 +1092,73 @@ export class ProfileManager implements RealmAuthenticator {
     return find();
   }
 
+  // Whether `input` is on the active profile's realm server, the only origin
+  // its OAuth token is sent to.
+  isRealmServerOrigin(input: string | URL | Request): boolean {
+    let active = this.getActiveProfile();
+    if (!active) {
+      return false;
+    }
+    try {
+      let url = input instanceof Request ? input.url : String(input);
+      return (
+        new URL(url).origin === new URL(active.profile.realmServerUrl).origin
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  // An OAuth profile has no per-realm tokens to find a realm by. The realm
+  // is the longest one in its workspace list that `url` starts with; failing
+  // that, the longest path prefix of `url` that answers as a realm
+  // (`<prefix>_info`), which finds realms shared with the user too.
+  private async oauthRealmUrlFor(url: string): Promise<string | undefined> {
+    let target: URL;
+    try {
+      target = new URL(url);
+    } catch {
+      return undefined;
+    }
+    try {
+      let listed = (await this.getUserRealms())
+        .map((realm) => (realm.endsWith('/') ? realm : `${realm}/`))
+        .filter((realm) => target.href.startsWith(realm))
+        .sort((a, b) => b.length - a.length)[0];
+      if (listed) {
+        return listed;
+      }
+    } catch {
+      // The list couldn't be read; the realms themselves can still answer.
+    }
+    // Only the realm server's realms are asked: elsewhere the token isn't
+    // sent, so nothing there would answer as one of this profile's realms.
+    if (!this.isRealmServerOrigin(target.href)) {
+      return undefined;
+    }
+    let segments = target.pathname.split('/').filter(Boolean);
+    for (let depth = segments.length; depth > 0; depth--) {
+      let prefix = `${target.origin}/${segments.slice(0, depth).join('/')}/`;
+      try {
+        let response = await this.authedRealmFetch(`${prefix}_info`, {
+          headers: { Accept: 'application/vnd.api+json' },
+        });
+        if (response.ok) {
+          return prefix;
+        }
+      } catch {
+        // Not a realm, or unreachable: try a shorter prefix.
+      }
+    }
+    return undefined;
+  }
+
+  // A realm's own token. An OAuth profile has none: its access token reaches
+  // every realm itself.
   async getRealmTokenForUrl(url: string): Promise<string | undefined> {
+    if (this.getActiveProfile()?.profile.oauth) {
+      return undefined;
+    }
     let realmToken = this.findRealmTokenForUrl(url);
     if (realmToken) {
       return realmToken;
@@ -898,6 +1200,10 @@ export class ProfileManager implements RealmAuthenticator {
         : input instanceof URL
           ? input.href
           : input;
+
+    if (this.getActiveProfile()?.profile.oauth) {
+      return this.oauthFetch(input, init, realmFetch);
+    }
 
     let token = await this.getRealmTokenForUrl(url);
     if (token) {
@@ -947,6 +1253,9 @@ export class ProfileManager implements RealmAuthenticator {
     input: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
+    if (this.getActiveProfile()?.profile.oauth) {
+      return this.oauthFetch(input, init, fetch);
+    }
     let token = await this.getOrRefreshServerToken();
     let headers = this.buildHeaders(input, init, token);
     let response = await fetch(input, { ...init, headers });
@@ -990,16 +1299,21 @@ export class ProfileManager implements RealmAuthenticator {
     }
   }
 
-  // The realm server edits the realm list when it keeps one for this user,
-  // holding the same lock as its own edits of it, so the two never overlap;
-  // otherwise the list is written to Matrix here. Matrix account data has no
+  // The account's realm list (the workspaces the app shows). The realm
+  // server edits it when it keeps one for this user, holding the same lock as
+  // its own edits of it (creating and deleting a realm with an OAuth token,
+  // a permission change), so the two never overlap. A Matrix profile writes
+  // it to the user's Matrix account data itself when the server keeps no list
+  // for the user or the request fails. Matrix account data has no
   // compare-and-set, so that direct write may still overlap another writer's
-  // edit.
+  // edit. An OAuth profile holds no Matrix token, so for it a list the server
+  // can't edit is an error.
   async addToUserRealms(realmUrl: string): Promise<void> {
     let edit = await this.editListOnRealmServer({ add: [realmUrl] });
     if (edit.outcome === 'edited') {
       return;
     }
+    this.refuseMatrixFallbackOnOAuth(edit);
     // Adds the realm only when it's missing, so a failed request that added
     // it already leaves no duplicate.
     await this.withMatrixAuthRecovery((auth) =>
@@ -1017,6 +1331,7 @@ export class ProfileManager implements RealmAuthenticator {
     if (edit.outcome === 'edited') {
       return edit.removed.length > 0;
     }
+    this.refuseMatrixFallbackOnOAuth(edit);
     let removed = await this.withMatrixAuthRecovery((auth) =>
       removeRealmFromMatrixAccountData(auth, realmUrl),
     );
@@ -1051,8 +1366,8 @@ export class ProfileManager implements RealmAuthenticator {
         try {
           return await this.authedRealmServerFetch(url, init);
         } catch {
-          // No realm-server token could be had: the list is written to
-          // Matrix instead.
+          // No realm-server token could be had: a Matrix profile writes the
+          // list to Matrix instead.
           return new Response(null, { status: 503 });
         }
       },
@@ -1060,10 +1375,41 @@ export class ProfileManager implements RealmAuthenticator {
     );
   }
 
+  // An OAuth profile has no Matrix token to write the list with, so a list
+  // edit the realm server didn't make fails.
+  private refuseMatrixFallbackOnOAuth(
+    edit: Exclude<RealmServerListEdit, { outcome: 'edited' }>,
+  ): void {
+    let active = this.getActiveProfile();
+    if (active?.profile.oauth) {
+      throw new Error(
+        edit.outcome === 'not-kept'
+          ? `The realm server keeps no workspace list for profile "${active.id}".`
+          : `The realm server couldn't update the workspace list for profile "${active.id}". Try again.`,
+      );
+    }
+  }
+
   async getUserRealms(): Promise<string[]> {
+    let active = this.getActiveProfile();
+    if (active?.profile.oauth) {
+      return readWorkspaceListResponse(
+        await this.authedRealmServerFetch(
+          `${active.profile.realmServerUrl.replace(/\/$/, '')}/_user-realms`,
+          { headers: { Accept: 'application/vnd.api+json' } },
+        ),
+      );
+    }
     return this.withMatrixAuthRecovery((auth) =>
       getUserRealmsFromMatrixAccountData(auth),
     );
+  }
+
+  // Whether the realm server edits the active profile's workspace list
+  // itself as part of creating and deleting a realm, so the caller has no
+  // list edit to make: true for an OAuth profile.
+  serverKeepsWorkspaceList(): boolean {
+    return Boolean(this.getActiveProfile()?.profile.oauth);
   }
 
   async migrateFromEnv(): Promise<{

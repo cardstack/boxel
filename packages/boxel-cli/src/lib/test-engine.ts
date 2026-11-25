@@ -11,6 +11,7 @@ import {
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from './profile-manager.ts';
+import { OAuthConnectionEndedError } from './oauth-login.ts';
 import { resolveRealmIdentifier } from './resolve-realm-identifier.ts';
 import { findBoxelCliRoot } from './find-package-root.ts';
 import { listFiles } from '../commands/file/list.ts';
@@ -246,19 +247,24 @@ export async function runTestsForRealm(
   }
 
   try {
-    let { qunitResults, durationMs } = await runQunitInBrowser({
-      pm,
-      targetRealm: normalizedRealmUrl,
-      hostAppUrl,
-      hostDistDir: options?.hostDistDir,
-      debug: options?.debug,
-    });
+    let { qunitResults, durationMs, refusedForOAuth } = await runQunitInBrowser(
+      {
+        pm,
+        targetRealm: normalizedRealmUrl,
+        hostAppUrl,
+        hostDistDir: options?.hostDistDir,
+        debug: options?.debug,
+      },
+    );
 
     let summary = summarizeQunitResults(qunitResults);
     return {
       ...summary,
       durationMs,
       testFiles,
+      ...(summary.status !== 'passed' && refusedForOAuth.length > 0
+        ? { errorMessage: describeRefusedForOAuth(refusedForOAuth) }
+        : {}),
     };
   } catch (err) {
     let errorMessage = err instanceof Error ? err.message : String(err);
@@ -273,6 +279,81 @@ export async function runTestsForRealm(
       errorMessage,
     };
   }
+}
+
+// The parts of a Playwright route and response the OAuth handlers use.
+interface RealmRoute {
+  request(): { headers(): Record<string, string> };
+  continue(options: { headers: Record<string, string> }): Promise<void>;
+  abort(errorCode?: string): Promise<void>;
+}
+interface RealmResponse {
+  url(): string;
+  status(): number;
+  request(): { method(): string };
+}
+
+// How a run on an OAuth profile authorizes the page's requests to the realm's
+// origin. An OAuth access token lasts minutes, less than a run can take, so
+// it is read on each request, renewed as it nears its end. When the
+// connection has ended, the request is aborted and the reason handed to
+// `onAuthorizationError`: nothing the suite does next can succeed. A renewal
+// that fails for a passing reason (the token endpoint's limit, an outage, a
+// timeout, the profiles lock) leaves the token held, which is sent while it
+// is still valid; past that, only the one request fails. Responses refused
+// with a 401 are collected in `refused` as `METHOD /path`.
+export function oauthRealmRequestHandlers(
+  pm: Pick<ProfileManager, 'getOAuthAccessToken' | 'getActiveProfile'>,
+  realmOrigin: string,
+  { onAuthorizationError }: { onAuthorizationError: (e: unknown) => void },
+) {
+  let refused = new Set<string>();
+  return {
+    refused,
+    async route(route: RealmRoute): Promise<void> {
+      let token: string;
+      try {
+        token = await pm.getOAuthAccessToken();
+      } catch (e) {
+        let held = pm.getActiveProfile()?.profile.oauth;
+        if (
+          !(e instanceof OAuthConnectionEndedError) &&
+          held &&
+          Date.parse(held.accessExpiresAt) > Date.now()
+        ) {
+          token = held.accessToken;
+        } else {
+          await route.abort('failed').catch(() => {});
+          if (e instanceof OAuthConnectionEndedError) {
+            onAuthorizationError(e);
+          }
+          return;
+        }
+      }
+      await route.continue({
+        headers: {
+          ...route.request().headers(),
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    },
+    response(response: RealmResponse): void {
+      let url = new URL(response.url());
+      if (url.origin === realmOrigin && response.status() === 401) {
+        refused.add(`${response.request().method()} ${url.pathname}`);
+      }
+    },
+  };
+}
+
+// Why a run on an OAuth profile may have failed: the realm server refused
+// these requests the OAuth access token, which it does on a route the Boxel
+// API doesn't offer.
+export function describeRefusedForOAuth(refused: string[]): string {
+  return (
+    `The realm server refused this profile's OAuth token on ${refused.join(', ')}. ` +
+    "An OAuth token doesn't reach every route the app uses; run this suite with a profile signed in with Matrix."
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -474,8 +555,16 @@ interface QunitRunnerOptions {
 async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
   qunitResults: QunitResults;
   durationMs: number;
+  // Requests to the realm's origin refused with a 401 while the run sent an
+  // OAuth access token, as `METHOD /path`: routes the Boxel API doesn't offer.
+  refusedForOAuth: string[];
 }> {
   let start = Date.now();
+  let refusedForOAuth = new Set<string>();
+  // Set when the OAuth access token couldn't be had for a request (the
+  // connection ended, say); the run then reports that rather than the
+  // failures it causes.
+  let authorizationError: unknown;
   let browser;
   let testPageServer: Server | undefined;
 
@@ -556,17 +645,36 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     // Realm-server auth only applies in remote mode — the local module
     // mounts on this same server don't gate on tokens.
     if (!options.realmMounts) {
-      let realmToken =
-        options.authorization ?? options.pm.getRealmToken(resolvedTargetRealm);
-      if (realmToken) {
-        let realmOrigin = new URL(resolvedTargetRealm).origin;
-        await page.route(`${realmOrigin}/**`, (route) => {
-          let headers = {
-            ...route.request().headers(),
-            Authorization: realmToken!,
-          };
-          route.continue({ headers });
+      let realmOrigin = new URL(resolvedTargetRealm).origin;
+      // The OAuth token goes only to the profile's own realm server.
+      let oauth =
+        !options.authorization &&
+        Boolean(options.pm.getActiveProfile()?.profile.oauth) &&
+        options.pm.isRealmServerOrigin(resolvedTargetRealm);
+      if (oauth) {
+        let handlers = oauthRealmRequestHandlers(options.pm, realmOrigin, {
+          onAuthorizationError: (e) => {
+            // The connection has ended: stop the run.
+            authorizationError ??= e;
+            void page.close().catch(() => {});
+          },
         });
+        await page.route(`${realmOrigin}/**`, handlers.route);
+        page.on('response', handlers.response);
+        refusedForOAuth = handlers.refused;
+      } else {
+        let realmToken =
+          options.authorization ??
+          options.pm.getRealmToken(resolvedTargetRealm);
+        if (realmToken) {
+          await page.route(`${realmOrigin}/**`, (route) => {
+            let headers = {
+              ...route.request().headers(),
+              Authorization: realmToken!,
+            };
+            route.continue({ headers });
+          });
+        }
       }
     }
 
@@ -584,6 +692,9 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
         { timeout: runEndTimeout },
       );
     } catch (err) {
+      if (authorizationError) {
+        throw authorizationError;
+      }
       // Label only the run-end wait timeout so callers can distinguish it from
       // other Playwright timeouts (navigation, asset fetch) and translate it
       // into their own diagnostic. The original error is kept as `cause`.
@@ -596,12 +707,29 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
       throw err;
     }
 
-    let qunitResults = (await page.evaluate(
-      () =>
-        (window as unknown as { __qunitResults: QunitResults }).__qunitResults,
-    )) as QunitResults;
-
-    return { qunitResults, durationMs: Date.now() - start };
+    // The page may have been closed for an ended connection between the
+    // run-end wait and here; that, not the closed page, is the reason.
+    let qunitResults: QunitResults;
+    try {
+      if (authorizationError) {
+        throw authorizationError;
+      }
+      qunitResults = (await page.evaluate(
+        () =>
+          (window as unknown as { __qunitResults: QunitResults })
+            .__qunitResults,
+      )) as QunitResults;
+    } catch (e) {
+      throw authorizationError ?? e;
+    }
+    if (authorizationError) {
+      throw authorizationError;
+    }
+    return {
+      qunitResults,
+      durationMs: Date.now() - start,
+      refusedForOAuth: [...refusedForOAuth],
+    };
   } finally {
     if (browser) {
       await browser.close().catch(() => {});
