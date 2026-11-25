@@ -3699,7 +3699,7 @@ module('Acceptance | automation view', function (hooks) {
       });
       assert.true(
         slotText('userKey')?.includes(
-          'You approve the automation’s use of the key.',
+          'You need to approve the automation’s use of the key.',
         ),
         slotText('userKey'),
       );
@@ -3740,13 +3740,13 @@ module('Acceptance | automation view', function (hooks) {
       await waitFor('[data-test-automation-key-approvals]', { timeout: 10000 });
       assert.true(
         slotText('apiKey')?.includes(
-          `${COLLEAGUE} approves the automation’s use of the shared key “Team vendor”.`,
+          `${COLLEAGUE} needs to approve the automation’s use of the shared key “Team vendor”.`,
         ),
         slotText('apiKey'),
       );
       assert.true(
         slotText('userKey')?.includes(
-          'The key’s owner approves the automation’s use of the key.',
+          'The key’s owner needs to approve the automation’s use of the key.',
         ),
         'a key owner the viewer shares no realm grant with goes unnamed',
       );
@@ -3853,7 +3853,7 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-key-approval="shared"]')
         .includesText(
-          'Boxel suspended the shared key “Team vendor” because the key’s owner is no longer a realm administrator. A realm administrator swaps in another key.',
+          'Boxel suspended the shared key “Team vendor” because the key’s owner is no longer a realm administrator. A realm administrator needs to replace the shared key with another key.',
         );
     });
 
