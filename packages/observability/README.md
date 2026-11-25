@@ -53,7 +53,11 @@ provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
                        # <env>/rules/ exist in that hosted env only;
                        # apply-alerting.sh pushes contact points first, with
                        # ${VAR} secrets from SSM. A rule here may route to
-                       # one through `notification_settings.receiver`.
+                       # one through `notification_settings.receiver`. A
+                       # rule file in both staging/rules/ and
+                       # production/rules/ is one rule copied for each env
+                       # (only the env name differs); lint.sh checks the
+                       # copies match. See "Hosted alert rules".
   local-only/          # local-dev overrides — bind-mounted file-by-file over
                        # `datasources/`. apply-datasources.sh ignores this dir.
 collectors/
@@ -235,16 +239,6 @@ collector. A query that Loki fails to run does not fire it. That arrives in the
 same channel as a `DatasourceError` alert for the rule, and the fault is Loki,
 not the collector (see [Alert rules: no data and query
 errors](#alert-rules-no-data-and-query-errors)).
-
-The alert "Prerender server aborts every render"
-(`provisioning/alerting-hosted/<env>/rules/prerender-pool-group.json`) posts
-to the `alarms-<env>-internal` Discord channel when, in 15 minutes, the
-prerender manager aborts 2 or more renders it sent to one prerender server and
-gets no successful response from that server. That server can no longer make
-browser tabs, and the manager keeps sending it the realms that have affinity
-with it. The alert names the server, and its summary gives the commands that
-find and stop its ECS task. One copy of the rule exists per environment
-because each routes to its own environment's Discord contact point.
 
 Build and deploy with the **Manual Deploy [actions-collector]** workflow. It is
 `workflow_dispatch` only — putting the deploy of a queue sampler on a CI
@@ -618,6 +612,29 @@ A resolved notification keeps the text from the last evaluation that had
 values. When a rule moves to Normal through no data, Grafana copies the
 alert's state and does not expand its annotations again, so the `else` text
 does not appear on a rule's resolved notice.
+
+## Hosted alert rules
+
+A rule in `provisioning/alerting-hosted/<env>/rules/` is pushed to that hosted
+environment only. There are two reasons to put a rule there:
+
+- The rule watches a service that runs in that environment only, such as the
+  actions-queue collector (see [Collectors](#collectors)).
+- The rule exists in each environment, but routes to that environment's own
+  contact point. Then there is one copy of the rule for each environment, and
+  the copies are identical apart from the environment name. Change all copies
+  together. `scripts/lint.sh` fails when a rule file in
+  `alerting-hosted/staging/rules/` differs from the file of the same name in
+  `alerting-hosted/production/rules/` in more than the environment name.
+
+The alert "Prerender server aborts every render"
+(`prerender-pool-group.json`, one copy for each environment) posts to the
+`alarms-<env>-internal` Discord channel when, in 15 minutes, the prerender
+manager aborts 2 or more renders it sent to one prerender server and gets no
+successful response from that server. That server can no longer make browser
+tabs, and the manager keeps sending it the realms that have affinity with it.
+The alert names the server, and its summary gives the commands that find and
+stop its ECS task.
 
 ## Staging / production workflow
 
