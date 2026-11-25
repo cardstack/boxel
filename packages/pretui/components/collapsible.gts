@@ -169,7 +169,10 @@ export class Collapsible extends Component<CollapsibleSignature> {
         data-state={{this.state}}
         data-test-pretui-collapsible-content
       >
-        <div class='pretui-collapsible-inner'>{{yield}}</div>
+        <div
+          class='pretui-collapsible-inner'
+          data-test-pretui-collapsible-inner
+        >{{yield}}</div>
       </div>
     </div>
 
@@ -275,16 +278,33 @@ export class Collapsible extends Component<CollapsibleSignature> {
               var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02)),
             visibility 0s;
         }
+        /* The clip is for the row-track animation only. Once the panel is
+           open it lifts, so a child's focus ring or box-shadow at the edge
+           shows in full; it lifts at the end of the expand (a discrete 0s
+           step, like visibility) and returns at once on collapse. */
         .pretui-collapsible-inner {
           min-block-size: 0;
           min-inline-size: 0;
           overflow: hidden;
+        }
+        /* Only where the delayed step is supported: without it the lift
+           would be immediate and the content would spill out of the
+           still-growing fold, so those browsers keep the clip. */
+        @supports (transition-behavior: allow-discrete) {
+          .pretui-collapsible-fold[data-state='open']
+            > .pretui-collapsible-inner {
+            overflow: visible;
+            transition: overflow 0s linear var(--pretui-dur-morph, 300ms);
+            transition-behavior: allow-discrete;
+          }
         }
         /* Reduced motion lands on the END state — open is open, closed is
            closed, never a frozen midpoint of the row track. */
         @media (prefers-reduced-motion: reduce) {
           .pretui-collapsible-fold,
           .pretui-collapsible-fold[data-state='open'],
+          .pretui-collapsible-fold[data-state='open']
+            > .pretui-collapsible-inner,
           .pretui-collapsible-caret {
             transition: none;
           }
