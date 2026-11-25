@@ -53,7 +53,8 @@ export class WorkspacePins {
   }
 
   // The pinned cards' ids, in the order the workspace lists them, each once.
-  // A realm whose index card isn't a Workspace has none.
+  // A realm whose index card isn't a Workspace has none. A pin naming the
+  // Workspace card itself, which only its edit view lets through, is left out.
   @cached
   get cardIds(): RealmResourceIdentifier[] {
     return pinnedCardIds(this.#resource.entries[0]?.item);
@@ -124,6 +125,9 @@ function pinnedCardIds(
   if (!base) {
     return [];
   }
+  let indexCardId = rri(trimJsonExtension(base));
+  // The realm's root URL also names its index card.
+  let itself = [indexCardId, rri(resolveRRIReference('./', indexCardId))];
   return relationshipEntries(item?.relationships)
     .filter(
       (entry): entry is typeof entry & { index: number } =>
@@ -132,7 +136,7 @@ function pinnedCardIds(
     .sort((a, b) => a.index - b.index)
     .flatMap(({ relationship }) => {
       let id = linkedId(relationship, rri(base));
-      return id ? [id] : [];
+      return id && !itself.includes(id) ? [id] : [];
     })
     .filter((id, index, ids) => ids.indexOf(id) === index);
 }

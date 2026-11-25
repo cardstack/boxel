@@ -50,9 +50,10 @@ export interface Model {
   // index boilerplate placeholder instead of running through Glimmer.
   // Set only when `format === 'isolated'`, the card is the realm's
   // default index, the type chain begins with a recognized default
-  // index card (CardsGrid or Workspace), and the realm
-  // has not opted in via `includePrerenderedDefaultRealmIndex` on its
-  // RealmConfig card. The orchestrator in `card-prerender.gts`
+  // index card (CardsGrid or Workspace), and neither the render
+  // options (`prerenderDefaultIndex`, set when the realm has a host URL) nor
+  // the realm's RealmConfig card (`includePrerenderedDefaultRealmIndex`) ask
+  // for the full render. The orchestrator in `card-prerender.gts`
   // honours this flag by substituting the boilerplate string and
   // skipping the actual Glimmer render.
   useRealmIndexBoilerplate?: boolean;
@@ -133,6 +134,7 @@ export default class RenderHtmlRoute extends Route<Model> {
     let useRealmIndexBoilerplate =
       format === 'isolated' &&
       level === 0 &&
+      !renderModel!.renderOptions?.prerenderDefaultIndex &&
       this.#isDefaultRealmIndexCard(instance, types);
 
     let envelope = parseEnvelope(envelopeWidth, envelopeHeight);
@@ -148,7 +150,9 @@ export default class RenderHtmlRoute extends Route<Model> {
   // substitutes a boilerplate placeholder for the captured HTML in
   // that case so the indexer doesn't pay for the (expensive) grid
   // fan-out render of every card in the realm. Published realms
-  // receive the opt-in automatically from the publish handler.
+  // receive the opt-in automatically from the publish handler. A realm
+  // with a host URL gets the full render through the render options
+  // instead, checked in model().
   #isDefaultRealmIndexCard(instance: CardDef, types: CodeRef[]): boolean {
     let cardRealmURL = instance[realmURL];
     if (

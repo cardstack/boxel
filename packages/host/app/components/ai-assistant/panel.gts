@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -596,6 +597,11 @@ export default class AiAssistantPanel extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadMonaco.perform();
+    // A panel left open while host submode hid it has no room yet when it
+    // shows. Loading starts after this render, which reads the load's state.
+    schedule('afterRender', () =>
+      this.aiAssistantPanelService.ensureRoomsLoaded(),
+    );
   }
 
   get velcroOffsetOptions() {

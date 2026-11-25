@@ -144,7 +144,20 @@ const BOOTSTRAP = `
         const name = prefix + key;
         if (typeof value === 'function') {
           if (allowed.has(name)) {
-            kept[key] = value;
+            // A method may carry methods of its own (realm.resolve.batch),
+            // each kept only when its own name is on the surface.
+            const own = Object.entries(value);
+            if (own.length === 0) {
+              kept[key] = value;
+            } else {
+              const method = (...args) => value(...args);
+              for (const [subKey, sub] of own) {
+                if (typeof sub === 'function' && allowed.has(name + '.' + subKey)) {
+                  method[subKey] = sub;
+                }
+              }
+              kept[key] = Object.freeze(method);
+            }
           }
         } else {
           const group = onSurface(value, name + '.');
@@ -268,7 +281,21 @@ const BOOTSTRAP = `
               call('web.search', [query, options ?? {}]),
             read: (url, options) => call('web.read', [url, options ?? {}]),
           },
-          resolve: (request) => call('resolve', [request ?? {}]),
+          resolve: Object.assign(
+            (request) => call('resolve', [request ?? {}]),
+            {
+              batch: async (requests, options) => {
+                const submitted = await call('resolve.batch', [
+                  requests ?? null,
+                  options ?? {},
+                ]);
+                // The batch started its own milestone, so the script may
+                // report tasks inside it.
+                inMilestone = true;
+                return submitted;
+              },
+            },
+          ),
           transform: (input, source, options) =>
             call('transform', [input ?? null, source, options ?? {}]),
           activity: (details) => call('activity', [details ?? {}]),

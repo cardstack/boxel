@@ -582,14 +582,18 @@ function chooseFromScratchCoalesceDecision(
   // the swapped files. Force a fresh row instead. The same holds for every
   // pass a realm publish enqueues (`awaitedByPublish`), with or without the
   // clear: the publish has just swapped in new files, and an already-running
-  // pass may have read the file mtimes before that swap.
+  // pass may have read the file mtimes before that swap. And the same holds
+  // for a pass whose caller asks for a fresh one (`freshPass`): the caller
+  // changed something a pass reads only when it starts, such as one row's
+  // modified time or whether the realm has a host URL.
   //
   // A pass that announces never rides on a running one that doesn't: a
   // running job's args can no longer change, so its subscribers would never
   // hear of a pass someone asked to announce.
   if (
     !incomingClearsLastModified(incoming.args) &&
-    !argsAwaitedByPublish(incoming.args)
+    !argsAwaitedByPublish(incoming.args) &&
+    !argsAskForFreshPass(incoming.args)
   ) {
     for (let candidate of inFlightCandidates) {
       if (
@@ -637,6 +641,12 @@ function incomingClearsLastModified(args: unknown): boolean {
 // so a job enqueued before this field existed reads as false.
 function argsAwaitedByPublish(args: unknown): boolean {
   return isObjectLike(args) && args.awaitedByPublish === true;
+}
+
+// Set by a caller that changed what a pass reads when it starts, so a pass
+// already running can't serve it. Absent on every other index path.
+function argsAskForFreshPass(args: unknown): boolean {
+  return isObjectLike(args) && args.freshPass === true;
 }
 
 // The index pass a spawned prerender_html job waits on: this one. A pass run

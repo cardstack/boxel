@@ -1,4 +1,10 @@
-import { click, settled, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -371,7 +377,7 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-state-sentence]')
       .hasText(
-        'Nobody has turned this automation on, so Boxel runs nothing. Anyone who can edit this workspace can turn the automation on, and that person then pays for every run.',
+        'Nobody has turned this automation on, so Boxel runs nothing. A realm administrator can turn this automation on, and that person then pays for every run.',
       );
     assert.dom('[data-test-automation-status]').includesText('Nobody yet');
     assert.dom('[data-test-automation-trigger-progress]').doesNotExist();
@@ -1034,7 +1040,7 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-milestones]')
       .includesText(
-        'Someone who can edit this workspace sees the milestones of the last run here.',
+        'A realm administrator sees the milestones of the last run here.',
       );
   });
 
@@ -1128,7 +1134,7 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-state-sentence]')
       .hasText(
-        'Boxel paused the automation because the automation’s settings have problems. Boxel will resume the automation once someone who can edit this workspace fixes each problem below.',
+        'Boxel paused the automation because the automation’s settings have problems. Boxel will resume the automation once a realm administrator fixes each problem below.',
       );
     assert
       .dom('[data-test-automation-pause-problem="Trigger “hourly”"]')
@@ -1146,7 +1152,7 @@ module('Acceptance | automation view', function (hooks) {
     await waitUntil(
       () =>
         text('[data-test-automation-state-sentence]')?.includes(
-          'Someone who can edit this workspace paused',
+          'A realm administrator paused',
         ),
       { timeout: 10000 },
     );
@@ -1160,12 +1166,12 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'paused', pauseReason: 'requested' },
         'Paused',
-        'Someone who can edit this workspace paused the automation, so Boxel runs nothing until someone resumes the automation.',
+        'A realm administrator paused the automation, so Boxel runs nothing until a realm administrator resumes the automation.',
       ],
       [
         { state: 'paused', pauseReason: 'caps-raised' },
         'Paused',
-        'Someone raised a limit above what the payer agreed to pay for, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and agrees to the new limits.',
+        'Someone raised a limit above what the payer agreed to pay for, so Boxel paused the automation. Boxel runs nothing until a realm administrator resumes the automation and agrees to the new limits.',
       ],
       [
         { state: 'paused', pauseReason: 'webhook-changed' },
@@ -1175,7 +1181,7 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'paused', pauseReason: 'payer-lost-access' },
         'Paused',
-        'The payer can no longer edit this workspace, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and becomes the new payer.',
+        'The payer is no longer a realm administrator, so Boxel paused the automation. Boxel runs nothing until a realm administrator resumes the automation and becomes the new payer.',
       ],
       [
         {
@@ -1191,7 +1197,7 @@ module('Acceptance | automation view', function (hooks) {
           },
         },
         'Paused',
-        'Boxel paused the automation after 5 runs in a row failed. Boxel runs nothing until someone who can edit this workspace fixes what the runs fail on and resumes the automation.',
+        'Boxel paused the automation after 5 runs in a row failed. Boxel runs nothing until a realm administrator fixes what the runs fail on and resumes the automation.',
       ],
       [
         {
@@ -1202,7 +1208,7 @@ module('Acceptance | automation view', function (hooks) {
           lastFailure: null,
         },
         'Paused',
-        'Boxel paused the automation after several runs in a row failed. Boxel runs nothing until someone who can edit this workspace fixes what the runs fail on and resumes the automation.',
+        'Boxel paused the automation after several runs in a row failed. Boxel runs nothing until a realm administrator fixes what the runs fail on and resumes the automation.',
       ],
       [
         { state: 'waiting-for-credits', pauseReason: null },
@@ -1222,7 +1228,7 @@ module('Acceptance | automation view', function (hooks) {
           })),
         },
         'Done',
-        'The automation has no runs left on any trigger, so Boxel runs nothing more. Boxel runs the automation again when someone who can edit this workspace adds a trigger.',
+        'The automation has no runs left on any trigger, so Boxel runs nothing more. Boxel runs the automation again when a realm administrator adds a trigger.',
       ],
     ];
     for (let [change, label, sentence] of cases) {
@@ -1786,7 +1792,7 @@ module('Acceptance | automation view', function (hooks) {
       );
       assert.ok(
         runText('access').includes(
-          'Boxel didn’t start the run because the person the run acts as can no longer edit this workspace.',
+          'Boxel didn’t start the run because the person the run acts as is no longer a realm administrator.',
         ),
       );
       assert.ok(
@@ -2827,6 +2833,343 @@ module('Acceptance | automation view', function (hooks) {
           );
         }
       });
+    });
+  });
+
+  module('switching on', function (hooks) {
+    // What the realm server's switch-on estimate answers, and each request
+    // the screen makes of the switch-on and resume routes.
+    let estimateAnswer: { status: number; body: Record<string, unknown> };
+    let posted: { route: string; body: any }[];
+    let postAnswer: { status: number; body: Record<string, unknown> };
+
+    function estimate(attributes: Record<string, unknown> = {}) {
+      return {
+        status: 200,
+        body: {
+          data: {
+            type: 'automation-estimate',
+            id: AUTOMATION,
+            attributes: {
+              switchedOn: false,
+              monthlyCredits: 10,
+              estimate: {
+                pricingVersion: 'test',
+                credits: 1234,
+                perRun: { totalCredits: 4.2 },
+                unboundedRunsPerMonth: 730,
+                boundedRunsPerMonth: 30,
+                onceRuns: 1,
+                webhookTriggers: ['push'],
+                triggers: [],
+                uncountedChargeKinds: ['run_indexing', 'storage'],
+              },
+              notices: [],
+              ...attributes,
+            },
+          },
+        },
+      };
+    }
+
+    // The monthly limit the card holds, as the realm server reads it: the
+    // card's own source in the test realm.
+    async function cardCap(): Promise<number | null> {
+      let response = await getService('network').virtualNetwork.fetch(
+        `${AUTOMATION}.json`,
+        { headers: { Accept: 'application/vnd.card+source' } },
+      );
+      let doc = await response.json();
+      return doc.data.attributes.caps?.monthlyCredits ?? null;
+    }
+
+    hooks.beforeEach(function () {
+      estimateAnswer = estimate();
+      posted = [];
+      postAnswer = { status: 201, body: { data: { type: 'automation' } } };
+      getService('network').virtualNetwork.mount(
+        async (request: Request) => {
+          let url = new URL(request.url);
+          let route = url.pathname.split('/').pop() ?? '';
+          if (
+            route !== '_automation-switch-on' &&
+            route !== '_automation-resume'
+          ) {
+            return null;
+          }
+          if (request.method === 'GET') {
+            let answer = estimateAnswer;
+            if (answer.status === 200) {
+              let attributes = (answer.body as any).data.attributes;
+              attributes.monthlyCredits = await cardCap();
+            }
+            return new Response(JSON.stringify(answer.body), {
+              status: answer.status,
+              headers: { 'content-type': 'application/json' },
+            });
+          }
+          posted.push({ route, body: await request.json() });
+          return new Response(JSON.stringify(postAnswer.body), {
+            status: postAnswer.status,
+            headers: { 'content-type': 'application/json' },
+          });
+        },
+        { prepend: true },
+      );
+    });
+
+    async function openScreen(status: Record<string, unknown>) {
+      answer = { status: 200, attributes: status };
+      await openIsolated();
+      await waitForStatus();
+      await click('[data-test-automation-switch-on]');
+      await waitFor(
+        '[data-test-automation-switch-on-estimate], [data-test-automation-switch-on-estimate-failure]',
+        { timeout: 10000 },
+      );
+    }
+
+    const OFF = { switchedOn: false, lastRun: null, currentRun: null };
+
+    test('the screen shows the estimate, what the estimate leaves out, the monthly limit and who pays', async function (assert) {
+      await openScreen(OFF);
+      assert
+        .dom('[data-test-automation-switch-on]')
+        .hasText(
+          'Turn on the automation',
+          'an automation nobody turned on offers to turn the automation on',
+        );
+      assert
+        .dom('[data-test-automation-switch-on-fact="estimate"]')
+        .hasText('1,234 credits a month');
+      assert
+        .dom('[data-test-automation-switch-on-fact="perRun"]')
+        .hasText('5 credits', 'the most one run can cost, rounded up');
+      assert
+        .dom('[data-test-automation-switch-on-fact="runs"]')
+        .hasText('761 runs a month');
+      assert
+        .dom('[data-test-automation-switch-on-fact="preview"]')
+        .hasText('No Preview yet');
+      assert
+        .dom('[data-test-automation-switch-on-left-out]')
+        .includesText('The indexing that each run’s saves cause.')
+        .includesText('The daily storage of the files the runs create.')
+        .includesText('This automation has webhook triggers: push');
+      assert
+        .dom('[data-test-automation-switch-on-cap] input')
+        .hasValue('10', 'the monthly limit starts as the card’s own');
+      assert
+        .dom('[data-test-automation-switch-on-payer]')
+        .includesText('Boxel charges every scheduled run');
+      assert.dom('[data-test-automation-switch-on-reconfirm]').doesNotExist();
+    });
+
+    test('the estimate shows what the viewer’s last Preview cost, beside the estimate', async function (assert) {
+      estimateAnswer = estimate();
+      (
+        estimateAnswer.body as any
+      ).data.attributes.estimate.recentPreviewCredits = 7;
+      await openScreen(OFF);
+      assert
+        .dom('[data-test-automation-switch-on-fact="preview"]')
+        .hasText('7 credits');
+      assert
+        .dom('[data-test-automation-switch-on-fact="estimate"]')
+        .hasText('1,234 credits a month', 'the Preview is not in the estimate');
+    });
+
+    test('turning on agrees to the card’s monthly limit and closes the screen', async function (assert) {
+      await openScreen(OFF);
+      await click('[data-test-automation-switch-on-confirm]');
+      await waitUntil(() => posted.length > 0, { timeout: 10000 });
+      await settled();
+      assert.deepEqual(posted, [
+        {
+          route: '_automation-switch-on',
+          body: {
+            data: {
+              type: 'automation',
+              id: AUTOMATION,
+              attributes: { realm: testRealmURL, monthlyCredits: 10 },
+            },
+          },
+        },
+      ]);
+      // A closed dialog keeps its content in the page; what closes is the
+      // dialog element.
+      assert
+        .dom('dialog[open] [data-test-automation-switch-on-screen]')
+        .doesNotExist('the screen closes');
+    });
+
+    test('a missing monthly limit is refused before anything is sent', async function (assert) {
+      await openScreen(OFF);
+      await fillIn('[data-test-automation-switch-on-cap] input', '');
+      await click('[data-test-automation-switch-on-confirm]');
+      assert
+        .dom('[data-test-automation-switch-on-screen]')
+        .includesText(
+          'Enter a monthly limit. Boxel turns an automation on only with a monthly limit.',
+        );
+      assert.deepEqual(posted, [], 'the screen sends nothing');
+    });
+
+    test('another monthly limit is written to the card before the automation is turned on at that limit', async function (assert) {
+      await openScreen(OFF);
+      await fillIn('[data-test-automation-switch-on-cap] input', '40');
+      await click('[data-test-automation-switch-on-confirm]');
+      await waitUntil(() => posted.length > 0, { timeout: 20000 });
+      assert.strictEqual(await cardCap(), 40, 'the card holds the new limit');
+      assert.strictEqual(
+        posted[0].body.data.attributes.monthlyCredits,
+        40,
+        'and the switch-on agrees to that limit',
+      );
+    });
+
+    test('a monthly limit below the card’s daily limit is refused before anything is written or sent', async function (assert) {
+      await openScreen(OFF);
+      await fillIn('[data-test-automation-switch-on-cap] input', '3');
+      await click('[data-test-automation-switch-on-confirm]');
+      assert
+        .dom('[data-test-automation-switch-on-screen]')
+        .includesText(
+          'The monthly limit can’t be below the daily limit of 5 credits.',
+        );
+      assert.deepEqual(posted, [], 'the screen sends nothing');
+      assert.strictEqual(await cardCap(), 10, 'the card keeps its limit');
+    });
+
+    test('the screen says when webhook triggers can’t fire', async function (assert) {
+      estimateAnswer = estimate({
+        notices: [
+          {
+            code: 'webhook-triggers-start-no-runs',
+            message: 'webhook triggers start no runs',
+          },
+        ],
+      });
+      await openScreen(OFF);
+      assert
+        .dom('[data-test-automation-switch-on-webhook-notice]')
+        .hasText(
+          'Boxel doesn’t run automations from webhooks, so these triggers can’t fire.',
+        );
+    });
+
+    test('a limit below the estimate says Boxel may stop starting runs before the month ends', async function (assert) {
+      await openScreen(OFF);
+      await fillIn('[data-test-automation-switch-on-cap] input', '5');
+      assert
+        .dom('[data-test-automation-switch-on-screen]')
+        .includesText(
+          'The limit is below the estimate, so Boxel may stop starting runs before the month ends.',
+        );
+    });
+
+    test('an automation paused for a raised limit or batched AI resumes through the screen, which says why', async function (assert) {
+      postAnswer = { status: 200, body: { data: { type: 'automation' } } };
+      await openScreen({
+        ...ACTIVE,
+        state: 'paused',
+        pauseReason: 'caps-raised',
+      });
+      assert
+        .dom('[data-test-automation-switch-on]')
+        .hasText('Review and resume');
+      assert
+        .dom('[data-test-automation-switch-on-reconfirm]')
+        .hasText(
+          'Someone raised one of the automation’s limits above what the payer agreed to, so Boxel paused the automation. Resuming the automation makes you the payer of the new limits.',
+        );
+      assert
+        .dom('[data-test-automation-switch-on-confirm]')
+        .hasText('Resume and pay');
+      await click('[data-test-automation-switch-on-confirm]');
+      await waitUntil(() => posted.length > 0, { timeout: 10000 });
+      assert.strictEqual(posted[0].route, '_automation-resume');
+      assert.strictEqual(posted[0].body.data.attributes.monthlyCredits, 10);
+    });
+
+    test('the screen says why Boxel paused an automation whose card turned on batched AI', async function (assert) {
+      await openScreen({
+        ...ACTIVE,
+        state: 'paused',
+        pauseReason: 'batched-ai-enabled',
+      });
+      assert
+        .dom('[data-test-automation-switch-on-reconfirm]')
+        .hasText(
+          'Someone turned on batched AI after the payer agreed to the automation’s limits, so Boxel paused the automation. Resuming the automation makes you the payer, with batched AI on.',
+        );
+    });
+
+    test('an active automation offers no switch-on screen', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      await openIsolated();
+      await waitForStatus();
+      assert.dom('[data-test-automation-switch-on]').doesNotExist();
+    });
+
+    test('an automation paused for a reason other than a raised limit or batched AI offers no switch-on screen', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+      };
+      await openIsolated();
+      await waitForStatus();
+      assert.dom('[data-test-automation-state="Paused"]').exists();
+      assert
+        .dom('[data-test-automation-switch-on]')
+        .doesNotExist('a pause someone asked for resumes without the screen');
+    });
+
+    test('an estimate the realm server refuses shows the server’s message and can be read again', async function (assert) {
+      estimateAnswer = {
+        status: 503,
+        body: {
+          errors: [
+            'this server has no prices, so it can neither estimate nor admit automation runs until its pricing is fixed',
+          ],
+        },
+      };
+      await openScreen(OFF);
+      assert
+        .dom('[data-test-automation-switch-on-estimate-failure]')
+        .includesText('Boxel couldn’t read the estimate')
+        .includesText('this server has no prices');
+      estimateAnswer = estimate();
+      await click('[data-test-automation-switch-on-retry]');
+      await waitFor('[data-test-automation-switch-on-estimate]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-switch-on-fact="estimate"]')
+        .hasText('1,234 credits a month');
+    });
+
+    test('a switch-on the realm server refuses shows the server’s message, and the screen stays open', async function (assert) {
+      postAnswer = {
+        status: 422,
+        body: {
+          errors: [
+            'the automation card sets no monthly credit cap (caps.monthlyCredits); set one on the card before switching it on',
+          ],
+        },
+      };
+      await openScreen(OFF);
+      await click('[data-test-automation-switch-on-confirm]');
+      await waitFor('[data-test-automation-switch-on-failure]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-switch-on-failure]')
+        .includesText('Boxel didn’t turn the automation on')
+        .includesText('the automation card sets no monthly credit cap');
+      assert
+        .dom('dialog[open] [data-test-automation-switch-on-screen]')
+        .exists('the screen stays open');
     });
   });
 });
