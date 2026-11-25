@@ -1,6 +1,6 @@
 ## What it is
 
-A horizontal strip of labels that switches which panel of content is showing. Use it when the sections are peers, all belong to the same object, and only one is relevant at a time. If the choice is a _value_ rather than a view — a filter, a unit, a mode you are setting — use **SegmentedControl**; if the sections should all be readable at once, use **Accordion**; if there are more than about six, use a **Select** or a side nav, because a tab strip that scrolls has lost its one advantage.
+A horizontal strip of labels that switches which panel of content is showing. Use it when the sections are peers, all belong to the same object, and only one is relevant at a time. If the choice is a _value_ rather than a view — a filter, a unit, a mode you are setting — use **SegmentedControl**; if the sections should all be readable at once, use **Accordion**; if there are more than about six, use a **Select** or a side nav, because a tab strip that scrolls has lost its one advantage; `@overflow='scroll'` is for a strip that can't be shortened.
 
 ## The contract
 
@@ -14,7 +14,7 @@ A horizontal strip of labels that switches which panel of content is showing. Us
 
 Hybrid controlled/uncontrolled, the kit-wide idiom: `@value ?? @internal`, defaulting to `@defaultValue ?? options[0].value`. The block is optional — you can use Tabs purely as a control and render panels elsewhere.
 
-**Overflow.** With `@overflow='scroll'` a list that doesn't fit scrolls sideways with no scrollbar. Each edge that hides tabs fades out (`data-fade-left` / `data-fade-right`, set from the scroll position, so a list at rest shows its first tab crisp), and the selected tab is scrolled into view whenever the value changes. Unset, the tabs shrink to fit and long labels wrap, as before.
+**Overflow.** With `@overflow='scroll'` a list that doesn't fit scrolls sideways with no scrollbar. Each edge that hides tabs fades out (`data-fade-left` / `data-fade-right`, set from the scroll position, so a list at rest shows its first tab crisp), and the selected tab is scrolled into view whenever the value changes. Unset, the tabs shrink to fit and long labels wrap.
 
 **Only one panel exists.** The block is yielded the active value and renders once; there is no per-tab panel, no `forceMount`, no keep-alive. This is why panel state resets on switch, and it is the right default for a card kit — but it means an expensive panel re-renders on every switch.
 
@@ -37,7 +37,7 @@ Governing pattern: APG **Tabs**, with automatic activation.
 - **Arrow keys, Home and End.** Left and Right move to the previous and next tab, wrapping at the ends, and swap under `dir="rtl"`; Home and End jump to the first and last. Moving selects as well as focuses, which APG recommends when panels render without a fetch, as the single yielded panel does here. A key held with Alt, Ctrl, Meta or Shift is left alone, so Alt+Left still goes Back. When a controlled `@value` refuses the change, focus stays on the selected tab. Enter and Space select through the native `<button>`, as does a plain DOM `click()`.
 - **Tab-to-panel wiring.** When there is a panel, every tab has `aria-controls` pointing at it, and the panel is `aria-labelledby` the active tab. With no block there is no panel, so the tabs carry no `aria-controls`.
 - **The panel is always focusable** (`tabindex="0"`, as Radix sets it), so a panel of plain text can be reached and scrolled from the keyboard. A panel that starts with its own control costs one extra Tab stop; APG drops the panel's stop in that case, and React Aria tracks it with `useHasTabbableChild`.
-- **Visible focus.** A focused tab shows a 2px `--ring` outline inset by 2px, so it neither shifts the layout nor gets clipped by a scrolling list (WCAG 2.4.7). It is the same `--ring` outline Button uses, so its contrast against the surface is the theme's `--ring` choice (WCAG 1.4.11). The focused tab sits under the sliding underline, so the selection stays visible through the ring. Inside the host app, the unlayered button focus rule reads the offset from `--host-outline-offset`, which the tab sets to the same −2px.
+- **Visible focus.** A focused tab shows a 2px `--ring` outline inset by 2px, so it neither shifts the layout nor gets clipped by a scrolling list (WCAG 2.4.7). Its colour is `--ring`, or the host's `--boxel-header-text-color` where that is set, so its contrast against the surface is the theme's choice (WCAG 1.4.11). The focused tab sits under the sliding underline, so the selection stays visible through the ring. Inside the host app, the unlayered button focus rule reads the offset from `--host-outline-offset`, which the tab sets to the same −2px.
 - **Hover only where it exists.** The hover ink sits inside `@media (hover: hover)`, so a tap on a touch screen doesn't leave a tab looking hovered.
 - **`@label`** becomes the tablist's `aria-label`; give one when the page has more than one tab list.
 - **No `aria-orientation`** and no vertical mode; the strip is horizontal only.
@@ -47,6 +47,8 @@ SegmentedControl and FilterChips share the strip's shape but none of this keyboa
 ## Theming
 
 `--muted-foreground` (rest ink), `--foreground` (hover and active ink), `--border` (the 1px rail, an inset shadow on the list), `--ring` (the focus outline), `--pretui-tabs-fade` (knob: the edge-fade width in scroll mode, default `1.5rem`), `--text-ui-md`, `--pretui-ease-snap`, `--space-4` (panel top padding), plus whatever **SlidingHighlight** consumes for the 2px accent bar. Tab height (34px), the 0.5rem side padding and the 0.625rem gap are fixed.
+
+Each tab has `0.5rem` of inline padding and the tabs sit `0.625rem` apart, so the first label is inset from the strip's edge by that padding and the underline overhangs each label by the same amount.
 
 A theme must keep `--muted-foreground` and `--foreground` separable, since inactive-versus-active is carried entirely by ink weight plus the underline — there is no background change to fall back on.
 

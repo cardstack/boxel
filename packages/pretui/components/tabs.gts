@@ -59,7 +59,10 @@ function stepFor(event: KeyboardEvent, list: HTMLElement) {
 }
 
 // Scroll mode: keep the selected tab in view, and mark which physical edges
-// hide tabs so the CSS fades only those.
+// hide tabs so the CSS fades only those. Scroller has the same edge
+// detection but also makes its viewport a Tab stop while it scrolls; a
+// tablist must stay out of the Tab order (the active tab is the one stop), so
+// Tabs keeps this smaller modifier.
 const scrollTabs = modifier(
   (
     list: HTMLElement,
@@ -93,6 +96,10 @@ const scrollTabs = modifier(
     let resize =
       typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(edges);
     resize?.observe(list);
+    // a web font or a label change resizes the tabs without resizing the list
+    for (let tab of list.querySelectorAll('[role="tab"]')) {
+      resize?.observe(tab);
+    }
     list.addEventListener('scroll', edges, { passive: true });
     return () => {
       resize?.disconnect();

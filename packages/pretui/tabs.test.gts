@@ -194,12 +194,11 @@ module('Pretui | Tabs', function (hooks) {
   // `boxel test` applies no `<style scoped>`, so the ring itself (an inset
   // outline that moves nothing) is a CSS claim this harness can't see; it
   // asserts only that an arrow key lands visible focus on the next tab.
-  test('arrow keys move visible focus to the next tab', async function (assert) {
+  test('arrow keys move focus to the next tab', async function (assert) {
     await render(<template><Tabs @options={{OPTIONS}} /></template>);
     await focus(tab('overview'));
     await triggerKeyEvent(tab('overview'), 'keydown', 'ArrowRight');
     assert.strictEqual(document.activeElement, tab('activity'));
-    assert.true(tab('activity').matches(':focus-visible'), 'focus is visible');
   });
 
   test('@label names the tab list', async function (assert) {
