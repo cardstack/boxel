@@ -80,12 +80,24 @@ export interface OperationKeyApproval {
   operation: string;
   targetType: { module: string; name: string };
   state: 'approved' | 'missing' | 'unavailable';
-  missing?: { slot: string; canApprove: KeyApprover }[];
+  missing?: MissingKeyApproval[];
   // Every credential slot the operation sends a key in, approved or not,
   // in the order the operation declares them. Absent for an `unavailable`
   // operation.
   slots?: SlotKeyApproval[];
   refusal?: { code: string; detail: string };
+}
+
+// One credential slot an operation lacks an approval for, and who can give
+// it. For an `{{apiKey}}` slot, `shares` names the realm's shares that can
+// fill it: the one its binding sends, or, with no binding, each active share
+// the approver named by `canApprove` owns. A share's `owner` is the Matrix id
+// of the key's owner, whom a route shows only as ADR 011 lets its caller see
+// them (null otherwise).
+export interface MissingKeyApproval {
+  slot: string;
+  canApprove: KeyApprover;
+  shares?: { id: string; label: string; owner: string | null }[];
 }
 
 // Where one credential slot of an operation stands for the automation:

@@ -20,6 +20,7 @@ import {
   type AutomationKeyApprovals,
   type AutomationVersionKey,
   type KeyApprover,
+  type MissingKeyApproval,
   type OperationKeyApproval,
   type SlotKeyApproval,
 } from '@cardstack/runtime-common/automation-key-approval';
@@ -130,7 +131,7 @@ export async function checkAutomationKeyApprovals(
       );
       continue;
     }
-    let missing: NonNullable<OperationKeyApproval['missing']> = [];
+    let missing: MissingKeyApproval[] = [];
     let slots: SlotKeyApproval[] = [];
     for (let check of await checkSlots(
       dbAdapter,
@@ -157,28 +158,44 @@ export async function checkAutomationKeyApprovals(
       );
       let { binding } = check;
       if (!binding) {
+        if (check.slot.key === 'userKey') {
+          missing.push({ slot, canApprove: 'payer' });
+          continue;
+        }
+        let { canApprove, shares } = await shareApprover(
+          dbAdapter,
+          realmURL.href,
+          payer,
+        );
         missing.push({
           slot,
-          canApprove:
-            check.slot.key === 'userKey'
-              ? 'payer'
-              : await shareApprover(dbAdapter, realmURL.href, payer),
+          canApprove,
+          ...(shares.length ? { shares } : {}),
         });
         continue;
       }
       let owner: KeyApprover =
         binding.approved_by === payer ? 'payer' : 'another-key-owner';
+      let bound: MissingKeyApproval = {
+        slot,
+        canApprove: owner,
+        ...(binding.share_id
+          ? {
+              shares: await shareNamed(dbAdapter, binding.share_id),
+            }
+          : {}),
+      };
       if (
         check.refused === 'binding-not-approved' ||
         check.refused === 'binding-needs-reapproval' ||
         check.refused === 'share-suspended'
       ) {
-        missing.push({ slot, canApprove: owner });
+        missing.push(bound);
         continue;
       }
       let approved = approvals.get(binding.id);
       if (!approved || !approvalMatches(approved, version)) {
-        missing.push({ slot, canApprove: owner });
+        missing.push(bound);
       }
     }
     operations.push({
@@ -393,14 +410,39 @@ async function shareApprover(
   dbAdapter: DBAdapter,
   realmURL: string,
   payer: string,
-): Promise<KeyApprover> {
-  let rows = await query(dbAdapter, [
-    'SELECT owner FROM key_shares WHERE realm_url = ',
+): Promise<{ canApprove: KeyApprover; shares: MissingShare[] }> {
+  let rows = (await query(dbAdapter, [
+    'SELECT id, label, owner FROM key_shares WHERE realm_url = ',
     param(realmURL),
-    " AND state = 'active' AND key_id IS NOT NULL",
-  ]);
-  if (rows.some((row) => row.owner === payer)) {
-    return 'payer';
+    " AND state = 'active' AND key_id IS NOT NULL ORDER BY label, id",
+  ])) as { id: string; label: string; owner: string }[];
+  let own = rows.filter((row) => row.owner === payer);
+  if (own.length) {
+    return { canApprove: 'payer', shares: own.map(shareOf) };
   }
-  return rows.length ? 'another-key-owner' : 'nobody-yet';
+  return rows.length
+    ? { canApprove: 'another-key-owner', shares: rows.map(shareOf) }
+    : { canApprove: 'nobody-yet', shares: [] };
+}
+
+type MissingShare = NonNullable<MissingKeyApproval['shares']>[number];
+
+function shareOf(row: {
+  id: string;
+  label: string;
+  owner: string;
+}): MissingShare {
+  return { id: row.id, label: row.label, owner: row.owner };
+}
+
+// The share `id` names, as a missing approval names it.
+async function shareNamed(
+  dbAdapter: DBAdapter,
+  id: string,
+): Promise<MissingShare[]> {
+  let rows = (await query(dbAdapter, [
+    'SELECT id, label, owner FROM key_shares WHERE id = ',
+    param(id),
+  ])) as { id: string; label: string; owner: string }[];
+  return rows.map(shareOf);
 }
