@@ -86,6 +86,18 @@ class StepperUsage extends Component {
           @description='Uncontrolled seed for the internal value.'
         />
         <Args.String
+          @name='label'
+          @description='The field name. The buttons read Decrease <label> and Increase <label>, and the input takes it as its accessible name.'
+        />
+        <Args.String
+          @name='decrementLabel'
+          @description="Replaces the − button's whole accessible name."
+        />
+        <Args.String
+          @name='incrementLabel'
+          @description="Replaces the + button's whole accessible name."
+        />
+        <Args.String
           @name='controlId'
           @description="The input's id for label wiring — supplied by a wrapping Field's yielded controlId."
         />
