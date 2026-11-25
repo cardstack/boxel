@@ -42,40 +42,56 @@ const RETRY_DELAYS_MS = [250, 750];
 // fails it rather than hanging it.
 const DEADLINE_MS = 15_000;
 
+// A list edit that failed. Matrix may have taken a write whose answer, or
+// every read after it, never came back, so the list may hold the edit even so.
+// `mayHaveChanged` is false only when no write can have reached it.
+export class WorkspaceListEditError extends Error {
+  readonly mayHaveChanged: boolean;
+  constructor(what: string, mayHaveChanged: boolean, cause: unknown) {
+    super(`could not ${what}: ${(cause as any)?.message ?? cause}`, { cause });
+    this.name = 'WorkspaceListEditError';
+    this.mayHaveChanged = mayHaveChanged;
+  }
+}
+
+// Throws `WorkspaceListEditError`.
 export async function addToWorkspaceList(
   deps: WorkspaceListDeps,
   user: string,
   realmURL: string,
 ): Promise<{ changed: boolean }> {
-  let result = await asListOwner(
-    deps,
-    user,
-    'add a workspace to a list',
-    (accessToken, signal) =>
-      appendRealmToUserAccountData({
+  let what = 'add a workspace to a list';
+  let writing = false;
+  try {
+    let result = await asListOwner(deps, user, what, (accessToken, signal) => {
+      writing = true;
+      return appendRealmToUserAccountData({
         matrixURL: deps.matrixClient.matrixURL,
         userId: user,
         userAccessToken: accessToken,
         realmURL,
         signal,
-      }),
-  );
-  return { changed: result ? !result.alreadyPresent : false };
+      });
+    });
+    return { changed: result ? !result.alreadyPresent : false };
+  } catch (e) {
+    throw new WorkspaceListEditError(what, writing, e);
+  }
 }
 
 // `changed` says whether the list held the realm when this began, even when a
 // try that removed it failed after its write and a later try found it gone.
+// Throws `WorkspaceListEditError`, which says the list may have changed when
+// a try found the realm there.
 export async function removeFromWorkspaceList(
   deps: WorkspaceListDeps,
   user: string,
   realmURL: string,
 ): Promise<{ changed: boolean }> {
+  let what = 'remove a workspace from a list';
   let held = false;
-  await asListOwner(
-    deps,
-    user,
-    'remove a workspace from a list',
-    async (accessToken, signal) => {
+  try {
+    await asListOwner(deps, user, what, async (accessToken, signal) => {
       // A try that fails may have written the removal already, so the next
       // one can't tell from the list whether the realm was ever on it: each
       // try records first whether the realm is there.
@@ -90,8 +106,10 @@ export async function removeFromWorkspaceList(
         realmURL,
         signal,
       });
-    },
-  );
+    });
+  } catch (e) {
+    throw new WorkspaceListEditError(what, held, e);
+  }
   return { changed: held };
 }
 

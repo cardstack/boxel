@@ -46,6 +46,8 @@ import {
 } from '../middleware/index.ts';
 import {
   addToWorkspaceList,
+  removeFromWorkspaceList,
+  WorkspaceListEditError,
   type WorkspaceListDeps,
 } from '../lib/workspace-list.ts';
 import {
@@ -445,6 +447,22 @@ export default function handleCreateRealmRequest(
         );
         Sentry.captureException(e);
         let deleted = await deleteUnlistedRealm(requestDeps, url!);
+        // The add may have reached the list before Matrix stopped answering,
+        // and the realm is gone, so it comes off the list again.
+        if (
+          deleted &&
+          e instanceof WorkspaceListEditError &&
+          e.mayHaveChanged
+        ) {
+          try {
+            await removeFromWorkspaceList(requestDeps, ownerUserId, url!);
+          } catch (removeError: any) {
+            log.error(
+              `${url} was deleted, and could not be taken off ${ownerUserId}'s workspace list: ${removeError?.message ?? removeError}`,
+            );
+            Sentry.captureException(removeError);
+          }
+        }
         await sendResponseForError(
           ctxt,
           503,

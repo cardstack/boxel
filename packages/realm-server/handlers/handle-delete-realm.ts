@@ -51,6 +51,7 @@ import {
 import {
   addToWorkspaceList,
   removeFromWorkspaceList,
+  WorkspaceListEditError,
 } from '../lib/workspace-list.ts';
 
 const log = logger('realm-server');
@@ -174,6 +175,16 @@ export default function handleDeleteRealm(
       // realm back on the list it was on. A caller with a session token keeps
       // the list itself, as the app and every boxel-cli signed in to Matrix
       // do, and would report a realm it found already gone as a failure.
+      let putBack = async () => {
+        try {
+          await addToWorkspaceList(args, ownerUserId, realmURL);
+        } catch (restoreError: any) {
+          log.error(
+            `${realmURL} was not deleted, and could not be put back on ${ownerUserId}'s workspace list: ${restoreError?.message ?? restoreError}`,
+          );
+          Sentry.captureException(restoreError);
+        }
+      };
       let listEdit = { changed: false };
       try {
         if (isOAuthRequest(ctxt)) {
@@ -184,6 +195,11 @@ export default function handleDeleteRealm(
           `could not remove ${realmURL} from ${ownerUserId}'s workspace list, so it was not deleted: ${error?.message ?? error}`,
         );
         Sentry.captureException(error);
+        // The removal may have reached the list before Matrix stopped
+        // answering, and the realm stays, so it goes back on the list.
+        if (error instanceof WorkspaceListEditError && error.mayHaveChanged) {
+          await putBack();
+        }
         await sendResponseForError(
           ctxt,
           503,
@@ -201,14 +217,7 @@ export default function handleDeleteRealm(
         });
       } catch (error) {
         if (listEdit.changed) {
-          try {
-            await addToWorkspaceList(args, ownerUserId, realmURL);
-          } catch (restoreError: any) {
-            log.error(
-              `${realmURL} was not deleted, and could not be put back on ${ownerUserId}'s workspace list: ${restoreError?.message ?? restoreError}`,
-            );
-            Sentry.captureException(restoreError);
-          }
+          await putBack();
         }
         throw error;
       }
