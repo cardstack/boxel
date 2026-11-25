@@ -23,6 +23,7 @@ import {
   resolveAdminCreds,
   logoutMatrixAccessToken,
 } from '../synapse.ts';
+import { withWorkspaceListLock } from '../lib/workspace-list.ts';
 
 const log = logger('realm-server');
 
@@ -184,25 +185,32 @@ export default function handleUpsertRealmUserPermission({
             adminPassword: creds.password,
             userId: user,
           });
-          let { alreadyPresent } = await appendRealmToUserAccountData({
-            matrixURL: matrixClient.matrixURL,
-            userId: user,
-            userAccessToken: userToken,
-            realmURL: normalizedRealmHref,
-          });
-          appendedToAccountData = !alreadyPresent;
-          // Keep `app.boxel.realm-servers` in lockstep with `app.boxel.realms`
-          // during the source-of-truth transition (CS-11655). Derive the
-          // realm-server origin from the realm URL — the host normalises the
-          // same way via the JWT's `realmServerURL` claim, but JWTs aren't
-          // in scope on this admin-impersonate path.
-          await appendRealmServerToUserAccountData({
-            matrixURL: matrixClient.matrixURL,
-            userId: user,
-            userAccessToken: userToken,
-            realmServerURL: ensureTrailingSlash(
-              new URL(normalizedRealmHref).origin,
-            ),
+          let token = userToken;
+          // Held around both writes, so neither overlaps another edit the
+          // realm server makes of this user's account data.
+          await withWorkspaceListLock(dbAdapter, user, async (signal) => {
+            let { alreadyPresent } = await appendRealmToUserAccountData({
+              matrixURL: matrixClient.matrixURL,
+              userId: user,
+              userAccessToken: token,
+              realmURL: normalizedRealmHref,
+              signal,
+            });
+            appendedToAccountData = !alreadyPresent;
+            // Keep `app.boxel.realm-servers` in lockstep with `app.boxel.realms`
+            // during the source-of-truth transition (CS-11655). Derive the
+            // realm-server origin from the realm URL — the host normalises the
+            // same way via the JWT's `realmServerURL` claim, but JWTs aren't
+            // in scope on this admin-impersonate path.
+            await appendRealmServerToUserAccountData({
+              matrixURL: matrixClient.matrixURL,
+              userId: user,
+              userAccessToken: token,
+              realmServerURL: ensureTrailingSlash(
+                new URL(normalizedRealmHref).origin,
+              ),
+              signal,
+            });
           });
         } catch (e: any) {
           matrixAccountDataWarning = `account_data sync failed: ${e?.message ?? String(e)}`;
