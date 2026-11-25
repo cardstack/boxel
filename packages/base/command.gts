@@ -849,10 +849,10 @@ export class RunRealmCodeResult extends CardDef {
               <span class='path'>{{url}}</span></span>
           </div>
         {{/each}}
-        {{#each @model.automationActions as |action|}}
+        {{#each @model.automationActions as |line|}}
           <div class='line' data-test-realm-code-automation-action>
             <span class='glyph done' aria-hidden='true'>✓</span>
-            <span class='text'>{{action}}</span>
+            <span class='text'>{{line}}</span>
           </div>
         {{/each}}
         {{#each @model.failedUiActions as |uiAction|}}
