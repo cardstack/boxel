@@ -41,6 +41,7 @@ import {
   findDanglingRoutingRules,
   type DanglingRoutingRule,
 } from '@cardstack/host/utils/dangling-routing-rules';
+import { hostAndPath } from '@cardstack/host/utils/host-urls';
 
 import type * as CardAPI from '@cardstack/base/card-api';
 
@@ -71,14 +72,6 @@ interface Signature {
 // to the full URL.
 function displayURL(url: string): string {
   return url.replace(/^https?:\/\//, '');
-}
-
-// A URL's host and path, which name an address whatever its scheme. The
-// manager builds `https://` URLs, and the realm server gives a host URL the
-// scheme it is served with.
-function hostAndPath(url: string): string {
-  let parsed = new URL(url);
-  return `${parsed.host}${ensureTrailingSlash(parsed.pathname)}`;
 }
 
 const CANONICAL_EXPLANATION =

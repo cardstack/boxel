@@ -54,6 +54,7 @@ import * as LintAndFixToolModule from './lint-and-fix';
 import * as ListRealmKeySharesToolModule from './list-realm-key-shares';
 import * as ListingBuildToolModule from './listing-action-build';
 import * as MigrateSkillToolModule from './migrate-skill';
+import * as MountHostURLToolModule from './mount-host-url';
 import * as OneShotLlmRequestToolModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomToolModule from './open-ai-assistant-room';
 import * as OpenCreateListingModalToolModule from './open-create-listing-modal';
@@ -98,6 +99,7 @@ import * as SuspendKeyShareToolModule from './suspend-key-share';
 import * as SwitchSubmodeToolModule from './switch-submode';
 import * as SyncOpenRouterModelsToolModule from './sync-openrouter-models';
 import * as TransformCardsToolModule from './transform-cards';
+import * as UnmountHostURLToolModule from './unmount-host-url';
 import * as UnpublishRealmToolModule from './unpublish-realm';
 import * as UnregisterBotToolModule from './unregister-bot';
 import * as UnshareKeyToolModule from './unshare-key';
@@ -250,6 +252,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     ListingBuildToolModule,
   );
   shimHostToolModule(virtualNetwork, 'migrate-skill', MigrateSkillToolModule);
+  shimHostToolModule(virtualNetwork, 'mount-host-url', MountHostURLToolModule);
   shimHostToolModule(
     virtualNetwork,
     'create-listing-pr-request',
@@ -385,6 +388,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     virtualNetwork,
     'transform-cards',
     TransformCardsToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
+    'unmount-host-url',
+    UnmountHostURLToolModule,
   );
   shimHostToolModule(
     virtualNetwork,
@@ -617,6 +625,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   SwitchSubmodeToolModule.default,
   SyncOpenRouterModelsToolModule.default,
   TransformCardsToolModule.default,
+  UnmountHostURLToolModule.default,
   UnpublishRealmToolModule.default,
   UnregisterBotToolModule.default,
   UnshareKeyToolModule.default,
@@ -632,6 +641,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   ValidateRealmToolModule.default,
   ViewVisuallyToolModule.default,
   MigrateSkillToolModule.default,
+  MountHostURLToolModule.default,
   WriteBinaryFileToolModule.default,
   WriteTextFileToolModule.default,
 ];
