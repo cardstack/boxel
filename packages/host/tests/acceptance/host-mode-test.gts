@@ -19,6 +19,7 @@ import { module, test } from 'qunit';
 import {
   Deferred,
   validateHostRoutes,
+  VirtualNetwork,
   type HostRoute,
   type HostRoutingRule,
   type RawHostRoutingRule,
@@ -130,6 +131,7 @@ function dynamicRoutes(): readonly HostRoute[] {
   let petKey = `${testHostModeRealmURL}pet/Pet`;
   let { routes, warnings } = validateHostRoutes(DYNAMIC_ROUTE_RULES, {
     realmURL: new URL(testHostModeRealmURL),
+    virtualNetwork: new VirtualNetwork(),
     lookupType: (ref) =>
       ref.module === `${testHostModeRealmURL}pet` && ref.name === 'Pet'
         ? {

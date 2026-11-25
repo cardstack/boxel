@@ -5,6 +5,10 @@ import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import hostRoutesTests from '@cardstack/runtime-common/tests/host-routes-test';
 
 module(basename(import.meta.filename), function () {
+  test('validateHostRoutes: a type must be in the realm itself or in a realm the server maps by prefix', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
   test('validateHostRoutes: the fixed routing map is what it was', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
@@ -114,14 +118,6 @@ module(basename(import.meta.filename), function () {
   });
 
   test('validateHostRoutes: a type that could not be read drops its route and keeps the rest', async function (assert) {
-    await runSharedTest(hostRoutesTests, assert, {});
-  });
-
-  test('validateHostRoutes: a type module that leaves the realm by a relative path, or that a visitor cannot read, drops its route', async function (assert) {
-    await runSharedTest(hostRoutesTests, assert, {});
-  });
-
-  test('withoutRoutesOnNonPublicTypes: drops the field-match routes it picks, and the routes under them', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 

@@ -92,16 +92,11 @@ The server MUST read routes only through `validateHostRoutes`
 validation MUST be dropped with a warning, with its child routes. The
 routes MUST be validated when the realm is indexed, and the validated tree
 MUST be stored with the index. A field match's type MUST be read then,
-through the definitions cache, which renders a module it doesn't hold. The
-validated tree is public, so a field match's type MUST be in the routing
-realm or in a realm that a visitor who isn't signed in can read, such as the
-base or the catalog realm. Validation MUST drop a route whose type is in
-another realm that such a visitor can't read, without reading the type. A
-realm may stop being public after the index, so a read of the routes MUST
-ask each such realm again, at most a minute after its last answer, and MUST
-drop a route whose type's realm says it isn't public. A
-type in another realm MUST be named by its full URL: validation MUST drop a
-route whose type module is a relative path that leaves the realm. A
+through the definitions cache, which renders a module it doesn't hold. A
+field match's type MUST be in the routing realm or in a realm the server
+maps by prefix (the base realm, the catalog), told from the module's
+address alone; validation MUST drop any other route with a warning, without
+reading its type. A
 type that can't be read (a module error, a missing export, a render
 timeout, a server that can't be reached) MUST make its route invalid, and
 the next index MUST read it again. A read that fails for a reason that may

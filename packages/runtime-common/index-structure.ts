@@ -253,23 +253,13 @@ export interface RealmMetaValue {
 // The host routes a realm's index stored.
 export interface StoredHostRoutes extends HostRoutesValidation {
   // The type definitions the routes were validated with, by
-  // `typeLookupKey`; `null` for a type the index didn't find, and
-  // `'not-public'` for a type in another realm that a visitor who isn't
-  // signed in can't read. A later read of a type that fails for a reason
-  // that may pass validates with these.
-  types?: Record<string, HostRouteTypeInfo | 'not-public' | null>;
+  // `typeLookupKey`; `null` for a type the index didn't find. A later read
+  // of a type that fails for a reason that may pass validates with these.
+  types?: Record<string, HostRouteTypeInfo | null>;
   // Set when a type read failed for a reason that may pass and no earlier
   // definition stood in for it, so its route was dropped. A read of the
   // routes then starts an index of realm.json, which reads the type again.
   retryTypeReads?: true;
-  // Set on a tree validated with a route's type held to the routing realm
-  // or a realm that a visitor who isn't signed in can read, and with a
-  // relative type module that leaves the realm kept as written. A tree
-  // without it may hold a type outside the realm that this rule drops, so
-  // its `types` don't stand in for a read that may pass. A read of the
-  // routes drops a route on a type whose realm isn't public, with or
-  // without it (`Realm.getHostRoutes`).
-  typeRealmsChecked?: true;
 }
 
 export interface RealmMetaTable {
@@ -330,7 +320,7 @@ export function storedHostRoutes(raw: unknown): StoredHostRoutes | undefined {
   ) {
     return undefined;
   }
-  let { types, retryTypeReads, typeRealmsChecked } = hostRoutes;
+  let { types, retryTypeReads } = hostRoutes;
   return {
     routes: hostRoutes.routes,
     warnings: hostRoutes.warnings,
@@ -338,7 +328,6 @@ export function storedHostRoutes(raw: unknown): StoredHostRoutes | undefined {
       ? { types }
       : {}),
     ...(retryTypeReads === true ? { retryTypeReads } : {}),
-    ...(typeRealmsChecked === true ? { typeRealmsChecked } : {}),
   };
 }
 

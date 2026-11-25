@@ -20,14 +20,12 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 
-// A site whose field-match routes name types in four places: its own realm,
-// a realm anyone may read, a realm only the site's owner may read, and a
-// realm the site's owner can't read. All four are on one realm server, so
-// the site's index reaches the other three.
+// A site whose field-match routes name types in its own realm, in the base
+// realm, and in two other users' workspaces on the same server: one that
+// anyone may read and one that only its owner may read.
 const SITE = 'http://127.0.0.1:4444/site/';
 const SHARED = 'http://127.0.0.1:4444/shared/';
 const PRIVATE = 'http://127.0.0.1:4444/private/';
-const STRANGER = 'http://127.0.0.1:4444/stranger/';
 const OWNER = '@owner:localhost';
 const OTHER_USER = '@other-user:localhost';
 
@@ -56,11 +54,15 @@ function siteFiles() {
           hostRoutingRules: [
             // Leaves the realm and comes back to its own module.
             route('/local/:slug', './sub/../site', 'Post'),
-            // Reaches the shared realm by a relative path.
+            {
+              path: '/base/:slug',
+              type: { module: '@cardstack/base/card-api', name: 'CardDef' },
+              match: { cardTitle: ':slug' },
+            },
+            // Reaches the shared workspace by a relative path.
             route('/escape/:slug', '../shared/post', 'Post'),
-            route('/private/:slug', `${PRIVATE}secret`, 'Secret'),
-            route('/stranger/:slug', `${STRANGER}secret`, 'Secret'),
             route('/shared/:slug', `${SHARED}post`, 'Post'),
+            route('/private/:slug', `${PRIVATE}secret`, 'Secret'),
           ],
         },
         meta: {
@@ -78,7 +80,6 @@ module(basename(import.meta.filename), function (hooks) {
   let server: Server;
   let site: Realm;
   let realms: Realm[] = [];
-  let db: PgAdapter;
 
   async function start({
     dbAdapter,
@@ -92,21 +93,14 @@ module(basename(import.meta.filename), function (hooks) {
     let result = await runTestRealmServerWithRealms({
       virtualNetwork: createVirtualNetwork(),
       realmsRootPath: join(dirSync().name, 'realm_server_1'),
-      // The shared and the private realm come first, so the site's index
-      // finds their modules served.
       realms: [
         {
           realmURL: new URL(SHARED),
           fileSystem: { 'post.gts': postModule('Post') },
-          permissions: { '*': ['read'], [OWNER]: ['read', 'write'] },
+          permissions: { '*': ['read'], [OTHER_USER]: ['read', 'write'] },
         },
         {
           realmURL: new URL(PRIVATE),
-          fileSystem: { 'secret.gts': postModule('Secret') },
-          permissions: { [OWNER]: ['read', 'write', 'realm-owner'] },
-        },
-        {
-          realmURL: new URL(STRANGER),
           fileSystem: { 'secret.gts': postModule('Secret') },
           permissions: { [OTHER_USER]: ['read', 'write', 'realm-owner'] },
         },
@@ -121,7 +115,6 @@ module(basename(import.meta.filename), function (hooks) {
       runner,
       matrixURL,
     });
-    db = dbAdapter;
     server = result.testRealmHttpServer;
     realms = result.realms;
     site = realms.find((realm) => realm.url === SITE)!;
@@ -153,14 +146,38 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   function warningFor(
-    warnings: readonly { path: string; code: string; dropped: boolean }[],
+    warnings: readonly {
+      path: string;
+      code: string;
+      dropped: boolean;
+      message: string;
+    }[],
     path: string,
   ) {
     return warnings.find((warning) => warning.path === path);
   }
 
+  function assertDropped(assert: Assert, path: string, module: string) {
+    assert.notOk(
+      routes.some((r) => r.fullPath === path),
+      `${path} is dropped`,
+    );
+    let warning = warningFor(warnings, path);
+    assert.strictEqual(warning?.code, 'type-outside-realm');
+    assert.true(warning?.dropped);
+    assert.true(
+      warning?.message.includes(module),
+      `the warning names ${module}`,
+    );
+  }
+
+  let routes: Awaited<ReturnType<Realm['getHostRoutes']>>['routes'];
+  let warnings: Awaited<ReturnType<Realm['getHostRoutes']>>['warnings'];
+  hooks.beforeEach(async function () {
+    ({ routes, warnings } = await site.getHostRoutes());
+  });
+
   test("a relative type module that stays in the realm names the realm's own type", async function (assert) {
-    let { routes, warnings } = await site.getHostRoutes();
     let local = routes.find((r) => r.fullPath === '/local/:slug');
     assert.strictEqual(local?.kind, 'field-match', 'the route is kept');
     assert.strictEqual(
@@ -170,119 +187,21 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(warningFor(warnings, '/local/:slug'), undefined);
   });
 
-  test('a relative type module that leaves the realm drops its route, even to a public realm', async function (assert) {
-    let { routes, warnings } = await site.getHostRoutes();
-    assert.notOk(
-      routes.some((r) => r.fullPath === '/escape/:slug'),
-      'the route is dropped',
+  test('a type in the base realm is kept', async function (assert) {
+    let base = routes.find((r) => r.fullPath === '/base/:slug');
+    assert.strictEqual(base?.kind, 'field-match', 'the route is kept');
+    assert.notStrictEqual(
+      warningFor(warnings, '/base/:slug')?.code,
+      'type-outside-realm',
     );
-    let warning = warningFor(warnings, '/escape/:slug');
-    assert.strictEqual(warning?.code, 'cross-realm-type-path');
-    assert.true(warning?.dropped);
   });
 
-  test("a type in a realm that a visitor who isn't signed in can't read drops its route", async function (assert) {
-    let { routes, warnings } = await site.getHostRoutes();
-    assert.notOk(
-      routes.some((r) => r.fullPath === '/private/:slug'),
-      "the route is dropped, though the site's owner can read the type",
-    );
-    let warning = warningFor(warnings, '/private/:slug');
-    assert.strictEqual(warning?.code, 'non-public-type');
-    assert.true(warning?.dropped);
+  test('a relative type module that leaves the realm is resolved to its full URL, and its route is dropped', async function (assert) {
+    assertDropped(assert, '/escape/:slug', `${SHARED}post`);
   });
 
-  test("a type in a realm that the site's owner can't read drops its route as not public", async function (assert) {
-    let { routes, warnings } = await site.getHostRoutes();
-    assert.notOk(routes.some((r) => r.fullPath === '/stranger/:slug'));
-    let warning = warningFor(warnings, '/stranger/:slug');
-    assert.strictEqual(
-      warning?.code,
-      'non-public-type',
-      'not type-unavailable, so its paths answer 404, not 503',
-    );
-    assert.true(warning?.dropped);
-  });
-
-  // Stores the site's tree with one more route, on the private realm's
-  // type, as an index would have stored it when that realm was public, or
-  // before the index held types to public realms (without the mark).
-  async function storeRouteOnPrivateType({ marked }: { marked: boolean }) {
-    let [row] = (await db.execute(
-      `SELECT rm.value FROM realm_meta rm
-       JOIN realm_generations rg
-         ON rg.realm_url = rm.realm_url
-        AND rg.current_generation = rm.generation
-       WHERE rm.realm_url = $1`,
-      { bind: [SITE] },
-    )) as { value: unknown }[];
-    let value = (
-      typeof row?.value === 'string' ? JSON.parse(row.value) : row?.value
-    ) as { hostRoutes: Record<string, any> };
-    let { typeRealmsChecked, ...hostRoutes } = value.hostRoutes;
-    let shared = hostRoutes.routes.find(
-      (r: { fullPath: string }) => r.fullPath === '/shared/:slug',
-    );
-    hostRoutes.routes = [
-      ...hostRoutes.routes,
-      {
-        ...shared,
-        path: '/private/:slug',
-        fullPath: '/private/:slug',
-        position: [hostRoutes.routes.length + 10],
-        type: { module: `${PRIVATE}secret`, name: 'Secret' },
-      },
-    ];
-    hostRoutes.warnings = hostRoutes.warnings.filter(
-      (w: { path: string }) => w.path !== '/private/:slug',
-    );
-    await db.execute(
-      `UPDATE realm_meta SET value = jsonb_set(value, '{hostRoutes}', $2::jsonb) WHERE realm_url = $1`,
-      {
-        bind: [
-          SITE,
-          JSON.stringify(
-            marked ? { ...hostRoutes, typeRealmsChecked } : hostRoutes,
-          ),
-        ],
-      },
-    );
-    site.clearRealmIndexCaches();
-  }
-
-  async function assertPrivateRouteDropped(assert: Assert) {
-    let { routes, warnings } = await site.getHostRoutes();
-    assert.notOk(
-      routes.some((r) => r.fullPath === '/private/:slug'),
-      'the route is not served',
-    );
-    let warning = warningFor(warnings, '/private/:slug');
-    assert.strictEqual(warning?.code, 'non-public-type');
-    assert.true(warning?.dropped);
-    assert.true(
-      routes.some((r) => r.fullPath === '/shared/:slug'),
-      'a route on a public type is still served',
-    );
-  }
-
-  test('a stored route on a type whose realm is no longer public is not served', async function (assert) {
-    await storeRouteOnPrivateType({ marked: true });
-    await assertPrivateRouteDropped(assert);
-  });
-
-  test('a tree stored before types were held to public realms does not serve a route on a type in a realm that is not public', async function (assert) {
-    await storeRouteOnPrivateType({ marked: false });
-    await assertPrivateRouteDropped(assert);
-  });
-
-  test('a type in a realm anyone may read, named by its full URL, is kept', async function (assert) {
-    let { routes, warnings } = await site.getHostRoutes();
-    let shared = routes.find((r) => r.fullPath === '/shared/:slug');
-    assert.strictEqual(shared?.kind, 'field-match', 'the route is kept');
-    assert.strictEqual(
-      shared?.kind === 'field-match' ? shared.type.module : undefined,
-      `${SHARED}post`,
-    );
-    assert.strictEqual(warningFor(warnings, '/shared/:slug'), undefined);
+  test("a type in another user's workspace is dropped, also when anyone may read that workspace", async function (assert) {
+    assertDropped(assert, '/shared/:slug', `${SHARED}post`);
+    assertDropped(assert, '/private/:slug', `${PRIVATE}secret`);
   });
 });

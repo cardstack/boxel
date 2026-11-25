@@ -1,7 +1,7 @@
 import {
+  hostRouteTypeRefs,
   hostRoutingMapFromRoutes,
   validateHostRoutes,
-  withoutRoutesOnNonPublicTypes,
   type HostRoute,
   type HostRouteTypeInfo,
   type HostRouteWarning,
@@ -11,6 +11,7 @@ import {
 import type { RawHostRoutingRule } from '../realm.ts';
 import type { ResolvedCodeRef } from '../code-ref.ts';
 import type { SharedTests } from '../helpers/index.ts';
+import { VirtualNetwork } from '../virtual-network.ts';
 
 const REALM = 'http://realm.test/site/';
 const MODULE = `${REALM}types`;
@@ -102,6 +103,7 @@ function validate(
 ): HostRoutesValidation {
   return validateHostRoutes(rules, {
     realmURL: new URL(REALM),
+    virtualNetwork: new VirtualNetwork(),
     lookupType: (ref) =>
       ref.module !== MODULE
         ? undefined
@@ -146,6 +148,62 @@ function codes(warnings: readonly HostRouteWarning[]) {
 }
 
 const tests: SharedTests<unknown> = Object.freeze({
+  'validateHostRoutes: a type must be in the realm itself or in a realm the server maps by prefix':
+    async (assert) => {
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addRealmMapping(
+        '@cardstack/base/',
+        'http://localhost:4201/base/',
+      );
+      let typeAt = (path: string, module: string): RawHostRoutingRule => ({
+        path,
+        type: { module, name: 'Post' },
+        match: { slug: ':slug' },
+      });
+      let rules = [
+        typeAt('/own/:slug', MODULE),
+        typeAt('/base/:slug', '@cardstack/base/post'),
+        typeAt('/base-url/:slug', 'http://localhost:4201/base/post'),
+        // What the search document holds for `../other-workspace/site`.
+        typeAt('/escape/:slug', 'http://realm.test/other-workspace/site'),
+        typeAt('/elsewhere/:slug', 'https://other.example/user/workspace/site'),
+      ];
+      let looked: string[] = [];
+      let { routes, warnings } = validateHostRoutes(rules, {
+        realmURL: new URL(REALM),
+        virtualNetwork,
+        lookupType: (ref) => {
+          looked.push(ref.module);
+          return TYPES.Post;
+        },
+      });
+      assert.deepEqual(paths(routes), [
+        '/own/:slug',
+        '/base/:slug',
+        '/base-url/:slug',
+      ]);
+      assert.deepEqual(codes(warnings), [
+        { code: 'type-outside-realm', path: '/escape/:slug', dropped: true },
+        {
+          code: 'type-outside-realm',
+          path: '/elsewhere/:slug',
+          dropped: true,
+        },
+      ]);
+      assert.deepEqual(
+        looked,
+        [MODULE, '@cardstack/base/post', 'http://localhost:4201/base/post'],
+        'a type in another workspace is not looked up',
+      );
+      assert.deepEqual(
+        hostRouteTypeRefs(rules, {
+          realmURL: new URL(REALM),
+          virtualNetwork,
+        }).map((ref) => ref.module),
+        [MODULE, '@cardstack/base/post', 'http://localhost:4201/base/post'],
+        'the index reads no type in another workspace',
+      );
+    },
   'validateHostRoutes: the fixed routing map is what it was': async (
     assert,
   ) => {
@@ -1093,72 +1151,6 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.deepEqual(hostRoutingMapFromRoutes(routes), [
         { path: '/', id: `${REALM}home` },
       ]);
-    },
-  'validateHostRoutes: a type module that leaves the realm by a relative path, or that a visitor cannot read, drops its route':
-    async (assert) => {
-      let looked: string[] = [];
-      let { routes, warnings } = validate(
-        [
-          {
-            path: '/escape/:slug',
-            type: { module: '../other-workspace/site', name: 'Post' },
-            match: { slug: ':slug' },
-          },
-          {
-            path: '/private/:slug',
-            type: { module: 'http://realm.test/other/site', name: 'Post' },
-            match: { slug: ':slug' },
-          },
-          fieldMatch('/posts/:slug', 'Post', { slug: ':slug' }),
-        ],
-        {
-          lookupType: (ref) => {
-            looked.push(ref.module);
-            return ref.module === MODULE ? TYPES[ref.name] : 'not-public';
-          },
-        },
-      );
-      assert.deepEqual(paths(routes), ['/posts/:slug']);
-      assert.deepEqual(codes(warnings), [
-        { code: 'cross-realm-type-path', path: '/escape/:slug', dropped: true },
-        { code: 'non-public-type', path: '/private/:slug', dropped: true },
-      ]);
-      assert.notOk(
-        looked.includes('../other-workspace/site'),
-        'a module reached by a relative path is not looked up',
-      );
-    },
-  'withoutRoutesOnNonPublicTypes: drops the field-match routes it picks, and the routes under them':
-    async (assert) => {
-      let validation = validate([
-        fieldMatch('/posts/:slug', 'Post', { slug: ':slug' }),
-        fieldMatch(
-          '/cities/:city',
-          'City',
-          { slug: ':city' },
-          {
-            routes: [fieldMatch('/:venue', 'Venue', { slug: ':venue' })],
-          },
-        ),
-      ]);
-      assert.deepEqual(paths(validation.routes), [
-        '/posts/:slug',
-        '/cities/:city',
-        '/cities/:city/:venue',
-      ]);
-      let { routes, warnings } = withoutRoutesOnNonPublicTypes(
-        validation,
-        (route) => route.type.name === 'City',
-      );
-      assert.deepEqual(paths(routes), ['/posts/:slug']);
-      assert.deepEqual(codes(warnings), [
-        { code: 'non-public-type', path: '/cities/:city', dropped: true },
-      ]);
-      assert.strictEqual(
-        withoutRoutesOnNonPublicTypes(validation, () => false),
-        validation,
-        'a tree with nothing to drop is served as it is',
-      );
     },
   'validateHostRoutes: a link to a type the parent descends from counts':
     async (assert) => {

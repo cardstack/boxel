@@ -24,6 +24,7 @@ import { assertQuery, type Filter } from './query.ts';
 import { isClientEvaluable } from './instance-filter-matcher.ts';
 import { RealmPaths } from './paths.ts';
 import { rri } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 import {
   DEFAULT_REDIRECT_STATUS,
   findRedirectCycles,
@@ -183,19 +184,24 @@ export function hostRouteTypeInfo(
 }
 
 // The card types the field-match routes in `rules` name, each once, in the
-// order they first appear. A caller looks these up before it validates.
+// order they first appear, less those a route may not name
+// (`isAllowedRouteTypeModule`), whose routes are dropped without a read. A
+// caller looks these up before it validates.
 export function hostRouteTypeRefs(
   rules: readonly RawHostRoutingRule[],
+  realm: { realmURL: URL; virtualNetwork: VirtualNetwork },
 ): ResolvedCodeRef[] {
   let refs = new Map<string, ResolvedCodeRef>();
   let visit = (list: readonly RawHostRoutingRule[]) => {
     for (let rule of list) {
       let ref = asCodeRef(rule.type);
-      // A relative module here left the realm, or couldn't be resolved
-      // (see `isRelativeTypeModule`); its route is dropped without a read.
       if (
         ref &&
-        !isRelativeTypeModule(ref.module) &&
+        isAllowedRouteTypeModule(
+          ref.module,
+          realm.realmURL,
+          realm.virtualNetwork,
+        ) &&
         !refs.has(typeLookupKey(ref))
       ) {
         refs.set(typeLookupKey(ref), ref);
@@ -207,6 +213,31 @@ export function hostRouteTypeRefs(
   };
   visit(rules);
   return [...refs.values()];
+}
+
+// Whether a field-match route may name a type from `module`: a module of the
+// routing realm itself, or of a realm the server maps by prefix (the base
+// realm, the catalog), in either spelling. Told from the module's address
+// alone. The validated routes are public, and a type in any other realm, a
+// user's workspace, is one a visitor may not be able to read.
+export function isAllowedRouteTypeModule(
+  module: string,
+  realmURL: URL,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  if (virtualNetwork.isRegisteredPrefix(module)) {
+    return true;
+  }
+  let url: URL;
+  try {
+    url = virtualNetwork.toURL(module);
+  } catch {
+    return false;
+  }
+  return (
+    new RealmPaths(realmURL).inRealm(url) ||
+    virtualNetwork.isRegisteredPrefix(virtualNetwork.unresolveURL(url.href))
+  );
 }
 
 // The key `hostRouteTypeRefs` dedupes on. A caller may key its lookup on it.
@@ -369,13 +400,9 @@ export type HostRouteWarningCode =
   | 'card-pattern-missing-param'
   // `type` isn't a code ref.
   | 'invalid-type'
-  // `type` names its module by a relative path that leaves the realm, or
-  // that the index couldn't resolve against it. A module in another realm
-  // is named by its full URL.
-  | 'cross-realm-type-path'
-  // `type` is in another realm that a visitor who isn't signed in can't
-  // read.
-  | 'non-public-type'
+  // `type` is in a realm other than this one that the server doesn't map by
+  // prefix: another user's workspace (`isAllowedRouteTypeModule`).
+  | 'type-outside-realm'
   // `type` isn't a card type the index knows.
   | 'not-card-type'
   // The definition of `type` couldn't be read when the realm was indexed:
@@ -429,17 +456,10 @@ export interface HostRoutesValidation {
 // The definitions of the types a realm's field-match routes name, by
 // `typeLookupKey`, as `ValidateHostRoutesOptions.lookupType` answers for
 // each.
-export type HostRouteTypes = ReadonlyMap<string, HostRouteTypeLookup>;
-
-// What a lookup of a route's type answers: its definition, `'unavailable'`
-// for a definition that couldn't be read, `'not-public'` for a type in
-// another realm that a visitor who isn't signed in can't read (its
-// definition isn't read), and undefined for a module with no such export.
-export type HostRouteTypeLookup =
-  | HostRouteTypeInfo
-  | 'unavailable'
-  | 'not-public'
-  | undefined;
+export type HostRouteTypes = ReadonlyMap<
+  string,
+  HostRouteTypeInfo | 'unavailable' | undefined
+>;
 
 // What the index read for each type a realm's field-match routes name, by
 // `typeLookupKey`: as `HostRouteTypes`, and `'transient'` for a read that
@@ -448,7 +468,7 @@ export type HostRouteTypeLookup =
 // validates with the definition the stored routes were validated with.
 export type HostRouteTypeReads = ReadonlyMap<
   string,
-  HostRouteTypeLookup | 'transient'
+  HostRouteTypeInfo | 'unavailable' | 'transient' | undefined
 >;
 
 // How long a server asks a client to wait before it asks again for what it
@@ -515,99 +535,19 @@ export function hasUnavailableRoutes(
   return validation.warnings.some((w) => w.code === 'type-unavailable');
 }
 
-// What a realm's discovery answer to a `HEAD` on one of its modules, sent
-// without credentials, says about the module's realm. A realm answers that
-// request from anyone, with the identity headers, also when it is private:
-// `'not-found'` when no realm answers for the module, `'refused'` when the
-// request is refused, else the realm and whether a visitor who isn't signed
-// in may read it (`X-Boxel-Realm-Public-Readable`). Throws when the request
-// fails or the server answers with a 5xx, which may pass.
-export type ModuleRealmAccess =
-  | { realmURL: URL; publicReadable: boolean }
-  | 'refused'
-  | 'not-found';
-
-export async function readModuleRealmAccess(
-  fetch: (url: string, init: RequestInit) => Promise<Response>,
-  moduleURL: URL,
-): Promise<ModuleRealmAccess> {
-  let response = await fetch(moduleURL.href, { method: 'HEAD' });
-  if (response.status >= 500) {
-    throw new Error(`${moduleURL.href} answered ${response.status}`);
-  }
-  if (response.status === 401 || response.status === 403) {
-    return 'refused';
-  }
-  let header = response.headers.get('x-boxel-realm-url');
-  if (!response.ok || !header) {
-    return 'not-found';
-  }
-  return {
-    realmURL: new URL(header),
-    publicReadable:
-      response.headers.get('x-boxel-realm-public-readable') === 'true',
-  };
-}
-
-// `validation` without the field-match routes `drop` picks, and the routes
-// under them, with a `non-public-type` warning for each route dropped. The
-// same object when `drop` picks none.
-export function withoutRoutesOnNonPublicTypes(
-  validation: HostRoutesValidation,
-  drop: (route: HostFieldMatchRoute) => boolean,
-): HostRoutesValidation {
-  let dropped: HostFieldMatchRoute[] = [];
-  let filter = (routes: readonly HostRoute[]): HostRoute[] =>
-    routes.flatMap((route): HostRoute[] => {
-      if (route.kind === 'field-match' && drop(route)) {
-        dropped.push(route);
-        return [];
-      }
-      let children = filter(route.routes);
-      return children.length === route.routes.length &&
-        children.every((child, i) => child === route.routes[i])
-        ? [route]
-        : [{ ...route, routes: children }];
-    });
-  let routes = filter(validation.routes);
-  if (dropped.length === 0) {
-    return validation;
-  }
-  let under = (position: readonly number[]) =>
-    dropped.some(
-      (route) =>
-        position.length >= route.position.length &&
-        route.position.every((index, i) => position[i] === index),
-    );
-  return {
-    routes,
-    warnings: [
-      ...validation.warnings.filter((w) => !under(w.position)),
-      ...dropped.map(
-        (route): HostRouteWarning => ({
-          code: 'non-public-type',
-          message: nonPublicTypeMessage(route.type),
-          position: route.position,
-          path: route.fullPath,
-          dropped: true,
-        }),
-      ),
-    ],
-  };
-}
-
-function nonPublicTypeMessage(type: ResolvedCodeRef): string {
-  return `type ${type.name} from ${type.module} is in another realm that a visitor who is not signed in cannot read`;
-}
-
 export interface ValidateHostRoutesOptions {
   // The URL the realm is served at, ending with `/`. A fixed route's card
   // must be in it.
   realmURL: URL;
+  // Tells a module of a realm the server maps by prefix, which a
+  // field-match route may name a type from (`isAllowedRouteTypeModule`).
+  virtualNetwork: VirtualNetwork;
   // The definition of a type a field-match route names. `undefined` when
   // there is no such type; `'unavailable'` when its definition couldn't be
   // read, which drops its routes like any other invalid route.
-  lookupType: (type: ResolvedCodeRef) => HostRouteTypeLookup;
+  lookupType: (
+    type: ResolvedCodeRef,
+  ) => HostRouteTypeInfo | 'unavailable' | undefined;
   // Defaults to `MAX_DYNAMIC_HOST_ROUTES`.
   maxDynamicRoutes?: number;
 }
@@ -1002,10 +942,16 @@ class Validator {
       if (!type) {
         return drop('invalid-type', 'type must name a module and an export');
       }
-      if (isRelativeTypeModule(type.module)) {
+      if (
+        !isAllowedRouteTypeModule(
+          type.module,
+          this.options.realmURL,
+          this.options.virtualNetwork,
+        )
+      ) {
         return drop(
-          'cross-realm-type-path',
-          `type module ${type.module} is a relative path that leaves this realm, or that could not be resolved against it; name a module in another realm by its full URL`,
+          'type-outside-realm',
+          `type ${type.name} from ${type.module} is in another workspace; use a type from this workspace, the base realm or the catalog`,
         );
       }
       let found = this.options.lookupType(type);
@@ -1014,9 +960,6 @@ class Validator {
           'type-unavailable',
           `The definition of ${type.name} from ${type.module} could not be read when the realm was indexed`,
         );
-      }
-      if (found === 'not-public') {
-        return drop('non-public-type', nonPublicTypeMessage(type));
       }
       typeInfo = found;
       if (!typeInfo || !typeInfo.isCardType) {
@@ -1322,7 +1265,8 @@ class Validator {
         if (route.kind === 'field-match') {
           let info = this.options.lookupType(route.type);
           if (
-            typeof info === 'object' &&
+            info &&
+            info !== 'unavailable' &&
             info.types.some((key) => standaloneTypes.has(key))
           ) {
             return;
@@ -1589,14 +1533,6 @@ function asCodeRef(value: unknown): ResolvedCodeRef | undefined {
     name
     ? { module: rri(module), name }
     : undefined;
-}
-
-// The search document holds a route's type module resolved against
-// realm.json, except for a relative module that leaves the realm, which it
-// holds as written (`RouteTypeField` in the base realm's realm-config). A
-// module that couldn't be resolved is also held as written.
-function isRelativeTypeModule(module: string): boolean {
-  return module.startsWith('.') || module.startsWith('/');
 }
 
 function isBlank(value: unknown): boolean {

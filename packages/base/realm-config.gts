@@ -11,7 +11,6 @@ import {
   linksTo,
   queryableValue,
   realmURL,
-  type BaseDef,
   type CardContext,
   type CardCrudFunctions,
 } from './card-api';
@@ -406,51 +405,6 @@ export class RouteJsonField extends JsonField {
   }
 }
 
-// A route's card type. Its value goes into the search document as a
-// `CodeRefField`'s does, `module/name` with the module resolved against
-// realm.json, except a relative module that leaves the realm: that one goes
-// in as written, so the route validation can drop its route rather than read
-// a type in another realm reached by `../`.
-export class RouteTypeField extends CodeRefField {
-  static [queryableValue](value: any, stack: BaseDef[] = []): any {
-    let module = value?.module;
-    let configId = stack.find((item) => (item as { id?: unknown }).id) as
-      | { id?: unknown }
-      | undefined;
-    if (
-      typeof module === 'string' &&
-      typeof value.name === 'string' &&
-      (module.startsWith('.') || module.startsWith('/')) &&
-      typeof configId?.id === 'string' &&
-      leavesRealm(module, configId.id)
-    ) {
-      return `${module}/${value.name}`;
-    }
-    return super[queryableValue](value, stack);
-  }
-}
-
-// Whether `module`, resolved against the id of the realm's RealmConfig card
-// (realm.json, at the realm root), is outside the realm. A realm served
-// under a prefix has an id that isn't a URL (`@cardstack/catalog/realm`);
-// its RealmConfig card is at the realm root all the same, so the module is
-// resolved against a stand-in URL one level deep, where a path that leaves
-// the root stays outside it.
-function leavesRealm(module: string, configId: string): boolean {
-  let base: URL;
-  try {
-    base = new URL(configId);
-  } catch {
-    base = new URL('https://realm.invalid/root/realm');
-  }
-  try {
-    let realmRoot = new URL('.', base).href;
-    return !new URL(module, base).href.startsWith(realmRoot);
-  } catch {
-    return false;
-  }
-}
-
 export class RoutingRuleField extends FieldDef {
   static displayName = 'Routing Rule';
   static icon = LinkIcon;
@@ -484,7 +438,7 @@ export class RoutingRuleField extends FieldDef {
       'Card id pattern the path resolves to, e.g. `./Person/:person_id`; each `:name` takes the value of the path parameter with that name',
   });
 
-  @field type = contains(RouteTypeField, {
+  @field type = contains(CodeRefField, {
     description:
       'Card type the route serves (module and name). A field-match route searches cards of this type',
   });

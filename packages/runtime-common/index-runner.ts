@@ -40,11 +40,10 @@ import {
 import {
   hostRouteTypeInfo,
   hostRouteTypeRefs,
-  readModuleRealmAccess,
   readRawHostRoutingRules,
   realmConfigCardURL,
   typeLookupKey,
-  type HostRouteTypeLookup,
+  type HostRouteTypeInfo,
   type HostRouteTypeReads,
   type RawHostRoutingRule,
 } from './host-routes.ts';
@@ -1739,7 +1738,10 @@ export class IndexRunner {
     let contexts = new Map<string, Promise<ModuleCacheContext>>();
     return new Map(
       await Promise.all(
-        hostRouteTypeRefs(rules).map(
+        hostRouteTypeRefs(rules, {
+          realmURL: this.#realmURL,
+          virtualNetwork: this.#virtualNetwork,
+        }).map(
           async (ref) =>
             [
               typeLookupKey(ref),
@@ -1753,7 +1755,7 @@ export class IndexRunner {
   async #readHostRouteType(
     ref: ResolvedCodeRef,
     contexts: Map<string, Promise<ModuleCacheContext>>,
-  ): Promise<HostRouteTypeLookup | 'transient'> {
+  ): Promise<HostRouteTypeInfo | 'unavailable' | 'transient' | undefined> {
     let keyFor = (codeRef: CodeRef) =>
       internalKeyFor(codeRef, undefined, this.#virtualNetwork);
     let fail = (reason: unknown, transient: boolean) => {
@@ -1771,20 +1773,6 @@ export class IndexRunner {
       let context = await this.#moduleCacheContextFor(moduleURL, contexts);
       if (context === 'not-found') {
         return fail(`${moduleURL} was not found`, false);
-      }
-      // The validated routes are public: a page on a host URL carries them,
-      // with the type's module and the fields its route matches. So a type
-      // in another realm is read only when a visitor who isn't signed in
-      // could read it too, as the shared base and catalog types can.
-      if (
-        context === 'not-public' ||
-        (context.realmURL !== this.#realmURL.href &&
-          context.cacheScope !== 'public')
-      ) {
-        this.#log.warn(
-          `${jobIdentity(this.#jobInfo)} did not read the definition of ${ref.name} from ${ref.module} for a host route of ${this.#realmURL.href}: its realm is not public`,
-        );
-        return 'not-public';
       }
       entry = await this.#definitionLookup.populateDefinitionCacheEntry({
         moduleURL,
@@ -1823,37 +1811,27 @@ export class IndexRunner {
 
   // The cache context a module's definition is read under: this realm's, or,
   // for a module of another realm, that realm's, which the module's own
-  // response names. That response is the realm's discovery answer to a
-  // `HEAD`, which any caller gets, asked for without credentials:
-  // `'not-found'` when no realm answers for the module, and `'not-public'`
-  // when the realm that does isn't one anyone may read (it doesn't send
-  // `X-Boxel-Realm-Public-Readable`, or it refuses the request), so its info
-  // is never read with this realm's credentials. `contexts` holds the
-  // contexts this read has asked for, by realm, and the realm each module
-  // named.
+  // response names. `'not-found'` when the other realm answers that the
+  // module isn't there. `contexts` holds the contexts this read has asked
+  // for, by realm, and the realm each module named.
   async #moduleCacheContextFor(
     moduleURL: string,
     contexts: Map<string, Promise<ModuleCacheContext>>,
-  ): Promise<ModuleCacheContext | 'not-found' | 'not-public'> {
+  ): Promise<ModuleCacheContext | 'not-found'> {
     let realmURL = this.#realmURL;
     // `moduleURL` is canonical, so a module of a realm served under a prefix
     // (`@cardstack/base/…`) is in its prefix form, which isn't a URL.
     let url = this.#virtualNetwork.toURL(moduleURL);
     if (!this.#realmPaths.inRealm(url)) {
-      let access = await readModuleRealmAccess(
-        (href, init) => this.#virtualNetwork.fetch(href, init),
-        url,
-      );
-      if (access === 'refused') {
-        return 'not-public';
+      let response = await this.#fetch(url.href, { method: 'HEAD' });
+      let header = response.headers.get('x-boxel-realm-url');
+      if (response.status >= 500) {
+        throw new Error(`${moduleURL} answered ${response.status}`);
       }
-      if (access === 'not-found') {
+      if (!response.ok || !header) {
         return 'not-found';
       }
-      realmURL = access.realmURL;
-      if (realmURL.href !== this.#realmURL.href && !access.publicReadable) {
-        return 'not-public';
-      }
+      realmURL = new URL(header);
     }
     let context = contexts.get(realmURL.href);
     if (!context) {
