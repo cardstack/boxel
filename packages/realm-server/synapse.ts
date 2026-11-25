@@ -429,8 +429,11 @@ export async function fetchDisplayName(
 // The content of `userId`'s global account data of `eventType`, read with the
 // admin API: empty when the user never wrote it, undefined when the Matrix
 // server has no such account. A failure of the admin's own login is thrown,
-// never read as that. Only reads: the admin API can't write another user's
-// account data, so a write needs the user's own token.
+// never read as that, and so is a user the server says isn't one of its own
+// (400): a caller asks only for users of the server it is configured with,
+// so that answer means the configuration and the server disagree. Only
+// reads: the admin API can't write another user's account data, so a write
+// needs the user's own token.
 export async function fetchAccountDataAsAdmin(
   admin: MatrixAdmin,
   userId: string,
@@ -442,8 +445,7 @@ export async function fetchAccountDataAsAdmin(
     `_synapse/admin/v1/users/${encodeURIComponent(userId)}/accountdata`,
     { signal },
   );
-  // 400: a user of another server. 404: no such account.
-  if (response.status === 404 || response.status === 400) {
+  if (response.status === 404) {
     return undefined;
   }
   if (!response.ok) {

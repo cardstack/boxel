@@ -117,7 +117,10 @@ export async function removeFromWorkspaceList(
 }
 
 // The user's list, or undefined when this server keeps none for them. A list
-// that was never written is empty.
+// that was never written is empty. The Matrix admin's own account has none
+// here: Synapse won't mint the admin a token for itself, so nothing here can
+// edit that list, and a read would show one that creates and deletes leave
+// as it was.
 export async function readWorkspaceList(
   deps: WorkspaceListDeps,
   user: string,
@@ -126,6 +129,9 @@ export async function readWorkspaceList(
     return undefined;
   }
   let admin = matrixAdmin(deps);
+  if (user === adminUserId(deps, admin)) {
+    return undefined;
+  }
   let content = await withRetries('read a list', (signal) =>
     fetchAccountDataAsAdmin(admin, user, APP_BOXEL_REALMS_EVENT_TYPE, {
       signal,
@@ -198,6 +204,14 @@ async function asListOwner<T>(
 
 function keepsAccountOf(deps: WorkspaceListDeps, user: string): boolean {
   return isUserOfMatrixServer(user, deps.matrixClient.serverName);
+}
+
+// The admin's Matrix user id. Its username may be a localpart or a full id,
+// as the Matrix login it signs in with accepts either.
+function adminUserId(deps: WorkspaceListDeps, admin: MatrixAdmin): string {
+  return admin.adminUsername.startsWith('@')
+    ? admin.adminUsername
+    : `@${admin.adminUsername}:${deps.matrixClient.serverName}`;
 }
 
 function matrixAdmin(deps: WorkspaceListDeps): MatrixAdmin {
