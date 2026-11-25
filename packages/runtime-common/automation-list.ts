@@ -208,7 +208,10 @@ export async function answerAutomationList({
   let querier = dbAdapterQuerier(dbAdapter);
   let ids = [...entries.keys()];
   // Each read below covers every listed automation at once, so a realm's
-  // list costs the same handful of queries however many automations it has.
+  // list costs the same handful of queries however many automations it has,
+  // besides a notice's own reads: the failure streak of an automation paused
+  // after repeated failures, and the credential of one whose latest run ended
+  // on a rejected credential.
   let [lastRuns, currentRuns, spent, notices] = await Promise.all([
     readLastRunsOf(querier, ids),
     readCurrentRunsOf(querier, ids),

@@ -89,7 +89,7 @@ export class WorkspaceActions {
 
   #getRealmIdentifier: () => RealmIdentifier;
 
-  // The count of the workspace's automation notices after Realm Settings,
+  // The count of the workspace's automation notices under Realm Settings,
   // made once, so the menu doesn't remount it on every read of its items.
   @cached
   private get automationNoticeCount() {
@@ -277,7 +277,7 @@ export class WorkspaceActions {
         label: 'Realm Settings',
         icon: FileSettingsIcon,
         action: this.openRealmConfig,
-        postscriptComponent: this.automationNoticeCount,
+        subtextComponent: this.automationNoticeCount,
       }),
     );
     if (this.canPublish) {

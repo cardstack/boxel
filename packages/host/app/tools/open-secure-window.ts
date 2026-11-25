@@ -33,7 +33,7 @@ export default class OpenSecureWindowTool extends HostBaseTool<
 
   static actionVerb = 'Open';
 
-  description = `Open Boxel's secure window, the only place a user enters or shares an API key, connects an account at a service, or disconnects an app connected to their Boxel account. Call it once when an operation is refused "Binding not approved" and the refusal names a credential slot "for the invoking user's own key", or a card says it needs the user's own key, and tell the user in the chat what you are opening and why. A stored key does not by itself fill the slot, so never reopen the window when the same refusal comes back. Never ask the user for a key, token, password or other credential in the chat. mode "enter-key": add a key, for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation). mode "replace-key": replace the key an operation sends, when it is refused "Credential rejected", for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation); the window finds the key from the user's approval, and when a workspace's shared key fills the slot it tells the user who can replace it. mode "share-key": share one of the user's keys into a workspace (realm). Where that workspace's policy lets people who aren't signed in make calls that send a shared key (its realm.json policy card has a grant whose where is actor() == "anonymous" on a callApi whose every slot is {{apiKey}}), sharing a key there means they will use it, and only a key whose owner allows anonymous use (on the key's page) can be shared there: tell the user so in the same reply before opening it. mode "connect": connect the user's account at a service that signs in with OAuth (such as GitHub), where the user signs in at the service itself instead of pasting a key; pass the same cardId and operation, or module, name, realm and operation, as for "enter-key", or a realm alone to offer the apps shared into that workspace. mode "swap-key": put one of the user's keys into a workspace's (realm) suspended share (share, the share's id). mode "share-limits": change the limits of a workspace's (realm) share (share, the share's id) of one of the user's own keys. mode "approve": approve the operation a card is blocked on when its readiness answers "needs-approval", passing that one operation and its cardId (or module, name and realm); the window gathers every other operation on the card that needs approving into the same confirmation, so call it once, never once per operation. mode "review-changes": the same, when readiness answers "needs-reapproval", to review what changed. mode "connected-apps": show the apps connected to the user's Boxel account (such as an AI assistant or boxel-cli signed in with OAuth), where the user can disconnect one; open it only when the user asks to see or disconnect them, and pass nothing else. reason: one short line the window shows as the opener's words. The result says only whether the window opened ("opened") or the browser blocked it and the app shows the user a button that opens it ("blocked"); it never says what the user did there.`;
+  description = `Open Boxel's secure window, the only place a user enters or shares an API key, connects an account at a service, or disconnects an app connected to their Boxel account. Call it once when an operation is refused "Binding not approved" and the refusal names a credential slot "for the invoking user's own key", or a card says it needs the user's own key, and tell the user in the chat what you are opening and why. A stored key does not by itself fill the slot, so never reopen the window when the same refusal comes back. Never ask the user for a key, token, password or other credential in the chat. mode "enter-key": add a key, for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation). mode "replace-key": replace the key an operation sends, when it is refused "Credential rejected", for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation); the window finds the key from the user's approval, and when a workspace's shared key fills the slot it tells the user who can replace it. mode "share-key": share one of the user's keys into a workspace (realm). Where that workspace's policy lets people who aren't signed in make calls that send a shared key (its realm.json policy card has a grant whose where is actor() == "anonymous" on a callApi whose every slot is {{apiKey}}), sharing a key there means they will use it, and only a key whose owner allows anonymous use (on the key's page) can be shared there: tell the user so in the same reply before opening it. mode "connect": connect the user's account at a service that signs in with OAuth (such as GitHub), where the user signs in at the service itself instead of pasting a key; pass the same cardId and operation, or module, name, realm and operation, as for "enter-key", or a realm alone to offer the apps shared into that workspace, or reconnect alone (the key id of one of the user's connections that a service no longer accepts) to sign that connection in again. mode "swap-key": put one of the user's keys into a workspace's (realm) suspended share (share, the share's id). mode "share-limits": change the limits of a workspace's (realm) share (share, the share's id) of one of the user's own keys. mode "approve": approve the operation a card is blocked on when its readiness answers "needs-approval", passing that one operation and its cardId (or module, name and realm); the window gathers every other operation on the card that needs approving into the same confirmation, so call it once, never once per operation. For a switched-on automation that is waiting for key approval, pass mode "approve" with automation (the automation card's id) and nothing else: the window gathers every key approval the automation is missing that the user can give, across every card type its operations are on, into one confirmation for that automation. mode "review-changes": the same, when readiness answers "needs-reapproval", to review what changed. mode "connected-apps": show the apps connected to the user's Boxel account (such as an AI assistant or boxel-cli signed in with OAuth), where the user can disconnect one; open it only when the user asks to see or disconnect them, and pass nothing else. reason: one short line the window shows as the opener's words. The result says only whether the window opened ("opened") or the browser blocked it and the app shows the user a button that opens it ("blocked"); it never says what the user did there.`;
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -97,6 +97,17 @@ function secureWindowRequest(
     }
     return { mode, realm: name('realm', input.realm), share, reason };
   }
+  if (mode === 'connect' && input.reconnect?.trim()) {
+    if (targetOf(input) || input.realm?.trim()) {
+      throw new Error(
+        'a reconnect names the connection (reconnect, its key id) alone, without cardId, module, name or realm',
+      );
+    }
+    return { mode, reconnect: input.reconnect.trim(), reason };
+  }
+  if (input.reconnect?.trim()) {
+    throw new Error('reconnect is for the connect mode only');
+  }
   if (mode === 'connect') {
     let target = targetOf(input);
     // A type target names its realm; otherwise a realm alone is what the
@@ -118,6 +129,21 @@ function secureWindowRequest(
       target: target as SecureWindowTarget & { operation: string },
       reason,
     };
+  }
+  if (mode === 'approve' && input.automation?.trim()) {
+    if (target) {
+      throw new Error(
+        "an automation's approval names the automation card (automation) alone, without cardId, module or name",
+      );
+    }
+    return {
+      mode,
+      automation: name('automation', input.automation),
+      reason,
+    };
+  }
+  if (input.automation?.trim()) {
+    throw new Error('automation is for the approve mode only');
   }
   if (mode === 'approve' || mode === 'review-changes') {
     if (!target?.operation) {

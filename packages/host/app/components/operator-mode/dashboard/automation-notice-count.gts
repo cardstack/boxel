@@ -10,7 +10,7 @@ import type AutomationNoticesService from '@cardstack/host/services/automation-n
 import type { ComponentLike } from '@glint/template';
 
 // How many of the user's automation notices are about automations in one
-// workspace, as a mark after the workspace menu's Realm Settings item, which
+// workspace, as a chip under the workspace menu's Realm Settings item, which
 // opens the realm config whose Automations section lists them. Renders
 // nothing while there are none.
 class AutomationNoticeCount extends Component {
@@ -32,10 +32,8 @@ class AutomationNoticeCount extends Component {
         data-test-realm-settings-automation-notices={{this.count}}
       >
         {{this.count}}
-        <span class='boxel-sr-only'>
-          {{if (eq this.count 1) 'automation needs' 'automations need'}}
-          attention
-        </span>
+        {{if (eq this.count 1) 'automation needs' 'automations need'}}
+        attention
       </Chip>
     {{/if}}
   </template>

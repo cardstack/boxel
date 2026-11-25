@@ -40,9 +40,10 @@ const SETTLE_MS = 500;
 // automation's row and runs record, so it ends the moment its problem is
 // fixed.
 //
-// The notices are read when a session starts, on each `automation` and `job`
-// realm event (which reach a direct writer's session for every realm they
-// write directly, whether or not a view of the realm is open), and when the
+// The notices are read when a session starts, on each `automation` realm
+// event and each `job` event for a run that ended (both reach a direct
+// writer's session for every realm they write directly, whether or not a view
+// of the realm is open), and when the
 // user comes back from the secure window, where reconnecting a key or
 // approving an operation fixes a notice without moving any automation. A
 // read that fails leaves the last notices shown.
@@ -65,7 +66,13 @@ export default class AutomationNoticesService
   constructor(owner: Owner) {
     super(owner);
     let stopListening = this.messageService.onEveryRealmEvent((event) => {
-      if (event.eventName === 'automation' || event.eventName === 'job') {
+      // A notice changes only when an automation's row changes, or one of
+      // its runs ends; a run starting or reaching a milestone changes none.
+      if (
+        event.eventName === 'automation' ||
+        (event.eventName === 'job' &&
+          (event.state === 'complete' || event.state === 'error'))
+      ) {
         this.refresh({ settle: true });
       }
     });

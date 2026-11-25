@@ -7,7 +7,7 @@ import {
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import window from 'ember-window-mock';
+import windowMock from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import {
@@ -1680,7 +1680,7 @@ module('Acceptance | automation view', function (hooks) {
       });
 
       test('a key approval notice opens the secure window on the operation the run was refused', async function (assert) {
-        let windowOpen = stubWindowOpen(window);
+        let windowOpen = stubWindowOpen(windowMock);
         answer = {
           status: 200,
           attributes: {
@@ -1709,7 +1709,7 @@ module('Acceptance | automation view', function (hooks) {
         assert
           .dom('[data-test-automation-notice]')
           .containsText(
-            'Boxel didn’t start a run of Nightly import: the request the operation “fetch” makes changed since the payer approved the operation.',
+            'Boxel didn’t start a run of Nightly import because the request the operation “fetch” makes changed after the payer approved the operation.',
           );
         await click('[data-test-automation-notice-action="review-changes"]');
         assert.strictEqual(
@@ -3329,6 +3329,231 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-switch-on-fact="estimate"]')
         .hasText('1,234 credits a month');
+    });
+
+    module('key approvals', function () {
+      const INBOX = { module: `${testRealmURL}inbox`, name: 'Inbox' };
+      const SHARE = {
+        id: 'share-1',
+        label: 'Team GitHub',
+        owner: '@writer:localhost',
+      };
+
+      function keyApprovals(
+        operations: Record<string, unknown>[],
+        approved = false,
+      ) {
+        return { approved, version: 'v1.40', operations };
+      }
+      const APPROVED = {
+        operation: 'listPRs',
+        targetType: INBOX,
+        state: 'approved',
+      };
+      const PAYER_MISSING = {
+        operation: 'listIssues',
+        targetType: INBOX,
+        state: 'missing',
+        missing: [{ slot: 'userKey', canApprove: 'payer' }],
+      };
+      const OTHER_MISSING = {
+        operation: 'postComment',
+        targetType: INBOX,
+        state: 'missing',
+        missing: [
+          { slot: 'apiKey', canApprove: 'another-key-owner', shares: [SHARE] },
+        ],
+      };
+      const NOBODY_YET = {
+        operation: 'postComment',
+        targetType: INBOX,
+        state: 'missing',
+        missing: [{ slot: 'apiKey', canApprove: 'nobody-yet' }],
+      };
+
+      function keyStates() {
+        return [
+          ...document.querySelectorAll(
+            '[data-test-automation-switch-on-key-state]',
+          ),
+        ].map((e) =>
+          e.getAttribute('data-test-automation-switch-on-key-state'),
+        );
+      }
+
+      test('every key approved: the screen lists each operation as approved, and turning on closes the screen', async function (assert) {
+        let { calls } = stubWindowOpen(windowMock);
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([APPROVED], true),
+        });
+        postAnswer = {
+          status: 201,
+          body: {
+            data: { type: 'automation' },
+            meta: { keyApprovals: keyApprovals([APPROVED], true) },
+          },
+        };
+        await openScreen(OFF);
+        assert.deepEqual(keyStates(), ['Approved']);
+        assert
+          .dom('[data-test-automation-switch-on-payer-approves]')
+          .doesNotExist();
+        await click('[data-test-automation-switch-on-confirm]');
+        await waitUntil(() => posted.length > 0, { timeout: 10000 });
+        await settled();
+        assert
+          .dom('dialog[open] [data-test-automation-switch-on-screen]')
+          .doesNotExist('the screen closes');
+        assert.deepEqual(calls, [], 'no secure window opens');
+      });
+
+      test('approvals the payer gives open the secure window in the same step, for the automation, and the screen shows the automation as on once the approvals land', async function (assert) {
+        let { calls } = stubWindowOpen(windowMock);
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([APPROVED, PAYER_MISSING]),
+        });
+        postAnswer = {
+          status: 201,
+          body: {
+            data: {
+              type: 'automation',
+              attributes: { state: 'waiting-for-key-approval' },
+            },
+            meta: { keyApprovals: keyApprovals([APPROVED, PAYER_MISSING]) },
+          },
+        };
+        await openScreen(OFF);
+        assert.deepEqual(keyStates(), ['Approved', 'You approve']);
+        assert
+          .dom('[data-test-automation-switch-on-payer-approves]')
+          .includesText(
+            'Turning on the automation opens Boxel’s secure window, where you approve the calls the automation makes with your keys.',
+          );
+        await click('[data-test-automation-switch-on-confirm]');
+        await waitFor('[data-test-automation-switch-on-waiting]', {
+          timeout: 10000,
+        });
+        assert.strictEqual(calls.length, 1, 'one secure window opens');
+        let opened = new URL(calls[0].url);
+        assert.strictEqual(opened.pathname.split('/').pop(), 'approve');
+        assert.deepEqual(
+          Object.fromEntries(new URLSearchParams(opened.hash.slice(1))),
+          {
+            automation: AUTOMATION,
+            reason: 'To approve the calls the automation makes with your keys',
+          },
+          'for the automation, which the window reads the missing approvals of',
+        );
+        assert
+          .dom('[data-test-automation-switch-on-approve-keys]')
+          .includesText('Approve the calls in the secure window');
+        assert.deepEqual(keyStates(), ['Approved', 'Waiting for you']);
+
+        estimateAnswer = estimate({
+          switchedOn: true,
+          keyApprovals: keyApprovals(
+            [
+              APPROVED,
+              { ...PAYER_MISSING, state: 'approved', missing: undefined },
+            ],
+            true,
+          ),
+        });
+        window.dispatchEvent(new Event('focus'));
+        await waitFor('[data-test-automation-switch-on-active]', {
+          timeout: 10000,
+        });
+        assert
+          .dom('[data-test-automation-switch-on-active]')
+          .includesText('The automation is on');
+        assert.deepEqual(keyStates(), ['Approved', 'Approved']);
+        await click('[data-test-automation-switch-on-close]');
+        assert
+          .dom('dialog[open] [data-test-automation-switch-on-screen]')
+          .doesNotExist('the screen closes');
+      });
+
+      test('an approval another person gives: the screen names the key and its owner, and the automation switches on waiting with no secure window', async function (assert) {
+        let { calls } = stubWindowOpen(windowMock);
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([OTHER_MISSING]),
+        });
+        postAnswer = {
+          status: 201,
+          body: {
+            data: { type: 'automation' },
+            meta: { keyApprovals: keyApprovals([OTHER_MISSING]) },
+          },
+        };
+        await openScreen(OFF);
+        assert.deepEqual(keyStates(), ['Another person approves']);
+        assert
+          .dom('[data-test-automation-switch-on-key-detail]')
+          .hasText(
+            '@writer:localhost approves the use of the key Team GitHub.',
+          );
+        assert
+          .dom('[data-test-automation-switch-on-other-approvers]')
+          .includesText(
+            '@writer:localhost approves the automation’s use of the key Team GitHub.',
+          )
+          .includesText(
+            'The automation waits and runs nothing until each approval is in place.',
+          );
+        await click('[data-test-automation-switch-on-confirm]');
+        await waitFor('[data-test-automation-switch-on-waiting]', {
+          timeout: 10000,
+        });
+        assert.deepEqual(calls, [], 'no secure window opens');
+        assert
+          .dom('[data-test-automation-switch-on-approve-keys]')
+          .doesNotExist();
+      });
+
+      test('a share’s owner the viewer may not see is named as the owner of the key', async function (assert) {
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([
+            {
+              ...OTHER_MISSING,
+              missing: [
+                {
+                  slot: 'apiKey',
+                  canApprove: 'another-key-owner',
+                  shares: [{ ...SHARE, owner: null }],
+                },
+              ],
+            },
+          ]),
+        });
+        await openScreen(OFF);
+        assert
+          .dom('[data-test-automation-switch-on-key-detail]')
+          .hasText(
+            'The owner of the key approves the use of the key Team GitHub.',
+          );
+      });
+
+      test('no share yet: the screen says a realm administrator shares a key, and Share a key opens the secure window’s share page', async function (assert) {
+        let { calls } = stubWindowOpen(windowMock);
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([NOBODY_YET]),
+        });
+        await openScreen(OFF);
+        assert.deepEqual(keyStates(), ['No key shared']);
+        assert
+          .dom('[data-test-automation-switch-on-no-share]')
+          .includesText(
+            'The automation calls a service with a key that a realm administrator shares with the realm, and nobody has shared a key yet.',
+          );
+        await click('[data-test-automation-switch-on-share-key]');
+        await waitUntil(() => calls.length > 0, { timeout: 10000 });
+        let opened = new URL(calls[0].url);
+        assert.strictEqual(opened.pathname.split('/').pop(), 'share-key');
+        assert.strictEqual(
+          new URLSearchParams(opened.hash.slice(1)).get('realm'),
+          testRealmURL,
+        );
+      });
     });
 
     test('a switch-on the realm server refuses shows the server’s message, and the screen stays open', async function (assert) {

@@ -1620,7 +1620,7 @@ module(basename(import.meta.filename), function (hooks) {
           param(state),
           ', pause_reason =',
           param(pauseReason),
-          ', next_run = NULL WHERE automation_id =',
+          ', next_run = NULL, updated_at = clock_timestamp() WHERE automation_id =',
           param(automationURL()),
         ]);
       }
@@ -1709,17 +1709,17 @@ module(basename(import.meta.filename), function (hooks) {
         assert.deepEqual(other_.body.data, [], 'the route lists none to ADMIN');
       });
 
-      test('a payer who lost access leaves the notice to the realm’s other direct writers', async function (assert) {
+      test('a payer whose account can no longer pay leaves the notice to every direct writer', async function (assert) {
         await writeAutomation();
         await switchOn();
         await setState('paused', 'payer-lost-access');
         let notice = await noticeOf(ADMIN);
         assert.strictEqual(notice?.reason, 'payer-lost-access');
-        assert.strictEqual(notice?.audience, 'other-direct-writers');
+        assert.strictEqual(notice?.audience, 'direct-writers');
         assert.true(notice?.forViewer, 'another direct writer is told');
-        assert.false(
+        assert.true(
           (await noticeOf(PAYER))?.forViewer,
-          'the payer who lost access is not',
+          'a payer who still writes the realm directly, whose sessions were revoked, is told too',
         );
         let listed = await noticesRoute(ADMIN);
         assert.deepEqual(
@@ -1813,6 +1813,61 @@ module(basename(import.meta.filename), function (hooks) {
           await noticeOf(PAYER),
           null,
           'the notice ends once the last approval lands',
+        );
+
+        // An edit puts the automation back in waiting for another
+        // operation: the earlier refusal belongs to a wait that ended.
+        await setState('waiting-for-key-approval');
+        let rewaiting = await noticeOf(PAYER);
+        assert.strictEqual(
+          rewaiting?.reason,
+          'waiting-for-key-approval',
+          'a refusal from an earlier wait names no operation',
+        );
+        assert.strictEqual(rewaiting?.operation, null);
+        assert.strictEqual(rewaiting?.run, null);
+      });
+
+      test('a run from before the automation’s latest switch-on or resume raises no notice', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        let row = (await getAutomation(dbAdapter, rri(automationURL())))!;
+        await endedRun({
+          state: 'error',
+          reason: 'credential-rejected',
+          message: 'The vendor refused the connection',
+        });
+        let credentialNotices = async () => [
+          {
+            kind: 'reconnect' as const,
+            keyId: 'key-1',
+            recipients: [PAYER],
+          },
+        ];
+        assert.strictEqual(
+          (
+            await automationNotices(dbAdapter, [row], {
+              viewer: PAYER,
+              credentialNotices,
+            })
+          ).get(row.automationId)?.reason,
+          'credential-rejected',
+        );
+        // A resume (or a remove and a later switch-on) starts the schedule
+        // again.
+        await query(dbAdapter, [
+          'UPDATE automations SET scheduled_since = clock_timestamp() WHERE automation_id =',
+          param(automationURL()),
+        ]);
+        assert.strictEqual(
+          (
+            await automationNotices(dbAdapter, [row], {
+              viewer: PAYER,
+              credentialNotices,
+            })
+          ).get(row.automationId),
+          undefined,
+          'the run before the resume is not the automation’s latest run of its own',
         );
       });
 

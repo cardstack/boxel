@@ -364,12 +364,53 @@ function uncheckedKeyApprovals(retry: string): AutomationRouteError {
 
 // Key approvals as a route answers them: whether every one is there, the
 // version a confirmation approving the rest names (`confirmationOf`: the
-// version and its `callApiCalls` cap), and each operation's state.
-function serializeKeyApprovals(approvals: AutomationKeyApprovals) {
+// version and its `callApiCalls` cap), and each operation's state. The owner
+// of a share a missing approval names is shown to `caller` only as ADR 011
+// lets them see that person (`shownIdentity`), and is null otherwise.
+async function serializeKeyApprovals(
+  dbAdapter: DBAdapter,
+  caller: string,
+  approvals: AutomationKeyApprovals,
+) {
+  let shown = new Map<string, Promise<string | null>>();
+  let show = (owner: string | null) => {
+    if (owner === null) {
+      return Promise.resolve(null);
+    }
+    let found = shown.get(owner);
+    if (!found) {
+      found = shownIdentity(dbAdapter, caller, owner);
+      shown.set(owner, found);
+    }
+    return found;
+  };
   return {
     approved: approvals.approved,
     version: confirmationOf(approvals.version),
-    operations: approvals.operations,
+    operations: await Promise.all(
+      approvals.operations.map(async (operation) =>
+        operation.missing
+          ? {
+              ...operation,
+              missing: await Promise.all(
+                operation.missing.map(async (missing) =>
+                  missing.shares
+                    ? {
+                        ...missing,
+                        shares: await Promise.all(
+                          missing.shares.map(async (share) => ({
+                            ...share,
+                            owner: await show(share.owner),
+                          })),
+                        ),
+                      }
+                    : missing,
+                ),
+              ),
+            }
+          : operation,
+      ),
+    ),
   };
 }
 
@@ -582,11 +623,9 @@ async function estimateFor(
   });
 }
 
-// `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>`: what
-// switching the automation on is likely to cost a month, the monthly credit
-// cap the card sets, which a switch-on agrees to, and its key approvals
-// (`keyApprovals`): with its payer as payer once it is switched on, and with
-// the caller before. 503 while this process has no prices.
+// How many realms `GET /_automation-notices` reads at once.
+const NOTICE_REALMS_AT_ONCE = 4;
+
 // `GET /_automation-notices`: the session's own user's automation notices
 // across every realm they write directly, which the app's badges count (see
 // `automation-notices.ts`). The realms come from the user's own permission
@@ -602,12 +641,9 @@ export function handleAutomationNotices(args: CreateRoutesArgs): Handler {
         'AND write ORDER BY realm_url',
       ])) as { realm_url: string }[]
     ).map(({ realm_url }) => realm_url);
-    let data: {
-      type: typeof AUTOMATION_NOTICE_RESOURCE_TYPE;
-      id: string;
-      attributes: Record<string, unknown>;
-    }[] = [];
-    for (let realmURL of realmURLs) {
+    // Realms are read a few at a time, so a person who writes many realms
+    // directly holds a few of the database's connections, not one per realm.
+    let noticesIn = async (realmURL: string) => {
       if (
         !(await isDirectWriter(
           args.dbAdapter,
@@ -616,7 +652,7 @@ export function handleAutomationNotices(args: CreateRoutesArgs): Handler {
           args.matrixClient.serverName,
         ))
       ) {
-        continue;
+        return [];
       }
       let rows = await automationsInRealm(
         args.dbAdapter,
@@ -627,20 +663,30 @@ export function handleAutomationNotices(args: CreateRoutesArgs): Handler {
         credentialNotices: (run) =>
           automationCredentialNotices(args.dbAdapter, run),
       });
-      for (let [automationId, notice] of notices) {
-        if (notice.forViewer) {
-          data.push({
-            type: AUTOMATION_NOTICE_RESOURCE_TYPE,
-            id: args.virtualNetwork.toURLHref(automationId),
-            attributes: { realm: realmURL, ...notice },
-          });
-        }
-      }
+      return [...notices]
+        .filter(([, notice]) => notice.forViewer)
+        .map(([automationId, notice]) => ({
+          type: AUTOMATION_NOTICE_RESOURCE_TYPE,
+          id: args.virtualNetwork.toURLHref(automationId),
+          attributes: { realm: realmURL, ...notice },
+        }));
+    };
+    let data: Awaited<ReturnType<typeof noticesIn>> = [];
+    for (let i = 0; i < realmURLs.length; i += NOTICE_REALMS_AT_ONCE) {
+      let batch = await Promise.all(
+        realmURLs.slice(i, i + NOTICE_REALMS_AT_ONCE).map(noticesIn),
+      );
+      data.push(...batch.flat());
     }
     await sendJSON(ctxt, 200, { data, meta: { total: data.length } });
   });
 }
 
+// `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>`: what
+// switching the automation on is likely to cost a month, the monthly credit
+// cap the card sets, which a switch-on agrees to, and its key approvals
+// (`keyApprovals`): with its payer as payer once it is switched on, and with
+// the caller before. 503 while this process has no prices.
 export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let caller = callerOf(ctxt);
@@ -686,7 +732,13 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
           monthlyCredits: declaration.caps.monthlyCredits,
           estimate,
           ...(keyApprovals
-            ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+            ? {
+                keyApprovals: await serializeKeyApprovals(
+                  args.dbAdapter,
+                  caller,
+                  keyApprovals,
+                ),
+              }
             : {}),
         },
       },
@@ -760,7 +812,11 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
       : undefined;
     await answerChange(ctxt, args, change, caller, 201, {
       ...(estimate ? { estimate } : {}),
-      keyApprovals: serializeKeyApprovals(keyApprovals),
+      keyApprovals: await serializeKeyApprovals(
+        args.dbAdapter,
+        caller,
+        keyApprovals,
+      ),
     });
   });
 }
@@ -930,7 +986,13 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
     );
     await answerChange(ctxt, args, change, caller, 200, {
       ...(keyApprovals
-        ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+        ? {
+            keyApprovals: await serializeKeyApprovals(
+              args.dbAdapter,
+              caller,
+              keyApprovals,
+            ),
+          }
         : {}),
     });
   });

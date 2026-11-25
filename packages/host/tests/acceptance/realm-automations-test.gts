@@ -268,7 +268,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
       assert
         .dom(`${weekly} [data-test-realm-automation-glance]`)
         .hasText(
-          'Boxel paused the automation because the payer is no longer a realm administrator.',
+          'Boxel paused the automation because the payer’s account can no longer pay for runs.',
         );
     });
 

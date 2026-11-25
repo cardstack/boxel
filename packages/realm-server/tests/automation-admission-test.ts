@@ -905,6 +905,20 @@ module(basename(import.meta.filename), function (hooks) {
         }),
     });
     await assertRefused(assert, run, result, calls, 'binding-not-approved');
+    let [line] = await admissionLines(run.id);
+    assert.deepEqual(
+      {
+        operation: line?.data?.operation,
+        targetModule: line?.data?.targetModule,
+        targetName: line?.data?.targetName,
+      },
+      {
+        operation: 'list',
+        targetModule: INBOX.module,
+        targetName: INBOX.name,
+      },
+      'the admission line names the operation refused and the type it is declared on, which a notice links its fix to',
+    );
     assert.strictEqual(
       (await getAutomation(dbAdapter, automationId(NEEDS_APPROVAL)))?.state,
       'active',

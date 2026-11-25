@@ -15,23 +15,26 @@
 //    the person who did it already knows.
 // 2. The row waits for key approval. When the automation's latest run of its
 //    own was refused at admission for a key approval (`binding-not-approved`,
-//    `binding-needs-reapproval`, `share-suspended`, `key-approval-ended`), the
-//    notice carries that code and the operation refused, so it can link to the
-//    secure window's approve or review-changes page for that operation.
-//    Otherwise the automation waits from its switch-on, or from an edit to its
-//    script, triggers, params or operations.
+//    `binding-needs-reapproval`, `share-suspended`, `key-approval-ended`) and
+//    that refusal is what put the row in this wait, the notice carries that
+//    code and the operation refused. Otherwise the automation waits from its
+//    switch-on, or from an edit to its script, triggers, params or operations.
 // 3. The row waits for credits.
 // 4. The automation's latest run of its own ended on a rejected credential and
 //    the credential is still broken (`CredentialNotices`, which asks the key,
 //    its OAuth client and the share as they are now).
 //
+// "The latest run of its own" is read from the current switch-on or resume
+// on, so a run from before a remove and a later switch-on, or before a
+// resume, never raises a notice.
+//
 // A notice is for some of the realm's direct writers, never anyone else (ADR
-// 011): the payer for most, the realm's other direct writers when the payer
-// lost access (someone else must resume the automation and become the payer),
-// every direct writer for a webhook whose owner lost access and for a broken
-// share, and the OAuth client's owner for a broken client, when that owner
-// writes the realm directly. `forViewer` says whether the viewer is one of
-// them; the console and the badges count only those.
+// 011): the payer for most; every direct writer when the payer's account can
+// no longer pay (any of them resumes the automation and becomes the payer),
+// for a webhook whose owner lost access, and for a broken share; and the
+// OAuth client's owner for a broken client, when that owner writes the realm
+// directly. `forViewer` says whether the viewer is one of them; the console
+// and the badges count only those.
 
 import {
   readAutomationFailures,
@@ -85,7 +88,6 @@ export type AutomationNoticeReason =
 // Who a notice is for, among the realm's direct writers.
 export type AutomationNoticeAudience =
   | 'payer'
-  | 'other-direct-writers'
   | 'direct-writers'
   | 'client-owner';
 
@@ -227,8 +229,10 @@ async function noticeFor(
           credential: fix?.fix ?? null,
         };
       }
+      // Set when the payer lost direct write, or the payer's sessions were
+      // revoked, or the account can't sign in: whoever still writes the realm
+      // directly, the payer included, can resume it and pay.
       case 'payer-lost-access':
-        return paused(reason, 'other-direct-writers', !forPayer);
       case 'webhook-owner-lost-access':
         return paused(reason, 'direct-writers', true);
       default:
@@ -236,8 +240,17 @@ async function noticeFor(
     }
   }
   if (row.state === 'waiting-for-key-approval') {
+    // A refusal that moved the row into this wait finished after the move,
+    // since admission moves the row before the run ends. One that finished
+    // earlier belongs to a wait that has ended since, and names an operation
+    // that may be approved by now.
     let refused =
-      last && isKeyApprovalNoticeReason(last.reason) ? last : undefined;
+      last &&
+      isKeyApprovalNoticeReason(last.reason) &&
+      last.finishedAt !== null &&
+      Date.parse(last.finishedAt) >= Date.parse(row.updatedAt)
+        ? last
+        : undefined;
     let reason: AutomationNoticeReason = refused
       ? (refused.reason as AutomationNoticeReason)
       : 'waiting-for-key-approval';
@@ -356,8 +369,9 @@ interface LatestRun {
   operation: AutomationNoticeOperation | null;
 }
 
-// Each automation's latest run of its own that ended complete or as an error:
-// a run its triggers started or a batch's follow-up, never a Preview or a Run
+// Each automation's latest run of its own that ended complete or as an error,
+// made since the automation's switch-on or last resume (`scheduled_since`): a
+// run its triggers started or a batch's follow-up, never a Preview or a Run
 // now, which act as the person who clicked. A canceled run is left out, since
 // a pause cancels the runs after the one that tells why it paused. Each comes
 // with the operation its admission refused, when its `admission` log line
@@ -380,6 +394,8 @@ async function readLatestOwnRuns(
     'FROM automation_runs WHERE automation_id = ids.automation_id',
     "AND finished_at IS NOT NULL AND state IN ('complete', 'error')",
     "AND NOT dry_run AND trigger <> 'manual'",
+    'AND created_at >= (SELECT scheduled_since FROM automations a',
+    'WHERE a.automation_id = ids.automation_id)',
     'ORDER BY finished_at DESC, id LIMIT 1',
     ') r LEFT JOIN LATERAL (',
     'SELECT data FROM automation_run_log',

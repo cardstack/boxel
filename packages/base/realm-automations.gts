@@ -177,7 +177,7 @@ const PAUSED_BECAUSE: Record<string, string> = {
   'webhook-owner-lost-access':
     'Boxel paused the automation because the person who made a trigger’s incoming webhook is no longer a realm administrator.',
   'payer-lost-access':
-    'Boxel paused the automation because the payer is no longer a realm administrator.',
+    'Boxel paused the automation because the payer’s account can no longer pay for runs.',
   'realm-archived':
     'Boxel paused the automation because someone archived this workspace.',
   'repeated-failures':
@@ -208,68 +208,85 @@ export function automationNoticeText(
   notice: AutomationNotice,
   name: string,
 ): AutomationNoticeText {
+  // A pause reads as the console's own sentence for it, naming the
+  // automation.
+  let paused = (reason: string) =>
+    PAUSED_BECAUSE[reason]!.replace(
+      'Boxel paused the automation',
+      `Boxel paused ${name}`,
+    );
   let operation = notice.operation
     ? `the operation “${notice.operation.name}”`
-    : 'an operation the automation declares';
+    : undefined;
   switch (notice.reason) {
     case 'repeated-failures':
       return {
-        happened: `Boxel paused ${name} after the automation’s runs failed several times in a row.`,
-        fix: 'The payer fixes what the runs fail on, checks the fix with a Preview, and resumes the automation.',
+        happened: paused(notice.reason),
+        fix: notice.credential
+          ? credentialFix(notice)
+          : 'The payer fixes what the runs fail on, checks the fix with a Preview, and resumes the automation.',
       };
     case 'payer-lost-access':
       return {
-        happened: `Boxel paused ${name} because the payer is no longer a realm administrator.`,
-        fix: 'Another realm administrator resumes the automation and becomes the payer.',
+        happened: paused(notice.reason),
+        fix: 'A realm administrator resumes the automation and becomes the payer.',
       };
     case 'caps-raised':
       return {
-        happened: `Boxel paused ${name} because someone raised a limit above what the payer agreed to pay for.`,
+        happened: paused(notice.reason),
         fix: 'The payer resumes the automation to agree to the new limits.',
       };
     case 'batched-ai-enabled':
       return {
-        happened: `Boxel paused ${name} because someone turned on batched AI after the payer agreed to the limits.`,
+        happened: paused(notice.reason),
         fix: 'The payer resumes the automation to agree to batched AI.',
       };
     case 'webhook-changed':
       return {
-        happened: `Boxel paused ${name} because a trigger names an incoming webhook the payer didn’t agree to.`,
+        happened: paused(notice.reason),
         fix: 'The payer resumes the automation to agree to the new webhook.',
       };
     case 'webhook-owner-lost-access':
       return {
-        happened: `Boxel paused ${name} because the person who made a trigger’s incoming webhook is no longer a realm administrator.`,
-        fix: 'A realm administrator points the trigger at one of this workspace’s webhooks and resumes the automation.',
+        happened: paused(notice.reason),
+        fix: 'A realm administrator points the trigger at another webhook of the workspace, and resumes the automation.',
       };
     case 'invalid-declaration':
       return {
-        happened: `Boxel paused ${name} because the automation’s settings have problems.`,
+        happened: paused(notice.reason),
         fix: 'The payer fixes each problem on the automation, and Boxel resumes the automation.',
       };
     case 'waiting-for-key-approval':
       return {
-        happened: `Boxel holds every run of ${name} until each key the automation uses is approved for the automation.`,
+        happened: `Boxel holds every run of ${name} until each key’s owner approves the automation.`,
         fix: 'Each key’s owner approves the automation in the secure window, and Boxel runs the automation once the last approval lands.',
       };
     case 'binding-not-approved':
       return {
-        happened: `Boxel didn’t start a run of ${name}: nobody approved ${operation} for the automation.`,
-        fix: 'The payer approves the operation in the secure window, and Boxel runs the automation once the approval lands.',
+        happened: operation
+          ? `Boxel didn’t start a run of ${name} because nobody approved ${operation} for the automation.`
+          : `Boxel didn’t start a run of ${name} because nobody approved one of the automation’s operations for the automation.`,
+        fix: 'The payer approves the automation in the secure window, and Boxel runs the automation once the approval lands.',
       };
     case 'binding-needs-reapproval':
       return {
-        happened: `Boxel didn’t start a run of ${name}: the request ${operation} makes changed since the payer approved the operation.`,
-        fix: 'The payer reviews the changes and approves the operation again in the secure window.',
+        happened: operation
+          ? `Boxel didn’t start a run of ${name} because the request ${operation} makes changed after the payer approved the operation.`
+          : `Boxel didn’t start a run of ${name} because the request one of the automation’s operations makes changed after the payer approved the operation.`,
+        fix: 'The payer reviews the change and approves the automation again in the secure window.',
       };
     case 'share-suspended':
       return {
-        happened: `Boxel didn’t start a run of ${name}: the workspace’s shared key ${operation} uses is suspended.`,
+        happened: operation
+          ? `Boxel didn’t start a run of ${name} because Boxel suspended the workspace’s shared key that ${operation} uses.`
+          : `Boxel didn’t start a run of ${name} because Boxel suspended a shared key of the workspace that the automation uses.`,
         fix: 'A realm administrator resumes the share, or the key’s owner swaps another key into the share.',
       };
     case 'key-approval-ended':
       return {
-        happened: `Boxel didn’t start a run of ${name}: an approval ${operation} needs ended.`,
+        happened: operation
+          ? `Boxel didn’t start a run of ${name} because an approval of a key that ${operation} needs ended.`
+          : `Boxel didn’t start a run of ${name} because an approval of a key that the automation needs ended.`,
         fix: 'The key’s owner approves the automation again in the secure window.',
       };
     case 'waiting-for-credits':
@@ -278,28 +295,37 @@ export function automationNoticeText(
         fix: 'The payer adds credits, and Boxel runs the automation at the next scheduled time.',
       };
     case 'credential-rejected':
-      switch (notice.credential?.kind) {
-        case 'connect-again':
-          return {
-            happened: `A run of ${name} ended because the app the payer’s connection signed in through no longer exists.`,
-            fix: 'The payer connects the account again through an app that exists.',
-          };
-        case 'fix-client':
-          return {
-            happened: `A run of ${name} ended because the app the connection signs in through is broken.`,
-            fix: 'The app’s owner replaces the app’s secret.',
-          };
-        case 'fix-share':
-          return {
-            happened: `A run of ${name} ended because the service refused the workspace’s shared key.`,
-            fix: 'A realm administrator resumes the share or swaps a working key into the share.',
-          };
-        default:
-          return {
-            happened: `A run of ${name} ended because the service refused the payer’s connection.`,
-            fix: 'The payer reconnects the account in the secure window.',
-          };
-      }
+      return {
+        happened: credentialHappened(notice, name),
+        fix: credentialFix(notice),
+      };
+  }
+}
+
+function credentialHappened(notice: AutomationNotice, name: string): string {
+  switch (notice.credential?.kind) {
+    case 'connect-again':
+      return `A run of ${name} ended because the app that the payer’s connection signed in through no longer exists.`;
+    case 'fix-client':
+      return `A run of ${name} ended because the app that the connection signs in through is broken.`;
+    case 'fix-share':
+      return `A run of ${name} ended because the service refused the workspace’s shared key.`;
+    default:
+      return `A run of ${name} ended because the service refused the payer’s connection.`;
+  }
+}
+
+// Who fixes a rejected credential, and how.
+function credentialFix(notice: AutomationNotice): string {
+  switch (notice.credential?.kind) {
+    case 'connect-again':
+      return 'The payer connects the account again through an app that exists.';
+    case 'fix-client':
+      return 'The app’s owner replaces the app’s secret.';
+    case 'fix-share':
+      return 'A realm administrator resumes the share or swaps a working key into the share.';
+    default:
+      return 'The payer reconnects the account in the secure window.';
   }
 }
 
