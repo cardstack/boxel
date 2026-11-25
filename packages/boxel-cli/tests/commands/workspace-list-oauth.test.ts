@@ -30,6 +30,7 @@ interface Recorded {
 function realmServer(
   options: {
     listStatus?: number;
+    editStatus?: number;
     realms?: string[];
     createStatus?: number;
   } = {},
@@ -45,6 +46,23 @@ function realmServer(
         path: url.pathname,
         authorization: new Headers(init.headers).get('Authorization'),
       });
+      if (url.pathname === '/_user-realms' && method === 'PATCH') {
+        if (options.editStatus && options.editStatus !== 200) {
+          return new Response('{"errors":[]}', { status: options.editStatus });
+        }
+        let { add = [], remove = [] } = JSON.parse(String(init.body)).data
+          .attributes as { add?: string[]; remove?: string[] };
+        let added = add.filter((r) => !realms.includes(r));
+        let removed = remove.filter((r) => realms.includes(r));
+        realms = [...realms.filter((r) => !remove.includes(r)), ...added];
+        return Response.json({
+          data: {
+            type: 'user-realms-edit',
+            id: USER,
+            attributes: { added, removed },
+          },
+        });
+      }
       if (url.pathname === '/_user-realms') {
         if (options.listStatus && options.listStatus !== 200) {
           return new Response('{"errors":[]}', { status: options.listStatus });
@@ -139,13 +157,32 @@ describe('the workspace list on a profile signed in with OAuth', () => {
     );
   });
 
-  it('refuses to edit the list itself, which the realm server keeps', async () => {
+  it('edits the list through the realm server', async () => {
+    let server = serve();
+
+    await pm.addToUserRealms(CREATED);
+    await expect(pm.removeFromUserRealms(MINE)).resolves.toBe(true);
+
+    expect(server.realms()).toEqual([CREATED]);
+    expect(server.requests.map((r) => `${r.method} ${r.path}`)).toEqual([
+      'PATCH /_user-realms',
+      'PATCH /_user-realms',
+    ]);
+    expect(
+      server.requests.every((r) => r.authorization === `Bearer ${ACCESS}`),
+    ).toBe(true);
+  });
+
+  it("fails an edit the realm server couldn't make, having no Matrix token to make it with", async () => {
+    let server = serve({ editStatus: 503 });
+
     await expect(pm.addToUserRealms(CREATED)).rejects.toThrow(
-      /signed in with OAuth: the realm server keeps its workspace list/,
+      "The realm server couldn't update the workspace list",
     );
     await expect(pm.removeFromUserRealms(MINE)).rejects.toThrow(
-      /signed in with OAuth/,
+      "The realm server couldn't update the workspace list",
     );
+    expect(server.requests.every((r) => r.path === '/_user-realms')).toBe(true);
   });
 
   it('lists the workspaces, with the archived ones when asked', async () => {

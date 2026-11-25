@@ -3473,6 +3473,78 @@ module('Acceptance | automation view', function (hooks) {
           .doesNotExist('the screen closes');
       });
 
+      test('a secure window the browser blocks: the screen says so and offers to open the window', async function (assert) {
+        let stub = stubWindowOpen(windowMock);
+        stub.state.blocked = true;
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([PAYER_MISSING]),
+        });
+        postAnswer = {
+          status: 201,
+          body: {
+            data: { type: 'automation' },
+            meta: { keyApprovals: keyApprovals([PAYER_MISSING]) },
+          },
+        };
+        await openScreen(OFF);
+        await click('[data-test-automation-switch-on-confirm]');
+        await waitFor('[data-test-automation-switch-on-approve-keys]', {
+          timeout: 10000,
+        });
+        await settled();
+        assert
+          .dom('[data-test-automation-switch-on-approve-keys]')
+          .includesText('Open the secure window')
+          .includesText(
+            'The browser kept Boxel from opening the secure window.',
+          );
+        stub.state.blocked = false;
+        await click('[data-test-automation-switch-on-reopen-window]');
+        await waitUntil(() => stub.calls.length === 2, { timeout: 10000 });
+        assert
+          .dom('[data-test-automation-switch-on-approve-keys]')
+          .includesText('Boxel opened the secure window');
+      });
+
+      test('a suspended share waits on the share’s owner, and never opens the secure window for the payer', async function (assert) {
+        let { calls } = stubWindowOpen(windowMock);
+        let suspended = {
+          ...PAYER_MISSING,
+          missing: [
+            {
+              slot: 'apiKey',
+              canApprove: 'payer',
+              shares: [
+                { ...SHARE, owner: '@testuser:localhost', suspended: true },
+              ],
+            },
+          ],
+        };
+        estimateAnswer = estimate({ keyApprovals: keyApprovals([suspended]) });
+        postAnswer = {
+          status: 201,
+          body: {
+            data: { type: 'automation' },
+            meta: { keyApprovals: keyApprovals([suspended]) },
+          },
+        };
+        await openScreen(OFF);
+        assert.deepEqual(keyStates(), ['Share suspended']);
+        assert
+          .dom('[data-test-automation-switch-on-key-detail]')
+          .hasText(
+            '@testuser:localhost resumes the share Team GitHub before anyone approves the call.',
+          );
+        assert
+          .dom('[data-test-automation-switch-on-payer-approves]')
+          .doesNotExist();
+        await click('[data-test-automation-switch-on-confirm]');
+        await waitFor('[data-test-automation-switch-on-waiting]', {
+          timeout: 10000,
+        });
+        assert.deepEqual(calls, [], 'no secure window opens');
+      });
+
       test('an approval another person gives: the screen names the key and its owner, and the automation switches on waiting with no secure window', async function (assert) {
         let { calls } = stubWindowOpen(windowMock);
         estimateAnswer = estimate({

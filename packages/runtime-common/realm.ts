@@ -1973,6 +1973,20 @@ export async function notifyRealmIndexUpdated(
   }
 }
 
+// The realm route the worker asks, once a from-scratch index pass over the
+// realm has landed and its index hook has synced the realm's automations, to
+// check every automation's key approvals in full
+// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`), which the worker
+// can't do, as it reads no operation definitions. A `POST` with no body,
+// answered 202 once the check has started, without waiting for it: the pass's
+// job holds the realm's exclusive index lane, so its writers would wait
+// behind the check's definition lookups. `Realm.incrementalIndexing()` holds
+// the check until it settles. Like every `POST`, it takes a caller the realm
+// ACL grants write, which includes the realm's own user (the worker asks as
+// it); it doesn't ask `isDirectWriter`, which counts no bot account.
+export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
+  '/_follow-automation-key-approvals';
+
 // Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
 // peer realm-server replicas drop every cached path for this realm. Use
 // directly when the caller has a DBAdapter + realm URL but isn't keeping
@@ -4140,6 +4154,15 @@ export class Realm {
         RUN_STATE_PATH,
         SupportedMimeType.JSONAPI,
         this.runState.bind(this),
+        ACL_ONLY,
+      )
+      // The worker's request, after a from-scratch pass over this realm, to
+      // check its automations' key approvals in full. Answered on the realm
+      // ACL alone: it runs only what the realm's own follow would.
+      .post(
+        FOLLOW_AUTOMATION_KEY_APPROVALS_PATH,
+        SupportedMimeType.JSONAPI,
+        this.followAutomationKeyApprovalsOnRequest.bind(this),
         ACL_ONLY,
       )
       // The operations envelope, under the media type that carries its
@@ -15564,6 +15587,68 @@ export class Realm {
         `couldn't follow the key approvals of the automations an index pass touched in ${this.url}: ${e?.message ?? e}`,
       );
     }
+  }
+
+  // Once a from-scratch pass over this realm has landed, follows the key
+  // approvals of every automation in the realm that isn't paused, as an
+  // incremental pass this realm starts does for the automations it touched.
+  // A from-scratch pass rebuilds the whole realm, so it can be the first to
+  // index an edit made while no realm server watched the files. The worker
+  // that ran the pass asks for this whoever started it
+  // (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`), and the request mounts the realm
+  // on whichever realm server it reaches, so a realm no server had mounted is
+  // followed too. Each automation's follow locks its row, so a follow racing
+  // another one of the same automation takes its turn and finds the row in
+  // step.
+  //
+  // It reports what it moved, as the worker's index hook in the same pass
+  // does: a from-scratch pass that announces nothing (a boot's reindex of an
+  // existing index) withholds only the index events that reset open tabs'
+  // loaders. No read it makes waits on this realm's indexing: a definition
+  // lookup reads a realm this server mounts as the prerender user, whose
+  // requests skip the read-your-writes gate. Never rejects: a failure is
+  // logged.
+  async followAutomationKeyApprovalsAfterFromScratchPass(): Promise<void> {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !this.#callApi?.checkAutomationKeyApprovals
+    ) {
+      return;
+    }
+    try {
+      let automations = (
+        await automationsInRealm(
+          this.#dbAdapter,
+          ri(this.#virtualNetwork.unresolveURL(this.url)),
+        )
+      ).filter(({ state }) => state !== 'paused');
+      if (automations.length === 0) {
+        return;
+      }
+      await this.followAutomationKeyApprovals(
+        automations.map(({ automationId }) => automationId),
+      );
+    } catch (e: any) {
+      this.#log.warn(
+        `couldn't follow the key approvals of the automations in ${this.url} after a from-scratch index pass: ${e?.message ?? e}`,
+      );
+    }
+  }
+
+  private async followAutomationKeyApprovalsOnRequest(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let tracked = this.followAutomationKeyApprovalsAfterFromScratchPass();
+    this.#automationFollowsAfterPass.add(tracked);
+    void tracked.finally(() =>
+      this.#automationFollowsAfterPass.delete(tracked),
+    );
+    return createResponse({
+      body: null,
+      init: { status: 202 },
+      requestContext,
+    });
   }
 
   // The automation's version with `payer` as its payer, its card read as
