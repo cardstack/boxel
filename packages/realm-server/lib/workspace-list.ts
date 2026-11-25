@@ -30,11 +30,16 @@ import {
 
 const log = logger('realm-server:workspace-list');
 
-export interface WorkspaceListDeps {
-  dbAdapter: DBAdapter;
+// What reading a list needs. Editing one also takes the per-user lock, which
+// lives in the database.
+export interface WorkspaceListReadDeps {
   matrixClient: MatrixClient;
   matrixAdminUsername?: string;
   matrixAdminPassword?: string;
+}
+
+export interface WorkspaceListDeps extends WorkspaceListReadDeps {
+  dbAdapter: DBAdapter;
 }
 
 // A step that may fail only for a while (the network, a 5xx, a 429) is tried
@@ -214,7 +219,7 @@ export async function editWorkspaceList(
 // edit that list, and a read would show one that creates and deletes leave
 // as it was.
 export async function readWorkspaceList(
-  deps: WorkspaceListDeps,
+  deps: WorkspaceListReadDeps,
   user: string,
 ): Promise<string[] | undefined> {
   if (!keepsAccountOf(deps, user)) {
@@ -235,7 +240,7 @@ export async function readWorkspaceList(
 // The user's display name: null when they have none, undefined when this
 // server has no account for them.
 export async function readDisplayName(
-  deps: WorkspaceListDeps,
+  deps: WorkspaceListReadDeps,
   user: string,
 ): Promise<string | null | undefined> {
   if (!keepsAccountOf(deps, user)) {
@@ -344,19 +349,19 @@ export async function withWorkspaceListLock<T>(
   return lock ? await lock(user, run, { deadline }) : await run();
 }
 
-function keepsAccountOf(deps: WorkspaceListDeps, user: string): boolean {
+function keepsAccountOf(deps: WorkspaceListReadDeps, user: string): boolean {
   return isUserOfMatrixServer(user, deps.matrixClient.serverName);
 }
 
 // The admin's Matrix user id. Its username may be a localpart or a full id,
 // as the Matrix login it signs in with accepts either.
-function adminUserId(deps: WorkspaceListDeps, admin: MatrixAdmin): string {
+function adminUserId(deps: WorkspaceListReadDeps, admin: MatrixAdmin): string {
   return admin.adminUsername.startsWith('@')
     ? admin.adminUsername
     : `@${admin.adminUsername}:${deps.matrixClient.serverName}`;
 }
 
-function matrixAdmin(deps: WorkspaceListDeps): MatrixAdmin {
+function matrixAdmin(deps: WorkspaceListReadDeps): MatrixAdmin {
   let creds = resolveAdminCreds(
     deps.matrixClient.matrixURL,
     deps.matrixAdminUsername,
