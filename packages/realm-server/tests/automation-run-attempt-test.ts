@@ -374,6 +374,11 @@ module(basename(import.meta.filename), function (hooks) {
       started + 300_000,
       "the tab is told when the run's time limit passes, counted from its start",
     );
+    assert.strictEqual(
+      input.batchDeadlineMinutes,
+      60,
+      "the tab is told the card's batch deadline, for a batch whose script sets none",
+    );
     assert.deepEqual(input.automation.trigger, {
       label: 'manual',
       kind: 'manual',

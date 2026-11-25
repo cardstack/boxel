@@ -10,6 +10,11 @@ import {
   AutomationRunStoppedError,
   REDACTED,
 } from '@cardstack/host/lib/realm-runner/automation';
+import {
+  RESOLVE_LLM,
+  resolveChatBody,
+  resolveRequest,
+} from '@cardstack/host/lib/realm-runner/research';
 import runRealmCode, {
   RealmCallFailure,
   RealmScriptError,
@@ -32,6 +37,8 @@ import RunRealmCodeTool, {
   clickRequiredCallsIn,
   runAutomationScript,
   type AutomationRunOptions,
+  type ResolveBatchSubmit,
+  type SubmitResolveBatch,
 } from '@cardstack/host/tools/run-realm-code';
 
 import {
@@ -91,6 +98,7 @@ const SURFACE_SCRIPT = `
     for (const [key, member] of Object.entries(value)) {
       if (typeof member === 'function') {
         names.push(prefix + key);
+        walk(member, prefix + key + '.');
       } else if (key !== 'current' || prefix !== '') {
         walk(member, prefix + key + '.');
       }
@@ -797,6 +805,177 @@ return 'done';`);
     assert.strictEqual(last.line, undefined, 'a time limit names no line');
     assert.strictEqual(last.stack, undefined);
   });
+  // An automation run whose batch submits are answered by `submit`, which
+  // records each batch it is sent.
+  function runWithBatches(
+    code: string,
+    {
+      submit = async () => ({ id: 'batch_1' }),
+      ...overrides
+    }: Partial<AutomationRunOptions> & {
+      submit?: SubmitResolveBatch;
+    } = {},
+  ) {
+    let submitted: ResolveBatchSubmit[] = [];
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let io = {
+      ...tool.automationRealmIO(testRealmURL),
+      resolveBatch: async (batch: ResolveBatchSubmit, signal: AbortSignal) => {
+        submitted.push(batch);
+        return await submit(batch, signal);
+      },
+    };
+    return { submitted, ...run(code, { io, ...overrides }) };
+  }
+
+  const CLASSIFY = {
+    instruction: 'Classify the ticket',
+    outputSchema: {
+      type: 'object',
+      properties: { label: { type: 'string' } },
+      required: ['label'],
+      additionalProperties: false,
+    },
+  };
+
+  test('realm.resolve.batch submits the requests as one batch, starts its milestone, and the script carries on to the end of the run', async function (assert) {
+    let { submitted, events, done } = runWithBatches(`
+      const batch = await realm.resolve.batch(
+        [
+          { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } },
+          { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'two' } },
+        ],
+        { by: new Date(Date.now() + 2 * 60 * 60 * 1000), milestone: 'classify tickets' },
+      );
+      realm.progress.task('saved the cursor');
+      return batch;
+    `);
+    let result = JSON.parse((await done).scriptResult);
+
+    assert.strictEqual(submitted.length, 1, 'one batch is submitted');
+    let [batch] = submitted;
+    assert.strictEqual(batch.model, RESOLVE_LLM);
+    assert.deepEqual(
+      batch.requests.map((request) => request.customId),
+      ['0', '1'],
+      'each request is keyed by its place in the list',
+    );
+    assert.deepEqual(
+      batch.requests[1].body,
+      resolveChatBody(
+        resolveRequest({ ...CLASSIFY, input: { ticket: 'two' } }),
+      ),
+      'each request is the chat completion realm.resolve would send',
+    );
+    let twoHours = 2 * 60 * 60;
+    let byTheScriptsDeadline =
+      batch.deadlineSeconds > twoHours - 30 &&
+      batch.deadlineSeconds <= twoHours;
+    assert.true(
+      byTheScriptsDeadline,
+      `the deadline is the script's \`by\` (${batch.deadlineSeconds}s)`,
+    );
+    assert.strictEqual(result.batchId, 'batch_1');
+    assert.strictEqual(result.requests, 2);
+    assert.strictEqual(result.milestone, 'classify tickets');
+    assert.false(Number.isNaN(Date.parse(result.deadline)));
+    assert.deepEqual(
+      events
+        .filter((event) => event.kind === 'milestone' || event.kind === 'task')
+        .map((event) => (event.kind === 'milestone' ? event.name : event.kind)),
+      ['classify tickets', 'task', 'task'],
+      'the batch starts its milestone, reports its submit, and the script may report tasks in it',
+    );
+  });
+
+  test("a batch with no `by` takes the card's batch deadline, and with no milestone is named batched AI", async function (assert) {
+    let { submitted, events, done } = runWithBatches(
+      `return await realm.resolve.batch([
+        { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } },
+      ]);`,
+      { batchDeadlineMinutes: 90 },
+    );
+    let result = JSON.parse((await done).scriptResult);
+
+    assert.strictEqual(submitted[0].deadlineSeconds, 90 * 60);
+    assert.strictEqual(result.milestone, 'batched AI');
+    assert.true(
+      events.some(
+        (event) => event.kind === 'milestone' && event.name === 'batched AI',
+      ),
+    );
+  });
+
+  test('a batch whose `by` is more than 24 hours away, or already past, is refused before anything is sent', async function (assert) {
+    let { submitted, done } = runWithBatches(`
+      const request = { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } };
+      const results = {};
+      for (const [name, by] of [
+        ['late', new Date(Date.now() + 25 * 60 * 60 * 1000)],
+        ['past', new Date(Date.now() - 60 * 1000)],
+        ['not a time', 'tomorrow'],
+      ]) {
+        try {
+          await realm.resolve.batch([request], { by });
+          results[name] = 'submitted';
+        } catch (error) {
+          results[name] = error.message;
+        }
+      }
+      return results;
+    `);
+    let results = JSON.parse((await done).scriptResult);
+
+    assert.true(/at most 24 hours/.test(results.late), results.late);
+    assert.true(/at most 24 hours/.test(results.past), results.past);
+    assert.true(/must be a time/.test(results['not a time']));
+    assert.strictEqual(submitted.length, 0, 'nothing was submitted');
+  });
+
+  test('a run submits at most one batch', async function (assert) {
+    let { submitted, done } = runWithBatches(`
+      const request = { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } };
+      await realm.resolve.batch([request]);
+      try {
+        await realm.resolve.batch([request]);
+        return 'submitted twice';
+      } catch (error) {
+        return error.message;
+      }
+    `);
+    let message = JSON.parse((await done).scriptResult);
+
+    assert.true(/at most one batch/.test(message), message);
+    assert.strictEqual(submitted.length, 1);
+  });
+
+  test("a batch the realm server refuses is the call's error in the script", async function (assert) {
+    let { done } = runWithBatches(
+      `return await realm.resolve.batch([
+        { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } },
+      ]);`,
+      {
+        submit: async () => {
+          throw new Error(
+            "realm.resolve.batch was refused: 403 - This automation hasn't turned on batched AI, so its runs can't submit batches",
+          );
+        },
+      },
+    );
+
+    await assert.rejects(done, /hasn't turned on batched AI/);
+  });
+
+  test('a run whose tab holds no run token to submit with refuses realm.resolve.batch', async function (assert) {
+    let { done } = run(
+      `return await realm.resolve.batch([
+        { ...${JSON.stringify(CLASSIFY)}, input: { ticket: 'one' } },
+      ]);`,
+    );
+
+    await assert.rejects(done, /needs an automation run's token/);
+  });
+
   test("the progress sink is flushed before each call the realm server logs, so the run's log keeps one order", async function (assert) {
     let order: string[] = [];
     let { done } = run(

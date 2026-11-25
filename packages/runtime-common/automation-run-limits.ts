@@ -212,8 +212,9 @@ export function runCapReached(cap: string): OperationError {
   };
 }
 
-// Counts one call of a run against its cap on `counter`. A call past the cap
-// ends the run, which `reportRunChange` is told, and is refused with
+// Counts one call of a run against its cap on `counter`, or `calls` calls
+// made together, such as a batch's requests. A call past the cap ends the
+// run, which `reportRunChange` is told, and is refused with
 // `runCapReached`; a run that is no longer running is refused as one.
 export async function countRunCall(
   dbAdapter: DBAdapter,
@@ -221,6 +222,7 @@ export async function countRunCall(
   counter: AutomationRunCallCounter,
   cap: number,
   reportRunChange?: ReportRunChange,
+  calls = 1,
 ): Promise<{ ok: true } | { ok: false; error: OperationError }> {
   let count = await countAutomationRunCall(
     dbAdapter,
@@ -228,6 +230,7 @@ export async function countRunCall(
     run.attempt,
     counter,
     cap,
+    calls,
   );
   switch (count.kind) {
     case 'counted':

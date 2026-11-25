@@ -3,6 +3,7 @@ import {
   isDirectWriterLocked,
   param,
   query,
+  type ChangedAutomation,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { Querier } from '@cardstack/runtime-common/expression';
@@ -15,6 +16,7 @@ import {
   UserKeyError,
 } from './user-keys.ts';
 import { moveShareBindingsIn } from './key-bindings.ts';
+import { waitForKeyApprovalOfBindingsIn } from './automation-key-approval-records.ts';
 import { isUUID, namedToViewer } from './named-users.ts';
 
 export { isUUID };
@@ -450,16 +452,26 @@ export async function shareKey(
   });
 }
 
+// The share's owner removes it. Its bindings, and their automation approvals,
+// go with it (`key_bindings.share_id` cascades), so each automation they
+// served moves to waiting for key approval first. Answers the automations the
+// ended approvals served.
 export async function unshareKey(
   dbAdapter: DBAdapter,
   { user, shareId }: { user: string; shareId: string },
-): Promise<void> {
-  await dbAdapter.withTransaction(async (txQuery) => {
+): Promise<ChangedAutomation[]> {
+  return await dbAdapter.withTransaction(async (txQuery) => {
     let { row } = await lockVisibleShare(txQuery, user, shareId);
     if (row.owner !== user) {
       throw new UserKeyError(403, 'only its owner unshares a share');
     }
+    let affected = await waitForKeyApprovalOfBindingsIn(txQuery, [
+      'SELECT id FROM key_bindings WHERE share_id =',
+      param(shareId),
+      '::uuid',
+    ]);
     await txQuery([`DELETE FROM key_shares WHERE id = `, param(shareId)]);
+    return affected;
   });
 }
 
@@ -566,7 +578,13 @@ export async function swapKeyIntoShare(
     // knows it opens nothing to them.
     opensToAnonymous?: (realmURL: URL) => Promise<boolean>;
   },
-): Promise<{ share: KeyShare; reapprovedBindings: string[] }> {
+): Promise<{
+  share: KeyShare;
+  reapprovedBindings: string[];
+  // The automations whose approvals of the share's bindings ended with the
+  // swap.
+  affected: ChangedAutomation[];
+}> {
   if (keyId === undefined || keyId === null) {
     throw new UserKeyError(400, 'a swap names the key it puts in');
   }
@@ -632,13 +650,17 @@ export async function swapKeyIntoShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    let reapprovedBindings = await moveShareBindingsIn(txQuery, keyring, {
+    let { moved, affected } = await moveShareBindingsIn(txQuery, keyring, {
       shareId,
       keyId,
       owner: user,
       via,
     });
-    return { share: toShare(updated, { withKey: true }), reapprovedBindings };
+    return {
+      share: toShare(updated, { withKey: true }),
+      reapprovedBindings: moved,
+      affected,
+    };
   });
 }
 

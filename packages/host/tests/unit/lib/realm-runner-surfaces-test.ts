@@ -25,8 +25,8 @@ import {
 // What an automation run may reach (ADR 025 §1.4): its own realm's reads,
 // writes the realm server stages for the one batch the run commits, card
 // operations (a `callApi` is the run's only way to an outside API), the
-// `resolve` model call, BXL transforms in a worker that touch nothing
-// outside it, and its own progress and console lines.
+// `resolve` model call and its batch, BXL transforms in a worker that
+// touch nothing outside it, and its own progress and console lines.
 const AUTOMATION_MAY_REACH = new Set<RealmRunnerMethodReach>([
   'realm-read',
   'realm-write',
@@ -65,8 +65,14 @@ module('Unit | Lib | realm-runner surfaces', function () {
       'progress.plan',
       'progress.task',
       'resolve',
+      'resolve.batch',
       'transform',
     ]);
+  });
+
+  test('realm.resolve.batch is on the automation surface only, since a person in a chat is waiting for an answer', function (assert) {
+    assert.true(AUTOMATION_METHODS.has('resolve.batch'));
+    assert.false(INTERACTIVE_METHODS.has('resolve.batch'));
   });
 
   test('no automation method writes outside the final batch, reaches the network another way, or touches the UI or a room', function (assert) {
