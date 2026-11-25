@@ -26,6 +26,8 @@ interface BrowserStubOptions {
   // Gate that every `browser.createBrowserContext` call awaits. Tests
   // toggle this to make standby refill arbitrarily slow.
   gate: () => Promise<void>;
+  // Gate that every `context.newPage` call awaits, after the context exists.
+  newPageGate?: () => Promise<void>;
   onContextCreated?: () => void;
   onContextClosed?: () => void;
 }
@@ -38,6 +40,7 @@ function makeBrowserStub(opts: BrowserStubOptions) {
       let context: any;
       context = {
         async newPage() {
+          await opts.newPageGate?.();
           return {
             async goto() {},
             async waitForFunction() {
@@ -480,6 +483,55 @@ module(basename(import.meta.filename), function (hooks) {
     } finally {
       clearTimeout(abortTimer);
       gate.unblockAll();
+    }
+  });
+
+  // Puppeteer's `context.newPage()` waits, with no timeout, for Chrome to
+  // report a URL for the new page target. When Chrome never does, the context
+  // exists and the page never arrives. That is the creation hang seen in
+  // production, one step later than the context creation the test above
+  // holds.
+  test('a standby creation stuck in newPage fails the refill, and a caller with no tab throws instead of waiting for its abort', async function (assert) {
+    let contextGate = makeManualGate();
+    let pageGate = makeManualGate();
+    let created = 0;
+    let browserManager = makeBrowserStub({
+      gate: contextGate.gate,
+      newPageGate: pageGate.gate,
+      onContextCreated: () => created++,
+    });
+    let pool = makePool({
+      maxPages: 1,
+      browserManager,
+      standbyCreationTimeoutMs: 100,
+      standbyRefillWaitMs: 50,
+    });
+    pageGate.block();
+
+    let controller = new AbortController();
+    let abortTimer = setTimeout(() => controller.abort(), 5000);
+    let start = Date.now();
+    try {
+      await pool.getPage('A', 'file', { signal: controller.signal });
+      assert.ok(false, 'getPage should not get a tab while newPage hangs');
+    } catch (e) {
+      let elapsed = Date.now() - start;
+      assert.true(created > 0, 'the context was created before newPage hung');
+      assert.true(
+        pageGate.waiterCount() > 0,
+        'a creation is still waiting in newPage',
+      );
+      assert.false(
+        controller.signal.aborted,
+        `getPage failed before its own abort (after ${elapsed}ms)`,
+      );
+      assert.true(
+        /No standby page available for prerender/.test(String(e)),
+        `getPage threw the no-tab error that restarts the browser (got: ${String(e)})`,
+      );
+    } finally {
+      clearTimeout(abortTimer);
+      pageGate.unblockAll();
     }
   });
 
