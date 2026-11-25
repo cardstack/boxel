@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { randomUUID } from 'crypto';
+import { createHmac, randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -29,6 +29,7 @@ import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
 import { recordAutomationRunVersion } from '@cardstack/runtime-common/automation-runs';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
+import { MAX_WEBHOOK_PAYLOAD_CHARS } from '@cardstack/runtime-common/automation-run-command';
 import {
   appendRunLog,
   type RunLogLine,
@@ -280,6 +281,7 @@ module(basename(import.meta.filename), function (hooks) {
           { kind: 'webhook', label: 'deliveries', webhookPath: HOOK_PATH },
         ],
       }),
+      [`${HOOKED}-script.js`]: `return 'ok';`,
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -600,25 +602,6 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(batched.credits > plain.credits);
     });
 
-    test('the estimate says webhook triggers start no runs, for a card with one', async function (assert) {
-      let hooked = await request
-        .get(AUTOMATION_SWITCH_ON_PATH)
-        .query({ realm: realm.url, automation: cardURL(HOOKED) })
-        .set('Authorization', auth(OWNER));
-      assert.strictEqual(hooked.status, 200, hooked.text);
-      assert.deepEqual(
-        hooked.body.data.attributes.notices.map(
-          ({ code }: { code: string }) => code,
-        ),
-        ['webhook-triggers-start-no-runs'],
-      );
-      let daily = await request
-        .get(AUTOMATION_SWITCH_ON_PATH)
-        .query({ realm: realm.url, automation: cardURL() })
-        .set('Authorization', auth(OWNER));
-      assert.deepEqual(daily.body.data.attributes.notices, []);
-    });
-
     test('a caller who is not a direct writer is refused', async function (assert) {
       let response = await request
         .get(AUTOMATION_SWITCH_ON_PATH)
@@ -678,7 +661,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test("switch-on refuses a webhook trigger naming a webhook the realm can't use, and says webhook triggers start no runs once on", async function (assert) {
+    test("switch-on refuses a webhook trigger naming a webhook the realm can't use", async function (assert) {
       let switchOnHooked = () =>
         post(
           AUTOMATION_SWITCH_ON_PATH,
@@ -701,7 +684,7 @@ module(basename(import.meta.filename), function (hooks) {
       let foreign = await switchOnHooked();
       assert.strictEqual(foreign.status, 422, foreign.text);
       assert.ok(
-        foreign.text.includes('doesn’t belong to a workspace administrator'),
+        foreign.text.includes('doesn’t belong to a realm administrator'),
         foreign.text,
       );
       assert.strictEqual(
@@ -723,10 +706,6 @@ module(basename(import.meta.filename), function (hooks) {
         on.status,
         201,
         `another direct writer's webhook is the realm's: ${on.text}`,
-      );
-      assert.deepEqual(
-        on.body.meta.notices.map(({ code }: { code: string }) => code),
-        ['webhook-triggers-start-no-runs'],
       );
     });
 
@@ -811,6 +790,285 @@ module(basename(import.meta.filename), function (hooks) {
         { id: 'http://127.0.0.1:4444/another-realm/automation/daily' },
       );
       assert.strictEqual(response.status, 400, response.text);
+    });
+  });
+
+  module('webhook deliveries', function (hooks) {
+    // The incoming webhook the hooked automation's trigger names, made by a
+    // direct writer who isn't the payer.
+    const SECRET = 'writer-secret';
+
+    hooks.beforeEach(async function () {
+      await insertIncomingWebhookRow(dbAdapter, {
+        username: WRITER,
+        webhookPath: HOOK_PATH,
+        signingSecret: SECRET,
+      });
+    });
+
+    async function switchOnHooked() {
+      await fund(OWNER);
+      await switchOn(OWNER, HOOKED);
+    }
+
+    async function deliver(deliveryId: string, payload: unknown) {
+      let body = JSON.stringify(payload);
+      let signature =
+        'sha256=' +
+        createHmac('sha256', SECRET).update(body, 'utf8').digest('hex');
+      return await request
+        .post(`/_webhooks/${HOOK_PATH}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Delivery', deliveryId)
+        .send(body);
+    }
+
+    async function runsOfHooked(): Promise<AutomationRun[]> {
+      let rows = (await dbAdapter.execute(
+        `SELECT id FROM automation_runs WHERE automation_id = $1 ORDER BY created_at`,
+        { bind: [automationId(HOOKED)] },
+      )) as { id: string }[];
+      return (await Promise.all(
+        rows.map(({ id }) => getAutomationRun(dbAdapter, id)),
+      )) as AutomationRun[];
+    }
+
+    test('a delivery starts a run of the webhook trigger with the payload, acting as the payer', async function (assert) {
+      await switchOnHooked();
+      let payload = { action: 'opened', number: 7 };
+      let response = await deliver('delivery-1', payload);
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 1);
+
+      let [run, ...others] = await runsOfHooked();
+      assert.strictEqual(others.length, 0, 'one run');
+      assert.strictEqual(run.trigger, 'deliveries', 'the webhook trigger');
+      assert.strictEqual(
+        run.slot,
+        'delivery:delivery-1',
+        "the slot is the delivery's id",
+      );
+      assert.strictEqual(
+        run.actsAs,
+        OWNER,
+        "it acts as the payer, not the webhook's owner",
+      );
+      let [job] = (await dbAdapter.execute(
+        `SELECT args FROM jobs WHERE args->>'dedupeKey' = $1`,
+        {
+          bind: [
+            `automation:${automationId(HOOKED)}:deliveries:delivery:delivery-1`,
+          ],
+        },
+      )) as { args: { commandInput: Record<string, unknown> } }[];
+      assert.deepEqual(
+        job?.args.commandInput.webhookPayload,
+        payload,
+        "the run's job carries the payload",
+      );
+      let ranAs = await ended(run.id);
+      assert.strictEqual(
+        ranAs.state,
+        'complete',
+        `it runs (${ranAs.errorReason}: ${ranAs.errorMessage})`,
+      );
+    });
+
+    test('a delivery whose body is too large starts a run that ends saying so, without the body', async function (assert) {
+      await switchOnHooked();
+      let payload = { blob: 'x'.repeat(MAX_WEBHOOK_PAYLOAD_CHARS) };
+      let response = await deliver('delivery-too-large', payload);
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 1);
+
+      let [run] = await runsOfHooked();
+      let [job] = (await dbAdapter.execute(
+        `SELECT args FROM jobs WHERE args->>'dedupeKey' = $1`,
+        {
+          bind: [
+            `automation:${automationId(HOOKED)}:deliveries:delivery:delivery-too-large`,
+          ],
+        },
+      )) as { args: { commandInput: Record<string, unknown> } }[];
+      assert.strictEqual(
+        job?.args.commandInput.webhookPayload,
+        undefined,
+        "the run's job doesn't carry the body",
+      );
+      assert.strictEqual(
+        job?.args.commandInput.webhookPayloadChars,
+        JSON.stringify(payload).length,
+        "the run's job carries the body's length",
+      );
+      let ranAs = await ended(run.id);
+      assert.strictEqual(ranAs.state, 'error');
+      assert.strictEqual(ranAs.errorReason, 'webhook-payload-too-large');
+    });
+
+    test('a redelivery joins the run the first delivery started', async function (assert) {
+      await switchOnHooked();
+      let first = await deliver('delivery-2', { attempt: 1 });
+      assert.strictEqual(first.body.automationRunsStarted, 1, first.text);
+      let again = await deliver('delivery-2', { attempt: 2 });
+      assert.strictEqual(again.status, 200, again.text);
+      assert.strictEqual(again.body.automationRunsStarted, 0);
+      let runs = await runsOfHooked();
+      assert.strictEqual(runs.length, 1, 'no second run');
+      await ended(runs[0].id);
+      let late = await deliver('delivery-2', { attempt: 3 });
+      assert.strictEqual(late.body.automationRunsStarted, 0, late.text);
+      assert.strictEqual(
+        (await runsOfHooked()).length,
+        1,
+        'a redelivery after the run ended starts nothing either',
+      );
+    });
+
+    test('a paused automation takes no delivery', async function (assert) {
+      await switchOnHooked();
+      let paused = await post(
+        AUTOMATION_PAUSE_PATH,
+        OWNER,
+        {},
+        { id: cardURL(HOOKED) },
+      );
+      assert.strictEqual(paused.status, 200, paused.text);
+      let response = await deliver('delivery-3', { paused: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
+    });
+
+    test('a delivery to a webhook whose owner lost write pauses the automation and starts no run', async function (assert) {
+      await switchOnHooked();
+      await dbAdapter.execute(
+        `DELETE FROM realm_user_permissions WHERE username = $1 AND realm_url = $2`,
+        { bind: [WRITER, realm.url] },
+      );
+      let response = await deliver('delivery-4', { foreign: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
+      let automation = await getAutomation(dbAdapter, automationId(HOOKED));
+      assert.strictEqual(automation?.state, 'paused');
+      assert.strictEqual(automation?.pauseReason, 'webhook-owner-lost-access');
+    });
+
+    test('an automation switched on before its snapshot recorded webhooks takes a delivery its card names', async function (assert) {
+      await switchOnHooked();
+      await dbAdapter.execute(
+        `UPDATE automations SET caps_snapshot = caps_snapshot - 'webhookPaths' WHERE automation_id = $1`,
+        { bind: [automationId(HOOKED)] },
+      );
+      let response = await deliver('delivery-6', { legacy: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 1);
+      let [run] = await runsOfHooked();
+      assert.strictEqual(run?.slot, 'delivery:delivery-6');
+      await ended(run.id);
+    });
+
+    test('an automation that is off takes no delivery', async function (assert) {
+      let response = await deliver('delivery-5', { off: true });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), []);
+    });
+
+    // Makes every automation take of a delivery fail, by refusing the run
+    // row the take inserts, for the length of `fn`.
+    async function whileRunsAreRefused(fn: () => Promise<void>) {
+      await dbAdapter.execute(
+        `CREATE OR REPLACE FUNCTION refuse_automation_run() RETURNS trigger AS $$
+         BEGIN RAISE EXCEPTION 'the test refuses every automation run'; END
+         $$ LANGUAGE plpgsql`,
+      );
+      await dbAdapter.execute(
+        `CREATE TRIGGER refuse_automation_run BEFORE INSERT ON automation_runs
+         FOR EACH ROW EXECUTE FUNCTION refuse_automation_run()`,
+      );
+      try {
+        await fn();
+      } finally {
+        await dbAdapter.execute(
+          `DROP TRIGGER IF EXISTS refuse_automation_run ON automation_runs`,
+        );
+        await dbAdapter.execute(
+          `DROP FUNCTION IF EXISTS refuse_automation_run()`,
+        );
+      }
+    }
+
+    test('a delivery with the sender’s id that no automation could take, and that enqueued no command, answers 500', async function (assert) {
+      await switchOnHooked();
+      await whileRunsAreRefused(async () => {
+        let response = await deliver('delivery-7', { refused: true });
+        assert.strictEqual(
+          response.status,
+          500,
+          'the sender delivers it again',
+        );
+      });
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
+      let again = await deliver('delivery-7', { refused: false });
+      assert.strictEqual(again.status, 200, again.text);
+      assert.strictEqual(
+        again.body.automationRunsStarted,
+        1,
+        'the redelivery starts the run',
+      );
+      await ended((await runsOfHooked())[0].id);
+    });
+
+    test('a delivery with no id from the sender answers 200 when no automation could take it', async function (assert) {
+      await switchOnHooked();
+      let body = JSON.stringify({ unnamed: true });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', SECRET).update(body, 'utf8').digest('hex');
+      await whileRunsAreRefused(async () => {
+        let response = await request
+          .post(`/_webhooks/${HOOK_PATH}`)
+          .set('Content-Type', 'application/json')
+          .set('X-Hub-Signature-256', signature)
+          .send(body);
+        assert.strictEqual(
+          response.status,
+          200,
+          'a redelivery would get a new id and start a second run, so the sender is not asked to deliver again',
+        );
+        assert.strictEqual(response.body.automationRunsStarted, 0);
+      });
+    });
+
+    test('a delivery that enqueued a command answers 200 when no automation could take it', async function (assert) {
+      await switchOnHooked();
+      let [webhook] = (await dbAdapter.execute(
+        `SELECT id FROM incoming_webhooks WHERE webhook_path = $1`,
+        { bind: [HOOK_PATH] },
+      )) as { id: string }[];
+      await dbAdapter.execute(
+        `INSERT INTO webhook_commands (id, incoming_webhook_id, command, command_filter, created_at, updated_at)
+         VALUES ($1, $2, $3, NULL, NOW(), NOW())`,
+        {
+          bind: [
+            randomUUID(),
+            webhook.id,
+            'http://test-realm/commands/process-github-event',
+          ],
+        },
+      );
+      await whileRunsAreRefused(async () => {
+        let response = await deliver('delivery-8', { withCommand: true });
+        assert.strictEqual(
+          response.status,
+          200,
+          'a redelivery would enqueue the command twice, so the sender is not asked to deliver again',
+        );
+        assert.strictEqual(response.body.commandsExecuted, 1);
+        assert.strictEqual(response.body.automationRunsStarted, 0);
+      });
     });
   });
 
