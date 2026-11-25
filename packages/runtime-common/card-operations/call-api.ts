@@ -22,7 +22,11 @@ export { destinationCovers };
 import type { KeyReadiness } from './capability-wire.ts';
 import type { OperationCore } from './dispatch.ts';
 import type { ResolvedCodeRef } from '../code-ref.ts';
-import type { CheckAutomationKeyApprovals } from '../automation-key-approval.ts';
+import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
+import type {
+  AwaitedKeyApproval,
+  CheckAutomationKeyApprovals,
+} from '../automation-key-approval.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
@@ -1099,6 +1103,11 @@ export interface CallApiUse {
 // for the key approvals a run of its triggers needs, against the automation
 // as its card and script read now (`automation-key-approval.ts`). A sender
 // that can't tell leaves it out, and the automation is taken to need none.
+//
+// `followKeyApprovalNotices` brings the key approval notices of an
+// automation in step with whom its approvals wait on (`awaiting`, as
+// `checkAutomationKeyApprovals` answered it, or undefined when it couldn't
+// check), once the automation's state has followed them.
 export interface CallApiSender {
   fill(lookup: CallApiSlotLookup): Promise<CallApiFilledSlot[]>;
   recordUse?(use: CallApiUse): Promise<void>;
@@ -1122,6 +1131,12 @@ export interface CallApiSender {
       realmURL: URL;
     },
   ): ReturnType<CheckAutomationKeyApprovals>;
+  followKeyApprovalNotices?(args: {
+    automationId: RealmResourceIdentifier;
+    automationURL: string;
+    realmURL: string;
+    awaiting: AwaitedKeyApproval[] | undefined;
+  }): Promise<void>;
   send(
     request: CallApiRequest,
     credentials: CallApiCredential[],

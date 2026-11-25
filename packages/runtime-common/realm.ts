@@ -261,6 +261,7 @@ import {
   automationVersion,
   type AutomationKeyApprovals,
   type AutomationVersion,
+  type AwaitedKeyApproval,
 } from './automation-key-approval.ts';
 import {
   endsRunOnCredential,
@@ -15473,6 +15474,9 @@ export class Realm {
     }
     for (let automationId of automationIds) {
       try {
+        // Whom the approvals wait on, as the check answered it; undefined
+        // when the automation wasn't checked.
+        let awaiting: AwaitedKeyApproval[] | undefined;
         let result = await followKeyApprovals(
           this.#dbAdapter,
           automationId,
@@ -15491,6 +15495,7 @@ export class Realm {
               declaration: read.declaration,
               payer: automation.payer,
             });
+            awaiting = approvals?.awaiting ?? (approvals ? [] : undefined);
             return approvals
               ? { approved: approvals.approved, declaration: read.declaration }
               : undefined;
@@ -15506,6 +15511,15 @@ export class Realm {
         if (result) {
           followed.set(automationId, result);
         }
+        // The people the automation waits on, besides its payer, each have a
+        // notice while it waits; its notices end once it stops waiting, or
+        // when its row is gone.
+        await this.#callApi?.followKeyApprovalNotices?.({
+          automationId,
+          automationURL: this.#virtualNetwork.toURLHref(automationId),
+          realmURL: this.url,
+          awaiting,
+        });
       } catch (e: any) {
         this.#log.warn(
           `couldn't follow the key approvals of automation ${automationId}: ${e?.message ?? e}`,

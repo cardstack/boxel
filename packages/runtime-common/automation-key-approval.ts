@@ -96,12 +96,35 @@ export interface MissingKeyApproval {
   shares?: { id: string; label: string; owner: string | null }[];
 }
 
+// A person other than the payer whom an automation's missing approval waits
+// on, for one operation: the key approval notice the realm server keeps for
+// them (`automation_key_approval_notices`).
+//
+// - `approve`: the recipient's key serves the operation's slot, through a
+//   share in the realm or a binding they approved, and their approval of the
+//   automation is missing or no longer matches.
+// - `share-a-key`: no share in the realm has a key for the operation's
+//   `{{apiKey}}` slot, so the recipient, a direct writer of the realm, is
+//   asked to share one.
+export interface AwaitedKeyApproval {
+  recipient: string;
+  ask: 'approve' | 'share-a-key';
+  operation: string;
+  targetType: { module: string; name: string };
+  // The origin and path the operation sends to.
+  destination: string;
+}
+
 // An automation's approvals, checked against its version.
 export interface AutomationKeyApprovals {
   // Every operation is `approved` or `unavailable`.
   approved: boolean;
   version: AutomationVersionKey;
   operations: OperationKeyApproval[];
+  // Whom each missing approval waits on, besides the payer, for the key
+  // approval notices. Kept on the realm server: a route that answers the
+  // approvals leaves it out.
+  awaiting?: AwaitedKeyApproval[];
 }
 
 // Checks an automation's approvals against its version: `declaration` and
