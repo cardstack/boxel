@@ -4112,10 +4112,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'show, a card or script that changed since the panel read it, and a ' +
     'write in the same script to the card or its script. preview and ' +
     'runNow answer { run, state }; in a later script, ' +
-    'realm.automations.readRun(run) answers the run (state pending, ' +
-    "running, complete, error or canceled; its log lines; a Preview's " +
-    'stagedFiles), and realm.automations.readPreviewFile(run, path) the ' +
-    'content a Preview staged for one file. switchOn answers ' +
+    'realm.automations.readRun(run) answers { run, automation, state ' +
+    '(pending, running, complete, error or canceled), dryRun, ' +
+    'errorReason?, errorMessage?, timings, cost, writes, stagedFiles? ' +
+    "(a complete Preview's [{ path, size }]), committedPaths? (a Run " +
+    "now's saved paths), logLines: [{ level, message, scriptLine? }], " +
+    'logLinesMore }, and realm.automations.readPreviewFile(run, path) ' +
+    'answers { path, bytes, text?, truncated? } for one file a Preview ' +
+    'staged. switchOn answers ' +
     '{ state, nextRun, keyApprovals: { forYou, byOthers, needShare, ' +
     'suspended } }: the secure window opens for the approvals in forYou; ' +
     'tell the person who must approve each one in byOthers, that a realm ' +

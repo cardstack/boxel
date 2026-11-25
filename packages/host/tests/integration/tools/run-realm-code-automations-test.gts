@@ -141,7 +141,22 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
           data: {
             type: 'automation-run-report',
             id: 'run-1',
-            attributes: { run: { state: 'complete' }, stagedFiles: [] },
+            // The realm server's report, as the handler answers it.
+            attributes: {
+              automation: SALE_END,
+              trigger: { kind: 'manual', label: 'manual' },
+              dryRun: true,
+              state: 'complete',
+              errorReason: null,
+              errorMessage: null,
+              timings: { createdAt: '2030-01-01T00:00:00.000Z' },
+              log: { lines: 1 },
+              writes: {
+                count: 0,
+                staged: [{ path: 'Sale/flash-sale.json', size: 19 }],
+              },
+              cost: { credits: 1 },
+            },
           },
         }),
     },
@@ -432,7 +447,12 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
       code,
     });
     let { run, file } = JSON.parse(result.scriptResult!);
-    assert.strictEqual(run.run.state, 'complete');
+    assert.strictEqual(run.run, 'run-1');
+    assert.strictEqual(run.state, 'complete');
+    assert.true(run.dryRun);
+    assert.deepEqual(run.stagedFiles, [
+      { path: 'Sale/flash-sale.json', size: 19 },
+    ]);
     assert.deepEqual(run.logLines, [
       { level: 'info', message: 'Ended 1 sale', scriptLine: 4 },
     ]);

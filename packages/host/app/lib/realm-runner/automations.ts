@@ -582,14 +582,32 @@ export async function automationRunReport(
       [AUTOMATION_RUN_LOG_LIMIT_PARAM]: String(READ_RUN_LOG_LINES),
     },
   });
-  let attributes = log.ok ? (log.data.attributes ?? {}) : {};
-  let lines = Array.isArray(attributes.lines) ? attributes.lines : [];
+  let logAttributes = log.ok ? (log.data.attributes ?? {}) : {};
+  let lines = Array.isArray(logAttributes.lines) ? logAttributes.lines : [];
+  let report_ = report.data.attributes ?? {};
+  let writes = report_.writes ?? {};
   return {
     ...report,
     data: {
       ...report.data,
+      // The report as the script reads it: one flat answer.
       attributes: {
-        ...(report.data.attributes ?? {}),
+        run: report.data.id,
+        automation: report_.automation,
+        state: report_.state,
+        dryRun: report_.dryRun === true,
+        ...(report_.errorReason ? { errorReason: report_.errorReason } : {}),
+        ...(report_.errorMessage ? { errorMessage: report_.errorMessage } : {}),
+        timings: report_.timings,
+        cost: report_.cost,
+        writes: typeof writes.count === 'number' ? writes.count : 0,
+        // A complete Preview's files, `{ path, size }` each.
+        ...(writes.staged ? { stagedFiles: writes.staged } : {}),
+        ...(writes.stagedReplacedBy
+          ? { stagedFilesReplacedBy: writes.stagedReplacedBy }
+          : {}),
+        // A Run now's saved paths.
+        ...(writes.committed ? { committedPaths: writes.committed } : {}),
         logLines: lines.map(
           (line: {
             level?: string;
@@ -601,8 +619,9 @@ export async function automationRunReport(
             ...(line.scriptLine != null ? { scriptLine: line.scriptLine } : {}),
           }),
         ),
-        logLinesMore: log.ok ? attributes.more === true : undefined,
-        ...(log.ok ? {} : { logError: log.error }),
+        ...(log.ok
+          ? { logLinesMore: logAttributes.more === true }
+          : { logError: log.error }),
       },
     },
   };
