@@ -1154,7 +1154,11 @@ module(basename(import.meta.filename), function (hooks) {
       operations: {
         operation: string;
         state: string;
-        missing?: { slot: string; canApprove: string }[];
+        missing?: {
+          slot: string;
+          canApprove: string;
+          shares?: { id: string; label: string; owner: string | null }[];
+        }[];
       }[];
     }) {
       return keyApprovals.operations.map(({ operation, state, missing }) => ({
