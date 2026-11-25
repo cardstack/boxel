@@ -12,6 +12,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import { Deferred } from '@cardstack/runtime-common';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
@@ -235,6 +236,52 @@ module('Acceptance | dashboard get started', function (hooks) {
     await openSteps();
     assert.dom('[data-test-get-started-step]').exists({ count: 3 });
     assert.dom(TOGGLE).hasAttribute('aria-expanded', 'true');
+  });
+
+  test('rendered again while a choice is still saving, the dashboard shows the steps as the user left them', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let matrixService = getService('matrix-service') as MatrixService;
+    let update = matrixService.updateDashboardState;
+    let save = new Deferred<void>();
+    matrixService.updateDashboardState = async (change) => {
+      await save.promise;
+      return update.call(matrixService, change);
+    };
+    // settled() waits for the held save, so until it's released the test
+    // waits with waitFor and leaves the click unawaited.
+    let minimized = click(TOGGLE);
+    try {
+      await waitFor(`${TOGGLE}[aria-expanded="false"]`);
+      // With no stack open, the index route opens the chooser again as soon
+      // as it closes, before a poll can see the dashboard gone. A new Get
+      // started shows the dashboard rendered again and read its state.
+      let before = find(GET_STARTED);
+      operatorModeState().workspaceChooserOpened = false;
+      await waitUntil(() => {
+        let current = find(GET_STARTED);
+        return Boolean(current) && current !== before;
+      });
+
+      assert.notOk(
+        (mockMatrixUtils.getDashboardState() as any).onboardingMinimized,
+        'the save has not landed',
+      );
+      assert.dom(GET_STARTED).exists();
+      assert
+        .dom('[data-test-get-started-step]')
+        .doesNotExist('the steps show minimized');
+    } finally {
+      matrixService.updateDashboardState = update;
+      save.fulfill();
+      await minimized;
+    }
+
+    assert.true(
+      (mockMatrixUtils.getDashboardState() as any).onboardingMinimized,
+    );
+    assert.dom('[data-test-get-started-step]').doesNotExist();
   });
 
   test('steps stored open show from the first paint at login, without moving the focus or announcing anything', async function (assert) {
