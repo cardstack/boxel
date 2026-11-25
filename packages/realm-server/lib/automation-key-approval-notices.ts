@@ -26,22 +26,27 @@ const log = logger('automation-key-approval-notices');
 // page links it to the secure window's `approve` page for the automation.
 //
 // The realm server keeps the notices in step with the automation's key
-// approvals each time it checks them (`followKeyApprovalNotices`), which it
-// does whenever the automation's state can follow its approvals: at switch-on
-// and resume, when an approval lands or ends, and after an index pass that
-// touched the automation's card or script. So a notice ends when the approval
-// it asks for lands, when the operation leaves the card, or when the
-// automation stops waiting, and goes with the automation's row when the
-// automation is removed, from the console or because its card was deleted or
-// stopped being an automation. Each recipient whose notice was recorded, changed or
-// ended is sent `KEY_NOTICES_UPDATED_EVENT_TYPE`, so a session they have open
-// reads the badge count again. A row an index pass removes is gone before
-// any realm server checks it, so its recipients read the count the next time
-// their session asks.
+// approvals each time it checks them (`Realm.followAutomationKeyApprovals`,
+// which writes them in its own transaction through
+// `writeKeyApprovalNoticesIn`): at switch-on and resume, when an approval
+// lands or ends, when a key is shared into the realm or a share resumes, and
+// after an index pass that touched the automation's card or script. So a
+// notice ends when the approval it asks for lands, when a key is shared for
+// a slot no share filled, when the operation leaves the card, or when the
+// automation stops waiting (a pause ends them at once), and goes with the
+// automation's row when the automation is removed. Each recipient whose notice
+// was recorded, changed or ended is sent `KEY_NOTICES_UPDATED_EVENT_TYPE`, so a
+// session they have open reads the badge count again. Two moves record
+// nothing on their own, since neither runs in a realm server that can check
+// the automation: a run that the worker refuses for a key approval it lacks
+// (`waitForKeyApproval`), whose automation's notices follow at its next
+// check, and a row an index pass removes, whose recipients read the count the
+// next time their session asks.
 //
-// A notice is listed only while its automation waits for key approval, and an
-// operation that asks a realm's direct writer to share a key only while the
-// recipient still directly writes the realm. What isn't listed isn't counted
+// A notice is listed only while its automation waits for key approval and
+// its recipient directly writes the automation's realm: a share's owner and
+// the writers asked to share a key both administer the realm, and someone who
+// no longer does sees nothing of it. What isn't listed isn't counted
 // as unread either. The secure origin's key page lists them and marks the
 // ones it shows read; the app reads only the unread count, for its badge.
 
@@ -291,10 +296,8 @@ function noticeOf(row: Record<string, any>): KeyApprovalNotice {
   };
 }
 
-// The recipient's notices whose automation still waits for key approval,
-// newest first. An operation that asks the recipient to share a key is left
-// out once they no longer directly write its realm, and a notice left with no
-// operation isn't listed.
+// The recipient's notices whose automation still waits for key approval and
+// whose realm the recipient still directly writes, newest first.
 export async function listKeyApprovalNotices(
   dbAdapter: DBAdapter,
   recipient: string,
@@ -330,18 +333,8 @@ export async function listKeyApprovalNotices(
   let listed: KeyApprovalNotice[] = [];
   for (let row of rows) {
     let notice = noticeOf(row);
-    let operations: KeyApprovalNoticeOperation[] = [];
-    for (let operation of notice.operations) {
-      if (
-        operation.ask === 'share-a-key' &&
-        !(await writesRealm(notice.realm))
-      ) {
-        continue;
-      }
-      operations.push(operation);
-    }
-    if (operations.length > 0) {
-      listed.push({ ...notice, operations });
+    if (notice.operations.length > 0 && (await writesRealm(notice.realm))) {
+      listed.push(notice);
     }
   }
   return listed;
@@ -359,10 +352,12 @@ export async function countUnreadKeyApprovalNotices(
 }
 
 // Marks the recipient's notices with these ids read, as their key page does
-// once it has shown them. Naming the ids leaves a notice recorded, or made
-// unread again, after the page loaded unread until a page lists it. Ids that
-// aren't the recipient's, or are already read, are passed over. Answers how
-// many it marked.
+// once it has shown them. Naming the ids leaves a notice recorded after the
+// page loaded unread until a page lists it. A notice keeps its id when it
+// changes, so one that came to ask about another operation between the
+// page's listing and this mark is marked read too. Ids that aren't the
+// recipient's, or are already read, are passed over. Answers how many it
+// marked.
 export async function markKeyApprovalNoticesRead(
   dbAdapter: DBAdapter,
   recipient: string,

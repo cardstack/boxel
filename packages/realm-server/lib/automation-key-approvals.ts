@@ -203,16 +203,24 @@ export async function checkAutomationKeyApprovals(
           : {}),
       };
       let approved = approvals.get(binding.id);
+      let approvalMissing = !approved || !approvalMatches(approved, version);
       if (
         check.refused === 'binding-not-approved' ||
         check.refused === 'binding-needs-reapproval' ||
         check.refused === 'share-suspended' ||
-        !approved ||
-        !approvalMatches(approved, version)
+        approvalMissing
       ) {
         missing.push(bound);
-        // A share's binding is approved by the share's owner, who owns its
-        // key; a personal key's, by the key's owner.
+      }
+      // Only an approval can be asked for: a suspended share waits for its
+      // suspension to lift, which no approval does. A share's binding is
+      // approved by the share's owner, who owns its key; a personal key's, by
+      // the key's owner.
+      if (
+        check.refused === 'binding-not-approved' ||
+        check.refused === 'binding-needs-reapproval' ||
+        (approvalMissing && check.refused !== 'share-suspended')
+      ) {
         awaits([binding.share_owner ?? binding.approved_by], 'approve');
       }
     }

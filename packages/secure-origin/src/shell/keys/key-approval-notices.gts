@@ -10,7 +10,8 @@
 // - **Key needed**: no share in the automation's workspace has a key for an
 //   operation, and the user, a realm administrator there, can share one.
 //   Share a key… opens the `share-key` page for the workspace (`@onShareKey`);
-//   the shared key's owner then approves the automation.
+//   once the key is shared, the entry asks the user to approve the
+//   automation's use of the key.
 //
 // Each entry names the automation, its workspace and each operation it asks
 // about with where the operation sends. An entry ends once the approval lands,
@@ -133,8 +134,8 @@ const KeyApprovalNotices: TOC<Signature> = <template>
                       The automation waits until each key owner approves the
                       automation’s use of the key.
                     {{else}}
-                      Share a key with the workspace, and the key’s owner then
-                      approves the automation’s use of the key.
+                      Share a key with the workspace, then approve the
+                      automation’s use of the key.
                     {{/if}}
                   </p>
                 </:default>

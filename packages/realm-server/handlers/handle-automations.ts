@@ -939,6 +939,16 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
       },
       actorOptions(args),
     );
+    if (change.ok && change.automation.state === 'waiting-for-key-approval') {
+      // As at switch-on: the resumed row is checked once more, which also
+      // records the notices of the people its approvals wait on.
+      let followed = (
+        await followAutomationKeyApprovals(args, realmURL, [automationId])
+      ).get(automationId);
+      if (followed) {
+        change = { ok: true, automation: followed.automation };
+      }
+    }
     await answerChange(ctxt, args, change, caller, 200, {
       ...(keyApprovals
         ? {
