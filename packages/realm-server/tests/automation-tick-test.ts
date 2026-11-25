@@ -5,6 +5,7 @@ import {
   automationInitiatedPriority,
   cancelAutomationRun,
   createAutomationRun,
+  recordAIBatch,
   getAutomationRun,
   insertPermissions,
   query,
@@ -42,6 +43,7 @@ import {
   automationJobTimeoutSec,
 } from '@cardstack/runtime-common/automation-run-command';
 import { enqueueAutomationRunJob } from '@cardstack/runtime-common/jobs/run-command';
+import { startDueAIBatchFollowUps } from '@cardstack/runtime-common/ai-batch-follow-ups';
 import type {
   ChangedAutomation,
   ReportAutomationChange,
@@ -113,7 +115,12 @@ interface QueuedRun {
   realmURL: string;
   command: string;
   dedupeKey: string;
-  input: { runId: string; scheduledAt: string; dryRun: boolean };
+  input: {
+    runId: string;
+    scheduledAt: string;
+    dryRun: boolean;
+    triggerKind?: string;
+  };
 }
 
 module(basename(import.meta.filename), function (hooks) {
@@ -1045,5 +1052,341 @@ module(basename(import.meta.filename), function (hooks) {
       [...ids].sort(),
     );
     assert.strictEqual((await queuedRuns()).length, 3);
+  });
+
+  module('batch follow-ups', function () {
+    const DEADLINE = '2026-11-10T13:00:00.000Z';
+
+    // A batch the automation's noon run submitted, due back at one.
+    async function submitBatch(batchId = 'batch_1') {
+      let submitting = await createAutomationRun(dbAdapter, {
+        automationId: AUTOMATION,
+        realm: REALM,
+        trigger: 'hourly',
+        slot: `${NOON_SLOT}#${batchId}`,
+        actsAs: OWNER,
+      });
+      await recordAIBatch(dbAdapter, {
+        batchId,
+        runId: submitting.id,
+        actsAs: OWNER,
+        realm: REALM,
+        automationId: AUTOMATION,
+        model: 'openai/gpt-4.1-mini',
+        requestCount: 3,
+        estimatedUsd: 0.01,
+        runAIReservation: 'reservation-1',
+        reservedCredits: 2,
+        deadline: new Date(DEADLINE),
+        expiresAt: null,
+        state: 'in_progress',
+        // Submitted by the database's clock, as the batch path records it,
+        // so after the automation's switch-on.
+      });
+      return submitting;
+    }
+
+    async function followUps(now: number) {
+      return await startDueAIBatchFollowUps(dbAdapter, {
+        queue: publisher,
+        virtualNetwork,
+        now,
+      });
+    }
+
+    async function followUpRuns(): Promise<AutomationRun[]> {
+      return (await runs()).filter((run) => run.trigger === 'batch');
+    }
+
+    test('a batch whose deadline has not come starts nothing', async function (assert) {
+      await switchOn();
+      await submitBatch();
+
+      assert.deepEqual(await followUps(ONE - 1), []);
+      assert.deepEqual(await followUpRuns(), []);
+    });
+
+    test('a batch whose deadline passed starts one follow-up run, acting as the submitting run’s identity, in the automation’s concurrency group', async function (assert) {
+      await switchOn();
+      let submitting = await submitBatch();
+
+      let [outcome] = await followUps(ONE + 30);
+
+      assert.strictEqual(outcome.kind, 'started');
+      let [followUp] = await followUpRuns();
+      assert.deepEqual(
+        {
+          trigger: followUp.trigger,
+          slot: followUp.slot,
+          actsAs: followUp.actsAs,
+          state: followUp.state,
+          dryRun: followUp.dryRun,
+        },
+        {
+          trigger: 'batch',
+          slot: 'batch_1',
+          actsAs: submitting.actsAs,
+          state: 'pending',
+          dryRun: false,
+        },
+        'the run row is the batch’s, with its id as the slot',
+      );
+      let [job] = (await queuedRuns()).filter(
+        (queued) => queued.input.runId === followUp.id,
+      );
+      assert.deepEqual(
+        {
+          concurrencyGroup: job.concurrencyGroup,
+          priority: job.priority,
+          timeout: job.timeout,
+          runAs: job.runAs,
+          command: job.command,
+          dedupeKey: job.dedupeKey,
+          input: job.input,
+        },
+        {
+          concurrencyGroup: `automation:${AUTOMATION}`,
+          priority: automationInitiatedPriority,
+          timeout: automationJobTimeoutSec(CAPS.seconds),
+          runAs: OWNER,
+          command: AUTOMATION_COMMAND,
+          dedupeKey: `automation:${AUTOMATION}:batch:batch_1`,
+          input: {
+            runId: followUp.id,
+            scheduledAt: DEADLINE,
+            dryRun: false,
+            triggerKind: 'batch',
+          },
+        },
+      );
+      let log = await readRunLog(dbAdapter, followUp.id);
+      assert.true(
+        (log?.lines ?? []).some(
+          (line) =>
+            line.kind === 'trigger' &&
+            line.message.includes('batch_1') &&
+            line.message.includes(submitting.id),
+        ),
+        'the follow-up’s log names its batch and the run that submitted it',
+      );
+    });
+
+    test('a batch gets one follow-up, however many passes see its deadline pass', async function (assert) {
+      await switchOn();
+      await submitBatch();
+
+      let [first, second] = await Promise.all([
+        followUps(ONE + 30),
+        followUps(ONE + 30),
+      ]);
+      let third = await followUps(ONE + 90);
+
+      assert.strictEqual(
+        [...first, ...second].filter((o) => o.kind === 'started').length,
+        1,
+        'one pass starts the follow-up',
+      );
+      assert.deepEqual(third, [], 'a later pass finds nothing due');
+      assert.strictEqual((await followUpRuns()).length, 1);
+      assert.strictEqual(
+        (await queuedRuns()).filter((job) => job.input.triggerKind === 'batch')
+          .length,
+        1,
+        'one job is enqueued',
+      );
+    });
+
+    test('each batch gets its own follow-up', async function (assert) {
+      await switchOn();
+      await submitBatch('batch_1');
+      await submitBatch('batch_2');
+
+      let outcomes = await followUps(ONE + 30);
+
+      assert.deepEqual(
+        outcomes.map((o) => [o.kind, o.batchId]),
+        [
+          ['started', 'batch_1'],
+          ['started', 'batch_2'],
+        ],
+      );
+      assert.deepEqual((await followUpRuns()).map((run) => run.slot).sort(), [
+        'batch_1',
+        'batch_2',
+      ]);
+    });
+
+    test('a paused automation’s batch starts its follow-up once the automation is no longer paused', async function (assert) {
+      await switchOn();
+      await submitBatch();
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'paused', pause_reason = 'requested'`,
+      ]);
+
+      assert.deepEqual(await followUps(ONE + 30), []);
+      assert.deepEqual(await followUpRuns(), []);
+
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'active', pause_reason = NULL`,
+      ]);
+      let [outcome] = await followUps(ONE + 90);
+      assert.strictEqual(outcome.kind, 'started');
+      assert.strictEqual((await followUpRuns()).length, 1);
+    });
+
+    test('a batch of an automation that is not switched on gets no follow-up, and is marked dropped', async function (assert) {
+      await switchOn();
+      await submitBatch();
+      await query(dbAdapter, ['DELETE FROM automations']);
+
+      assert.deepEqual(await followUps(ONE + 30), []);
+      assert.deepEqual(await followUpRuns(), []);
+      let [batch] = await query(dbAdapter, [
+        `SELECT follow_up_dropped_at FROM ai_batches WHERE batch_id = 'batch_1'`,
+      ]);
+      assert.notStrictEqual(
+        batch.follow_up_dropped_at,
+        null,
+        'it leaves the tick’s search',
+      );
+    });
+
+    test('a pause that lands while the tick starts follow-ups holds the follow-ups it has not reached', async function (assert) {
+      await switchOn();
+      await submitBatch('batch_1');
+      await submitBatch('batch_2');
+      // Pause the automation from another connection the moment the first
+      // follow-up's job is published. The pause waits for the tick's hold on
+      // the automation's row, then commits ahead of the second batch's.
+      let paused: Promise<unknown> | undefined;
+      let pausingQueue: QueuePublisher = {
+        ...publisher,
+        publish: async (...args: Parameters<QueuePublisher['publish']>) => {
+          let job = await publisher.publish(...args);
+          if (!paused) {
+            paused = query(dbAdapter, [
+              `UPDATE automations SET state = 'paused', pause_reason = 'requested'`,
+            ]);
+            // Return only once the pause is queued on the row's lock, so it
+            // is ahead of the second batch's hold.
+            for (let waited = 0; waited < 100; waited++) {
+              let [{ waiting }] = await query(dbAdapter, [
+                "SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE automations SET state%'",
+              ]);
+              if (Number(waiting) > 0) {
+                break;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+          }
+          return job;
+        },
+      } as QueuePublisher;
+
+      let outcomes = await startDueAIBatchFollowUps(dbAdapter, {
+        queue: pausingQueue,
+        virtualNetwork,
+        now: ONE + 30,
+      });
+      await paused;
+
+      assert.deepEqual(
+        outcomes.map((o) => [o.kind, o.batchId]),
+        [
+          ['started', 'batch_1'],
+          ['held', 'batch_2'],
+        ],
+      );
+      assert.deepEqual(
+        (await followUpRuns()).map((run) => run.slot),
+        ['batch_1'],
+        'no follow-up is made for the held batch',
+      );
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'active', pause_reason = NULL`,
+      ]);
+      let [resumed] = await followUps(ONE + 90);
+      assert.deepEqual(
+        [resumed.kind, resumed.batchId],
+        ['started', 'batch_2'],
+        'the held batch starts once the automation is active again',
+      );
+    });
+
+    test('a paused automation’s batch starts its follow-up however long the pause lasted', async function (assert) {
+      await switchOn();
+      await submitBatch();
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'paused', pause_reason = 'requested'`,
+      ]);
+      let fortyDaysOn = ONE + 40 * 24 * 60 * 60;
+      assert.deepEqual(await followUps(fortyDaysOn), []);
+
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'active', pause_reason = NULL`,
+      ]);
+      let [outcome] = await followUps(fortyDaysOn + 60);
+      assert.strictEqual(outcome.kind, 'started');
+    });
+
+    test('an automation waiting for a key approval holds its batch’s follow-up until it is active again', async function (assert) {
+      await switchOn();
+      await submitBatch();
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'waiting-for-key-approval'`,
+      ]);
+
+      assert.deepEqual(await followUps(ONE + 30), []);
+
+      await query(dbAdapter, [`UPDATE automations SET state = 'active'`]);
+      let [outcome] = await followUps(ONE + 90);
+      assert.strictEqual(outcome.kind, 'started');
+    });
+
+    test('a batch submitted before the automation was last switched on gets no follow-up', async function (assert) {
+      await switchOn();
+      await submitBatch();
+      // Removed and switched on again after the batch was submitted.
+      await query(dbAdapter, [
+        `UPDATE automations SET switched_on_at = now() + interval '1 minute'`,
+      ]);
+
+      assert.deepEqual(await followUps(ONE + 30), []);
+      assert.deepEqual(await followUpRuns(), []);
+    });
+
+    test('a follow-up whose run row a stopped tick made, with no job, has its job enqueued by the next tick', async function (assert) {
+      await switchOn();
+      await submitBatch();
+      // A tick that stopped after making the row, before enqueueing.
+      let orphan = await createAutomationRun(dbAdapter, {
+        automationId: AUTOMATION,
+        realm: REALM,
+        trigger: 'batch',
+        slot: 'batch_1',
+        actsAs: OWNER,
+      });
+
+      let [outcome] = await followUps(ONE + 30);
+
+      assert.deepEqual(
+        { kind: outcome.kind, runId: (outcome as { runId: string }).runId },
+        { kind: 'resumed', runId: orphan.id },
+      );
+      let jobs = (await queuedRuns()).filter(
+        (job) => job.input.runId === orphan.id,
+      );
+      assert.strictEqual(jobs.length, 1, 'its job is enqueued');
+      assert.strictEqual(jobs[0].input.triggerKind, 'batch');
+      let [batch] = await query(dbAdapter, [
+        `SELECT follow_up_run_id FROM ai_batches WHERE batch_id = 'batch_1'`,
+      ]);
+      assert.strictEqual(
+        String(batch.follow_up_run_id),
+        orphan.id,
+        'the follow-up is recorded on the batch',
+      );
+      assert.deepEqual(await followUps(ONE + 90), [], 'and is not due again');
+    });
   });
 });

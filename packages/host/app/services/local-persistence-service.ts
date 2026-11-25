@@ -288,7 +288,7 @@ export default class LocalPersistenceService extends Service {
       filledPrompt: existing?.filledPrompt,
       updatedAt:
         existing?.updatedAt ??
-        Number((existing as { createdAt?: number })?.createdAt) ??
+        (existing as { createdAt?: number } | undefined)?.createdAt ??
         Date.now(),
     };
 

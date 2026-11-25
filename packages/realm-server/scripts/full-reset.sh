@@ -21,7 +21,7 @@ pnpm --dir="${SCRIPTS_DIR}/../../skills-realm" skills:reset
 # the DB state
 cd "${SCRIPTS_DIR}/../../matrix"
 pnpm stop:synapse
-rm -rf ./synapse-data
+rm -rf "$(node "${SCRIPTS_DIR}/../../../scripts/synapse-data-dir.js")"
 pnpm start:synapse
 pnpm register-all
 

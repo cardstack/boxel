@@ -1,0 +1,614 @@
+import QUnit from 'qunit';
+const { module, test } = QUnit;
+import { basename, join } from 'path';
+import fsExtra from 'fs-extra';
+import { dirSync } from 'tmp';
+import { v4 as uuidv4 } from 'uuid';
+import supertest from 'supertest';
+import type { PgAdapter } from '@cardstack/postgres';
+import {
+  SupportedMimeType,
+  type QueuePublisher,
+  type QueueRunner,
+} from '@cardstack/runtime-common';
+import {
+  getMatrixUsername,
+  MatrixClient,
+} from '@cardstack/runtime-common/matrix-client';
+import {
+  closeServer,
+  createVirtualNetwork,
+  ensureMatrixAdminUser,
+  fixtureDir,
+  matrixURL,
+  realmSecretSeed,
+  runTestRealmServer,
+  setupDB,
+  setupTestDatabaseTemplate,
+} from '../helpers/index.ts';
+import {
+  testOAuthProviderConfig,
+  testOAuthSecureOriginURL,
+} from '../helpers/oauth-provider.ts';
+import {
+  boxelApiToken,
+  registerListUser,
+  setWorkspaceListOf,
+  workspaceListOf,
+} from '../helpers/workspace-list.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { realmURLFor } from '../../handlers/create-realm.ts';
+import { readWorkspaceList } from '../../lib/workspace-list.ts';
+import { oauthIssuer } from '../../lib/oauth-provider/registry.ts';
+import type { RealmHttpServer as Server } from '../../server.ts';
+import { testRealmURL } from './helpers.ts';
+
+const { copySync, ensureDirSync, existsSync } = fsExtra;
+
+// The Boxel API's resource on the test server: the issuer, its own origin.
+const BOXEL_API = oauthIssuer(testRealmURL.origin);
+
+// A workspace that isn't on this server, so a list that names it shows the
+// server's edits keep what they didn't make.
+const OTHER_WORKSPACE = 'https://elsewhere.example/someone/other/';
+
+function sessionToken(user: string) {
+  return createRealmServerJWT(
+    { user, sessionRoom: 'session-room-test' },
+    realmSecretSeed,
+  );
+}
+
+function createRealm(server: Server, token: string, endpoint: string) {
+  return supertest(server)
+    .post('/_create-realm')
+    .set('Accept', SupportedMimeType.JSONAPI)
+    .set('Content-Type', 'application/json')
+    .set('Authorization', `Bearer ${token}`)
+    .send(
+      JSON.stringify({
+        data: { type: 'realm', attributes: { name: 'Listed', endpoint } },
+      }),
+    );
+}
+
+function deleteRealm(server: Server, token: string, realmURL: string) {
+  return supertest(server)
+    .delete('/_delete-realm')
+    .set('Accept', SupportedMimeType.JSONAPI)
+    .set('Content-Type', 'application/json')
+    .set('Authorization', `Bearer ${token}`)
+    .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+}
+
+function read(
+  server: Server,
+  path: '/_user-realms' | '/_user-display-name',
+  token: string,
+) {
+  return supertest(server)
+    .get(path)
+    .set('Accept', SupportedMimeType.JSONAPI)
+    .set('Authorization', `Bearer ${token}`);
+}
+
+function editList(
+  server: Server,
+  token: string,
+  attributes: { add?: unknown; remove?: unknown },
+) {
+  return supertest(server)
+    .patch('/_user-realms')
+    .set('Accept', SupportedMimeType.JSONAPI)
+    .set('Content-Type', 'application/json')
+    .set('Authorization', `Bearer ${token}`)
+    .send(JSON.stringify({ data: { type: 'user-realms', attributes } }));
+}
+
+async function registryHas(dbAdapter: PgAdapter, realmURL: string) {
+  let rows = (await dbAdapter.execute(
+    `SELECT url FROM realm_registry WHERE url = $1`,
+    { bind: [realmURL] },
+  )) as { url: string }[];
+  return rows.length > 0;
+}
+
+// A realm server with the OAuth provider on, at the test realm's URL, so a
+// realm it creates can be indexed. `matrixAdmin` replaces its Synapse admin.
+function setupServer(
+  hooks: NestedHooks,
+  key: string,
+  matrixAdmin?: { username: string; password: string },
+) {
+  let context = {} as {
+    server: Server;
+    dbAdapter: PgAdapter;
+    realmsRootPath: string;
+  };
+
+  async function start({
+    dbAdapter,
+    publisher,
+    runner,
+  }: {
+    dbAdapter: PgAdapter;
+    publisher: QueuePublisher;
+    runner: QueueRunner;
+  }) {
+    let realmsRootPath = join(dirSync().name, 'realm_server_workspace_list');
+    let testRealmDir = join(realmsRootPath, 'test');
+    ensureDirSync(testRealmDir);
+    copySync(fixtureDir('blank'), testRealmDir);
+    let { testRealmHttpServer } = await runTestRealmServer({
+      virtualNetwork: createVirtualNetwork(),
+      testRealmDir,
+      realmsRootPath,
+      realmURL: testRealmURL,
+      permissions: { '*': ['read'] },
+      dbAdapter,
+      publisher,
+      runner,
+      matrixURL,
+      secureOriginURL: testOAuthSecureOriginURL,
+      clientAddress: { trustedProxyHops: 0, infraAddresses: [] },
+      oauthProvider: testOAuthProviderConfig(),
+      ...(matrixAdmin ? { matrixAdmin } : {}),
+    });
+    return { server: testRealmHttpServer, realmsRootPath };
+  }
+
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key,
+    build: async (args) => {
+      let built = await start(args);
+      return () => closeServer(built.server);
+    },
+  });
+  setupDB(hooks, {
+    templateDatabase,
+    beforeEach: async (dbAdapter, publisher, runner) => {
+      let started = await start({ dbAdapter, publisher, runner });
+      context.server = started.server;
+      context.realmsRootPath = started.realmsRootPath;
+      context.dbAdapter = dbAdapter;
+    },
+    afterEach: async () => {
+      await closeServer(context.server);
+    },
+  });
+  hooks.before(async function () {
+    await ensureMatrixAdminUser();
+  });
+  return context;
+}
+
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
+  module('a user’s workspace list', function (hooks) {
+    let context = setupServer(hooks, `${import.meta.filename}#admin`);
+
+    test('creating a workspace with an OAuth token adds it to its owner’s list, and deleting it takes it off', async function (assert) {
+      let owner = await registerListUser('list-owner');
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE]);
+      let token = await boxelApiToken(
+        context.dbAdapter,
+        owner.userId,
+        BOXEL_API,
+      );
+
+      let created = await createRealm(
+        context.server,
+        token,
+        `listed-${uuidv4()}`,
+      );
+      assert.strictEqual(created.status, 202, created.text);
+      let realmURL = created.body.data.id as string;
+      assert.deepEqual(
+        await workspaceListOf(owner),
+        [OTHER_WORKSPACE, realmURL],
+        'the new workspace is on the list once it is created',
+      );
+
+      let deleted = await deleteRealm(context.server, token, realmURL);
+      assert.strictEqual(deleted.status, 204, deleted.text);
+      assert.deepEqual(
+        await workspaceListOf(owner),
+        [OTHER_WORKSPACE],
+        'the deleted workspace is off the list, and the rest stays',
+      );
+    });
+
+    test('creating and deleting a workspace with a session token leave the list to the caller', async function (assert) {
+      let owner = await registerListUser('list-session');
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE]);
+      let token = sessionToken(owner.userId);
+
+      let created = await createRealm(
+        context.server,
+        token,
+        `session-${uuidv4()}`,
+      );
+      assert.strictEqual(created.status, 202, created.text);
+      assert.deepEqual(await workspaceListOf(owner), [OTHER_WORKSPACE]);
+
+      let realmURL = created.body.data.id as string;
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE, realmURL]);
+      let deleted = await deleteRealm(context.server, token, realmURL);
+      assert.strictEqual(deleted.status, 204, deleted.text);
+      assert.deepEqual(
+        await workspaceListOf(owner),
+        [OTHER_WORKSPACE, realmURL],
+        'the caller still finds the entry to remove itself',
+      );
+    });
+
+    test('creating a workspace that is already the caller’s puts it back on their list', async function (assert) {
+      let owner = await registerListUser('list-relink');
+      let token = await boxelApiToken(
+        context.dbAdapter,
+        owner.userId,
+        BOXEL_API,
+      );
+      let endpoint = `relink-${uuidv4()}`;
+      let created = await createRealm(context.server, token, endpoint);
+      assert.strictEqual(created.status, 202, created.text);
+      let realmURL = created.body.data.id as string;
+      await setWorkspaceListOf(owner, []);
+
+      let again = await createRealm(context.server, token, endpoint);
+      assert.strictEqual(again.status, 400, again.text);
+      assert.true(
+        again.text.includes(`realm '${realmURL}' already exists`),
+        'the answer still says the realm exists, as boxel-cli expects',
+      );
+      assert.deepEqual(await workspaceListOf(owner), [realmURL]);
+    });
+
+    test('a user with no Matrix account can still create and delete a workspace', async function (assert) {
+      let user = `@no-account-${uuidv4()}:localhost`;
+      let token = await boxelApiToken(context.dbAdapter, user, BOXEL_API);
+      let created = await createRealm(
+        context.server,
+        token,
+        `unlisted-${uuidv4()}`,
+      );
+      assert.strictEqual(created.status, 202, created.text);
+      let deleted = await deleteRealm(
+        context.server,
+        token,
+        created.body.data.id,
+      );
+      assert.strictEqual(deleted.status, 204, deleted.text);
+    });
+
+    test('GET /_user-realms answers the caller’s own list', async function (assert) {
+      let first = await registerListUser('list-first');
+      let second = await registerListUser('list-second');
+      await setWorkspaceListOf(first, [OTHER_WORKSPACE]);
+      await setWorkspaceListOf(second, []);
+
+      let response = await read(
+        context.server,
+        '/_user-realms',
+        sessionToken(first.userId),
+      );
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.data, {
+        type: 'user-realms',
+        id: first.userId,
+        attributes: { realms: [OTHER_WORKSPACE] },
+      });
+
+      let seconds = await read(
+        context.server,
+        '/_user-realms',
+        sessionToken(second.userId),
+      );
+      assert.deepEqual(
+        seconds.body.data.attributes.realms,
+        [],
+        'the second user sees their own list',
+      );
+    });
+
+    test('GET /_user-realms answers an empty list for a user who never had one', async function (assert) {
+      let user = await registerListUser('list-never');
+      let response = await read(
+        context.server,
+        '/_user-realms',
+        sessionToken(user.userId),
+      );
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.data.attributes.realms, []);
+    });
+
+    test('GET /_user-display-name answers the caller’s display name', async function (assert) {
+      let user = await registerListUser('list-name');
+      let response = await read(
+        context.server,
+        '/_user-display-name',
+        sessionToken(user.userId),
+      );
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.data, {
+        type: 'user-display-name',
+        id: user.userId,
+        attributes: { displayName: user.displayName },
+      });
+    });
+
+    test('a user with no Matrix account has no list or display name here', async function (assert) {
+      let token = sessionToken(`@no-account-${uuidv4()}:localhost`);
+      for (let path of ['/_user-realms', '/_user-display-name'] as const) {
+        let response = await read(context.server, path, token);
+        assert.strictEqual(response.status, 404, `${path}: ${response.text}`);
+      }
+    });
+
+    test('the Matrix admin account has no list here', async function (assert) {
+      // The test server signs in to the Admin API as the local default
+      // admin. Synapse won't mint that account a token for itself, so the
+      // server can't edit its list and doesn't show it.
+      let response = await read(
+        context.server,
+        '/_user-realms',
+        sessionToken('@admin:localhost'),
+      );
+      assert.strictEqual(response.status, 404, response.text);
+    });
+
+    test('a user of another Matrix server has no list or display name here', async function (assert) {
+      let token = sessionToken(`@someone-${uuidv4()}:elsewhere.example`);
+      for (let path of ['/_user-realms', '/_user-display-name'] as const) {
+        let response = await read(context.server, path, token);
+        assert.strictEqual(response.status, 404, `${path}: ${response.text}`);
+      }
+    });
+  });
+
+  // A realm server configured with a Matrix server name its Synapse doesn't
+  // have: Synapse turns away every user the realm server asks about.
+  module('when the Matrix server name is misconfigured', function (hooks) {
+    hooks.before(async function () {
+      await ensureMatrixAdminUser();
+    });
+
+    test('reading a list fails rather than answering that there is none', async function (assert) {
+      let deps = {
+        matrixClient: new MatrixClient({
+          matrixURL,
+          serverName: 'elsewhere.example',
+          username: 'unused',
+          seed: realmSecretSeed,
+        }),
+      };
+      await assert.rejects(
+        readWorkspaceList(deps, '@someone:elsewhere.example'),
+        /HTTP 400/,
+      );
+    });
+  });
+
+  // A server whose Synapse admin login fails: no list can be read or edited,
+  // so an OAuth create or delete either completes with its list edit or not
+  // at all.
+  module('when the workspace list can’t be edited', function (hooks) {
+    let context = setupServer(hooks, `${import.meta.filename}#no-admin`, {
+      // An admin the homeserver doesn't have, so every admin login fails.
+      username: `no-such-admin-${uuidv4().slice(0, 8)}`,
+      password: 'password',
+    });
+
+    test('a create whose list edit fails is undone', async function (assert) {
+      let owner = await registerListUser('list-undone');
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE]);
+      let token = await boxelApiToken(
+        context.dbAdapter,
+        owner.userId,
+        BOXEL_API,
+      );
+      let endpoint = `undone-${uuidv4()}`;
+      let realmURL = realmURLFor(
+        new URL(testRealmURL.origin),
+        owner.userId,
+        endpoint,
+      );
+
+      let response = await createRealm(context.server, token, endpoint);
+      assert.strictEqual(response.status, 503, response.text);
+      assert.true(
+        response.text.includes('The workspace was not created'),
+        response.text,
+      );
+      assert.false(
+        await registryHas(context.dbAdapter, realmURL),
+        'the realm is not registered',
+      );
+      assert.false(
+        existsSync(
+          join(
+            context.realmsRootPath,
+            getMatrixUsername(owner.userId),
+            endpoint,
+          ),
+        ),
+        'its files are gone',
+      );
+      assert.deepEqual(await workspaceListOf(owner), [OTHER_WORKSPACE]);
+    });
+
+    test('a delete whose list edit fails deletes nothing', async function (assert) {
+      let owner = await registerListUser('list-kept');
+      // A session-token create keeps no list, so it needs no admin.
+      let created = await createRealm(
+        context.server,
+        sessionToken(owner.userId),
+        `kept-${uuidv4()}`,
+      );
+      assert.strictEqual(created.status, 202, created.text);
+      let realmURL = created.body.data.id as string;
+      let token = await boxelApiToken(
+        context.dbAdapter,
+        owner.userId,
+        BOXEL_API,
+      );
+
+      let response = await deleteRealm(context.server, token, realmURL);
+      assert.strictEqual(response.status, 503, response.text);
+      assert.true(
+        await registryHas(context.dbAdapter, realmURL),
+        'the realm is still there',
+      );
+    });
+
+    test('GET /_user-realms answers 503, not an empty list', async function (assert) {
+      let user = await registerListUser('list-unreadable');
+      let response = await read(
+        context.server,
+        '/_user-realms',
+        sessionToken(user.userId),
+      );
+      assert.strictEqual(response.status, 503, response.text);
+    });
+  });
+
+  // Every edit rewrites the whole list, and Matrix account data has no
+  // compare-and-set, so the realm server holds each user's account-data lock
+  // around its edits: two that overlap must both stay on the list. Concurrent
+  // PATCH edits overlap reliably and are what shows the lock at work; a
+  // create or delete spends most of its time on the realm, so its list edit
+  // rarely meets another's, and those tests check the outcome rather than the
+  // lock. The lock itself, its deadline included, is tested in
+  // realm-advisory-locks-test.
+  module('overlapping edits of one user’s list', function (hooks) {
+    let context = setupServer(hooks, `${import.meta.filename}#overlap`);
+
+    test('two OAuth creates at once both end on the list', async function (assert) {
+      let owner = await registerListUser('list-two-creates');
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE]);
+      let token = await boxelApiToken(
+        context.dbAdapter,
+        owner.userId,
+        BOXEL_API,
+      );
+
+      let [first, second] = await Promise.all([
+        createRealm(context.server, token, `first-${uuidv4()}`),
+        createRealm(context.server, token, `second-${uuidv4()}`),
+      ]);
+      assert.strictEqual(first.status, 202, first.text);
+      assert.strictEqual(second.status, 202, second.text);
+      let list = (await workspaceListOf(owner)) as string[];
+      assert.deepEqual(
+        [...list].sort(),
+        [OTHER_WORKSPACE, first.body.data.id, second.body.data.id].sort(),
+        'both new workspaces are on the list, and the rest stays',
+      );
+    });
+
+    test('an OAuth delete and create at once leave the list right', async function (assert) {
+      let owner = await registerListUser('list-delete-create');
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE]);
+      let token = await boxelApiToken(
+        context.dbAdapter,
+        owner.userId,
+        BOXEL_API,
+      );
+      let doomed = await createRealm(
+        context.server,
+        token,
+        `doomed-${uuidv4()}`,
+      );
+      assert.strictEqual(doomed.status, 202, doomed.text);
+
+      let [deleted, created] = await Promise.all([
+        deleteRealm(context.server, token, doomed.body.data.id),
+        createRealm(context.server, token, `kept-${uuidv4()}`),
+      ]);
+      assert.strictEqual(deleted.status, 204, deleted.text);
+      assert.strictEqual(created.status, 202, created.text);
+      assert.deepEqual(await workspaceListOf(owner), [
+        OTHER_WORKSPACE,
+        created.body.data.id,
+      ]);
+    });
+
+    test('PATCH /_user-realms edits made at once all land', async function (assert) {
+      let owner = await registerListUser('list-patches');
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE]);
+      let token = sessionToken(owner.userId);
+      let realms = Array.from(
+        { length: 6 },
+        (_, i) => `https://elsewhere.example/someone/added-${i}/`,
+      );
+
+      let responses = await Promise.all(
+        realms.map((realm) =>
+          editList(context.server, token, { add: [realm] }),
+        ),
+      );
+      for (let [i, response] of responses.entries()) {
+        assert.strictEqual(response.status, 200, response.text);
+        assert.deepEqual(response.body.data.attributes, {
+          added: [realms[i]],
+          removed: [],
+        });
+      }
+      let list = (await workspaceListOf(owner)) as string[];
+      assert.deepEqual(
+        [...list].sort(),
+        [OTHER_WORKSPACE, ...realms].sort(),
+        'every realm is on the list',
+      );
+    });
+
+    test('PATCH /_user-realms adds and removes, and says what it changed', async function (assert) {
+      let owner = await registerListUser('list-patch');
+      let kept = 'https://elsewhere.example/someone/kept/';
+      await setWorkspaceListOf(owner, [OTHER_WORKSPACE, kept]);
+      let token = sessionToken(owner.userId);
+      let added = 'https://elsewhere.example/someone/added/';
+
+      let response = await editList(context.server, token, {
+        add: [added, kept],
+        remove: [OTHER_WORKSPACE, 'https://elsewhere.example/never/listed/'],
+      });
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.data.attributes, {
+        added: [added],
+        removed: [OTHER_WORKSPACE],
+      });
+      assert.deepEqual(await workspaceListOf(owner), [kept, added]);
+    });
+
+    test('PATCH /_user-realms refuses an edit it can’t make', async function (assert) {
+      let owner = await registerListUser('list-bad-patch');
+      let token = sessionToken(owner.userId);
+      for (let attributes of [
+        {},
+        { add: 'https://elsewhere.example/one/' },
+        { add: ['not a url'] },
+        { add: ['ftp://elsewhere.example/one/'] },
+        {
+          add: ['https://elsewhere.example/one/'],
+          remove: ['https://elsewhere.example/one/'],
+        },
+      ]) {
+        let response = await editList(context.server, token, attributes);
+        assert.strictEqual(
+          response.status,
+          400,
+          `${JSON.stringify(attributes)}: ${response.text}`,
+        );
+      }
+    });
+
+    test('PATCH /_user-realms answers 404 for a user this server keeps no list for', async function (assert) {
+      let response = await editList(
+        context.server,
+        sessionToken('@someone:elsewhere.example'),
+        { add: [OTHER_WORKSPACE] },
+      );
+      assert.strictEqual(response.status, 404, response.text);
+    });
+  });
+});

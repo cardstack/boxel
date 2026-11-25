@@ -33,6 +33,8 @@ import {
   jobOfRun,
   msBetween,
 } from './automation-run-telemetry.ts';
+import type { AutomationOperationDeclaration } from './automation-declaration.ts';
+import type { AutomationVersionKey } from './automation-key-approval.ts';
 import type { DBAdapter } from './db.ts';
 import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import {
@@ -86,6 +88,14 @@ export interface AutomationRun extends AutomationRunCounts {
   attempt: number | null;
   scriptId: RealmResourceIdentifier | null;
   scriptHash: string | null;
+  // The version of its automation the attempt that owns the run read, with
+  // the run's identity as payer (`automation-key-approval.ts`): what a
+  // binding's automation approval is compared with, at the run's admission
+  // and at each of its calls. Null until that attempt records it.
+  version: AutomationVersionKey | null;
+  // The operations the automation declared as that attempt read it, which
+  // the realm's admission checks. Null until that attempt records them.
+  versionOperations: AutomationOperationDeclaration[] | null;
   state: AutomationRunState;
   // For an error, a code such as `script-error`. A run canceled by a pause no
   // person asked for carries that pause's reason here instead.
@@ -350,9 +360,9 @@ export async function startAutomationRunAttempt(
   // run's row, since the takeover waited on that lock. A run whose commit was
   // already claimed keeps its files: the claiming attempt may still be
   // reading them to send its batch. An attempt that takes the run from
-  // another also clears the run's admission and milestones, since it admits
-  // the run again and the script runs again from its start and reports them
-  // afresh. The run's row is locked first, the order `appendRunLog` takes the
+  // another also clears the run's admission, the version it was admitted
+  // at, and its milestones, since it reads the automation and admits the run
+  // again, and the script runs again from its start and reports them afresh. The run's row is locked first, the order `appendRunLog` takes the
   // locks in.
   let row = await dbAdapter.withTransaction(async (txQuery) => {
     let [owner] = await txQuery([
@@ -378,9 +388,9 @@ export async function startAutomationRunAttempt(
       ]);
       if (owner?.attempt != null && Number(owner.attempt) !== attempt) {
         await clearRunMilestones(txQuery, id);
-        if (started.admitted_at != null) {
+        if (started.admitted_at != null || started.version_key != null) {
           let [readmitting] = await txQuery([
-            'UPDATE automation_runs SET admitted_at = NULL WHERE id =',
+            'UPDATE automation_runs SET admitted_at = NULL, version_key = NULL, version_call_api_calls = NULL, version_operations = NULL WHERE id =',
             param(id),
             'RETURNING *',
           ]);
@@ -425,6 +435,27 @@ export async function recordAutomationRunScript(
     param(script.scriptId),
     ', script_hash =',
     param(script.scriptHash),
+  ]);
+}
+
+// Records the version of its automation `attempt` read, and the operations
+// it declared, before it asks the realm to admit the run. Refused unless the
+// run is running and `attempt` owns it.
+export async function recordAutomationRunVersion(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+  version: AutomationVersionKey,
+  operations: readonly AutomationOperationDeclaration[],
+): Promise<AutomationRun | undefined> {
+  return await updateOwned(dbAdapter, id, attempt, [
+    'version_key =',
+    param(version.versionKey),
+    ', version_call_api_calls =',
+    param(version.callApiCalls),
+    ', version_operations =',
+    param(JSON.stringify(operations)),
+    '::jsonb',
   ]);
 }
 
@@ -924,19 +955,27 @@ export type AutomationRunCallCount =
   | { kind: 'over-cap' | 'not-running'; run: AutomationRun }
   | { kind: 'missing' };
 
-// Counts one call against a running run's cap on `counter`, for the attempt
-// that owns it. The check and the count are one statement, so two calls
-// racing for a run's last call can't both make it.
+// Counts `calls` calls (one unless given) against a running run's cap on
+// `counter`, for the attempt that owns it: a batch of AI requests counts each
+// of its requests. The check and the count are one statement, so two calls
+// racing for a run's last call can't both make it, and calls that would pass
+// the cap together are none of them counted.
 export async function countAutomationRunCall(
   dbAdapter: DBAdapter,
   id: string,
   attempt: number,
   counter: AutomationRunCallCounter,
   cap: number,
+  calls = 1,
 ): Promise<AutomationRunCallCount> {
   if (!Number.isSafeInteger(cap) || cap < 0) {
     throw new Error(
       `a run's ${counter} cap must be a whole number, not ${cap}`,
+    );
+  }
+  if (!Number.isSafeInteger(calls) || calls < 1) {
+    throw new Error(
+      `a run counts a whole number of calls, 1 or more, not ${calls}`,
     );
   }
   let column = COUNT_COLUMNS[counter];
@@ -944,8 +983,8 @@ export async function countAutomationRunCall(
     dbAdapter,
     id,
     attempt,
-    [`${column} = ${column} + 1`],
-    [`AND ${column} + 1 <=`, param(cap)],
+    [`${column} = ${column} +`, param(calls)],
+    [`AND ${column} +`, param(calls), '<=', param(cap)],
   );
   if (run) {
     return { kind: 'counted', run };
@@ -1315,6 +1354,16 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     attempt: row.attempt == null ? null : Number(row.attempt),
     scriptId: (row.script_id as RealmResourceIdentifier | null) ?? null,
     scriptHash: (row.script_hash as string | null) ?? null,
+    version:
+      row.version_key == null
+        ? null
+        : {
+            versionKey: String(row.version_key),
+            callApiCalls: Number(row.version_call_api_calls),
+          },
+    versionOperations: jsonColumn<AutomationOperationDeclaration[]>(
+      row.version_operations,
+    ),
     state: row.state as AutomationRunState,
     errorReason: (row.error_reason as string | null) ?? null,
     errorMessage: (row.error_message as string | null) ?? null,
@@ -1339,6 +1388,14 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     committedAt: iso(row.committed_at),
     finishedAt: iso(row.finished_at),
   };
+}
+
+// A jsonb column as the driver hands it back: parsed, or as its text.
+function jsonColumn<T>(value: PgPrimitive | undefined): T | null {
+  if (value == null) {
+    return null;
+  }
+  return (typeof value === 'string' ? JSON.parse(value) : value) as T;
 }
 
 function credentialRefusalFromRow(

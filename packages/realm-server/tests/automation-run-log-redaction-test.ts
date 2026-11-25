@@ -306,7 +306,7 @@ module(basename(import.meta.filename), function (hooks) {
         dbAdapter,
         realm,
         OWNER,
-        { automation: TEST_AUTOMATION_PATH },
+        { automation: TEST_AUTOMATION_PATH, approveBindings: true },
       );
 
       // What the script is handed.

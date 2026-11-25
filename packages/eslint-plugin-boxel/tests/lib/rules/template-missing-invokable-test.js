@@ -10,8 +10,11 @@ const RuleTester = require('eslint').RuleTester;
 //------------------------------------------------------------------------------
 
 const ruleTester = new RuleTester({
-  parser: require.resolve('ember-eslint-parser'),
-  parserOptions: { ecmaVersion: 2022, sourceType: 'module' },
+  languageOptions: {
+    parser: require('ember-eslint-parser'),
+    ecmaVersion: 2022,
+    sourceType: 'module',
+  },
 });
 ruleTester.run('template-missing-invokable', rule, {
   valid: [
@@ -95,7 +98,6 @@ ruleTester.run('template-missing-invokable', rule, {
 
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],
@@ -123,7 +125,6 @@ ruleTester.run('template-missing-invokable', rule, {
       ],
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],
@@ -151,7 +152,6 @@ ruleTester.run('template-missing-invokable', rule, {
       ],
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],
@@ -181,7 +181,6 @@ ruleTester.run('template-missing-invokable', rule, {
       ],
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],
@@ -232,15 +231,12 @@ ruleTester.run('template-missing-invokable', rule, {
       ],
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],
@@ -273,7 +269,6 @@ ruleTester.run('template-missing-invokable', rule, {
 
       errors: [
         {
-          type: 'GlimmerPathExpression',
           message: rule.meta.messages['missing-invokable'],
         },
       ],

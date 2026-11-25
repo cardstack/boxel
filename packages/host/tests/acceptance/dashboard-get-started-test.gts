@@ -18,6 +18,7 @@ import type LocalPersistenceService from '@cardstack/host/services/local-persist
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import {
+  percySnapshot,
   realmConfigCardJSON,
   setupAcceptanceTestRealm,
   visitOperatorMode,
@@ -140,6 +141,12 @@ module('Acceptance | dashboard get started', function (hooks) {
     await settled();
 
     assert.strictEqual(nameFromTip(TOGGLE), 'Minimize steps');
+    // The snapshots are of the whole dashboard, so its workspaces and the
+    // publish step's note must have loaded too.
+    await waitFor('[data-test-workspace="Workspace A"]');
+    assert.dom('[data-test-workspace-loading-indicator]').doesNotExist();
+    await waitFor('[data-test-get-started-publish-unavailable]');
+    await percySnapshot('Acceptance | dashboard get started | open steps');
     await click(TOGGLE);
 
     assert.dom(GET_STARTED).exists('the list stays open, folded');
@@ -151,6 +158,10 @@ module('Acceptance | dashboard get started', function (hooks) {
     assert.strictEqual(nameFromTip(TOGGLE), 'Expand steps');
     assert.dom(TOGGLE).hasAttribute('aria-expanded', 'false');
     assert.dom(BUTTON).hasAttribute('aria-expanded', 'true');
+    // At 800px the card is narrower than 48rem, so the folded row stacks.
+    await percySnapshot('Acceptance | dashboard get started | folded steps', {
+      widths: [1280, 800],
+    });
 
     await click(TOGGLE);
     assert.dom('[data-test-get-started-step]').exists({ count: 3 });

@@ -160,6 +160,11 @@ export class GetUserSystemCardResult extends CardDef {
 export class ShowCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field format = contains(StringField);
+  // When true, a card already on top of the target stack opens fresh as
+  // well, the way a card buried in the stack does, so the card renders anew.
+  // For callers inside the app that rely on the card mounting again; the
+  // ShowCard tool keeps it out of the schema the model sees.
+  @field reopen = contains(BooleanField);
 }
 
 export class PatchThemeInput extends CardDef {

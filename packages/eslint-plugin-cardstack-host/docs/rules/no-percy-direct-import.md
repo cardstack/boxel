@@ -1,4 +1,6 @@
-# Forbid importing percySnapshot directly from @percy/ember; use @cardstack/host/tests/helpers instead (`@cardstack/host/no-percy-direct-import`)
+# @cardstack/host/no-percy-direct-import
+
+📝 Forbid importing percySnapshot directly from @percy/ember; use @cardstack/host/tests/helpers instead.
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

@@ -5,8 +5,10 @@ import {
   PgAdapter,
   hashFilePathForAdvisoryLock,
   hashRealmUrlForAdvisoryLock,
+  hashUserIdForAccountDataLock,
   hashUserIdForCostLock,
 } from '@cardstack/postgres';
+import { AccountDataLockTimeoutError } from '@cardstack/runtime-common';
 import { isWriteLockTimeout } from '@cardstack/runtime-common/card-operations';
 import { setupDB } from './helpers/index.ts';
 
@@ -1381,6 +1383,194 @@ module(basename(import.meta.filename), function () {
       } finally {
         clearTimeout(guardTimer);
       }
+    });
+  });
+
+  module('PgAdapter.withAccountDataLock', function (hooks) {
+    let dbAdapter: PgAdapter;
+    let extraAdapters: PgAdapter[] = [];
+    setupDB(hooks, {
+      beforeEach: async (adapter) => {
+        dbAdapter = adapter;
+      },
+      afterEach: async () => {
+        let adapters = extraAdapters;
+        extraAdapters = [];
+        for (let adapter of adapters) {
+          await adapter.close();
+        }
+      },
+    });
+
+    const USER = '@alice:localhost';
+    const WAIT_MS = 300;
+
+    function within(ms: number) {
+      return { deadline: Date.now() + ms };
+    }
+
+    // Holds the lock for `user` on `adapter` until `release` is called.
+    // Resolves once the holder is inside its section.
+    async function holdLock(adapter: PgAdapter, user: string) {
+      let release!: () => void;
+      const released = new Promise<void>((r) => {
+        release = r;
+      });
+      let signalEntered!: () => void;
+      const entered = new Promise<void>((r) => {
+        signalEntered = r;
+      });
+      const done = adapter.withAccountDataLock(
+        user,
+        async () => {
+          signalEntered();
+          await released;
+        },
+        within(10_000),
+      );
+      await Promise.race([entered, done]);
+      return { release, done };
+    }
+
+    test('key is namespaced away from the same user’s cost lock', function (assert) {
+      assert.notStrictEqual(
+        hashUserIdForAccountDataLock(USER),
+        hashUserIdForCostLock(USER),
+      );
+    });
+
+    test('serializes two concurrent callers for the same user', async function (assert) {
+      const events: string[] = [];
+      const holder = await holdLock(dbAdapter, USER);
+      const second = dbAdapter.withAccountDataLock(
+        USER,
+        async () => {
+          events.push('second');
+        },
+        within(5_000),
+      );
+      await new Promise((r) => setTimeout(r, 100));
+      events.push('holder-releases');
+      holder.release();
+      await Promise.all([holder.done, second]);
+      assert.deepEqual(events, ['holder-releases', 'second']);
+    });
+
+    test('runs callers for different users in parallel', async function (assert) {
+      const holder = await holdLock(dbAdapter, USER);
+      try {
+        const result = await dbAdapter.withAccountDataLock(
+          '@bob:localhost',
+          async () => 'bob ran',
+          within(WAIT_MS),
+        );
+        assert.strictEqual(result, 'bob ran');
+      } finally {
+        holder.release();
+        await holder.done;
+      }
+    });
+
+    test('a caller queued on this replica gives up at its deadline without running', async function (assert) {
+      const holder = await holdLock(dbAdapter, USER);
+      let ran = false;
+      const startedAt = Date.now();
+      let err: unknown;
+      try {
+        await dbAdapter.withAccountDataLock(
+          USER,
+          async () => {
+            ran = true;
+          },
+          within(WAIT_MS),
+        );
+      } catch (e) {
+        err = e;
+      }
+      const elapsed = Date.now() - startedAt;
+      assert.true(
+        err instanceof AccountDataLockTimeoutError,
+        `refused with AccountDataLockTimeoutError (got ${String(err)})`,
+      );
+      assert.false(ran, 'the section never ran');
+      assert.true(
+        elapsed < WAIT_MS + 2000,
+        `gave up soon after its deadline, not when the holder let go (${elapsed} ms)`,
+      );
+
+      // A caller behind the one that gave up still waits for the holder.
+      const events: string[] = [];
+      const third = dbAdapter.withAccountDataLock(
+        USER,
+        async () => {
+          events.push('third');
+        },
+        within(5_000),
+      );
+      await new Promise((r) => setTimeout(r, 100));
+      events.push('holder-releases');
+      holder.release();
+      await Promise.all([holder.done, third]);
+      assert.deepEqual(events, ['holder-releases', 'third']);
+    });
+
+    test('a caller on another replica gives up at its deadline without running', async function (assert) {
+      const holder = await holdLock(dbAdapter, USER);
+      // A second adapter, as a second replica would be: it shares the lock
+      // space and none of the first one's in-process queue, so its caller
+      // waits in postgres.
+      const otherReplica = new PgAdapter();
+      extraAdapters.push(otherReplica);
+      let ran = false;
+      const startedAt = Date.now();
+      let err: unknown;
+      try {
+        await otherReplica.withAccountDataLock(
+          USER,
+          async () => {
+            ran = true;
+          },
+          within(WAIT_MS),
+        );
+      } catch (e) {
+        err = e;
+      } finally {
+        holder.release();
+        await holder.done;
+      }
+      const elapsed = Date.now() - startedAt;
+      assert.true(
+        err instanceof AccountDataLockTimeoutError,
+        `refused with AccountDataLockTimeoutError (got ${String(err)})`,
+      );
+      assert.false(ran, 'the section never ran');
+      assert.true(
+        elapsed >= WAIT_MS - 50,
+        `waited until its deadline (${elapsed} ms)`,
+      );
+      assert.true(
+        elapsed < WAIT_MS + 2000,
+        `gave up soon after its deadline (${elapsed} ms)`,
+      );
+    });
+
+    test('releases the lock when the callback throws', async function (assert) {
+      await assert.rejects(
+        dbAdapter.withAccountDataLock(
+          USER,
+          async () => {
+            throw new Error('boom');
+          },
+          within(WAIT_MS),
+        ),
+        /boom/,
+      );
+      const result = await dbAdapter.withAccountDataLock(
+        USER,
+        async () => 'next ran',
+        within(WAIT_MS),
+      );
+      assert.strictEqual(result, 'next ran');
     });
   });
 });

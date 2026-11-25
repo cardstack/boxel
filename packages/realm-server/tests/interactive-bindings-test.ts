@@ -389,6 +389,7 @@ module(basename(import.meta.filename), function (hooks) {
             (
               await createAutomationRunToken(dbAdapter, realm, user, {
                 automation: TEST_AUTOMATION_PATH,
+                approveBindings: true,
               })
             ).token
           }`,
