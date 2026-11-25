@@ -3118,8 +3118,8 @@ module(basename(import.meta.filename), function (hooks) {
     test('a share of a sign-in app is no share an automation can send', async function (assert) {
       let share = await shareOwnKey(WRITER);
       await dbAdapter.execute(
-        `INSERT INTO oauth_clients (key_id, client_id, grant_type, token_url, token_auth) VALUES ($1, 'sign-in', 'authorization_code', $2, 'client_secret_post')`,
-        { bind: [share.keyId!, `${VENDOR}/token`] },
+        `INSERT INTO oauth_clients (key_id, client_id, grant_type, token_url, authorize_url, token_auth) VALUES ($1, 'sign-in', 'authorization_code', $2, $3, 'client_secret_post')`,
+        { bind: [share.keyId!, `${VENDOR}/token`, `${VENDOR}/authorize`] },
       );
       await switchOn(OWNER, SHARED);
       let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, WRITER));
