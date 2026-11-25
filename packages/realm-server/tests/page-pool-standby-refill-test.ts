@@ -444,11 +444,12 @@ module(basename(import.meta.filename), function (hooks) {
     gate.unblockAll();
   });
 
-  // A CDP call inside a standby creation that never answers used to hold the
-  // refill open for the life of the process: `#creatingStandbys` stayed at
-  // one, the refill never reported a failure, and a caller with no tab parked
-  // until its own abort. Every render on the server then failed by timeout
-  // while the server kept reporting itself healthy. The creation deadline
+  // Without a deadline, a CDP call inside a standby creation that never
+  // answers holds the refill open for the life of the process:
+  // `#creatingStandbys` stays at one, the refill never reports a failure,
+  // and a caller with no tab parks until its own abort. Every render on the
+  // server then fails by timeout while the server keeps reporting itself
+  // healthy. The creation deadline
   // turns that hang into a refill failure, which the caller answers by
   // throwing, and a throw from a render makes the Prerenderer restart the
   // browser.
@@ -488,9 +489,8 @@ module(basename(import.meta.filename), function (hooks) {
 
   // Puppeteer's `context.newPage()` waits, with no timeout, for Chrome to
   // report a URL for the new page target. When Chrome never does, the context
-  // exists and the page never arrives. That is the creation hang seen in
-  // production, one step later than the context creation the test above
-  // holds.
+  // exists and the page never arrives. That hang is one step later than the
+  // context creation the test above holds.
   test('a standby creation stuck in newPage fails the refill, and a caller with no tab throws instead of waiting for its abort', async function (assert) {
     let contextGate = makeManualGate();
     let pageGate = makeManualGate();
