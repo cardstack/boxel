@@ -41,6 +41,7 @@ import {
   finishAutomationRun,
   getAutomationRun,
   holdAutomationFollowUpRun,
+  logAutomationRunEnded,
   recordAutomationRunAdmitted,
   recordAutomationRunScript,
   recordAutomationRunVersion,
@@ -372,18 +373,27 @@ async function attemptRun(
     // approval is held, never ended: it goes back to pending, and starts
     // again once its automation is active (ADR 030 §1.5).
     admitted(identity.reason);
-    let held = await holdAutomationFollowUpRun(dbAdapter, runId, attempt);
-    if (!held) {
+    let hold = await holdAutomationFollowUpRun(dbAdapter, runId, attempt);
+    if (!hold) {
       log.info(`${tag} left alone: another attempt owns the run, or it ended`);
       return { state: 'left', reason: 'superseded' };
     }
-    await logRunPlatformLine(dbAdapter, runId, {
+    // An earlier attempt had used something for the run, so it ended in
+    // favor of a new pending run of the batch; this attempt's charge of it
+    // follows, to whom it acted as.
+    if (hold.ended) {
+      await logAutomationRunEnded(dbAdapter, hold.ended);
+    }
+    await logRunPlatformLine(dbAdapter, hold.held.id, {
       kind: 'admission',
       level: 'info',
       message: `Admission held the run (${identity.reason}): ${identity.message}`,
       data: { admitted: false, held: true, reason: identity.reason },
     });
     await ctx.reportRunChange?.(runId);
+    if (hold.held.id !== runId) {
+      await ctx.reportRunChange?.(hold.held.id);
+    }
     log.info(`${tag} held: ${identity.message}`);
     return { state: 'left', reason: 'held' };
   }

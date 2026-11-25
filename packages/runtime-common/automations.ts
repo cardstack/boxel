@@ -1380,11 +1380,11 @@ async function toKeyApprovalWait(
       { pendingOnly: true, keepFollowUps: true },
     )),
   );
-  changes.held.push(
-    ...(await holdAutomationFollowUpRuns(txQuery, automationId, {
-      pendingOnly: true,
-    })),
-  );
+  let waitHeld = await holdAutomationFollowUpRuns(txQuery, automationId, {
+    pendingOnly: true,
+  });
+  changes.held.push(...waitHeld.held);
+  changes.canceled.push(...waitHeld.ended);
   let waiting = automationFromRow(row);
   changes.automations.push(waiting);
   return waiting;
@@ -1891,11 +1891,11 @@ async function pause(
       { pendingOnly: keepRunning, keepFollowUps: true },
     )),
   );
-  changes.held.push(
-    ...(await holdAutomationFollowUpRuns(txQuery, automationId, {
-      pendingOnly: keepRunning,
-    })),
-  );
+  let pauseHeld = await holdAutomationFollowUpRuns(txQuery, automationId, {
+    pendingOnly: keepRunning,
+  });
+  changes.held.push(...pauseHeld.held);
+  changes.canceled.push(...pauseHeld.ended);
   let paused = automationFromRow(row);
   changes.automations.push(paused);
   return paused;
@@ -2226,14 +2226,17 @@ function currentUnixSeconds(): number {
 }
 
 // A batch of the automation, aliased `b`, whose follow-up hasn't started: it
-// has none yet and none was dropped, or the one it has is pending (held, or
-// enqueued and not yet taken). Its batch was submitted since the automation
-// was last switched on, so it can still get a follow-up.
+// has none yet and none was dropped, or the one it has is held, or pending
+// (enqueued and not yet taken). A held follow-up counts whatever its run's
+// state: a job enqueued before the pause can take the run just before the
+// resume, and admission then holds it again for the identity the resume
+// sets. Its batch was submitted since the automation was last switched on,
+// so it can still get a follow-up.
 function followUpNotStarted(): Expression {
   return [
     'b.follow_up_dropped_at IS NULL',
     'AND b.submitted_at >= (SELECT a.switched_on_at FROM automations a WHERE a.automation_id = b.automation_id)',
-    'AND (b.follow_up_run_id IS NULL OR EXISTS (SELECT 1 FROM automation_runs r',
+    'AND (b.follow_up_held_at IS NOT NULL OR b.follow_up_run_id IS NULL OR EXISTS (SELECT 1 FROM automation_runs r',
     "WHERE r.id = b.follow_up_run_id AND r.state = 'pending'))",
   ];
 }

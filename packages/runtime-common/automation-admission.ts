@@ -14,6 +14,10 @@
 //    §1.5): the refusal carries `hold`, and the attempt puts the run back to
 //    pending rather than ending it (`holdAutomationFollowUpRun`), so it
 //    starts again once the automation is resumed or active again. A
+//    follow-up whose batch a resume gave another identity than its row's is
+//    held too (`follow-up-identity-changed`): a job enqueued before the
+//    pause took it before the resume reached it, and it starts again acting
+//    as whoever resumed. A
 //    trigger's run that no longer acts as the payer
 //    (a resume made someone else the payer) is refused (`payer-changed`). A
 //    run someone started by hand (Preview, Run now) needs no row. A
@@ -218,6 +222,20 @@ export async function admitRunIdentity(
             'automation-paused',
             `The automation is paused (${automation.pauseReason}), so its scheduled run doesn't start`,
           );
+    }
+    // A resume made someone else the follow-up's identity after this run row
+    // was read for its job: it is held, and starts again acting as them.
+    if (kind === 'batch') {
+      let identity = await followUpIdentity(dbAdapter, run);
+      if (identity.actsAs !== undefined && identity.actsAs !== actsAs) {
+        return {
+          ...refuse(
+            'follow-up-identity-changed',
+            `A resume made ${identity.actsAs} the identity of this batch's follow-up, so it starts again acting as them`,
+          ),
+          hold: true,
+        };
+      }
     }
     if (automation.state === 'waiting-for-key-approval') {
       return kind === 'batch'
@@ -643,17 +661,38 @@ async function followUpAuthorizedAt(
   dbAdapter: DBAdapter,
   run: AutomationRun,
 ): Promise<number> {
+  let identity = await followUpIdentity(dbAdapter, run);
+  let since =
+    identity.resumedAt !== undefined && identity.actsAs === run.actsAs
+      ? identity.resumedAt
+      : (identity.submittedBy ?? run.createdAt);
+  return Math.floor(new Date(since).getTime() / 1000);
+}
+
+// What the follow-up's batch (its slot) says of its identity: whom a resume
+// made it act as and when (`follow_up_acts_as`, `follow_up_resumed_at`), and
+// when the run that submitted the batch started. Each is undefined when the
+// batch, or the value, isn't there.
+async function followUpIdentity(
+  dbAdapter: DBAdapter,
+  run: AutomationRun,
+): Promise<{ actsAs?: string; resumedAt?: string; submittedBy?: string }> {
   let [row] = await query(dbAdapter, [
     'SELECT b.follow_up_acts_as, b.follow_up_resumed_at, r.created_at FROM ai_batches b LEFT JOIN automation_runs r ON r.id = b.run_id WHERE b.batch_id =',
     param(run.slot),
     'AND b.automation_id =',
     param(run.automationId),
   ]);
-  let since =
-    row?.follow_up_resumed_at != null && row.follow_up_acts_as === run.actsAs
-      ? row.follow_up_resumed_at
-      : (row?.created_at ?? run.createdAt);
-  return Math.floor(new Date(since as string).getTime() / 1000);
+  let iso = (value: unknown) =>
+    value == null ? undefined : new Date(value as string).toISOString();
+  return {
+    actsAs:
+      row?.follow_up_acts_as == null
+        ? undefined
+        : String(row.follow_up_acts_as),
+    resumedAt: iso(row?.follow_up_resumed_at),
+    submittedBy: iso(row?.created_at),
+  };
 }
 
 function refuse(

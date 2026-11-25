@@ -79,6 +79,7 @@ import {
   abandonAutomationRun,
   getAutomationRun,
   holdAutomationFollowUpRuns,
+  logAutomationRunEnded,
   type AutomationRun,
 } from './automation-runs.ts';
 import {
@@ -166,7 +167,10 @@ export type AutomationLostRunOutcome =
     }
   | {
       kind: 'held';
+      // The held follow-up, and the run that ended in its place when the
+      // lost run had used something (`holdAutomationFollowUpRuns`).
       run: AutomationRun;
+      ended?: AutomationRun;
     }
   | {
       kind: 'failed';
@@ -338,10 +342,13 @@ async function reconcileLostRun(
       (automation?.state === 'paused' ||
         automation?.state === 'waiting-for-key-approval')
     ) {
-      let [held] = await holdAutomationFollowUpRuns(txQuery, automationId, {
-        runId,
-      });
-      return held ? ({ kind: 'held', run: held } as const) : undefined;
+      let {
+        held: [held],
+        ended: [ended],
+      } = await holdAutomationFollowUpRuns(txQuery, automationId, { runId });
+      return held
+        ? ({ kind: 'held', run: held, ...(ended ? { ended } : {}) } as const)
+        : undefined;
     }
     if (row.reconciled_at != null) {
       return await end(
@@ -443,14 +450,26 @@ async function reconcileLostRun(
   }
 
   if (decided?.kind === 'held') {
-    await logRunPlatformLine(dbAdapter, runId, {
+    if (decided.ended) {
+      // The lost run's attempt is gone, so reconcile logs its end and
+      // charges what it used to whom it acted as.
+      await logAutomationRunEnded(dbAdapter, decided.ended);
+      await chargeAutomationRun({
+        dbAdapter,
+        meteredCharges: options.meteredCharges,
+        runId: decided.ended.id,
+        log: options.log,
+      });
+      await options.reportRunChange?.(decided.ended.id);
+    }
+    await logRunPlatformLine(dbAdapter, decided.run.id, {
       kind: 'trigger',
       level: 'info',
       message:
         "Reconcile found this batch's follow-up without a job while its automation is stopped, so it is held: it starts again once the automation is resumed or active again",
       data: { reconciled: true, held: true },
     });
-    await options.reportRunChange?.(runId);
+    await options.reportRunChange?.(decided.run.id);
   } else if (decided?.kind === 'requeued') {
     await logRunPlatformLine(dbAdapter, runId, {
       kind: 'trigger',

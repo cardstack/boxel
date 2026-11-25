@@ -918,6 +918,34 @@ module(basename(import.meta.filename), function (hooks) {
     await assertRefused(assert, again, result, calls, 'session-revoked');
   });
 
+  test('a follow-up whose batch a resume gave another identity is held, so it starts again acting as them', async function (assert) {
+    await switchOn(CLEAN);
+    let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    let followUp = await batchFollowUp(submitting);
+    // A resume by the writer landed after a job enqueued before the pause
+    // read the run row acting as the owner.
+    await query(dbAdapter, [
+      'UPDATE ai_batches SET follow_up_acts_as =',
+      param(WRITER),
+      ', follow_up_resumed_at = now() WHERE batch_id =',
+      param(followUp.slot),
+    ]);
+
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(followUp, { triggerKind: 'batch', calls });
+
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    assert.strictEqual(calls.length, 0, 'the script never ran as the owner');
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, followUp.id))?.state,
+      'pending',
+    );
+    assert.deepEqual(
+      (await admissionLines(followUp.id)).map((line) => line.data?.reason),
+      ['follow-up-identity-changed'],
+    );
+  });
+
   test('a script that doesn’t parse is refused before it runs', async function (assert) {
     let run = await newRun(BROKEN);
     let calls: RunCommandArgs[] = [];
