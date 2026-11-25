@@ -236,12 +236,17 @@ export function markedSync(
     monacoTheme?: string;
     monaco?: MonacoSDK | null;
     tabSize?: number;
+    // Render every single newline as `<br>` instead of joining the lines.
+    breaks?: boolean;
   } = DEFAULT_MARKED_SYNC_OPTIONS,
 ): string {
   // Set per-call options for the code renderer (registered once above).
   _codeRenderOpts = { ...DEFAULT_MARKED_SYNC_OPTIONS, ...opts };
 
-  return bfmMarked.parse(markdown, { async: false }) as string;
+  return bfmMarked.parse(markdown, {
+    async: false,
+    breaks: opts.breaks ?? false,
+  }) as string;
 }
 
 const DEFAULT_OPTS = {
@@ -262,6 +267,8 @@ export function markdownToHtml(
     monacoTheme?: string;
     monaco?: MonacoSDK | null;
     tabSize?: number;
+    // Render every single newline as `<br>` instead of joining the lines.
+    breaks?: boolean;
   } = DEFAULT_OPTS,
 ): string {
   opts = { ...DEFAULT_OPTS, ...opts };
@@ -276,6 +283,7 @@ export function markdownToHtml(
     monacoTheme: opts.monacoTheme,
     monaco: opts.monaco,
     tabSize: opts.tabSize,
+    breaks: opts.breaks,
   });
   if (opts.sanitize) {
     html = sanitizeHtml(html);
