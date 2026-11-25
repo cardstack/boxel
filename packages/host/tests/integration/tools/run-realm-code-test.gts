@@ -5944,6 +5944,25 @@ return [out.length, out[39999].b, gauss];`);
     );
   });
 
+  test('an interactive run runs at most 100 transforms', async function (assert) {
+    let result = await run(`
+let ran = 0;
+let refusal;
+for (let i = 0; i < 101; i++) {
+  try {
+    await realm.transform({ i }, '.i');
+    ran++;
+  } catch (e) {
+    refusal = e.message;
+  }
+}
+return { ran, refusal };`);
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      ran: 100,
+      refusal: 'Realm code may call realm.transform at most 100 times per run',
+    });
+  });
+
   // Auto-fix answers come from the same proxy. `fix` turns the code the
   // runner sent into the code the model answers with.
   function answerFixes(fix: (code: string) => string) {
