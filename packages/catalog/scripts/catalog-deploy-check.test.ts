@@ -240,7 +240,7 @@ test('a catalog pull request counts once it has merged, into any branch', () => 
   assert.equal(merged({ merged_at: null }), false);
 });
 
-test('a boxel pull request merged into a stack parent still holds', () => {
+test('a boxel pull request merged into a stack parent holds until its merge commit is on main', () => {
   let main = { ref: 'main' };
   let at = '2026-10-01T00:00:00Z';
   assert.deepEqual(
@@ -262,6 +262,26 @@ test('a boxel pull request merged into a stack parent still holds', () => {
     [{ ...boxelPull(10), ...stacked }],
   );
   assert.equal(result.holds[0]?.reason, 'unmerged');
+
+  let landed = boxelPullState(
+    { merged_at: at, state: 'closed', base: { ref: 'cs-1-parent' } },
+    true,
+  );
+  assert.deepEqual(landed, { merged: true, closed: false });
+  let catalogPulls = [catalogPull(1, 'Merges after: cardstack/boxel#10')];
+  let boxelPulls = [{ ...boxelPull(10), ...landed }];
+  assert.equal(
+    assess(catalogPulls, boxelPulls).holds[0]?.reason,
+    'not-deployed',
+  );
+  assert.deepEqual(assess(catalogPulls, boxelPulls, [10]).holds, []);
+  assert.deepEqual(
+    boxelPullState(
+      { merged_at: null, state: 'open', base: { ref: 'cs-1-parent' } },
+      true,
+    ),
+    { merged: false, closed: false },
+  );
 });
 
 test('a path a negated pattern re-includes ships', () => {

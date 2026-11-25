@@ -17,7 +17,8 @@
 // merging count for nothing: a closed catalog pull request never reached main,
 // and a pairing that names a boxel pull request closed without merging holds
 // nothing back and is reported as a warning. A boxel pull request merged into
-// a branch other than main hasn't landed, so it holds.
+// a branch other than main has landed only once its merge commit is on main;
+// until then it holds.
 //
 // A target at or behind the deployed catalog revision deploys nothing, so a
 // deploy never moves an environment's catalog backwards. That is what lets
@@ -491,14 +492,19 @@ export function merged(pull: Pick<RestPull, 'merged_at'>) {
   return Boolean(pull.merged_at);
 }
 
-// A boxel pull request's code is on main only once it merges into main. One
-// merged into another branch, such as a stack parent, hasn't landed yet, so it
-// holds like an open one.
+// A boxel pull request has landed once its code is on main. One that merged
+// into main has. One that merged into another branch, such as a stack parent,
+// has only when `mergeCommitOnMain` says its merge commit got to main since:
+// the parent merged after it, or the stack was merged into main without the
+// pull request being retargeted first. Until then it holds like an open one.
 export function boxelPullState(
   pull: Pick<RestPull, 'merged_at' | 'state' | 'base'>,
+  mergeCommitOnMain = false,
 ) {
   return {
-    merged: Boolean(pull.merged_at) && pull.base.ref === 'main',
+    merged:
+      Boolean(pull.merged_at) &&
+      (pull.base.ref === 'main' || mergeCommitOnMain),
     closed: pull.state === 'closed' && !pull.merged_at,
   };
 }
@@ -736,6 +742,17 @@ async function main() {
   write({ action: 'deploy', environment, from, to, boxel, ...assessment });
 }
 
+// Whether a boxel revision (a SHA or a branch) has a commit in its history.
+async function contains(revision: string, commit: string | null) {
+  if (!commit) {
+    return false;
+  }
+  let { status } = await get<{ status: string }>(
+    `repos/${BOXEL_REPOSITORY}/compare/${commit}...${revision}?per_page=1`,
+  );
+  return status === 'ahead' || status === 'identical';
+}
+
 // Reads the boxel pull requests these catalog pull requests declare, and which
 // of them the boxel revision an environment runs contains.
 async function assess(
@@ -751,7 +768,14 @@ async function assess(
     let pull = await getOrUndefined<RestPull>(
       `repos/${BOXEL_REPOSITORY}/pulls/${n}`,
     );
-    let state = pull && boxelPullState(pull);
+    let state =
+      pull &&
+      boxelPullState(
+        pull,
+        Boolean(pull.merged_at) &&
+          pull.base.ref !== 'main' &&
+          (await contains('main', pull.merge_commit_sha)),
+      );
     boxelPulls.set(
       n,
       pull &&
@@ -762,13 +786,12 @@ async function assess(
           ...state,
         },
     );
-    if (pull && state?.merged && pull.merge_commit_sha) {
-      let { status } = await get<{ status: string }>(
-        `repos/${BOXEL_REPOSITORY}/compare/${pull.merge_commit_sha}...${boxelSha}?per_page=1`,
-      );
-      if (status === 'ahead' || status === 'identical') {
-        deployedPulls.add(n);
-      }
+    if (
+      pull &&
+      state?.merged &&
+      (await contains(boxelSha, pull.merge_commit_sha))
+    ) {
+      deployedPulls.add(n);
     }
   }
   return assessRollout({
