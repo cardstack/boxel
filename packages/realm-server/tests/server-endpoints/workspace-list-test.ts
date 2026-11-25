@@ -11,7 +11,10 @@ import {
   type QueuePublisher,
   type QueueRunner,
 } from '@cardstack/runtime-common';
-import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
+import {
+  getMatrixUsername,
+  MatrixClient,
+} from '@cardstack/runtime-common/matrix-client';
 import {
   closeServer,
   createVirtualNetwork,
@@ -35,6 +38,7 @@ import {
 } from '../helpers/workspace-list.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { realmURLFor } from '../../handlers/create-realm.ts';
+import { readWorkspaceList } from '../../lib/workspace-list.ts';
 import { oauthIssuer } from '../../lib/oauth-provider/registry.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
 import { testRealmURL } from './helpers.ts';
@@ -306,6 +310,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('GET /_user-realms answers an empty list for a user who never had one', async function (assert) {
+      let user = await registerListUser('list-never');
+      let response = await read(
+        context.server,
+        '/_user-realms',
+        sessionToken(user.userId),
+      );
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.data.attributes.realms, []);
+    });
+
     test('GET /_user-display-name answers the caller’s display name', async function (assert) {
       let user = await registerListUser('list-name');
       let response = await read(
@@ -327,6 +342,49 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         let response = await read(context.server, path, token);
         assert.strictEqual(response.status, 404, `${path}: ${response.text}`);
       }
+    });
+
+    test('the Matrix admin account has no list here', async function (assert) {
+      // The test server signs in to the Admin API as the local default
+      // admin. Synapse won't mint that account a token for itself, so the
+      // server can't edit its list and doesn't show it.
+      let response = await read(
+        context.server,
+        '/_user-realms',
+        sessionToken('@admin:localhost'),
+      );
+      assert.strictEqual(response.status, 404, response.text);
+    });
+
+    test('a user of another Matrix server has no list or display name here', async function (assert) {
+      let token = sessionToken(`@someone-${uuidv4()}:elsewhere.example`);
+      for (let path of ['/_user-realms', '/_user-display-name'] as const) {
+        let response = await read(context.server, path, token);
+        assert.strictEqual(response.status, 404, `${path}: ${response.text}`);
+      }
+    });
+  });
+
+  // A realm server configured with a Matrix server name its Synapse doesn't
+  // have: Synapse turns away every user the realm server asks about.
+  module('when the Matrix server name is misconfigured', function (hooks) {
+    hooks.before(async function () {
+      await ensureMatrixAdminUser();
+    });
+
+    test('reading a list fails rather than answering that there is none', async function (assert) {
+      let deps = {
+        matrixClient: new MatrixClient({
+          matrixURL,
+          serverName: 'elsewhere.example',
+          username: 'unused',
+          seed: realmSecretSeed,
+        }),
+      };
+      await assert.rejects(
+        readWorkspaceList(deps, '@someone:elsewhere.example'),
+        /HTTP 400/,
+      );
     });
   });
 

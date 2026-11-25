@@ -205,7 +205,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
     const startPos = textarea.selectionStart;
     const endPos = textarea.selectionEnd;
 
-    const newValue = `${value.substring(0, startPos)}\n\n${value.substring(
+    const newValue = `${value.substring(0, startPos)}\n${value.substring(
       endPos,
     )}`;
 
@@ -213,7 +213,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
 
     // Set the cursor position to be right after the inserted new line
     next(() => {
-      textarea.selectionStart = textarea.selectionEnd = startPos + 2;
+      textarea.selectionStart = textarea.selectionEnd = startPos + 1;
     });
   }
 }

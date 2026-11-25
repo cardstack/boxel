@@ -1,20 +1,6 @@
 {
   "main": [
     {
-      "run": 44219537371,
-      "at": "2026-11-18T01:56:12Z",
-      "peakMb": 398,
-      "highestShardMb": 578,
-      "shards": 16
-    },
-    {
-      "run": 44245863516,
-      "at": "2026-11-18T05:40:22Z",
-      "peakMb": 374,
-      "highestShardMb": 833,
-      "shards": 16
-    },
-    {
       "run": 44259178914,
       "at": "2026-11-18T07:28:40Z",
       "peakMb": 378,
@@ -278,6 +264,20 @@
       "at": "2026-11-25T06:59:51Z",
       "peakMb": 430,
       "highestShardMb": 597,
+      "shards": 16
+    },
+    {
+      "run": 45583268563,
+      "at": "2026-11-25T09:12:54Z",
+      "peakMb": 434,
+      "highestShardMb": 592,
+      "shards": 16
+    },
+    {
+      "run": 45602025343,
+      "at": "2026-11-25T11:10:59Z",
+      "peakMb": 410,
+      "highestShardMb": 604,
       "shards": 16
     }
   ]

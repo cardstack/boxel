@@ -408,7 +408,68 @@ export async function fetchDisplayName(
   userId: string,
   { signal }: { signal?: AbortSignal } = {},
 ): Promise<string | null | undefined> {
-  let path = `_synapse/admin/v2/users/${encodeURIComponent(userId)}`;
+  let response = await adminGet(
+    admin,
+    `_synapse/admin/v2/users/${encodeURIComponent(userId)}`,
+    { signal },
+  );
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw new MatrixHttpError(
+      `matrix admin user lookup for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
+      response.status,
+    );
+  }
+  let { displayname } = (await response.json()) as { displayname?: unknown };
+  return typeof displayname === 'string' && displayname ? displayname : null;
+}
+
+// The content of `userId`'s global account data of `eventType`, read with the
+// admin API: empty when the user never wrote it, undefined when the Matrix
+// server has no such account. A failure of the admin's own login is thrown,
+// never read as that, and so is a user the server says isn't one of its own
+// (400): a caller asks only for users of the server it is configured with,
+// so that answer means the configuration and the server disagree. Only
+// reads: the admin API can't write another user's account data, so a write
+// needs the user's own token.
+export async function fetchAccountDataAsAdmin(
+  admin: MatrixAdmin,
+  userId: string,
+  eventType: string,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<Record<string, unknown> | undefined> {
+  let response = await adminGet(
+    admin,
+    `_synapse/admin/v1/users/${encodeURIComponent(userId)}/accountdata`,
+    { signal },
+  );
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw new MatrixHttpError(
+      `matrix admin account-data read for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
+      response.status,
+    );
+  }
+  let body = (await response.json()) as {
+    account_data?: { global?: Record<string, unknown> };
+  };
+  let content = body.account_data?.global?.[eventType];
+  return content && typeof content === 'object'
+    ? (content as Record<string, unknown>)
+    : {};
+}
+
+// GETs an admin API path with the process's shared admin token, logging the
+// admin in again once if synapse no longer accepts it.
+async function adminGet(
+  admin: MatrixAdmin,
+  path: string,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<Response> {
   let request = async (adminAccessToken: string) =>
     await fetch(new URL(path, admin.matrixURL), {
       headers: { Authorization: `Bearer ${adminAccessToken}` },
@@ -421,17 +482,7 @@ export async function fetchDisplayName(
       await getMatrixAdminToken({ ...admin, stale: adminAccessToken }),
     );
   }
-  if (response.status === 404) {
-    return undefined;
-  }
-  if (!response.ok) {
-    throw new MatrixHttpError(
-      `matrix admin user lookup for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
-      response.status,
-    );
-  }
-  let { displayname } = (await response.json()) as { displayname?: unknown };
-  return typeof displayname === 'string' && displayname ? displayname : null;
+  return response;
 }
 
 // Append a single realm URL to a user's `app.boxel.realms` account_data,

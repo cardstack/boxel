@@ -1,8 +1,10 @@
 // A user's workspace list: the realms the app lists for them, kept in their
 // Matrix account data (`app.boxel.realms`). The realm server reads and edits
-// it through the Synapse admin API, as the user whose list it is and no one
-// else, for a caller that holds no Matrix token of its own (an app with an
-// OAuth Boxel API token, such as boxel-cli).
+// it for a caller that holds no Matrix token of its own (an app with an OAuth
+// Boxel API token, such as boxel-cli), only ever the list of the user the
+// request is for. It reads with the shared admin token, and edits as that
+// user, with a token the Synapse admin API mints for them, since the admin
+// API can't write another user's account data.
 //
 // The admin API reaches only the users of the realm server's own homeserver
 // (ADR 004 §4), so a user of any other server has no list here: reads answer
@@ -16,6 +18,7 @@ import { isUserOfMatrixServer } from '@cardstack/runtime-common/matrix-server-na
 import {
   appendRealmToUserAccountData,
   fetchAccountData,
+  fetchAccountDataAsAdmin,
   fetchDisplayName,
   MatrixHttpError,
   putAccountData,
@@ -206,16 +209,25 @@ export async function editWorkspaceList(
 }
 
 // The user's list, or undefined when this server keeps none for them. A list
-// that was never written is empty.
+// that was never written is empty. The Matrix admin's own account has none
+// here: Synapse won't mint the admin a token for itself, so nothing here can
+// edit that list, and a read would show one that creates and deletes leave
+// as it was.
 export async function readWorkspaceList(
   deps: WorkspaceListDeps,
   user: string,
 ): Promise<string[] | undefined> {
-  let content = await asListOwner(
-    deps,
-    user,
-    'read a list',
-    (accessToken, signal) => read(deps, user, accessToken, signal),
+  if (!keepsAccountOf(deps, user)) {
+    return undefined;
+  }
+  let admin = matrixAdmin(deps);
+  if (user === adminUserId(deps, admin)) {
+    return undefined;
+  }
+  let content = await withRetries('read a list', (signal) =>
+    fetchAccountDataAsAdmin(admin, user, APP_BOXEL_REALMS_EVENT_TYPE, {
+      signal,
+    }),
   );
   return content ? realmsIn(content) : undefined;
 }
@@ -334,6 +346,14 @@ export async function withWorkspaceListLock<T>(
 
 function keepsAccountOf(deps: WorkspaceListDeps, user: string): boolean {
   return isUserOfMatrixServer(user, deps.matrixClient.serverName);
+}
+
+// The admin's Matrix user id. Its username may be a localpart or a full id,
+// as the Matrix login it signs in with accepts either.
+function adminUserId(deps: WorkspaceListDeps, admin: MatrixAdmin): string {
+  return admin.adminUsername.startsWith('@')
+    ? admin.adminUsername
+    : `@${admin.adminUsername}:${deps.matrixClient.serverName}`;
 }
 
 function matrixAdmin(deps: WorkspaceListDeps): MatrixAdmin {

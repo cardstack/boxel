@@ -22,6 +22,7 @@ import {
   hasExtension,
   hasUnavailableRoutes,
   hostRouteCanonicalAddress,
+  HOST_ROUTES_RETRY_AFTER_SECONDS,
   HostRoutesReadError,
   isCaptureServingPath,
   isHashedScopedCSSRequest,
@@ -68,10 +69,6 @@ import {
   prefixRealmURLsOf,
   type PrefixRealmSource,
 } from '@cardstack/runtime-common/prefix-realm-network';
-
-// How long a page that answers 503 because a realm's host routes can't be
-// served yet asks the client to wait, in seconds.
-const HOST_ROUTES_RETRY_AFTER_SECONDS = '30';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
@@ -1230,13 +1227,15 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       configFields.hostRoutingMap = hostScopedMap;
     }
 
-    if (dynamicRoutes && routedRealm) {
+    if (hostRoutes.length > 0 && routedRealm) {
       // The realm's validated routes, the whole tree, fixed routes
       // included, as plain JSON: what the resolver takes, so the host app
-      // can resolve a path the way this server does. `realmURL` is the URL
-      // card id templates are filled under; a request path is resolved
-      // relative to its pathname. `hostRoutingMap` above stays the fixed
-      // routes the host resolves synchronously.
+      // can resolve a path the way this server does, and what its links
+      // get their routed addresses from. So a realm with only fixed routes
+      // gets it too. `realmURL` is the URL card id templates are filled
+      // under; a request path is resolved relative to its pathname.
+      // `hostRoutingMap` above stays the fixed routes the host resolves
+      // synchronously.
       configFields.hostDynamicRoutes = {
         realmURL: routedRealm.url,
         routes: hostRoutes,
