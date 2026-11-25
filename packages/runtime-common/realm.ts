@@ -22619,24 +22619,13 @@ export class Realm {
   // couldn't be read then was dropped with a `type-unavailable` warning.
   // Kept until the next index. When the index can't be read, this rejects
   // with a `HostRoutesReadError`, and nothing is kept: an empty tree would
-  // read as a realm with no routes. When the index stores no tree, the
-  // answer is the fallback `#readHostRoutes` builds, which is temporary by
-  // design (an index of realm.json is on its way, or realm.json isn't indexed
-  // yet), so it isn't kept either: callers that share the read get it, and
-  // the next read asks the index again.
+  // read as a realm with no routes.
   async getHostRoutes(): Promise<HostRoutesValidation> {
     let cached = this.#cachedHostRoutes;
     if (cached) {
       return await cached;
     }
-    let read: Promise<HostRoutesValidation> = this.#readHostRoutes().then(
-      ({ validation, stored }) => {
-        if (!stored && this.#cachedHostRoutes === read) {
-          this.#cachedHostRoutes = undefined;
-        }
-        return validation;
-      },
-    );
+    let read = this.#readHostRoutes();
     this.#cachedHostRoutes = read;
     try {
       return await read;
@@ -22648,12 +22637,7 @@ export class Realm {
     }
   }
 
-  async #readHostRoutes(): Promise<{
-    validation: HostRoutesValidation;
-    // Whether the answer is the tree the index stores, and not the fallback
-    // built from realm.json's rules when it stores none.
-    stored: boolean;
-  }> {
+  async #readHostRoutes(): Promise<HostRoutesValidation> {
     let stored: StoredHostRoutes | undefined;
     let rules: RawHostRoutingRule[] = [];
     try {
@@ -22674,10 +22658,7 @@ export class Realm {
         // realm for a long time, so an index of realm.json reads it again.
         this.#indexRealmConfigForHostRoutes();
       }
-      return {
-        validation: { routes: stored.routes, warnings: stored.warnings },
-        stored: true,
-      };
+      return { routes: stored.routes, warnings: stored.warnings };
     }
     // An index written before the index stored host routes. Its rules are
     // validated without type definitions, so each field-match route is
@@ -22687,13 +22668,10 @@ export class Realm {
     if (hostRouteTypeRefs(rules).length > 0) {
       this.#indexRealmConfigForHostRoutes();
     }
-    return {
-      validation: validateHostRoutes(rules, {
-        realmURL: new URL(this.url),
-        lookupType: () => 'unavailable',
-      }),
-      stored: false,
-    };
+    return validateHostRoutes(rules, {
+      realmURL: new URL(this.url),
+      lookupType: () => 'unavailable',
+    });
   }
 
   // Starts an index of realm.json, which stores the host routes with the
