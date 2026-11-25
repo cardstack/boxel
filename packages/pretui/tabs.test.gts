@@ -201,7 +201,7 @@ module('Pretui | Tabs', function (hooks) {
     let style = getComputedStyle(focused);
     assert.strictEqual(style.outlineStyle, 'solid');
     assert.strictEqual(style.outlineWidth, '2px');
-    assert.strictEqual(style.outlineOffset, '-2px', 'the ring sits inside');
+    assert.strictEqual(style.outlineOffset, '-2px', `the ring sits inside (got ${style.outlineOffset}; width=${style.outlineWidth} style=${style.outlineStyle})`);
     assert.deepEqual(
       focused.getBoundingClientRect().toJSON(),
       before.toJSON(),
@@ -234,7 +234,7 @@ module('Pretui | Tabs', function (hooks) {
     let list = document.querySelector(
       '[data-test-pretui-tabs] [role="tablist"]',
     ) as HTMLElement;
-    assert.true(list.scrollWidth > list.clientWidth, 'the list overflows');
+    assert.true(list.scrollWidth > list.clientWidth, `the list overflows (scrollWidth=${list.scrollWidth} clientWidth=${list.clientWidth} width=${getComputedStyle(list).width})`);
     assert.dom(list).hasAttribute('data-fade-right');
     assert.dom(list).doesNotHaveAttribute('data-fade-left');
 
