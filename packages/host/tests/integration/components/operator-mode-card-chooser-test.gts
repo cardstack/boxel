@@ -1186,6 +1186,10 @@ module('Integration | operator-mode | card chooser', function (hooks) {
   });
 
   test(`Show only focuses a section and collapses others`, async function (assert) {
+    // The search covers only the test realm, so the snapshot shows the test's
+    // own cards and doesn't move when the base or skills realm changes. A
+    // recent card gives it a second section.
+    getService('recent-cards-service').add(`${testRealmURL}Pet/mango`);
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1194,8 +1198,23 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
+    await click('[data-test-realm-picker]');
+    await click(`[data-test-boxel-picker-option-row="${testRealmURL}"]`);
+    await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+    assert
+      .dom('[data-test-boxel-picker-option-row]')
+      .doesNotExist('the realm list is closed');
     await fillIn(`[data-test-search-field]`, 'ma');
-    await waitFor('[data-test-search-sheet-show-only]');
+    await waitFor(
+      `[data-section-sid="realm:${testRealmURL}"] [data-test-search-result]`,
+    );
+    assert.deepEqual(
+      [...document.querySelectorAll('[data-section-sid]')].map((section) =>
+        section.getAttribute('data-section-sid'),
+      ),
+      ['recents', `realm:${testRealmURL}`],
+      'only the recent card and the test realm have sections',
+    );
     await percySnapshot(assert);
     await click('[data-test-search-sheet-show-only]');
     const collapsedBlocks = document.querySelectorAll(
