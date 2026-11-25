@@ -994,9 +994,10 @@ is neither measured nor charged, and the job counts the automation as
 `stopped` for that day. A day with both states counts as active: an
 automation paused at 20:00 is charged for that day, and the charge stops from
 the next day. The files stay in the realm, and readers keep the files; only
-the charge stops. Resuming, the last key approval landing, credits arriving or
-a new trigger on a done automation makes the automation active again, and the
-charge starts again from that day. Removing an automation deletes the
+the charge stops. Resuming, the last key approval landing, the next run
+admitted once the payer's balance covers the run (a top-up alone changes no
+state), or a new trigger on a done automation makes the automation active
+again, and the charge starts again from that day. Removing an automation deletes the
 automation's `automations` row, so the job no longer measures or charges the
 automation, and deleting a file stops that file counting.
 
@@ -1009,7 +1010,10 @@ day began, and every change during the day, to decide whether the automation
 was active. The storage route (`GET /_automation-storage`) answers
 `chargeStopped` from the same history: null while the automation is active,
 otherwise the current state, the pause reason and `since`, the time the
-automation last left `active` (`storageChargeStopped`).
+automation last left `active`, or the switch-on time for an automation that
+was never active (`storageChargeStopped`). The charge stops from the first day
+the automation spends wholly stopped: the day after `since` when the
+automation was active earlier that day, otherwise `since`'s own day.
 
 **A day is measured once.** For each automation, the job first records the
 day's measurement as an `automation_storage_days` row (automation, day, file

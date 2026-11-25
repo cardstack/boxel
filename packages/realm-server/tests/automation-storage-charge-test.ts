@@ -596,6 +596,40 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('an automation switched on waiting for key approval is never charged, and says so from the switch-on', async function (assert) {
+    let result = await switchOnAutomation(
+      dbAdapter,
+      {
+        automationId: AUTOMATION,
+        realm: REALM,
+        user: PAYER,
+        declaration: declaration(),
+        keyApproved: false,
+      },
+      options,
+    );
+    assert.true(result.ok);
+    await changedAt('2026-11-10T08:00:00Z');
+    await dbAdapter.execute(
+      `UPDATE automations SET switched_on_at = '2026-11-10T08:00:00Z' WHERE automation_id = $1`,
+      { bind: [AUTOMATION] },
+    );
+    await createdFile('logs/sync.jsonl', BYTES_PER_GB);
+
+    let [result10] = await charge('2026-11-10');
+
+    assert.strictEqual(
+      result10.outcome,
+      'stopped',
+      'the switch-on day is not charged',
+    );
+    assert.deepEqual(await storageChargeStopped(dbAdapter, AUTOMATION), {
+      state: 'waiting-for-key-approval',
+      pauseReason: null,
+      since: '2026-11-10T08:00:00.000Z',
+    });
+  });
+
   test('a file that no longer exists is not charged', async function (assert) {
     await switchOn('2026-11-10');
     await createdFile('logs/sync.jsonl', BYTES_PER_GB);

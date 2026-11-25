@@ -7,9 +7,10 @@
 // point in the day, as its `automation_state_changes` history records. A day
 // the automation spent wholly paused, waiting for credits, waiting for key
 // approval or done is neither measured nor charged. The files stay in the
-// realm; only the charge stops. Resuming, the last key approval, credits
-// arriving or a new trigger on a done automation makes the automation active
-// again, and the charge starts again from that day.
+// realm; only the charge stops. Resuming, the last key approval, the next
+// run admitted once the payer's balance covers the run, or a new trigger on a
+// done automation makes the automation active again, and the charge starts
+// again from that day.
 //
 // Each day is priced at what existed that day. Just after a UTC day ends, the
 // job measures each automation's files (see `getAutomationStorage`) and keeps
@@ -228,10 +229,13 @@ async function chargeOne(
 
 // Why, and since when, an automation's storage isn't charged: the
 // automation's current state when that state isn't `active`, with its pause
-// reason, and when the automation last left `active`. Null for an active
-// automation, and for one with no history. The day the automation left
-// `active` is still charged; the charge stops from the next day the
-// automation spends wholly stopped.
+// reason, and `since`, when the automation last left `active` (or, for an
+// automation that was never active, when the automation was switched on).
+// Null for an active automation, and for one with no history. The charge
+// stops from the first day the automation spends wholly stopped: the day
+// after `since` when the automation was active earlier that day, otherwise
+// `since`'s own day (a stop at exactly midnight, or an automation that was
+// never active).
 export interface StorageChargeStopped {
   state: Exclude<AutomationState, 'active'>;
   pauseReason: AutomationPauseReason | null;
@@ -243,16 +247,21 @@ export async function storageChargeStopped(
   automationId: RealmResourceIdentifier,
 ): Promise<StorageChargeStopped | null> {
   let [latest] = (await query(dbAdapter, [
-    `SELECT c.state, c.pause_reason,
-       (SELECT MIN(s.changed_at) FROM automation_state_changes s
-        WHERE s.automation_id = c.automation_id
-          -- Every change after the automation last became active.
-          AND NOT EXISTS (SELECT 1 FROM automation_state_changes l
-            WHERE l.automation_id = s.automation_id AND l.state = 'active'
-              AND (l.changed_at, l.id) >= (s.changed_at, s.id))) AS since
-     FROM automation_state_changes c WHERE c.automation_id =`,
+    `WITH history AS (
+       SELECT id, state, pause_reason, changed_at FROM automation_state_changes
+       WHERE automation_id =`,
     param(automationId),
-    'ORDER BY c.changed_at DESC, c.id DESC LIMIT 1',
+    `),
+     last_active AS (
+       SELECT changed_at, id FROM history WHERE state = 'active'
+       ORDER BY changed_at DESC, id DESC LIMIT 1)
+     SELECT latest.state, latest.pause_reason,
+       -- The first change after the automation last became active.
+       (SELECT MIN(s.changed_at) FROM history s
+        WHERE NOT EXISTS (SELECT 1 FROM last_active l
+          WHERE (l.changed_at, l.id) >= (s.changed_at, s.id))) AS since
+     FROM (SELECT * FROM history ORDER BY changed_at DESC, id DESC LIMIT 1)
+       AS latest`,
   ])) as unknown as {
     state: AutomationState;
     pause_reason: AutomationPauseReason | null;

@@ -63,8 +63,10 @@ exports.up = (pgm) => {
                         WHERE c.automation_id = a.automation_id)
   `);
   pgm.sql(`
-    INSERT INTO automation_state_changes (automation_id, state, pause_reason)
-    SELECT a.automation_id, a.state, a.pause_reason FROM automations a
+    INSERT INTO automation_state_changes
+        (automation_id, state, pause_reason, changed_at)
+    SELECT a.automation_id, a.state, a.pause_reason, clock_timestamp()
+      FROM automations a
      WHERE a.state <> 'active'
        AND (SELECT c.state FROM automation_state_changes c
              WHERE c.automation_id = a.automation_id

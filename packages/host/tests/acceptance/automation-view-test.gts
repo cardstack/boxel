@@ -2698,9 +2698,11 @@ module('Acceptance | automation view', function (hooks) {
         assert
           .dom('[data-test-automation-run-storage-rules]')
           .includesText('Storage isn’t part of any one run’s total')
-          .includesText('Boxel charges for every day the automation is active')
           .includesText(
-            'Boxel stops charging while the automation is paused, waiting for credits, waiting for key approval or done',
+            'Boxel charges for every day the automation’s status reads On',
+          )
+          .includesText(
+            'Boxel doesn’t charge for a day the automation spends wholly paused, waiting for credits, waiting for key approval or done',
           );
       });
 
