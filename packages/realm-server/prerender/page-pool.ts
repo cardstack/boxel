@@ -10,7 +10,10 @@ import { isRunAffinityKey, realmAffinityKeyOf } from './affinity.ts';
 import { raceNodeTimeout } from './node-race.ts';
 import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
-import type { BrowserManager } from './browser-manager.ts';
+import {
+  BROWSER_LAUNCH_TIMEOUT_MS,
+  type BrowserManager,
+} from './browser-manager.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
 import { attachRuntimeExceptionCapture } from './runtime-exception-capture.ts';
@@ -269,11 +272,12 @@ const DEFAULT_AFFINITY_TEARDOWN_WAIT_MS = 10_000;
 const DEFAULT_STANDBY_REFILL_WAIT_MS = 5000;
 // A standby creation that runs normally takes at most two
 // `standbyTimeoutMs` waits: the navigation to the standby page, then the
-// wait for its readiness marker. The steps before them (getting the
-// browser, creating the context, opening the page, attaching
-// observability) are CDP calls with no timeout of their own. A creation
-// still running after both waits plus this margin is held by one of those
-// calls, on a browser that no longer answers.
+// wait for its readiness marker. The first creation after a boot or a
+// browser restart also launches Chrome, which `BROWSER_LAUNCH_TIMEOUT_MS`
+// bounds. The other steps (creating the context, opening the page,
+// attaching observability) are CDP calls with no timeout of their own. A
+// creation still running after the launch, both waits and this margin is
+// held by one of those calls, on a browser that no longer answers.
 const STANDBY_CREATION_MARGIN_MS = 15_000;
 
 // How many visits of a realm must finish in time, one after another, before
@@ -681,7 +685,8 @@ export class PagePool {
     // the steal deadline on millisecond timescales.
     standbyRefillWaitMs?: number;
     // Overrides the bound on one standby creation, which by default is
-    // twice `standbyTimeoutMs` plus `STANDBY_CREATION_MARGIN_MS`. Tests use
+    // `BROWSER_LAUNCH_TIMEOUT_MS`, plus twice `standbyTimeoutMs`, plus
+    // `STANDBY_CREATION_MARGIN_MS`. Tests use
     // it to drive the bound on millisecond timescales.
     standbyCreationTimeoutMs?: number;
   }) {
@@ -827,7 +832,9 @@ export class PagePool {
       options.standbyRefillWaitMs ?? DEFAULT_STANDBY_REFILL_WAIT_MS;
     this.#standbyCreationTimeoutMs =
       options.standbyCreationTimeoutMs ??
-      2 * this.#standbyTimeoutMs + STANDBY_CREATION_MARGIN_MS;
+      BROWSER_LAUNCH_TIMEOUT_MS +
+        2 * this.#standbyTimeoutMs +
+        STANDBY_CREATION_MARGIN_MS;
     this.#tabHealthProbeMs =
       options.tabHealthProbeMs ?? parseTabHealthProbeMs();
     // Resolve the per-affinity file-admission cap.
@@ -1616,20 +1623,20 @@ export class PagePool {
     // pool occupancy for the life of the process. Pinned by
     // `tests/page-pool-standby-refill-test.ts`.
     //
-    // Bumping the close generation first is what keeps that wait bounded. The
-    // refill gives up when the generation moves, so this awaits the attempt
-    // already in flight and nothing beyond it. Waiting out the rest costs
-    // `STANDBY_CREATION_RETRIES` standby timeouts plus backoff — long enough
-    // for a caller closing the pool in order to shut down to blow its own
-    // shutdown budget, leaving the process it was tearing down alive.
-    //
-    // The attempt in flight is abandoned rather than awaited to its end. The
-    // most common reason to close the pool is to restart a browser that has
-    // stopped answering, and a creation on that browser runs until its full
-    // deadline, which would hold the restart past the deadline of the render
-    // that asked for it. An abandoned creation releases its count before the
-    // reset below, and if it finishes later, what it made is closed instead of
-    // joining `#standbys`. See `#createStandby`.
+    // What this waits for is the refill unwinding, not the creation in
+    // flight. Bumping the close generation stops the refill from starting
+    // another attempt, and the creation in flight is abandoned at once, so
+    // the refill returns without waiting for it. Waiting for either instead
+    // would hold the close too long. The most common reason to close the pool
+    // is to restart a browser that has stopped answering, and a creation on
+    // that browser runs until its full deadline, past the deadline of the
+    // render that asked for the restart; the remaining retries would add
+    // `STANDBY_CREATION_RETRIES` standby timeouts plus backoff, past a
+    // shutdown's budget. An abandoned creation releases its count before the
+    // reset below, and if it finishes later, what it made is closed instead
+    // of joining `#standbys`. See `#createStandby`. A creation abandoned while
+    // it launches Chrome is safe for the same reason: the browser restart
+    // that follows waits for that launch and closes what it started.
     this.#closeGeneration++;
     for (let abandon of [...this.#abandonCreations]) {
       abandon();
