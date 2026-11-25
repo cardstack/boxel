@@ -1481,6 +1481,58 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-fitted-next]').doesNotExist();
   });
 
+  test('a direct writer gets a way into the Automations console from the isolated, embedded and fitted views', async function (assert) {
+    answer = { status: 200, attributes: ACTIVE };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom(
+        '[data-test-automation] header [data-test-automation-show-in-console]',
+      )
+      .hasText('Show in Automations', 'the isolated header offers the action');
+
+    await openFormat('embedded');
+    await waitFor(
+      '[data-test-automation-embedded] [data-test-automation-show-in-console]',
+      { timeout: 10000 },
+    );
+    assert
+      .dom(
+        '[data-test-automation-embedded] [data-test-automation-show-in-console]',
+      )
+      .hasText('Show in Automations');
+
+    await openFormat('fitted');
+    await waitFor(
+      '[data-test-automation-fitted] [data-test-automation-show-in-console]',
+      { timeout: 10000 },
+    );
+    assert
+      .dom(
+        '[data-test-automation-fitted] [data-test-automation-show-in-console]',
+      )
+      .hasAria(
+        'label',
+        'Show in Automations',
+        'the fitted view offers the action as a labelled icon button',
+      );
+  });
+
+  test("a viewer who isn't a direct writer gets no way into the Automations console", async function (assert) {
+    await openIsolated();
+    await waitUntil(() => asked.length > 0, { timeout: 10000 });
+    await settled();
+    assert.dom('[data-test-automation-show-in-console]').doesNotExist();
+
+    await openFormat('embedded');
+    await settled();
+    assert.dom('[data-test-automation-show-in-console]').doesNotExist();
+
+    await openFormat('fitted');
+    await settled();
+    assert.dom('[data-test-automation-show-in-console]').doesNotExist();
+  });
+
   // The Runs section, read from the realm's `_automation-runs` route, which
   // an in-browser test realm can't answer: each test says what the route
   // lists.

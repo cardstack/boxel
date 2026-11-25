@@ -2,7 +2,6 @@ import {
   keyFitsSlot,
   logger,
   type RealmResourceIdentifier,
-  type ResolvedCodeRef,
   param,
   query,
   rri,
@@ -97,7 +96,14 @@ export type BatchSlotStatus =
 
 export interface BatchSlot {
   // The token the slot is written as: `userKey`, `apiKey`, `apiKey:<name>`.
+  // In an automation's batch, which spans card definitions, each definition's
+  // slots are chosen apart, since two services' `userKey` slots take
+  // different keys: `slot` is then `<n>.<token>`, numbering the definitions
+  // in the order the batch first meets them, `token` is the slot's own token,
+  // which an approval names, and `card` is the definition's display name.
   slot: string;
+  token?: string;
+  card?: string;
   key: CallApiSlot['key'];
   status: BatchSlotStatus;
   snapshot: BindingSnapshot;
@@ -447,6 +453,7 @@ async function automationApprovalBatch(
   let ownShares = await sharesIn(dbAdapter, realmURL.href, user);
   let collected = collectedBatch();
   let rowsOf = new Map<string, Awaited<ReturnType<typeof bindingRows>>>();
+  let typeNumbers = new Map<string, number>();
   for (let missing of approvals.operations) {
     if (missing.state !== 'missing') {
       continue;
@@ -464,30 +471,43 @@ async function automationApprovalBatch(
     if (tokens.size === 0) {
       continue;
     }
+    // The card type is read as a card's batch reads one
+    // (`resolveWindowRequest`): only from a module realm the caller may
+    // read. A type the caller can't read is left out, and says nothing of
+    // itself.
+    let typed;
+    try {
+      typed = await resolveWindowRequest(deps, user, {
+        target: {
+          kind: 'type',
+          module: missing.targetType.module as RealmResourceIdentifier,
+          name: missing.targetType.name,
+          realm: realm.url as RealmResourceIdentifier,
+        },
+      });
+    } catch (e) {
+      if (e instanceof UserKeyError && e.status === 404) {
+        continue;
+      }
+      throw e;
+    }
+    let typeDefinition = typed.target!.definition;
     let resolvedType = realm.operationCore.resolveCodeRef(
-      missing.targetType as ResolvedCodeRef,
+      typed.target!.codeRef,
       realmURL,
     );
-    let typeDefinition = resolvedType
-      ? await definitionLookup
-          .forRealm(realm)
-          .lookupDefinition(resolvedType)
-          .catch(() => undefined)
-      : undefined;
-    let operation = typeDefinition?.operations?.[missing.operation];
-    if (
-      !resolvedType ||
-      !typeDefinition ||
-      !operation ||
-      !approvable(operation)
-    ) {
+    let operation = typeDefinition.operations?.[missing.operation];
+    if (!resolvedType || !operation || !approvable(operation)) {
       continue;
     }
     let type = {
       module: trimExecutableExtension(String(resolvedType.module)),
       name: resolvedType.name,
     };
+    let typeName = typeDefinition.displayName ?? type.name;
     let typeKey = `${type.module}#${type.name}`;
+    let typeNumber = typeNumbers.get(typeKey) ?? typeNumbers.size + 1;
+    typeNumbers.set(typeKey, typeNumber);
     let rows = rowsOf.get(typeKey);
     if (!rows) {
       rows = await bindingRows(dbAdapter, realmURL.href, type, user);
@@ -520,14 +540,22 @@ async function automationApprovalBatch(
       ) {
         continue;
       }
-      let status =
-        slotStatus(bound, slot, fingerprint, {
-          user,
-          ownsShareHere: ownShares.length > 0,
-          interactive: false,
-        }) ?? 'automation';
+      let needs = slotStatus(bound, slot, fingerprint, {
+        user,
+        ownsShareHere: ownShares.length > 0,
+        interactive: false,
+      });
+      // A slot whose binding needs nothing more of the caller needs only
+      // the automation's approval. One with no binding that the caller has
+      // nothing to fill is left out.
+      if (!needs && !bound) {
+        continue;
+      }
+      let status: BatchSlotStatus = needs ?? 'automation';
       let batchSlot: BatchSlot = {
-        slot: token,
+        slot: `${typeNumber}.${token}`,
+        token,
+        card: typeName,
         key: slot.key,
         status,
         snapshot,
@@ -549,7 +577,7 @@ async function automationApprovalBatch(
     collected.add(request, {
       name: missing.operation,
       card: {
-        name: typeDefinition.displayName ?? type.name,
+        name: typeName,
         module: virtualNetwork.unresolveURL(type.module),
         exportName: type.name,
       },

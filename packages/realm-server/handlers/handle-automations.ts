@@ -15,6 +15,7 @@ import {
   SupportedMimeType,
   type AutomationRun,
   type DBAdapter,
+  type Expression,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type VirtualNetwork,
@@ -86,6 +87,7 @@ import {
 } from '../lib/automation-estimate.ts';
 import { buildAdmitPayerSpending } from '../lib/automation-spending.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
+import { namedToViewer } from '../lib/named-users.ts';
 import { followAutomationKeyApprovals } from '../lib/automation-key-approvals.ts';
 import { exactMeteredCredits } from '../lib/metered-charge.ts';
 import { currentPricing } from '../lib/pricing.ts';
@@ -361,51 +363,50 @@ function uncheckedKeyApprovals(retry: string): AutomationRouteError {
 // Key approvals as a route answers them: whether every one is there, the
 // version a confirmation approving the rest names (`confirmationOf`: the
 // version and its `callApiCalls` cap), and each operation's state. The owner
-// of a share a missing approval names is shown to `caller` only as ADR 011
-// lets them see that person (`shownIdentity`), and is null otherwise.
+// of a share a missing approval names is shown to `caller` only as the
+// key-share listings show a share's owner (`namedToViewer`, ADR 011: a person
+// named with the caller in the share's realm), and is null otherwise.
 async function serializeKeyApprovals(
   dbAdapter: DBAdapter,
   caller: string,
+  realmURL: URL,
   approvals: AutomationKeyApprovals,
 ) {
-  let shown = new Map<string, Promise<string | null>>();
-  let show = (owner: string | null) => {
-    if (owner === null) {
-      return Promise.resolve(null);
-    }
-    let found = shown.get(owner);
-    if (!found) {
-      found = shownIdentity(dbAdapter, caller, owner);
-      shown.set(owner, found);
-    }
-    return found;
-  };
+  let owners = approvals.operations.flatMap((operation) =>
+    (operation.missing ?? []).flatMap((missing) =>
+      (missing.shares ?? []).map((share) => share.owner),
+    ),
+  );
+  let isNamed = await namedToViewer(
+    (expression: Expression) => query(dbAdapter, expression),
+    caller,
+    [realmURL.href],
+    owners.filter((owner): owner is string => typeof owner === 'string'),
+  );
   return {
     approved: approvals.approved,
     version: confirmationOf(approvals.version),
-    operations: await Promise.all(
-      approvals.operations.map(async (operation) =>
-        operation.missing
-          ? {
-              ...operation,
-              missing: await Promise.all(
-                operation.missing.map(async (missing) =>
-                  missing.shares
-                    ? {
-                        ...missing,
-                        shares: await Promise.all(
-                          missing.shares.map(async (share) => ({
-                            ...share,
-                            owner: await show(share.owner),
-                          })),
-                        ),
-                      }
-                    : missing,
-                ),
-              ),
-            }
-          : operation,
-      ),
+    operations: approvals.operations.map((operation) =>
+      operation.missing
+        ? {
+            ...operation,
+            missing: operation.missing.map((missing) =>
+              missing.shares
+                ? {
+                    ...missing,
+                    shares: missing.shares.map((share) => ({
+                      ...share,
+                      owner:
+                        share.owner !== null &&
+                        isNamed(realmURL.href, share.owner)
+                          ? share.owner
+                          : null,
+                    })),
+                  }
+                : missing,
+            ),
+          }
+        : operation,
     ),
   };
 }
@@ -673,6 +674,7 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
                 keyApprovals: await serializeKeyApprovals(
                   args.dbAdapter,
                   caller,
+                  realmURL,
                   keyApprovals,
                 ),
               }
@@ -752,6 +754,7 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
       keyApprovals: await serializeKeyApprovals(
         args.dbAdapter,
         caller,
+        realmURL,
         keyApprovals,
       ),
     });
@@ -927,6 +930,7 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
             keyApprovals: await serializeKeyApprovals(
               args.dbAdapter,
               caller,
+              realmURL,
               keyApprovals,
             ),
           }
