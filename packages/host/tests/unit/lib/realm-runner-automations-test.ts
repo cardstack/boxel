@@ -136,6 +136,24 @@ module('Unit | Lib | realm-runner automations', function () {
           state: 'missing',
           missing: [{ slot: 'apiKey', canApprove: 'nobody-yet' }],
         },
+        {
+          operation: 'paused',
+          state: 'missing',
+          missing: [
+            {
+              slot: 'apiKey',
+              canApprove: 'payer',
+              shares: [
+                {
+                  id: 'p',
+                  label: 'Paused key',
+                  owner: '@me:localhost',
+                  suspended: true,
+                },
+              ],
+            },
+          ],
+        },
       ],
     });
     assert.deepEqual(report, {
@@ -144,6 +162,10 @@ module('Unit | Lib | realm-runner automations', function () {
       // An owner Boxel may not name to the reader stays unnamed.
       byOthers: [{ operation: 'theirs', key: 'Mail key' }],
       needShare: ['none'],
+      // A suspended share is resumed by its owner before any approval.
+      suspended: [
+        { operation: 'paused', key: 'Paused key', owner: '@me:localhost' },
+      ],
     });
   });
 });

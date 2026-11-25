@@ -484,7 +484,12 @@ export async function automationRunReport(
 interface MissingApproval {
   slot: string;
   canApprove: 'payer' | 'another-key-owner' | 'nobody-yet';
-  shares?: { id: string; label?: string; owner: string | null }[];
+  shares?: {
+    id: string;
+    label?: string;
+    owner: string | null;
+    suspended?: boolean;
+  }[];
 }
 
 export interface KeyApprovalReport {
@@ -497,6 +502,10 @@ export interface KeyApprovalReport {
   // Operations whose slot has no key shared in the workspace: a realm
   // administrator shares one first.
   needShare: string[];
+  // Approvals waiting on a suspended share: the share's owner resumes the
+  // share first, then approves. `owner` is there when Boxel may name the
+  // owner to the person.
+  suspended: { operation: string; key?: string; owner?: string }[];
 }
 
 // The switch-on answer's key approvals, sorted by who acts on each.
@@ -514,6 +523,7 @@ export function keyApprovalReport(keyApprovals: unknown): KeyApprovalReport {
     forYou: [],
     byOthers: [],
     needShare: [],
+    suspended: [],
   };
   for (let entry of approvals.operations ?? []) {
     if (entry.state === 'approved') {
@@ -521,12 +531,22 @@ export function keyApprovalReport(keyApprovals: unknown): KeyApprovalReport {
     }
     let operation = entry.operation ?? 'an operation';
     for (let missing of entry.missing ?? []) {
-      if (missing.canApprove === 'payer') {
+      let suspended = (missing.shares ?? []).filter((share) => share.suspended);
+      if (suspended.length && suspended.length === missing.shares?.length) {
+        for (let share of suspended) {
+          report.suspended.push({
+            operation,
+            ...(share.label ? { key: share.label } : {}),
+            ...(share.owner ? { owner: share.owner } : {}),
+          });
+        }
+      } else if (missing.canApprove === 'payer') {
         if (!report.forYou.includes(operation)) {
           report.forYou.push(operation);
         }
       } else if (missing.canApprove === 'another-key-owner') {
-        let shares = missing.shares?.length ? missing.shares : [undefined];
+        let active = (missing.shares ?? []).filter((share) => !share.suspended);
+        let shares = active.length ? active : [undefined];
         for (let share of shares) {
           report.byOthers.push({
             operation,

@@ -4042,11 +4042,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'estimate and the monthly cap, and refuses a card the panel did not ' +
     'show. preview and runNow answer { run, state }; read the run with ' +
     'realm.automations.readRun(run) once it finishes. switchOn answers ' +
-    '{ state, nextRun, keyApprovals: { forYou, byOthers, needShare } }: the ' +
-    'secure window opens for the approvals in forYou; tell the person who ' +
-    'must approve each one in byOthers, that a realm administrator must ' +
-    'share a key for each operation in needShare, and that the automation ' +
-    'runs nothing until every approval lands. ' +
+    '{ state, nextRun, keyApprovals: { forYou, byOthers, needShare, ' +
+    'suspended } }: the secure window opens for the approvals in forYou; ' +
+    'tell the person who must approve each one in byOthers, that a realm ' +
+    'administrator must share a key for each operation in needShare, that ' +
+    'each share in suspended waits for its owner to resume the share, and ' +
+    'that the automation runs nothing until every approval lands. ' +
     'can change the skills and model of this room with room.*, can read ' +
     "the user's plan, credit balance and this room's spend with " +
     'room.credits(), and can ' +
@@ -4329,6 +4330,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         forYou: approvals.forYou,
         byOthers: approvals.byOthers,
         needShare: approvals.needShare,
+        suspended: approvals.suspended,
       },
     };
   }

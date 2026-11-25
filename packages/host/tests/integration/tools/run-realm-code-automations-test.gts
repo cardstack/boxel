@@ -400,6 +400,7 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
         },
       ],
       needShare: ['chargeCard'],
+      suspended: [],
     });
     assert.strictEqual(opened.length, 1, 'the secure window opened once');
     assert.true(
