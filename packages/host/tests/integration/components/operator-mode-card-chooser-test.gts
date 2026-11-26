@@ -1216,14 +1216,33 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       'only the recent card and the test realm have sections',
     );
     await percySnapshot(assert);
-    await click('[data-test-search-sheet-show-only]');
-    const collapsedBlocks = document.querySelectorAll(
-      '.search-result-block--collapsed',
+    assert
+      .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
+      .isVisible('the recent card shows before Show only is checked');
+    await click(
+      `[data-section-sid="realm:${testRealmURL}"] [data-test-search-sheet-show-only]`,
     );
-    assert.ok(
-      collapsedBlocks.length >= 1,
-      'at least one section is collapsed when Show only is checked',
-    );
+    assert
+      .dom(
+        `[data-section-sid="realm:${testRealmURL}"] [data-test-search-sheet-show-only]`,
+      )
+      .isChecked('the test realm is the focused section');
+    assert
+      .dom(
+        `[data-section-sid="realm:${testRealmURL}"] [data-test-search-result]`,
+      )
+      .isVisible('the test realm section stays open');
+    assert
+      .dom('[data-section-sid="recents"] [data-test-search-sheet-show-only]')
+      .isNotChecked('Recents is not the focused section');
+    assert
+      .dom(
+        '[data-section-sid="recents"] [data-test-search-sheet-section-header]',
+      )
+      .isVisible('Recents keeps its header');
+    assert
+      .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
+      .isNotVisible('Show only on the test realm collapses Recents');
   });
 
   test(`Show only reorders focused section to top and scrolls back on uncheck`, async function (assert) {
