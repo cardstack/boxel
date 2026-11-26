@@ -57,6 +57,26 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 
+  test('validateHostRoutes: a query-backed link is not a parent link candidate', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: parent cannot name a query-backed link', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: a named query-backed link when one type is known', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: a subtype that stores an inherited query-backed link', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('hostRouteTypeInfo: a link field with a query is query-backed', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
   test('validateHostRoutes: a link on its own type is read by its kind', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });

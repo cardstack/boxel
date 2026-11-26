@@ -111,8 +111,8 @@ export interface HomePageCheck {
   anonymousCanView: boolean;
 }
 
-// A request to `/_host-urls` that the server refused. `message` is the
-// server's reason, which is written for the user.
+// A request to `/_host-urls` or `/_boxel-claimed-domains` that the server
+// refused. `message` is the server's reason, which is written for the user.
 export class HostURLRequestError extends Error {
   constructor(
     readonly status: number,
@@ -336,6 +336,56 @@ export default class RealmServerService
       data: { id: realmURL },
     } = (await response.json()) as { data: { id: string } };
     return new URL(realmURL);
+  }
+
+  // Asks this realm server to add realms to the user's workspace list
+  // (`app.boxel.realms`) and remove realms from it. The server makes the edit
+  // holding the user's account-data lock, so it never overlaps an edit the
+  // server makes itself, as a write of the list straight to Matrix could.
+  // True when the server made the edit. False when the caller should write
+  // the list itself: the server keeps no list for this user (404, a user of
+  // another homeserver), or the request failed. A failed request may still
+  // have made the edit, so a caller that writes the list after one adds a
+  // realm only when it's missing.
+  async editWorkspaceList(edit: {
+    add?: string[];
+    remove?: string[];
+  }): Promise<boolean> {
+    // With no session and no matrix client to mint one, a login can't
+    // succeed, and attempting it reports its failure as uncaught.
+    if (!this.canFetch) {
+      return false;
+    }
+    try {
+      await this.login();
+      let response = await this.network.fetch(`${this.url.href}_user-realms`, {
+        method: 'PATCH',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          data: { type: 'user-realms', attributes: edit },
+        }),
+      });
+      if (response.ok) {
+        return true;
+      }
+      if (response.status !== 404) {
+        console.warn(
+          `The realm server could not edit the workspace list, so the app writes it itself: ${
+            response.status
+          } - ${await response.text()}`,
+        );
+      }
+    } catch (e) {
+      console.warn(
+        'The realm server could not be asked to edit the workspace list, so the app writes it itself',
+        e,
+      );
+    }
+    return false;
   }
 
   async deleteRealm(realmURL: string) {
@@ -2062,7 +2112,10 @@ export default class RealmServerService
     );
 
     if (!response.ok) {
-      throw new Error(refusalReason(await response.text()));
+      throw new HostURLRequestError(
+        response.status,
+        refusalReason(await response.text()),
+      );
     }
 
     return response.json();

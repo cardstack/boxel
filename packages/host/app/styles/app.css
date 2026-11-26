@@ -1,6 +1,11 @@
 :root {
   --boxel-ai-purple: var(--boxel-700);
 
+  /* The dashboard's backdrop. A load that opens on the dashboard paints it
+     from the first frame: index.html's boot and the loading screen read it
+     too, so they can't drift from the dashboard. */
+  --host-dashboard-background: var(--boxel-800);
+
   --host-ai-panel-popover-z-index: 900;
   --host-ai-panel-button-z-index: 800;
   --host-ai-panel-z-index: 700;

@@ -736,6 +736,27 @@ function registerAuthRoutes() {
     });
   }
 
+  // The realm server edits a user's workspace list only when its Synapse
+  // keeps an account for them. The mock keeps none, so it answers as the
+  // server does for a user of another homeserver, and the app writes the list
+  // to its mock Matrix itself. A test that wants the server to make the edit
+  // stands in its own route.
+  registerRealmServerRoute({
+    path: '/_user-realms',
+    handler: async (req) =>
+      req.method === 'PATCH'
+        ? new Response(
+            JSON.stringify({
+              errors: [{ status: '404', title: 'Not Found' }],
+            }),
+            {
+              status: 404,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+          )
+        : null,
+  });
+
   registerRealmServerRoute({
     path: '/_delete-realm',
     handler: async (req, _url, state: RealmServerMockState) => {

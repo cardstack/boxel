@@ -148,6 +148,11 @@ export interface PrerenderedHtmlTable {
   // configured) or the card declares none; a slot whose capture failed is
   // simply absent (see `diagnostics.captureErrors`).
   captures: Record<string, unknown> | null;
+  // The URL the stored HTML was rendered against (ADR 033 §1.8): the realm's
+  // URL, or its canonical host URL. A row that keeps the HTML of an earlier
+  // render after a failed one keeps that render's URL too. Null means the
+  // realm's URL, as for every row written before the column existed.
+  rendered_against_url: string | null;
   // Originating worker job id. Only present on the staging table
   // `prerendered_html_pending` — the production `prerendered_html` does not
   // carry this column, hence the field is optional.

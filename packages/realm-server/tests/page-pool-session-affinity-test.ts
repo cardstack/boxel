@@ -5,6 +5,7 @@ import { PagePool } from '../prerender/page-pool.ts';
 import {
   fromAffinityKey,
   isAffinityOfRealm,
+  isOAuthTabAffinityKey,
   isRealmAuthorityAffinityKey,
   isRunAffinityKey,
   realmAffinityKeyOf,
@@ -13,6 +14,7 @@ import {
 } from '../prerender/affinity.ts';
 import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
 import { mintRunToken } from '../lib/run-token.ts';
+import { buildCreateOAuthTabAuth } from '../lib/oauth-tab-token.ts';
 import type { AutomationRun } from '@cardstack/runtime-common';
 
 // A render hands its tab its sessions through localStorage, which belongs to
@@ -45,6 +47,25 @@ const otherOwnerAuthorityAuth = createPrerenderAuth(OTHER_OWNER, permissions, {
 const user1Auth = createPrerenderAuth(USER_1, permissions);
 const user2Auth = createPrerenderAuth(USER_2, permissions);
 const anonymousAuth = '{}';
+
+// An OAuth app's tab auth: its tab tokens, one per realm, all for one grant.
+const createOAuthTabAuth = buildCreateOAuthTabAuth(
+  'page-pool-session-affinity-test-seed',
+  { realmServerURL: 'http://localhost:4202' },
+);
+function oauthTabAuth(user: string, grantId = 'grant-1') {
+  return createOAuthTabAuth({
+    userId: user,
+    permissions: {
+      [REALM]: ['read'],
+      'http://localhost:4202/other/': ['read'],
+    },
+    grantId,
+    scopes: ['boxel:read'],
+    purpose: 'run-command',
+    permissionCeiling: 'read',
+  });
+}
 
 // An automation run's tab auth: its run token, alone, for its realm.
 function runAuth(user: string, runId = 'run-1') {
@@ -249,6 +270,67 @@ module(basename(import.meta.filename), function (hooks) {
       assert.false(isRunAffinityKey(realmKeyFor(mixed)));
     });
 
+    test("an OAuth app's tab is keyed by its user and grant, apart from the user's sessions", function (assert) {
+      let auth = oauthTabAuth(USER_1);
+      assert.deepEqual(renderSessionOf(auth), {
+        kind: 'oauth-tab',
+        user: USER_1,
+        grant: 'grant-1',
+      });
+      let key = realmKeyFor(auth);
+      assert.strictEqual(key, `${REALM_KEY}#oauth:${USER_1}:grant-1`);
+      assert.notStrictEqual(
+        realmKeyFor(user1Auth),
+        key,
+        "the user's own sessions never share it",
+      );
+      assert.notStrictEqual(
+        realmKeyFor(oauthTabAuth(USER_1, 'grant-2')),
+        key,
+        "another grant's tab tokens never share it",
+      );
+      assert.false(isRealmAuthorityAffinityKey(key));
+      assert.false(isRunAffinityKey(key));
+      assert.strictEqual(realmAffinityKeyOf(key), REALM_KEY);
+
+      // A command runs on its user's affinity, which a tab token splits too.
+      let userKey = toAffinityKey({
+        affinityType: 'user',
+        affinityValue: USER_1,
+        auth,
+      });
+      assert.strictEqual(userKey, `user:${USER_1}#oauth:grant-1`);
+      assert.strictEqual(
+        realmAffinityKeyOf(userKey),
+        `user:${USER_1}`,
+        'it is reported to the manager as the user',
+      );
+      assert.deepEqual(fromAffinityKey(userKey), {
+        affinityType: 'user',
+        affinityValue: USER_1,
+        session: 'oauth:grant-1',
+      });
+      assert.true(isOAuthTabAffinityKey(key));
+      assert.true(isOAuthTabAffinityKey(userKey));
+      for (let auth of [realmAuthorityAuth, user1Auth, anonymousAuth]) {
+        assert.false(isOAuthTabAffinityKey(realmKeyFor(auth)));
+      }
+      assert.false(isOAuthTabAffinityKey(realmKeyFor(runAuth(USER_1))));
+    });
+
+    test('a tab token beside any other session is unreadable', function (assert) {
+      let besideSession = JSON.stringify({
+        ...JSON.parse(oauthTabAuth(USER_1)),
+        'http://localhost:4202/third/': JSON.parse(user1Auth)[REALM],
+      });
+      assert.strictEqual(renderSessionOf(besideSession).kind, 'unreadable');
+      let twoGrants = JSON.stringify({
+        ...JSON.parse(oauthTabAuth(USER_1, 'grant-2')),
+        [REALM]: JSON.parse(oauthTabAuth(USER_1))[REALM],
+      });
+      assert.strictEqual(renderSessionOf(twoGrants).kind, 'unreadable');
+    });
+
     test('a user affinity is keyed by its user alone', function (assert) {
       assert.strictEqual(
         toAffinityKey({
@@ -268,6 +350,76 @@ module(basename(import.meta.filename), function (hooks) {
       });
       assert.false(isAffinityOfRealm(other, REALM_KEY));
     });
+  });
+
+  // With no standby left and the pool at its ceiling, a render takes an idle
+  // tab of another affinity (see the steal tests below). An OAuth app's tab is
+  // never on either side of that: its page may hold a timer the app's code
+  // left, and a tab it took would hold what another render left.
+  test("a render never takes an OAuth app's idle tab, even with no standby left", async function (assert) {
+    let pool = makePool({
+      maxPages: 2,
+      browserManager: makeBrowserStub(),
+      disableStandbyRefill: true,
+    });
+    await pool.warmStandbys();
+    let oauthKey = realmKeyFor(oauthTabAuth(USER_1));
+    let busy = await pool.getPage('A');
+    let oauthTab = await pool.getPage(oauthKey);
+    oauthTab.release();
+
+    // With only the OAuth app's idle tab to take, the user's render waits
+    // for a tab it may take rather than taking that one.
+    let userTook: string | undefined;
+    let userLease = pool.getPage(realmKeyFor(user1Auth)).then((lease) => {
+      userTook = lease.pageId;
+      return lease;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.strictEqual(userTook, undefined, "the user's render is waiting");
+    assert.true(
+      pool.getWarmAffinities().includes(oauthKey),
+      "the OAuth app's tab is still its own",
+    );
+
+    busy.release();
+    let user = await userLease;
+    assert.strictEqual(
+      user.pageId,
+      busy.pageId,
+      'it takes the idle tab it may take once there is one',
+    );
+    assert.notStrictEqual(user.pageId, oauthTab.pageId);
+    user.release();
+  });
+
+  test("an OAuth app's render never takes another affinity's idle tab, even with no standby left", async function (assert) {
+    let pool = makePool({
+      maxPages: 2,
+      browserManager: makeBrowserStub(),
+      disableStandbyRefill: true,
+    });
+    await pool.warmStandbys();
+    let userKey = realmKeyFor(user1Auth);
+    let busy = await pool.getPage('A');
+    let userTab = await pool.getPage(userKey);
+    userTab.release();
+
+    try {
+      let oauth = await pool.getPage(realmKeyFor(oauthTabAuth(USER_1)));
+      oauth.release();
+      assert.ok(false, `the OAuth app's render took tab ${oauth.pageId}`);
+    } catch (e: any) {
+      assert.true(
+        /No standby page available/.test(e.message),
+        `the OAuth app's render finds no tab it may take: ${e.message}`,
+      );
+    }
+    assert.true(
+      pool.getWarmAffinities().includes(userKey),
+      "the user's tab is still the user's",
+    );
+    busy.release();
   });
 
   test("renders of one realm by its own indexing, another realm's owner, two users and an anonymous reader each get a BrowserContext of their own", async function (assert) {

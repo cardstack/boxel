@@ -13,6 +13,19 @@ scope:
   - packages/realm-server/lib/secure-session.ts
   - packages/realm-server/handlers/handle-revoke-user-sessions.ts
   - packages/runtime-common/realm.ts
+  - packages/runtime-common/oauth-tab-token.ts
+  - packages/realm-server/lib/oauth-tab-token.ts
+  - packages/realm-server/handlers/handle-run-command.ts
+  - packages/realm-server/handlers/handle-capture.ts
+  - packages/realm-server/handlers/handle-search.ts
+  - packages/runtime-common/jobs/capture.ts
+  - packages/runtime-common/tasks/capture.ts
+  - packages/host/app/utils/realm-sessions.ts
+  - packages/host/app/utils/auth-service-worker-registration.ts
+  - packages/host/public/auth-service-worker.js
+  - packages/realm-server/prerender/affinity.ts
+  - packages/realm-server/prerender/page-pool.ts
+  - packages/realm-server/prerender/render-runner.ts
   - packages/postgres/migrations/*oauth-provider*
   - packages/secure-origin/src/shell/pages.js
   - packages/secure-origin/src/shell/authorize/**
@@ -199,8 +212,28 @@ NOT grant what they don't (ADR 006). An OAuth token MUST NOT be exchanged for a
 realm-server session, a realm session, a delegated session or a Matrix login.
 A session the realm server mints in process for work a route starts, such as
 publishing a realm, is not an exchange when it never reaches the caller, nor
-any code the caller chose, and acts only for that work. A route that runs
-code the caller chose beside such a session MUST NOT be mapped.
+any code the caller chose, and acts only for that work. A route that runs code
+the caller chose, such as running a command or capturing a card, MUST hand
+that code no credential but tab tokens, and MUST NOT be mapped otherwise.
+
+A tab token names the user and the OAuth grant, never the OAuth token or its
+hash. It MUST be signed under a key no other verifier accepts, and MUST expire
+when the work it was minted for is given up on. Each call that carries one
+MUST be judged as the OAuth caller its grant names, after the lookup's grant
+checks, read on that call. It MUST then meet the route map, the scope ceiling
+and §1.6 as an OAuth token does. A realm that can't admit a tab token, because it can't verify it (such as one
+another realm server minted) or the grant it names fails the grant checks
+there, MUST judge it as a session that doesn't verify, which gains nothing a
+request with no credential lacks. A tab token for work that only reads, such as
+a capture, MUST allow reading only, whatever its grant allows. A realm-server
+route MUST refuse a tab token, except the federated reads a tab makes through
+`multiRealmAuthorization`. The tab MUST hold nothing but its tab tokens,
+and those only in memory. It MAY give one to its browser context's auth
+service worker for the one request the worker asks about, so its images draw,
+and the worker MUST NOT keep it. The tab MUST NOT share a browser context with
+any other render's tab. Its tab, page and browser context MUST NOT pass to another
+render, nor be taken from one, even when the prerender pool has no fresh tab
+to give.
 
 ### 1.6. What an OAuth token never reaches
 
@@ -221,6 +254,9 @@ from any field), or a write to the `RealmPolicy` card `policy` names, MUST be
 refused. A policy grant that reads the card it
 guards gives that part of the decision to anyone who can write the card, OAuth
 tokens included.
+
+A named query's unshareable formats MUST be withheld from an OAuth caller's
+search, whatever it says about being a render.
 
 ### 1.7. Consent
 
@@ -343,6 +379,19 @@ An outside app acts on content the user didn't write, so widening who can
 reach a realm stays with the user in Boxel itself, whether by its permissions
 or by its policy.
 
+Running a command or capturing a card renders in a prerender tab, which runs
+code the caller may have written, so whatever the tab holds can reach the
+caller. With the user's sessions there, an OAuth token would buy a day-long
+session that administers every realm the user can reach and that
+disconnecting the app doesn't end. A tab token reaches no further than the
+OAuth token behind it: the same routes, scopes and permissions, ended by the
+same disconnect. What code in the tab can do until it expires, the caller
+could already do with the token. A render's search is served markup a live
+caller isn't, because that markup becomes stored HTML the embedding card's
+own declarations govern. A tab marks every request it sends as a render's,
+and an access token's caller sets their own headers, so neither is trusted
+to say so.
+
 A password change revokes the user's sessions twice. The second revocation,
 about an hour later, ends sessions a signed-out Matrix device could still mint
 with an OpenID token it obtained before. A grant needs a secure session, which
@@ -435,6 +484,17 @@ it, and the provider warns before it does.
 - **Exchanging the OAuth token for a realm session.** A realm session is
   stateless and outlives the grant, so revoking one grant would mean revoking
   every session the user has.
+- **Handing the tab the OAuth access token.** It may outlive the work, it
+  identifies the caller's token, and code in the tab could present it at the
+  token and revocation endpoints.
+- **Running OAuth callers' commands on the automation run token (ADR 026).**
+  A run token is checked against an automation run's row, reaches one realm,
+  and puts every call in automation mode, which a command with no run,
+  declaration or caps would fail. Nothing ties it to an OAuth grant, so
+  disconnecting the app wouldn't end it.
+- **One tab token for every realm.** The host looks up a session by realm, and
+  a token for any realm would be sent to any URL the tab takes for a realm,
+  including realms on other servers.
 - **Only `/mcp` accepts OAuth tokens.** boxel-cli could not sign in with
   OAuth, since it calls realm and realm-server routes directly.
 - **One resource derived from the server's URL.** A second resource would need

@@ -757,7 +757,7 @@ export class RoomResource extends Resource<Args> {
       userId,
       displayName: event.content.displayname,
       membership: event.content.membership,
-      membershipDateTime: new Date(event.origin_server_ts) || Date.now(),
+      membershipDateTime: new Date(event.origin_server_ts ?? Date.now()),
       membershipInitiator: event.sender,
     };
     this.upsertRoomMember({

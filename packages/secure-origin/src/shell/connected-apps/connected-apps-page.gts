@@ -40,6 +40,7 @@ import EditPage from '../keys/edit-page.gts';
 import KeysWindow, { type KeysWindowAPI } from '../keys/keys-window.gts';
 import LoadFailed from '../keys/load-failed.gts';
 
+import { clock } from './clock.ts';
 import {
   accessLine,
   connectedLine,
@@ -418,7 +419,7 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
     disconnectError: undefined as { id: string; text: string } | undefined,
     // What the page last told a screen reader, politely.
     announcement: '',
-    now: new Date(),
+    now: clock.now(),
   });
   private loaded = false;
   // Each read of the list is numbered, and only the latest one's answer is
@@ -436,7 +437,7 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
     this.tick = setInterval(() => {
       let previous = this.state.connections;
       let before = this.shownIds();
-      this.state.now = new Date();
+      this.state.now = clock.now();
       this.closeIfGone(previous, before);
     }, TICK_MS);
     document.addEventListener('visibilitychange', this.reread);
@@ -529,7 +530,7 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
       let previous = this.state.connections;
       let before = this.shownIds();
       this.state.connections = connections;
-      this.state.now = new Date();
+      this.state.now = clock.now();
       if (!this.loaded) {
         this.loaded = true;
         this.args.api.visit.loaded();

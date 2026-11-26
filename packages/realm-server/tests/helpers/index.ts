@@ -9,6 +9,7 @@ const {
 } = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
 import { buildMintRunToken, mintRunToken } from '../../lib/run-token.ts';
+import { buildCreateOAuthTabAuth } from '../../lib/oauth-tab-token.ts';
 import type {
   AccountStanding,
   AutomationAdmissionChecks,
@@ -502,6 +503,7 @@ export async function ensureMatrixAdminUser(): Promise<void> {
 }
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
+export const testCreateOAuthTabAuth = buildCreateOAuthTabAuth(realmSecretSeed);
 
 const PRERENDER_POOL_CAPACITY_OVERRIDE_ENV_KEYS = [
   'PRERENDER_PAGE_POOL_MIN',
@@ -1736,6 +1738,7 @@ export async function createRealm({
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
+      createOAuthTabAuth: testCreateOAuthTabAuth,
       mintRunToken: buildMintRunToken(realmSecretSeed),
       automationAdmissionChecks: testAutomationAdmissionChecks,
       mediaCacheAdapter,
@@ -1965,6 +1968,7 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    createOAuthTabAuth: testCreateOAuthTabAuth,
     mintRunToken: buildMintRunToken(realmSecretSeed),
     automationAdmissionChecks: testAutomationAdmissionChecks,
     // The indexing worker persists declared captures when a store is
@@ -2189,6 +2193,7 @@ export async function runTestRealmServerWithRealms({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    createOAuthTabAuth: testCreateOAuthTabAuth,
     mintRunToken: buildMintRunToken(realmSecretSeed),
     automationAdmissionChecks: testAutomationAdmissionChecks,
     mediaCacheAdapter,
@@ -2871,6 +2876,7 @@ type InternalPermissionedRealmSetupOptions = {
   linkShapePolicy?: LinkShapePolicy;
   secureOriginURL?: URL;
   cardDocumentCache?: CardDocumentCache;
+  oauthProvider?: ConstructorParameters<typeof RealmServer>[0]['oauthProvider'];
 };
 
 async function startPermissionedRealmFixture(
@@ -2895,6 +2901,7 @@ async function startPermissionedRealmFixture(
     linkShapePolicy,
     secureOriginURL,
     cardDocumentCache,
+    oauthProvider,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2969,6 +2976,7 @@ async function startPermissionedRealmFixture(
     linkShapePolicy,
     secureOriginURL,
     cardDocumentCache,
+    ...(oauthProvider ? { oauthProvider } : {}),
     ...(published ? { published: true as const } : {}),
     ...(history ? { history } : {}),
   });
@@ -3045,6 +3053,7 @@ export function setupPermissionedRealm(
     linkShapePolicy,
     secureOriginURL,
     cardDocumentCache,
+    oauthProvider,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -3080,6 +3089,12 @@ export function setupPermissionedRealm(
     linkShapePolicy?: LinkShapePolicy;
     // Gives the server a secure origin (see `lib/secure-origin.ts`).
     secureOriginURL?: URL;
+    // Turns Boxel's OAuth provider on (see `lib/oauth-provider/`), which
+    // needs a secure origin too. The realm is then one of the Boxel API's
+    // controllers.
+    oauthProvider?: ConstructorParameters<
+      typeof RealmServer
+    >[0]['oauthProvider'];
     // Inject a cache configured for the test (e.g. one that holds its
     // computation open, so a second request is guaranteed to join rather than
     // race). Omit for the production default.
@@ -3121,6 +3136,7 @@ export function setupPermissionedRealm(
         linkShapePolicy,
         secureOriginURL,
         cardDocumentCache,
+        oauthProvider,
         history,
       });
       testRealmServer = server;
@@ -3181,6 +3197,8 @@ function permissionedRealmTemplateCacheKey(
     // or server and leaves no trace in the template database, so keying on
     // any of them would only fragment the template cache.
     prerenderer: prerendererCacheKeyPart(options.prerenderer),
+    // The provider's startup may write rows of its own.
+    oauthProvider: Boolean(options.oauthProvider),
   });
 }
 
@@ -4087,6 +4105,13 @@ export function automationFixture({
 // path in the realm (`TEST_AUTOMATION_PATH` for `automationFixture`'s);
 // without it the run is of a card that doesn't exist, so it declares
 // nothing.
+//
+// A run's `callApi` is served only by a binding with an automation approval
+// matching the version the run's attempt recorded. `approveBindings` gives
+// the run what a switched-on automation whose key owners approved it has: a
+// row for its automation, a recorded version, and an approval of that
+// version by each binding in the realm as the token is made. A test
+// that approves a binding after making the token makes a new one.
 export async function createAutomationRunToken(
   dbAdapter: DBAdapter,
   realm: Realm,
@@ -4097,12 +4122,14 @@ export async function createAutomationRunToken(
     writesCap = 100,
     timeLimitSeconds = 600,
     automation,
+    approveBindings = false,
   }: {
     attempt?: number;
     readRealms?: string[];
     writesCap?: number;
     timeLimitSeconds?: number;
     automation?: string;
+    approveBindings?: boolean;
   } = {},
 ): Promise<{ token: string; run: AutomationRun }> {
   let created = await createAutomationRun(dbAdapter, {
@@ -4118,6 +4145,9 @@ export async function createAutomationRunToken(
   if (start.kind !== 'run') {
     throw new Error(`expected the test run to start, got ${start.kind}`);
   }
+  if (approveBindings) {
+    await approveRunForRealmBindings(dbAdapter, realm, start.run);
+  }
   let token = mintRunToken({
     realmSecretSeed,
     run: start.run,
@@ -4128,6 +4158,54 @@ export async function createAutomationRunToken(
     timeLimitSeconds,
   });
   return { token, run: start.run };
+}
+
+const TEST_RUN_VERSION = { versionKey: 'test-run-version', callApiCalls: 1000 };
+
+// Approves `run`'s automation for every binding in `realm`, whatever its
+// state (so a suspended or changed binding still answers its own refusal), at the
+// version the run records, as each key's owner approving the automation at
+// switch-on does. The automation's row is written if it has none, with the
+// run's identity as payer.
+async function approveRunForRealmBindings(
+  dbAdapter: DBAdapter,
+  realm: Realm,
+  run: AutomationRun,
+): Promise<void> {
+  await dbAdapter.execute(
+    `INSERT INTO automations (automation_id, realm, payer, caps_snapshot, scheduled_since)
+     VALUES ($1, $2, $3, '{}'::jsonb, now())
+     ON CONFLICT (automation_id) DO NOTHING`,
+    { bind: [run.automationId, run.realm, run.actsAs] },
+  );
+  // The run records a version but no operations, so its admission checks
+  // the operations its card declares as the realm reads them.
+  await dbAdapter.execute(
+    `UPDATE automation_runs SET version_key = $1, version_call_api_calls = $2 WHERE id = $3`,
+    {
+      bind: [
+        TEST_RUN_VERSION.versionKey,
+        TEST_RUN_VERSION.callApiCalls,
+        run.id,
+      ],
+    },
+  );
+  await dbAdapter.execute(
+    `INSERT INTO automation_key_approvals (automation_id, binding_id, approved_by, version, version_key, call_api_calls)
+     SELECT $1, b.id, b.approved_by, '{}'::jsonb, $2, $3
+       FROM key_bindings b
+      WHERE b.realm_url = $4
+     ON CONFLICT (automation_id, binding_id) DO UPDATE
+       SET version_key = EXCLUDED.version_key, call_api_calls = EXCLUDED.call_api_calls`,
+    {
+      bind: [
+        run.automationId,
+        TEST_RUN_VERSION.versionKey,
+        TEST_RUN_VERSION.callApiCalls,
+        realm.url,
+      ],
+    },
+  );
 }
 
 // Variant that builds a realm JWT from URL + seed instead of a Realm

@@ -215,7 +215,6 @@ import {
   type RunTokenClaim,
 } from './run-token.ts';
 import { automationRef } from './automation-declaration.ts';
-import { MANUAL_RUN_TRIGGER } from './automation-declaration.ts';
 import {
   addAutomationRunCounts,
   automationRunForCall,
@@ -754,8 +753,16 @@ import {
   admitsRoute,
   isOAuthAccessTokenShaped,
   realmPermissionCeiling,
+  type OAuthLookupResult,
   type RealmOAuthResource,
 } from './oauth-route-admission.ts';
+import {
+  oauthTabPermissionCeiling,
+  oauthTabTokenContext,
+  oauthTabTokenOf,
+  oauthTabTokenSecret,
+  type OAuthTabPurpose,
+} from './oauth-tab-token.ts';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -1973,6 +1980,20 @@ export async function notifyRealmIndexUpdated(
     );
   }
 }
+
+// The realm route the worker asks, once a from-scratch index pass over the
+// realm has landed and its index hook has synced the realm's automations, to
+// check every automation's key approvals in full
+// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`), which the worker
+// can't do, as it reads no operation definitions. A `POST` with no body,
+// answered 202 once the check has started, without waiting for it: the pass's
+// job holds the realm's exclusive index lane, so its writers would wait
+// behind the check's definition lookups. `Realm.incrementalIndexing()` holds
+// the check until it settles. Like every `POST`, it takes a caller the realm
+// ACL grants write, which includes the realm's own user (the worker asks as
+// it); it doesn't ask `isDirectWriter`, which counts no bot account.
+export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
+  '/_follow-automation-key-approvals';
 
 // Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
 // peer realm-server replicas drop every cached path for this realm. Use
@@ -3206,12 +3227,14 @@ export type RequestContext = {
   // request was judged as: the user its grant is for, read with that user's
   // permissions, and never more than its scopes allow in a realm
   // (`permissionCeiling`). Its token was removed from the request once it
-  // was checked.
+  // was checked. A tab token (`oauth-tab-token.ts`) gives the same caller,
+  // naming the work its tab does as `tabPurpose`.
   oauthCaller?: {
     user: string;
     clientId: string;
     scopes: readonly string[];
     permissionCeiling: 'read' | 'write' | undefined;
+    tabPurpose?: OAuthTabPurpose;
   };
   // Set for a dispatch made from inside the realm-server process (a worker's
   // or definition lookup's in-process fetch), which never reaches the realm
@@ -4141,6 +4164,15 @@ export class Realm {
         RUN_STATE_PATH,
         SupportedMimeType.JSONAPI,
         this.runState.bind(this),
+        ACL_ONLY,
+      )
+      // The worker's request, after a from-scratch pass over this realm, to
+      // check its automations' key approvals in full. Answered on the realm
+      // ACL alone: it runs only what the realm's own follow would.
+      .post(
+        FOLLOW_AUTOMATION_KEY_APPROVALS_PATH,
+        SupportedMimeType.JSONAPI,
+        this.followAutomationKeyApprovalsOnRequest.bind(this),
         ACL_ONLY,
       )
       // The operations envelope, under the media type that carries its
@@ -12857,6 +12889,9 @@ export class Realm {
         realmURL: this.url,
         realmUsername: await this.getRealmOwnerUserId(),
         runAs: reader,
+        // No OAuth caller reaches this route (ADR 021 §1.3): it is no Boxel
+        // API route.
+        oauth: null,
         cardId: entryKey.sourceURL,
         sourceKind,
         format: spec.format,
@@ -13795,13 +13830,13 @@ export class Realm {
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}): ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e?.constructor?.name === 'JsonWebTokenError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}): ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
@@ -13991,6 +14026,8 @@ export class Realm {
         virtualNetwork: this.#virtualNetwork,
         run,
         reportRunChange: (runId) => this.reportRunChange(runId),
+        reportAutomationChange: (automation) =>
+          this.reportAutomationChange(automation),
       });
       this.#callApiRunMeters.set(requestContext, meter);
     }
@@ -14083,33 +14120,64 @@ export class Realm {
       return notInHeader();
     }
     let header = request.headers.get('Authorization') ?? '';
-    let bearer = /^Bearer[ ]+(\S+)[ ]*$/i.exec(header)?.[1];
-    if (header && !(bearer && isOAuthAccessTokenShaped(bearer))) {
-      return undefined;
-    }
-    // A token in a form-encoded body is refused as one in the query string
-    // is, whatever the header carries, as the realm server's controllers do.
-    if (
-      (request.headers.get('content-type') ?? '')
-        .split(';')[0]
-        .trim()
-        .toLowerCase() === 'application/x-www-form-urlencoded'
-    ) {
-      let body = await readFormBody(request);
-      if (body === undefined) {
+    // A tab token is judged as the OAuth caller whose grant it names, after
+    // the same grant checks an access token gets. One this realm can't admit
+    // (minted by another realm server or for another realm, expired, or whose
+    // grant is gone or unknown here) is no credential here, and is judged as
+    // any session that doesn't verify is: a realm anyone may read answers it
+    // as it answers nobody, and any other refuses it. A tab reads realms on
+    // other servers, such as the base realm, with the same tokens, and no
+    // client stands behind it to restart an OAuth flow on a refusal.
+    let tabToken = oauthTabTokenOf(header);
+    let tabPurpose: OAuthTabPurpose | undefined;
+    let result: OAuthLookupResult;
+    if (tabToken) {
+      let verified = this.#verifyOAuthTabToken(request, tabToken);
+      if (!verified) {
+        return undefined;
+      }
+      tabPurpose = verified.purpose;
+      result = await oauth.resolveGrant({
+        grantId: verified.grantId,
+        user: verified.user,
+        scopes: verified.scopes,
+      });
+      if (!result.ok) {
         this.#log.info(
-          `request refused for ${request.method} ${maskLoggedURL(request.url)}: form body too large to read`,
+          `OAuth tab token not accepted for ${request.method} ${maskLoggedURL(request.url)}, judged as a session: its grant was refused`,
         );
-        return refuse(413, 'invalid_request');
+        return undefined;
       }
-      if (new URLSearchParams(body).has('access_token')) {
-        return notInHeader();
+    } else {
+      let bearer = /^Bearer[ ]+(\S+)[ ]*$/i.exec(header)?.[1];
+      if (header && !(bearer && isOAuthAccessTokenShaped(bearer))) {
+        return undefined;
       }
+      // A token in a form-encoded body is refused as one in the query string
+      // is, whatever the header carries, as the realm server's controllers
+      // do.
+      if (
+        (request.headers.get('content-type') ?? '')
+          .split(';')[0]
+          .trim()
+          .toLowerCase() === 'application/x-www-form-urlencoded'
+      ) {
+        let body = await readFormBody(request);
+        if (body === undefined) {
+          this.#log.info(
+            `request refused for ${request.method} ${maskLoggedURL(request.url)}: form body too large to read`,
+          );
+          return refuse(413, 'invalid_request');
+        }
+        if (new URLSearchParams(body).has('access_token')) {
+          return notInHeader();
+        }
+      }
+      if (!bearer) {
+        return undefined;
+      }
+      result = await oauth.resolve(bearer);
     }
-    if (!bearer) {
-      return undefined;
-    }
-    let result = await oauth.resolve(bearer);
     if (!result.ok) {
       return refuse(
         401,
@@ -14118,7 +14186,7 @@ export class Realm {
       );
     }
     let { caller } = result;
-    let described = `${request.method} ${maskLoggedURL(request.url)}, client ${caller.clientId}`;
+    let described = `${request.method} ${maskLoggedURL(request.url)}, client ${caller.clientId}${tabPurpose ? `, ${tabPurpose} tab token` : ''}`;
     let admitted = dispatch.route
       ? admitsRoute(oauth.scopes, caller, { on: 'realm', ...dispatch.route })
       : { admitted: false as const, scopes: [] as string[] };
@@ -14148,8 +14216,12 @@ export class Realm {
     // The scopes are a ceiling on what the realm requires of the caller,
     // over and above the route map, so a route the map admits can't be
     // reached for more than the token allows. Nothing admits administering
-    // the realm.
-    let permissionCeiling = realmPermissionCeiling(oauth.scopes, caller.scopes);
+    // the realm. A tab token is held to its work's ceiling too: a capture's
+    // only reads.
+    let scopeCeiling = realmPermissionCeiling(oauth.scopes, caller.scopes);
+    let permissionCeiling = tabPurpose
+      ? oauthTabPermissionCeiling(scopeCeiling, tabPurpose)
+      : scopeCeiling;
     if (
       requiredPermission === 'administer' ||
       !permissionCeiling ||
@@ -14191,9 +14263,64 @@ export class Realm {
       clientId: caller.clientId,
       scopes: caller.scopes,
       permissionCeiling,
+      ...(tabPurpose ? { tabPurpose } : {}),
     };
     request.headers.delete('Authorization');
     return undefined;
+  }
+
+  // What a tab token presented to this realm says, when it verifies under the
+  // tab-token key, within its expiry, and was minted for this realm;
+  // otherwise undefined, with the reason logged, and the request is judged as
+  // one with a session that doesn't verify. Its grant is the caller's to
+  // check.
+  #verifyOAuthTabToken(
+    request: Request,
+    token: string,
+  ):
+    | {
+        user: string;
+        grantId: string;
+        scopes: string[];
+        purpose: OAuthTabPurpose;
+      }
+    | undefined {
+    let described = `${request.method} ${maskLoggedURL(request.url)}`;
+    let claims: TokenClaims & { iat: number; exp: number };
+    try {
+      claims = this.#adapter.verifyJWT(
+        token,
+        oauthTabTokenSecret(this.#realmSecretSeed),
+      );
+    } catch (e: any) {
+      this.#log.info(
+        `OAuth tab token not accepted for ${described}, judged as a session: ${e?.constructor?.name === 'TokenExpiredError' ? 'expired' : 'did not verify'}`,
+      );
+      return undefined;
+    }
+    let context = oauthTabTokenContext(claims);
+    if (!context) {
+      this.#log.info(
+        `OAuth tab token not accepted for ${described}, judged as a session: malformed`,
+      );
+      return undefined;
+    }
+    let realmURL = this.#sameRealmSpelling(this.url);
+    if (
+      realmURL === undefined ||
+      this.#sameRealmSpelling(context.realm) !== realmURL
+    ) {
+      this.#log.info(
+        `OAuth tab token not accepted for ${described}, judged as a session: minted for another realm`,
+      );
+      return undefined;
+    }
+    return {
+      user: context.user,
+      grantId: context.grantId,
+      scopes: context.scopes,
+      purpose: context.purpose,
+    };
   }
 
   // The realm ACL's decision for an OAuth caller (`#admitOAuthToken`): the
@@ -15310,7 +15437,13 @@ export class Realm {
   // Checks each operation the run's automation declares as the run's
   // identity, without opening any key (`CallApiSender.admitAutomation`), and
   // answers the first refusal, or none (see `automation-admission-route.ts`).
-  // A refused credential that ends the run is recorded on its row.
+  // Each slot is held to the run as its calls are: a run of the automation's
+  // triggers, or a batch's follow-up of one, needs each binding's approval for
+  // this automation, matching the version the run's attempt read and recorded
+  // on its row (ADR 039 §1.7), and a Preview or a Run now a key its identity
+  // owns, an interactive binding or such an approval. The operations checked
+  // are those the attempt recorded with that version. A refused credential
+  // that ends the run is recorded on its row.
   private async admitRunOperations(
     _request: Request,
     requestContext: RequestContext,
@@ -15362,10 +15495,17 @@ export class Realm {
         refusal: { code: 'not-an-automation', detail: limits.message },
       });
     }
+    // The operations the attempt read, with the version it read: an edit
+    // landing after the attempt's read neither adds an operation the run
+    // never read nor drops one it did.
+    let operations =
+      (await getAutomationRun(this.#dbAdapter, call.runId))
+        ?.versionOperations ?? limits.operations;
     let refusal = await this.#declaredOperationRefusal(
       admit,
-      limits.operations,
+      operations,
       call.actsAs,
+      call.runId,
       async (refused) => {
         // A credential only a person can fix is recorded on the run, with
         // the share or key the refused slot is filled from, before the
@@ -15384,41 +15524,7 @@ export class Realm {
     if (refusal) {
       return answer({ refusal });
     }
-    // A run of the automation's triggers, or a batch's follow-up of one,
-    // also needs each binding's approval for this automation, matching it as
-    // its card and script read now (ADR 039 §1.7). The run's own row says
-    // which kind it is; only a Preview or a Run now needs no automation
-    // approval.
-    let run = await getAutomationRun(this.#dbAdapter, call.runId);
-    if (run && run.trigger !== MANUAL_RUN_TRIGGER) {
-      let read = await readRunDeclaration({
-        dbAdapter: this.#dbAdapter,
-        definitionLookup: this.#definitionLookup,
-        virtualNetwork: this.#virtualNetwork,
-        automationId: call.automationId,
-      });
-      let approvals = read.ok
-        ? await this.checkAutomationKeyApprovals({
-            automationId: call.automationId,
-            declaration: read.declaration,
-            payer: call.actsAs,
-          })
-        : undefined;
-      if (approvals && !approvals.approved) {
-        let operation = approvals.operations.find(
-          ({ state }) => state === 'missing',
-        )!;
-        return answer({
-          refusal: {
-            code: 'key-approval-ended',
-            detail: `a key approval this automation needs for operation "${operation.operation}" ended, or the automation changed since its key's owner approved it, so the run waits until it is approved again`,
-            operation: operation.operation,
-            targetType: operation.targetType,
-          },
-        });
-      }
-    }
-    return answer({ refusal: null, operations: limits.operations.length });
+    return answer({ refusal: null, operations: operations.length });
   }
 
   // Checks each operation the automation declares for the key approvals a
@@ -15586,6 +15692,68 @@ export class Realm {
     }
   }
 
+  // Once a from-scratch pass over this realm has landed, follows the key
+  // approvals of every automation in the realm that isn't paused, as an
+  // incremental pass this realm starts does for the automations it touched.
+  // A from-scratch pass rebuilds the whole realm, so it can be the first to
+  // index an edit made while no realm server watched the files. The worker
+  // that ran the pass asks for this whoever started it
+  // (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`), and the request mounts the realm
+  // on whichever realm server it reaches, so a realm no server had mounted is
+  // followed too. Each automation's follow locks its row, so a follow racing
+  // another one of the same automation takes its turn and finds the row in
+  // step.
+  //
+  // It reports what it moved, as the worker's index hook in the same pass
+  // does: a from-scratch pass that announces nothing (a boot's reindex of an
+  // existing index) withholds only the index events that reset open tabs'
+  // loaders. No read it makes waits on this realm's indexing: a definition
+  // lookup reads a realm this server mounts as the prerender user, whose
+  // requests skip the read-your-writes gate. Never rejects: a failure is
+  // logged.
+  async followAutomationKeyApprovalsAfterFromScratchPass(): Promise<void> {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !this.#callApi?.checkAutomationKeyApprovals
+    ) {
+      return;
+    }
+    try {
+      let automations = (
+        await automationsInRealm(
+          this.#dbAdapter,
+          ri(this.#virtualNetwork.unresolveURL(this.url)),
+        )
+      ).filter(({ state }) => state !== 'paused');
+      if (automations.length === 0) {
+        return;
+      }
+      await this.followAutomationKeyApprovals(
+        automations.map(({ automationId }) => automationId),
+      );
+    } catch (e: any) {
+      this.#log.warn(
+        `couldn't follow the key approvals of the automations in ${this.url} after a from-scratch index pass: ${e?.message ?? e}`,
+      );
+    }
+  }
+
+  private async followAutomationKeyApprovalsOnRequest(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let tracked = this.followAutomationKeyApprovalsAfterFromScratchPass();
+    this.#automationFollowsAfterPass.add(tracked);
+    void tracked.finally(() =>
+      this.#automationFollowsAfterPass.delete(tracked),
+    );
+    return createResponse({
+      body: null,
+      init: { status: 202 },
+      requestContext,
+    });
+  }
+
   // The automation's version with `payer` as its payer, its card read as
   // `declaration` and its script as this realm holds it now: what a key's
   // owner approves (`automation-key-approval.ts`). Undefined when the script
@@ -15658,6 +15826,7 @@ export class Realm {
       declaration.operations,
       payer,
       undefined,
+      undefined,
       passOver,
     );
     return refusal
@@ -15666,12 +15835,14 @@ export class Realm {
   }
 
   // The first of `operations` that `payer` may not invoke as an automation
-  // call, as `admit` answers, told to `onRefused` before it is answered. A
-  // refusal whose code `passOver` names is skipped.
+  // call, as `admit` answers, told to `onRefused` before it is answered.
+  // With `runId`, each is held to that run as its calls are. A refusal whose
+  // code `passOver` names is skipped.
   async #declaredOperationRefusal(
     admit: NonNullable<CallApiSender['admitAutomation']>,
     operations: AutomationOperationDeclaration[],
     payer: string,
+    runId: string | undefined,
     onRefused?: (refused: OperationFailure) => Promise<void>,
     passOver: readonly string[] = [],
   ): Promise<RunAdmissionAnswer['refusal']> {
@@ -15682,6 +15853,7 @@ export class Realm {
         codeRef: declared.targetType,
         operation: declared.operation,
         payer,
+        ...(runId ? { runId } : {}),
       });
       if (refused && !passOver.includes(refused.error.code)) {
         await onRefused?.(refused);
@@ -20998,8 +21170,13 @@ export class Realm {
           // embedding card's own prerendered HTML, which that card's own
           // declarations govern — and a render served a row data-only would
           // draw the row from its data under the realm's authority, baking in
-          // the same content its markup holds.
-          ...(duringPrerender ? {} : { unshareableFormats }),
+          // the same content its markup holds. An OAuth caller's search is
+          // never such a render, whatever it says: a tab token's tab runs
+          // code its caller chose and answers them with what it draws, and
+          // an access token's caller sets their own headers.
+          ...(duringPrerender && !requestContext.oauthCaller
+            ? {}
+            : { unshareableFormats }),
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget live search off (408) rather than run it to

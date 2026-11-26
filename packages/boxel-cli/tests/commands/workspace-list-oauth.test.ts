@@ -26,11 +26,16 @@ interface Recorded {
 
 // A realm server answering as it does for an OAuth caller: it keeps the
 // workspace list itself, adding a realm it creates and removing one it
-// deletes.
+// deletes. It answers which realms on the list the caller can still open:
+// all but `unreachable`, with `ARCHIVED` archived.
 function realmServer(
   options: {
     listStatus?: number;
+    editStatus?: number;
     realms?: string[];
+    unreachable?: string[];
+    // Answers as a realm server that predates `reachableRealms`.
+    withoutReachable?: boolean;
     createStatus?: number;
   } = {},
 ) {
@@ -45,16 +50,39 @@ function realmServer(
         path: url.pathname,
         authorization: new Headers(init.headers).get('Authorization'),
       });
+      if (url.pathname === '/_user-realms' && method === 'PATCH') {
+        if (options.editStatus && options.editStatus !== 200) {
+          return new Response('{"errors":[]}', { status: options.editStatus });
+        }
+        let { add = [], remove = [] } = JSON.parse(String(init.body)).data
+          .attributes as { add?: string[]; remove?: string[] };
+        let added = add.filter((r) => !realms.includes(r));
+        let removed = remove.filter((r) => realms.includes(r));
+        realms = [...realms.filter((r) => !remove.includes(r)), ...added];
+        return Response.json({
+          data: {
+            type: 'user-realms-edit',
+            id: USER,
+            attributes: { added, removed },
+          },
+        });
+      }
       if (url.pathname === '/_user-realms') {
         if (options.listStatus && options.listStatus !== 200) {
           return new Response('{"errors":[]}', { status: options.listStatus });
         }
+        let reachableRealms = realms
+          .filter((url) => !options.unreachable?.includes(url))
+          .map((url) => ({ url, archived: url === ARCHIVED }));
         return Response.json({
-          data: { type: 'user-realms', id: USER, attributes: { realms } },
+          data: {
+            type: 'user-realms',
+            id: USER,
+            attributes: options.withoutReachable
+              ? { realms }
+              : { realms, reachableRealms },
+          },
         });
-      }
-      if (url.pathname === '/_archived-realms') {
-        return Response.json({ data: [{ id: ARCHIVED }] });
       }
       if (url.pathname === '/_create-realm') {
         if (options.createStatus === 400) {
@@ -139,16 +167,35 @@ describe('the workspace list on a profile signed in with OAuth', () => {
     );
   });
 
-  it('refuses to edit the list itself, which the realm server keeps', async () => {
-    await expect(pm.addToUserRealms(CREATED)).rejects.toThrow(
-      /signed in with OAuth: the realm server keeps its workspace list/,
-    );
-    await expect(pm.removeFromUserRealms(MINE)).rejects.toThrow(
-      /signed in with OAuth/,
-    );
+  it('edits the list through the realm server', async () => {
+    let server = serve();
+
+    await pm.addToUserRealms(CREATED);
+    await expect(pm.removeFromUserRealms(MINE)).resolves.toBe(true);
+
+    expect(server.realms()).toEqual([CREATED]);
+    expect(server.requests.map((r) => `${r.method} ${r.path}`)).toEqual([
+      'PATCH /_user-realms',
+      'PATCH /_user-realms',
+    ]);
+    expect(
+      server.requests.every((r) => r.authorization === `Bearer ${ACCESS}`),
+    ).toBe(true);
   });
 
-  it('lists the workspaces, with the archived ones when asked', async () => {
+  it("fails an edit the realm server couldn't make, having no Matrix token to make it with", async () => {
+    let server = serve({ editStatus: 503 });
+
+    await expect(pm.addToUserRealms(CREATED)).rejects.toThrow(
+      "The realm server couldn't update the workspace list",
+    );
+    await expect(pm.removeFromUserRealms(MINE)).rejects.toThrow(
+      "The realm server couldn't update the workspace list",
+    );
+    expect(server.requests.every((r) => r.path === '/_user-realms')).toBe(true);
+  });
+
+  it('lists only the workspaces on the list, with one request', async () => {
     let server = serve();
 
     let result = await listRealms({
@@ -157,12 +204,41 @@ describe('the workspace list on a profile signed in with OAuth', () => {
     });
 
     expect(result).toEqual({
-      realms: [
-        { url: ARCHIVED, hidden: true, archived: true },
-        { url: MINE, hidden: false, archived: false },
-      ],
+      realms: [{ url: MINE, hidden: false, archived: false }],
     });
-    expect(server.requests.map((r) => r.path)).not.toContain('/_realm-auth');
+    expect(server.requests.map((r) => r.path)).toEqual(['/_user-realms']);
+  });
+
+  it('leaves out a workspace it can no longer open', async () => {
+    // Its permission was revoked, or another client deleted it: the list
+    // still names it.
+    serve({ realms: [MINE, SHARED], unreachable: [SHARED] });
+
+    let result = await listRealms({ profileManager: pm });
+
+    expect(result).toEqual({
+      realms: [{ url: MINE, hidden: false, archived: false }],
+    });
+  });
+
+  it('says a realm server that predates reachableRealms is older', async () => {
+    serve({ realms: [MINE], withoutReachable: true });
+
+    let result = await listRealms({ profileManager: pm });
+
+    expect(result.realms).toEqual([]);
+    expect(result.error).toMatch(
+      /didn't say which of your workspaces you can still open\. It is probably older than this version of boxel-cli/,
+    );
+  });
+
+  it("doesn't list what the server can't say it can open", async () => {
+    serve({ listStatus: 503 });
+
+    let result = await listRealms({ profileManager: pm });
+
+    expect(result.realms).toEqual([]);
+    expect(result.error).toMatch(/couldn't read your workspace list: 503/);
   });
 
   it('lists a workspace that has been archived only as archived', async () => {

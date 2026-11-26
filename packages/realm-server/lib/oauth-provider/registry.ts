@@ -97,9 +97,12 @@ const MCP: OAuthResourceDefinition = {
 // mapped, nor may ever be (§1.6): the realm's `_session`, `_permissions` and
 // `_sign-capture-urls`, and the realm server's `_server-session`,
 // `_realm-auth`, `_delegate-session`, key, secure-session, secure-window and
-// `_oauth` routes. Nor is `/_run-command`: its prerender tab holds sessions for
-// every realm the user can reach, beside code the caller chooses, which would
-// exchange the token for those sessions (§1.5).
+// `_oauth` routes. `/_run-command` and `/_capture` run code the caller
+// chooses in a prerender tab, so for an OAuth caller that tab holds tab tokens
+// its grant bounds, never the user's sessions (§1.5,
+// `runtime-common/oauth-tab-token.ts`). A capture's served URL stays
+// unmapped: the GET `_capture/` route answers from no router route, and its
+// answer to an OAuth caller carries the capture's bytes instead.
 // `oauth-provider-boxel-api-test.ts` checks the map against both routers.
 const ROUTE_METHODS_READ: readonly OAuthRouteMethod[] = ['GET', 'QUERY'];
 
@@ -176,6 +179,11 @@ const BOXEL_API_READ_ROUTES: readonly OAuthRoute[] = [
   // The caller's own workspace list and display name.
   server('GET', '/_user-realms'),
   server('GET', '/_user-display-name'),
+  // A capture only reads: its tab tokens allow reading whatever the grant
+  // allows. The endpoint's former names are what released clients post to.
+  server('POST', '/_capture'),
+  server('POST', '/_capture-card'),
+  server('POST', '/_screenshot-card'),
 ];
 
 const BOXEL_API_WRITE_ROUTES: readonly OAuthRoute[] = [
@@ -200,13 +208,18 @@ const BOXEL_API_WRITE_ROUTES: readonly OAuthRoute[] = [
   // published copy, never on the realm published from, so neither changes
   // who can reach an existing realm of the user's (§1.6). Creating and
   // deleting a workspace with one of these tokens also edit the caller's own
-  // workspace list, which names realms and grants nothing.
+  // workspace list, which names realms and grants nothing, and so does
+  // editing that list directly.
   server('POST', '/_create-realm'),
+  server('PATCH', '/_user-realms'),
   server('DELETE', '/_delete-realm'),
   server('POST', '/_publish-realm'),
   server('POST', '/_unpublish-realm'),
   server('POST', '/_archive-realm'),
   server('POST', '/_unarchive-realm'),
+  // A command runs as the user, held to the grant's scopes, with tab tokens
+  // in its tab.
+  server('POST', '/_run-command'),
 ];
 
 const BOXEL_API: OAuthResourceDefinition = {

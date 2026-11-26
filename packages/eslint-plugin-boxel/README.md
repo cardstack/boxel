@@ -8,22 +8,27 @@ This is currently only for use within the Boxel monorepo. In the future, we expe
 
 ## Usage
 
-Add `@cardstack/boxel` to the plugins section of your `.eslintrc` configuration file:
+The plugin exports flat configs. Use its `recommended` config in your `eslint.config.mjs`:
 
-```json
-{
-  "plugins": ["@cardstack/boxel"]
-}
+```js
+import plugin from '@cardstack/eslint-plugin-boxel';
+
+export default [plugin.configs.recommended];
 ```
 
-Then configure the rules you want to use under the rules section:
+or register the plugin and configure the rules you want:
 
-```json
-{
-  "rules": {
-    "@cardstack/boxel/rule-name": "error"
-  }
-}
+```js
+import plugin from '@cardstack/eslint-plugin-boxel';
+
+export default [
+  {
+    plugins: { '@cardstack/boxel': plugin },
+    rules: {
+      '@cardstack/boxel/rule-name': 'error',
+    },
+  },
+];
 ```
 
 ## Rules

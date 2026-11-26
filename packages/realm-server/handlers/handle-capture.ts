@@ -15,6 +15,7 @@ import {
   sanitizeLoggingCorrelationId,
   ON_DEMAND_CAPTURE_FORMATS,
   captureURLFor,
+  oauthCaptureReader,
   touchMediaCacheEntryOnHit,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type CaptureIdentity,
@@ -35,12 +36,13 @@ import type { CaptureSourceKind } from '@cardstack/runtime-common/tasks/capture'
 
 import {
   fetchRequestFromContext,
+  requestUser,
   sendResponseForBadRequest,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware/index.ts';
+import type { OAuthCaller } from '../lib/oauth-provider/lookup.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 // One entry of the response's `captures` array — one shape across both paths so
 // a caller can read a field without first knowing how the capture was produced.
@@ -183,7 +185,10 @@ interface CaptureResult {
  * ledger fast path, no MediaCache persist, and every `captures` entry's
  * `url` is null.
  *
- * The `runAs` user is derived from the authenticated JWT.
+ * The `runAs` user is derived from the authenticated JWT, or from the grant
+ * of the Boxel API OAuth token the request was admitted with. An OAuth
+ * caller's capture renders with tab tokens its grant bounds, is kept under a
+ * reader of its own, and is answered with its bytes and no `url`.
  */
 
 // The captureSpec bounds and strict parse live in `capture-spec.ts`
@@ -304,14 +309,23 @@ export default function handleCapture({
         ? { format, ...(captureSpec ?? {}) }
         : undefined;
 
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token?.user) {
+    let userId = requestUser(ctxt);
+    if (!userId) {
       return sendResponseForBadRequest(
         ctxt,
         'Authenticated user not found in JWT',
       );
     }
-    let userId = token.user;
+    // An OAuth app's capture renders with tab tokens its grant bounds, never
+    // the user's sessions (ADR 021 §1.5), so it is kept and served under a
+    // reader of its own. Its served URL is one the app's token can't fetch
+    // (the GET `_capture/` route is no Boxel API route, and signing a capture
+    // URL never is), so the answer carries the bytes and no URL.
+    let oauthCaller = ctxt.state.oauthCaller as OAuthCaller | undefined;
+    let reader = oauthCaller ? oauthCaptureReader(userId) : userId;
+    if (oauthCaller) {
+      withBase64 = true;
+    }
     let requestStart = Date.now();
     let correlationId = sanitizeLoggingCorrelationId(
       request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
@@ -401,7 +415,7 @@ export default function handleCapture({
         let ledgerLookupStart = Date.now();
         let entry = await findMediaCacheEntry(dbAdapter, {
           ...entryKey,
-          servedTo: userId,
+          servedTo: reader,
         });
         ledgerLookupMs = Date.now() - ledgerLookupStart;
         if (entry) {
@@ -410,7 +424,7 @@ export default function handleCapture({
             entry,
             withBase64,
             normalizedRealmURL,
-            servedLocalPath,
+            servedLocalPath: oauthCaller ? undefined : servedLocalPath,
             spec,
             mediaCacheAdapter: mediaCacheAdapter!,
             dbAdapter,
@@ -440,7 +454,14 @@ export default function handleCapture({
         {
           realmURL: normalizedRealmURL,
           realmUsername: userId,
-          runAs: userId,
+          runAs: reader,
+          oauth: oauthCaller
+            ? {
+                user: userId,
+                grantId: oauthCaller.grantId,
+                scopes: [...oauthCaller.scopes],
+              }
+            : null,
           cardId: normalizedTarget,
           sourceKind: kind,
           format,
@@ -566,7 +587,7 @@ export default function handleCapture({
             deviceScaleFactor: result.captures?.[0]?.deviceScaleFactor ?? null,
             pageCount: result.captures?.[0]?.pageCount,
             normalizedRealmURL,
-            servedLocalPath,
+            servedLocalPath: oauthCaller ? undefined : servedLocalPath,
             spec,
           }),
         ];
@@ -613,17 +634,21 @@ function captureResult({
   pageCount?: number;
   normalizedRealmURL: string;
   // The source's ledger spelling within its realm, which its served URL
-  // hangs off.
-  servedLocalPath: string;
+  // hangs off. Undefined for a caller who can't fetch that URL, whose answer
+  // carries no URL.
+  servedLocalPath: string | undefined;
   spec: CaptureIdentity;
 }): CaptureResult {
   return {
     name: null,
-    url: captureURLFor({
-      realmURL: normalizedRealmURL,
-      localPath: servedLocalPath,
-      spec,
-    }),
+    url:
+      servedLocalPath === undefined
+        ? null
+        : captureURLFor({
+            realmURL: normalizedRealmURL,
+            localPath: servedLocalPath,
+            spec,
+          }),
     width,
     height,
     // The effective scale: the engine-reported factor when the capture just
@@ -654,7 +679,7 @@ async function respondFromLedger({
   entry: MediaCacheEntry;
   withBase64: boolean;
   normalizedRealmURL: string;
-  servedLocalPath: string;
+  servedLocalPath: string | undefined;
   spec: CaptureIdentity;
   mediaCacheAdapter: NonNullable<CreateRoutesArgs['mediaCacheAdapter']>;
   dbAdapter: DBAdapter;
