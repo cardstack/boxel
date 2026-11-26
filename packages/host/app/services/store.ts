@@ -959,11 +959,13 @@ export default class StoreService extends Service implements StoreInterface {
       let wired = this.wireUpNewReference(id, readType);
       if (!subscribed) {
         // A realm the user reaches only through its policy is unknown until
-        // the card's first load signs in to it, so subscribe once that's done.
-        void wired.then(
-          () => this.subscribeToRealm(rri(id)),
-          () => undefined,
-        );
+        // the card's first load signs in to it, so subscribe once that's done,
+        // unless the reference was dropped while it loaded.
+        void wired.then(() => {
+          if ((this.referenceCount.get(id) ?? 0) > 0) {
+            this.subscribeToRealm(rri(id));
+          }
+        });
       }
     }
   }
