@@ -26,7 +26,7 @@ import {
 import type { ReportAutomationChange } from '../automation-change-events.ts';
 import type { ReportRunChange } from '../automation-run-events.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
-import { pauseAfterRepeatedFailures } from '../automations.ts';
+import { getAutomation, pauseAfterRepeatedFailures } from '../automations.ts';
 import { JOB_LOST_REASON } from '../automation-reconcile.ts';
 import { logRunPlatformLine } from '../automation-run-log.ts';
 import {
@@ -40,6 +40,9 @@ import {
   addAutomationRunTabTime,
   finishAutomationRun,
   getAutomationRun,
+  FOLLOW_UP_HELD_REASON,
+  holdAutomationFollowUpRun,
+  logAutomationRunEnded,
   recordAutomationRunAdmitted,
   recordAutomationRunScript,
   recordAutomationRunVersion,
@@ -365,7 +368,73 @@ async function attemptRun(
     reportRunChange: ctx.reportRunChange,
     reportAutomationChange: ctx.reportAutomationChange,
   };
+  // Holds a batch's follow-up rather than ending it, once its automation is
+  // paused or waiting for a key approval, or a resume made someone else its
+  // identity (ADR 030 §1.5): the run goes back to pending, and starts again
+  // once its automation is active. A pause this attempt's own refusal made
+  // may already have held it, ending it in favor of a new run of the batch.
+  let hold = async (
+    reason: string,
+    message: string,
+  ): Promise<AutomationAttemptResult> => {
+    admitted(reason);
+    let held = await holdAutomationFollowUpRun(dbAdapter, runId, attempt);
+    let current = held ? undefined : await getAutomationRun(dbAdapter, runId);
+    if (
+      !held &&
+      !(
+        current?.state === 'canceled' &&
+        current.errorReason === FOLLOW_UP_HELD_REASON
+      )
+    ) {
+      log.info(`${tag} left alone: another attempt owns the run, or it ended`);
+      return { state: 'left', reason: 'superseded' };
+    }
+    // An earlier attempt had used something for the run, so it ended in
+    // favor of a new pending run of the batch; this attempt's charge of it
+    // follows, to whom it acted as.
+    if (held?.ended) {
+      await logAutomationRunEnded(dbAdapter, held.ended);
+    }
+    await logRunPlatformLine(dbAdapter, held?.held.id ?? runId, {
+      kind: 'admission',
+      level: 'info',
+      message: `Admission held the run (${reason}): ${message}`,
+      data: { admitted: false, held: true, reason },
+    });
+    await ctx.reportRunChange?.(runId);
+    if (held && held.held.id !== runId) {
+      await ctx.reportRunChange?.(held.held.id);
+    }
+    log.info(`${tag} held: ${message}`);
+    return { state: 'left', reason: 'held' };
+  };
+  // Whether the run's automation is now paused or waiting for a key
+  // approval, as a refusal of a follow-up can leave it.
+  let automationStopped = async () => {
+    let now = await getAutomation(dbAdapter, run.automationId);
+    return now?.state === 'paused' || now?.state === 'waiting-for-key-approval';
+  };
+
   let identity = await admitRunIdentity(admission, run, { kind });
+  if (!identity.ok && identity.hold) {
+    return await hold(identity.reason, identity.message);
+  }
+  if (!identity.ok && kind === 'batch' && identity.pause) {
+    // The payer lost access, so the automation pauses, and a pause holds a
+    // follow-up: this one too, rather than ending with the refusal's code.
+    try {
+      await identity.pause();
+    } catch (e: any) {
+      log.error(
+        `${tag} couldn't pause the automation after its payer lost access: ${e?.message ?? e}`,
+      );
+    }
+    if (await automationStopped()) {
+      return await hold(identity.reason, identity.message);
+    }
+    return await refuse(identity.reason, identity.message);
+  }
   if (!identity.ok) {
     let refused = await refuse(identity.reason, identity.message);
     // The payer lost access: the automation pauses, which cancels its other
@@ -469,6 +538,11 @@ async function attemptRun(
     token,
   });
   if (!operationsAdmitted.ok) {
+    // A refusal that moved the automation to waiting for a key approval
+    // holds a follow-up, as the wait holds its pending ones.
+    if (kind === 'batch' && (await automationStopped())) {
+      return await hold(operationsAdmitted.reason, operationsAdmitted.message);
+    }
     return await refuse(operationsAdmitted.reason, operationsAdmitted.message);
   }
   if (!(await recordAutomationRunAdmitted(dbAdapter, runId, attempt))) {
@@ -516,6 +590,7 @@ async function attemptRun(
     secondsCap: remainingMs / 1000,
     endsAt: new Date(deadline).toISOString(),
     batchDeadlineMinutes: declaration.declaration.batchDeadlineMinutes,
+    batchedAI: declaration.declaration.batchedAI,
   };
 
   let outcome: AutomationScriptOutcome;
