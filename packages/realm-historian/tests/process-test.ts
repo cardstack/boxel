@@ -16,7 +16,7 @@ const MAIN = join(import.meta.dirname, '..', 'main.ts');
 // spawns another Node process beside the holder on a shared CI runner. The
 // expiry stays well above the release handover, which takes about one
 // renewal interval, so the handover assertion tells a release from an
-// expiry.
+// expiry even when renewals run behind schedule.
 const RENEW_MS = 200;
 const EXPIRY_MS = 4000;
 
@@ -136,11 +136,12 @@ module('process', (hooks) => {
       async () => holderPid(await holderOf(0)) === second.process.pid,
       { what: 'the second task to take the lease' },
     );
-    // The first task's last renewal started at most RENEW_MS before the
-    // signal, so a lease that moved on expiry would move no sooner than this.
+    // A task that still holds its lease started its last renewal less than
+    // (RENEW_MS + EXPIRY_MS) / 2 before the signal, or its deadline would have
+    // fired, so a lease that moved on expiry would move no sooner than this.
     let handover = Date.now() - signalledAt;
     assert.true(
-      handover < EXPIRY_MS - RENEW_MS,
+      handover < (EXPIRY_MS - RENEW_MS) / 2,
       `the lease moved on release, before its expiry (${handover}ms)`,
     );
     assert.true(await healthy(second), 'the new holder reports healthy');
