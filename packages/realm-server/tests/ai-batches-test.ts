@@ -25,7 +25,6 @@ import {
   VirtualNetwork,
   type AutomationRun,
 } from '@cardstack/runtime-common';
-import { HIT_A_CAP_REASON } from '@cardstack/runtime-common/automation-runs';
 import {
   pauseAutomation,
   resumeAutomation,
@@ -1541,52 +1540,6 @@ module(basename(import.meta.filename), function () {
       assert.true(
         again.body.late,
         'a later attempt never switches to the results once its requests went at the normal price',
-      );
-    });
-
-    test('a late follow-up’s requests sent at the normal price count against the run’s resolve cap, past which the run ends', async function (assert) {
-      await switchOn(AUTOMATION, true, 100, 2);
-      let submitting = await runningRun();
-      await submit(submitting.token, twoRequests());
-      await deadlinePassed();
-      let { run, token } = await followUpRun();
-      let read = await readFollowUp(token);
-      assert.true(read.body.late);
-      submitAnswer = {
-        status: 200,
-        body: {
-          id: 'gen-1',
-          model: MODEL,
-          choices: [{ message: { content: '{}' }, finish_reason: 'stop' }],
-          usage: { total_tokens: 20, cost: 0.0001 },
-        },
-      };
-      let send = (body: unknown) =>
-        request
-          .post('/_request-forward')
-          .set('Accept', 'application/json')
-          .set('Content-Type', 'application/json')
-          .set('Authorization', `Bearer ${token}`)
-          .send({
-            url: 'https://openrouter.ai/api/v1/chat/completions',
-            method: 'POST',
-            requestBody: JSON.stringify(body),
-          });
-
-      for (let { body } of read.body.requests) {
-        let response = await send(body);
-        assert.strictEqual(response.status, 200, response.text);
-      }
-      let past = await send(read.body.requests[0].body);
-
-      assert.strictEqual(past.status, 403, past.text);
-      let row = await getAutomationRun(dbAdapter, run.id);
-      assert.strictEqual(row?.state, 'error');
-      assert.strictEqual(row?.errorReason, HIT_A_CAP_REASON);
-      assert.strictEqual(
-        row?.resolveCalls,
-        2,
-        'each request sent at the normal price counted once',
       );
     });
 

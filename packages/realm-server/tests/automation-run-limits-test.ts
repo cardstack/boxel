@@ -154,9 +154,13 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
-  async function runOf(automation: string) {
+  async function runOf(
+    automation: string,
+    { trigger }: { trigger?: string } = {},
+  ) {
     return await createAutomationRunToken(dbAdapter, realm, OWNER, {
       automation,
+      trigger,
     });
   }
 
@@ -570,6 +574,20 @@ module(basename(import.meta.filename), function (hooks) {
         [-GENERATION_COST_USD * CREDITS_PER_USD],
         'only the forwarded request is billed',
       );
+    });
+
+    test('a batch follow-up’s requests sent at the normal price count against its resolveCalls cap, past which the run ends', async function (assert) {
+      let { token, run } = await runOf(TIGHT, { trigger: 'batch' });
+      assert.strictEqual((await resolve(token)).status, 200);
+
+      let second = await resolve(token);
+      assert.strictEqual(second.status, 403, JSON.stringify(second.body));
+      assert.strictEqual(forwarded.length, 1, 'only the first was forwarded');
+      let row = (await getAutomationRun(dbAdapter, run.id))!;
+      assert.strictEqual(row.trigger, 'batch');
+      assert.strictEqual(row.state, 'error');
+      assert.strictEqual(row.errorReason, HIT_A_CAP_REASON);
+      assert.strictEqual(row.resolveCalls, 1);
     });
 
     test('a run whose person loses direct write mid-run is refused its next resolve, which ends the run, and nothing is sent or billed', async function (assert) {
