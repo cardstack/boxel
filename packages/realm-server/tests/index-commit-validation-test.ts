@@ -882,6 +882,7 @@ module(basename(import.meta.filename), function (hooks) {
             clientRequestId: null,
             urls: [`${testRealm}x`],
             clientAuthored: null,
+            initiatedBy: null,
             announcesPass: true,
           },
         ]),

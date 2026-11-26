@@ -87,6 +87,9 @@ export interface CoalescedCaller extends JSONTypes.Object {
   // supplied verbatim (see the event's `clientAuthored`). Null when the
   // request made no such report.
   clientAuthored: string[] | null;
+  // The matrix user whose write this is, when known, so a policy watcher hears
+  // only of their own writes. No event carries it.
+  initiatedBy: string | null;
   // Whether this caller announces the pass to subscribers the moment it
   // lands. False for a pass that is only a step in a larger write (the
   // module→instance flush), whose caller announces later, once its closing

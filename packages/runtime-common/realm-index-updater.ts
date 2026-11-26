@@ -647,6 +647,7 @@ export class RealmIndexUpdater {
           clientAuthored: opts?.clientAuthored ?? null,
           announcesPass: opts?.announcesPass === true,
           realmEvents: opts?.realmEvents !== false,
+          initiatedBy: opts?.initiatedBy ?? null,
         },
       );
       job = await this.#queue.publish<IncrementalDoneResult>({
