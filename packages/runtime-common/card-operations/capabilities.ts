@@ -198,16 +198,19 @@ export async function checkCapabilities(
       operation: check.operation,
       target: check.target,
     })),
+    admitted: checks.map((_check, index) => decided.get(keys[index])!.admitted),
     admitsAny: [...decided.values()].some(({ admitted }) => admitted),
   };
 }
 
-// What a check answers, and whether the gate admitted any of its pairs
-// outright. A pair answered `true` on a predicate the check could not run is
-// not one it admitted: whether that grant would admit the caller is not known
-// until the call.
+// What a check answers, and whether the gate admitted each of its pairs
+// outright, in the order asked. A pair answered `true` on a predicate the
+// check could not run is not one it admitted: whether that grant would admit
+// the caller is not known until the call. A server-side consumer that acts on
+// a check reads `admitted`, never `answers`.
 export interface CapabilityOutcome {
   answers: CapabilityAnswer[];
+  admitted: boolean[];
   admitsAny: boolean;
 }
 
