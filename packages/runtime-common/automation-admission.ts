@@ -9,9 +9,16 @@
 //    automation was removed (`not-switched-on`), and a trigger's run when it
 //    is paused (`automation-paused`) or waiting for key approval
 //    (`waiting-for-key-approval`), so a run enqueued before a pause, a
-//    remove or the wait doesn't start. A batch's follow-up still runs while paused: it
-//    reads results its submitting run already paid for, and nothing runs it
-//    again after a resume. A trigger's run that no longer acts as the payer
+//    remove or the wait doesn't start. A batch's follow-up is held instead
+//    while its automation is paused or waiting for key approval (ADR 030
+//    §1.5): the refusal carries `hold`, and the attempt puts the run back to
+//    pending rather than ending it (`holdAutomationFollowUpRun`), so it
+//    starts again once the automation is resumed or active again. A
+//    follow-up whose batch a resume gave another identity than its row's is
+//    held too (`follow-up-identity-changed`): a job enqueued before the
+//    pause took it before the resume reached it, and it starts again acting
+//    as whoever resumed. A
+//    trigger's run that no longer acts as the payer
 //    (a resume made someone else the payer) is refused (`payer-changed`). A
 //    run someone started by hand (Preview, Run now) needs no row. A
 //    `waiting-for-credits` row is admitted here and left to the spending
@@ -23,15 +30,20 @@
 //    - Their sessions weren't revoked since the run was given their
 //      authority (`session-revoked`): since they switched the automation on
 //      or last resumed it, for a run of its triggers; since the submitting
-//      run started, for a batch's follow-up; or since they started the run,
-//      for one started by hand.
+//      run started, for a batch's follow-up, or since the resume that made
+//      them its identity, for one a pause held; or since they started the
+//      run, for one started by hand.
 //    - Their account can still sign in (`account-deactivated`): the Matrix
 //      server, which alone knows, says it isn't deactivated or locked. A
 //      worker that can't ask refuses the run (`account-unverifiable`).
 //    When the run acts as the automation's payer, losing direct write, a
 //    revocation and an account that can't sign in also pause the automation
 //    with `payer-lost-access`, so its later slots don't each fail the same
-//    way. A direct writer resumes it and becomes the payer.
+//    way. A direct writer resumes it and becomes the payer. A batch's
+//    follow-up refused that way is held by the pause rather than ended, and
+//    so is one whose key-approval refusal (step 4) moved the automation to
+//    waiting: `runAutomationAttempt` checks the automation once the refusal
+//    has paused it or made it wait.
 // 3. The script parses (`script-error`). The card and the script file are
 //    read before this, by the attempt.
 // 4. Every operation the card declares passes `automationAdmission` as the
@@ -183,7 +195,13 @@ export async function admitRunIdentity(
   { kind }: { kind: AdmittedRunKind },
 ): Promise<
   | { ok: true; automation: AutomationRow | undefined }
-  | ({ ok: false; pause?: () => Promise<unknown> } & AdmissionRefusal)
+  | ({
+      ok: false;
+      pause?: () => Promise<unknown>;
+      // The run is a batch's follow-up its automation holds: the attempt
+      // puts it back to pending rather than ending it.
+      hold?: true;
+    } & AdmissionRefusal)
 > {
   let {
     dbAdapter,
@@ -201,25 +219,53 @@ export async function admitRunIdentity(
         `The automation ${run.automationId} isn't switched on, so its scheduled run doesn't start`,
       );
     }
-    // A batch's follow-up reads results its submitting run already paid
-    // for, and nothing runs it again after a resume, so a pause doesn't stop
-    // it.
-    if (automation.state === 'paused' && kind === 'trigger') {
-      return refuse(
-        'automation-paused',
-        `The automation is paused (${automation.pauseReason}), so its scheduled run doesn't start`,
-      );
+    if (automation.state === 'paused') {
+      return kind === 'batch'
+        ? {
+            ...refuse(
+              'automation-paused',
+              `The automation is paused (${automation.pauseReason}), so its batch's follow-up is held until it is resumed`,
+            ),
+            hold: true,
+          }
+        : refuse(
+            'automation-paused',
+            `The automation is paused (${automation.pauseReason}), so its scheduled run doesn't start`,
+          );
     }
-    if (automation.state === 'waiting-for-key-approval' && kind === 'trigger') {
-      return refuse(
-        'waiting-for-key-approval',
-        "The automation is waiting for a key approval one of its operations needs, so its scheduled run doesn't start",
-      );
+    // A resume made someone else the follow-up's identity after this run row
+    // was read for its job: it is held, and starts again acting as them.
+    if (kind === 'batch') {
+      let identity = await followUpIdentity(dbAdapter, run);
+      if (identity.actsAs !== undefined && identity.actsAs !== actsAs) {
+        return {
+          ...refuse(
+            'follow-up-identity-changed',
+            `A resume made ${identity.actsAs} the identity of this batch's follow-up, so it starts again acting as them`,
+          ),
+          hold: true,
+        };
+      }
+    }
+    if (automation.state === 'waiting-for-key-approval') {
+      return kind === 'batch'
+        ? {
+            ...refuse(
+              'waiting-for-key-approval',
+              "The automation is waiting for a key approval one of its operations needs, so its batch's follow-up is held until it is active again",
+            ),
+            hold: true,
+          }
+        : refuse(
+            'waiting-for-key-approval',
+            "The automation is waiting for a key approval one of its operations needs, so its scheduled run doesn't start",
+          );
     }
     // A trigger's run acts as the payer (ADR 026 §1.1). One enqueued before
     // a resume made someone else the payer doesn't start as the old one; the
     // automation's next run acts as the new payer. A batch's follow-up acts
-    // as whoever its submitting run acted as.
+    // as whoever its submitting run acted as, or, once a resume came after
+    // the batch was submitted, as whoever resumed.
     if (kind === 'trigger' && automation.payer !== actsAs) {
       return refuse(
         'payer-changed',
@@ -277,13 +323,14 @@ export async function admitRunIdentity(
 
   // The moment the run was given its identity's authority: the payer's
   // switch-on or last resume (when the payer was set), for a trigger's run;
-  // the submitting run's start, for a batch's follow-up, which acts as whoever
-  // that run acted as; the run's own start, for a run started by hand.
+  // for a batch's follow-up, the submitting run's start, or the resume that
+  // made the run's identity the follow-up's (`followUpAuthorizedAt`); the
+  // run's own start, for a run started by hand.
   let authorizedAt =
     kind === 'trigger' && automation
       ? automation.scheduledSince
       : kind === 'batch'
-        ? await submittingRunStart(dbAdapter, run)
+        ? await followUpAuthorizedAt(dbAdapter, run)
         : Math.floor(Date.parse(run.createdAt) / 1000);
   if (await isSessionRevoked(dbAdapter, actsAs, authorizedAt)) {
     return payerLostAccess(
@@ -618,19 +665,48 @@ async function askAccountStanding(
   }
 }
 
-// Unix seconds: when the run that submitted a batch's follow-up started.
-// The follow-up's slot is the batch's id. A follow-up whose batch isn't found
-// falls back to its own start.
-async function submittingRunStart(
+// Unix seconds: when a batch's follow-up was given its identity's
+// authority. The follow-up's slot is the batch's id. One that acts as whoever
+// resumed the automation after the batch was submitted dates from that
+// resume (`follow_up_resumed_at`); any other dates from the start of the run
+// that submitted the batch. A follow-up whose batch isn't found falls back
+// to its own start.
+async function followUpAuthorizedAt(
   dbAdapter: DBAdapter,
   run: AutomationRun,
 ): Promise<number> {
+  let identity = await followUpIdentity(dbAdapter, run);
+  let since =
+    identity.resumedAt !== undefined && identity.actsAs === run.actsAs
+      ? identity.resumedAt
+      : (identity.submittedBy ?? run.createdAt);
+  return Math.floor(new Date(since).getTime() / 1000);
+}
+
+// What the follow-up's batch (its slot) says of its identity: whom a resume
+// made it act as and when (`follow_up_acts_as`, `follow_up_resumed_at`), and
+// when the run that submitted the batch started. Each is undefined when the
+// batch, or the value, isn't there.
+async function followUpIdentity(
+  dbAdapter: DBAdapter,
+  run: AutomationRun,
+): Promise<{ actsAs?: string; resumedAt?: string; submittedBy?: string }> {
   let [row] = await query(dbAdapter, [
-    'SELECT r.created_at FROM ai_batches b JOIN automation_runs r ON r.id = b.run_id WHERE b.batch_id =',
+    'SELECT b.follow_up_acts_as, b.follow_up_resumed_at, r.created_at FROM ai_batches b LEFT JOIN automation_runs r ON r.id = b.run_id WHERE b.batch_id =',
     param(run.slot),
+    'AND b.automation_id =',
+    param(run.automationId),
   ]);
-  let started = row?.created_at ?? run.createdAt;
-  return Math.floor(new Date(started as string).getTime() / 1000);
+  let iso = (value: unknown) =>
+    value == null ? undefined : new Date(value as string).toISOString();
+  return {
+    actsAs:
+      row?.follow_up_acts_as == null
+        ? undefined
+        : String(row.follow_up_acts_as),
+    resumedAt: iso(row?.follow_up_resumed_at),
+    submittedBy: iso(row?.created_at),
+  };
 }
 
 function refuse(
