@@ -208,13 +208,6 @@
    PRIMARY KEY ( budget_key, period, period_start ) 
 );
 
- CREATE TABLE IF NOT EXISTS realm_event_watchers (
-   realm_url TEXT NOT NULL,
-   user_id TEXT NOT NULL,
-   expires_at NOT NULL,
-   PRIMARY KEY ( realm_url, user_id ) 
-);
-
  CREATE TABLE IF NOT EXISTS realm_file_meta (
    realm_url TEXT NOT NULL,
    file_path TEXT NOT NULL,
