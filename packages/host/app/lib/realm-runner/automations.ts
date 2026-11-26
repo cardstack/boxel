@@ -3,6 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import {
   RealmPaths,
   resolveRRIReference,
+  rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import {
@@ -271,6 +272,9 @@ export interface AutomationIO {
   readSourceText(url: string): Promise<string>;
   // A realm identifier in URL form, as the realm serves it.
   toURLHref(identifier: string): string;
+  // A URL in the form its realm is known by: prefix form for a realm mapped
+  // to a prefix, as a card's id is.
+  toIdentifier(url: string): string;
   viewerTimeZone: string;
 }
 
@@ -282,7 +286,10 @@ export function automationIOFor(services: {
   };
   network: {
     authedFetch: typeof globalThis.fetch;
-    virtualNetwork: { toURLHref(identifier: string): string };
+    virtualNetwork: {
+      toURLHref(identifier: string): string;
+      unresolveURL(url: string): string;
+    };
   };
 }): AutomationIO {
   return {
@@ -309,6 +316,7 @@ export function automationIOFor(services: {
     },
     toURLHref: (identifier) =>
       services.network.virtualNetwork.toURLHref(identifier),
+    toIdentifier: (url) => services.network.virtualNetwork.unresolveURL(url),
     viewerTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
 }
@@ -387,7 +395,7 @@ export async function loadAutomationConfirmation(
       // Joined as the realm server joins the card's script link, so the
       // gate reads, and the run protects, the script the server runs.
       confirmation.scriptURL = io.toURLHref(
-        resolveRRIReference(scriptLink, new URL(cardURL)),
+        resolveRRIReference(scriptLink, rri(io.toIdentifier(cardURL))),
       );
     }
     let script = confirmation.scriptURL
