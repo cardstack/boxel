@@ -31,13 +31,20 @@ const DEFAULT_MAX_HOSTS = 10_000;
 // What a request on a host URL resolved to. `hostURL` is the host URL itself,
 // with the request's protocol, ending in `/`. `canonicalHostURL` is the
 // realm's canonical host URL in the same form, undefined when the realm has
-// none.
+// none. `renderedAgainstURLs` are the URLs other than the realm's that the
+// realm's stored HTML was rendered against (ADR 033 §1.8), in order.
 export interface HostURLMatch {
   hostURL: string;
   realmURL: string;
   isCanonical: boolean;
   canonicalHostURL?: string;
+  renderedAgainstURLs?: readonly string[];
 }
+
+// For each realm whose stored HTML was rendered against a URL other than its
+// own, those URLs, in order. A realm whose HTML names only its own URL has no
+// entry.
+export type RenderedAgainstURLs = ReadonlyMap<string, readonly string[]>;
 
 interface HostEntry {
   pathPrefix: string;
@@ -78,6 +85,13 @@ export class HostURLResolver {
   // have committed after the query read the table.
   #invalidations = 0;
   #subscribing: Promise<void> | undefined;
+  // The URLs each realm's stored HTML was rendered against, for every realm
+  // at once: one read serves every request until it expires or a change is
+  // announced.
+  #renderedAgainst:
+    | { urls: RenderedAgainstURLs; expiresAt: number }
+    | undefined;
+  #renderedAgainstLoad: Promise<RenderedAgainstURLs> | undefined;
 
   constructor(
     dbAdapter: DBAdapter,
@@ -115,6 +129,9 @@ export class HostURLResolver {
     if (!entry) {
       return undefined;
     }
+    let renderedAgainstURLs = (await this.renderedAgainstURLs()).get(
+      entry.realmURL,
+    );
     return {
       hostURL: `${requestURL.protocol}//${host}${entry.pathPrefix}`,
       realmURL: entry.realmURL,
@@ -122,20 +139,71 @@ export class HostURLResolver {
       canonicalHostURL: entry.canonical
         ? `${requestURL.protocol}//${entry.canonical}`
         : undefined,
+      ...(renderedAgainstURLs ? { renderedAgainstURLs } : {}),
     };
+  }
+
+  // The URLs other than its own that each realm's stored HTML was rendered
+  // against, as `prerendered_html.rendered_against_url` records them
+  // (ADR 033 §1.8). Read for all realms at once and cached like a host's
+  // entries: until a change to any host URL is announced, or for the same
+  // fixed time. A render can record a new URL after this was read. Until it
+  // is read again, a response on a host URL still translates from the
+  // realm's canonical host URL, but a response on the realm's own URL can
+  // name the new URL for up to that fixed time.
+  async renderedAgainstURLs(): Promise<RenderedAgainstURLs> {
+    this.#ensureSubscribed();
+    let cached = this.#renderedAgainst;
+    if (cached && cached.expiresAt > this.#now()) {
+      return cached.urls;
+    }
+    if (!this.#renderedAgainstLoad) {
+      let invalidationsBefore = this.#invalidations;
+      let load = loadRenderedAgainstURLs(this.#dbAdapter).then((urls) => {
+        if (this.#invalidations === invalidationsBefore) {
+          this.#renderedAgainst = {
+            urls,
+            expiresAt: this.#now() + this.#ttlMs,
+          };
+        }
+        return urls;
+      });
+      this.#renderedAgainstLoad = load;
+      load.then(
+        () => {
+          if (this.#renderedAgainstLoad === load) {
+            this.#renderedAgainstLoad = undefined;
+          }
+        },
+        () => {
+          if (this.#renderedAgainstLoad === load) {
+            this.#renderedAgainstLoad = undefined;
+          }
+        },
+      );
+    }
+    return await this.#renderedAgainstLoad;
   }
 
   // Drops a host's cached entries in this process. A writer calls this, as
   // well as `notifyHostURLsChanged`, so its own change takes effect before
   // its response is sent (ADR 033 §1.3).
+  // A change to any host URL can be followed by a render against another
+  // URL, so it also drops the URLs stored HTML was rendered against.
   forget(host: string): void {
-    this.#invalidations++;
+    this.#forgetRenderedAgainstURLs();
     this.#entries.delete(host.toLowerCase());
   }
 
   #forgetAll(): void {
-    this.#invalidations++;
+    this.#forgetRenderedAgainstURLs();
     this.#entries.clear();
+  }
+
+  #forgetRenderedAgainstURLs(): void {
+    this.#invalidations++;
+    this.#renderedAgainst = undefined;
+    this.#renderedAgainstLoad = undefined;
   }
 
   async #entriesFor(host: string): Promise<HostEntry[]> {
@@ -215,6 +283,30 @@ export class HostURLResolver {
         },
       );
   }
+}
+
+// Reads, for every realm, the distinct URLs other than its own that its live
+// stored HTML was rendered against. The predicate is the one of the partial
+// index `prerendered_html_rendered_against_url_index`, so the read touches
+// only those rows. A null `rendered_against_url` is the realm's URL.
+async function loadRenderedAgainstURLs(
+  dbAdapter: DBAdapter,
+): Promise<RenderedAgainstURLs> {
+  let rows = (await query(dbAdapter, [
+    `SELECT DISTINCT realm_url, rendered_against_url FROM prerendered_html`,
+    `WHERE rendered_against_url <> realm_url AND is_deleted IS NOT TRUE`,
+    `ORDER BY realm_url, rendered_against_url`,
+  ])) as { realm_url: string; rendered_against_url: string }[];
+  let urls = new Map<string, string[]>();
+  for (let row of rows) {
+    let list = urls.get(row.realm_url);
+    if (!list) {
+      list = [];
+      urls.set(row.realm_url, list);
+    }
+    list.push(row.rendered_against_url);
+  }
+  return urls;
 }
 
 // Tells every process that a host's host URLs changed. Best effort, like the

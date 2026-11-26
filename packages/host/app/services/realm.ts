@@ -1220,11 +1220,11 @@ export default class RealmService extends Service {
     }
   }
 
-  // Forgets the sessions an automation run's tab was handed in memory, and
-  // every realm holding one, so no session of the run outlives its answer.
-  // A run's tab holds no session but the run's own, so every realm holding a
-  // session got it from the run. Does nothing in a tab whose sessions are in
-  // storage.
+  // Forgets the sessions a tab was handed in memory (an automation run's
+  // token, or an OAuth app's tab tokens), and every realm holding one, so
+  // none outlives the command's answer. Such a tab holds no other session, so
+  // every realm holding a session got it from them. Does nothing in a tab
+  // whose sessions are in storage.
   dropInMemorySessions(): void {
     if (!inMemorySessions()) {
       return;

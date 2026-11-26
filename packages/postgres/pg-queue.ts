@@ -542,7 +542,8 @@ function familyKey(alias: 'j'): string {
 // Whether a row's priority is in the user-initiated tier rather than the
 // system tier (see the tier table in runtime-common's queue.ts). The
 // high-priority worker pool floors at the bottom of the user-initiated tier, so
-// only the all-priority pool can claim a system-tier job.
+// a system-tier job is claimed only by the all-priority pool or, for an index
+// job, by a system-index worker where one runs.
 function isUserInitiatedTier(alias: JobsAlias): string {
   return `(${alias}.priority >= ${userInitiatedPrerenderHtmlPriority})`;
 }
@@ -767,7 +768,11 @@ export class PgQueueRunner implements QueueRunner {
             //   workers (`wakeRunnersForPendingExclusive`), so an idle
             //   all-priority worker races it for the family, but a busy one
             //   scans only when it frees up. An operator reindex published at
-            //   the user tier is the way to run one on demand.
+            //   the user tier is the way to run one on demand. This describes
+            //   the deployed pools. Where a system-index worker runs (only the
+            //   local development worker manager starts one), it can claim the
+            //   pass too, but it also takes the family's user-tier writes, so
+            //   the pass still needs an idle moment in the family.
             //
             // Jobs published without a family are all exclusive, each in a
             // family of its own group, so for them these reduce to the first

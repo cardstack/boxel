@@ -159,9 +159,20 @@ const CAPTURE_FETCH_FAILURE_RE =
 // which the tab shares with every other tab of its BrowserContext.
 export function renderActorFor(auth: string): string | null {
   let session = renderSessionOf(auth);
-  return session.kind === 'user' || session.kind === 'run'
+  return session.kind === 'user' ||
+    session.kind === 'run' ||
+    session.kind === 'oauth-tab'
     ? session.user
     : null;
+}
+
+// Whether a tab is handed its sessions in the page's memory rather than in
+// localStorage: an automation run's token (ADR 026 §1.2), and an OAuth app's
+// tab tokens, which reach code the app chose. Anything a tab keeps in storage
+// its BrowserContext's other tabs can read.
+export function sessionsGoInMemory(auth: string): boolean {
+  let kind = renderSessionOf(auth).kind;
+  return kind === 'run' || kind === 'oauth-tab';
 }
 
 // A render timeout's diagnostics say whether the tab was still answering when
@@ -521,11 +532,13 @@ export class RenderRunner {
     };
     this.#pagePool.resetConsoleErrors(pageId);
     // An automation run's token goes to the tab in memory only, never into
-    // anything the tab keeps (ADR 026 §1.2). The host drops it as the run
-    // answers, and a run that doesn't answer loses its tab. The run's tab
-    // holds no other session, so its storage is cleared of any. Every other
-    // command takes its sessions from storage.
-    let sessionsInMemory = renderSessionOf(auth).kind === 'run';
+    // anything the tab keeps (ADR 026 §1.2), and so do an OAuth app's tab
+    // tokens. The host drops them as the command answers, and a command that
+    // doesn't answer loses its tab. Such a tab holds no other session, so its
+    // storage is cleared of any. Every other command takes its sessions from
+    // storage.
+    let sessionsInMemory = sessionsGoInMemory(auth);
+    let isRun = renderSessionOf(auth).kind === 'run';
     const markTimeout = (status?: RunCommandResponse['status']) => {
       if (!poolInfo.timedOut && status === 'unusable') {
         poolInfo.timedOut = true;
@@ -706,7 +719,7 @@ export class RenderRunner {
       markTimeout(response.status);
       // Taken before the memory reading, which is not part of the command.
       let renderMs = Date.now() - renderStart;
-      if (sessionsInMemory) {
+      if (isRun) {
         // The whole tab's heap as this run's command ended: the host app's,
         // and whatever earlier runs on the tab left uncollected, beside the
         // run's own. The run's telemetry reads it from the response's
@@ -821,11 +834,19 @@ export class RenderRunner {
       // try so `finally { release() }` frees the tab slot if the caller
       // aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
+      // An OAuth app's capture holds tab tokens, which go to the tab in
+      // memory only, as a command's do.
+      let sessionsInMemory = sessionsGoInMemory(auth);
       await abortable(signal, () =>
         page.evaluate(
-          (sessionAuth, actor, sessionsGlobal) => {
-            localStorage.setItem('boxel-session', sessionAuth);
-            delete (globalThis as any)[sessionsGlobal];
+          (sessionAuth, inMemory, actor, sessionsGlobal) => {
+            if (inMemory) {
+              localStorage.removeItem('boxel-session');
+              (globalThis as any)[sessionsGlobal] = JSON.parse(sessionAuth);
+            } else {
+              localStorage.setItem('boxel-session', sessionAuth);
+              delete (globalThis as any)[sessionsGlobal];
+            }
             (globalThis as any).__boxelRenderActor = actor;
             // A capture renders through the same card branch as a visit, on a
             // tab drawn from the same affinity queue — and it names the card a
@@ -838,6 +859,7 @@ export class RenderRunner {
             delete (globalThis as any).__boxelCardRenderData;
           },
           auth,
+          sessionsInMemory,
           renderActorFor(auth),
           inMemorySessionsGlobal,
         ),

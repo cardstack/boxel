@@ -754,7 +754,13 @@ export default function handleSearch(opts: {
     // draws becomes part of the embedding card's own prerendered HTML, which
     // that card's own declarations govern. It folds into the cache key below
     // with the rest of these, because the two are different response bodies.
-    if (unshareableFormats.length > 0 && !cacheOnlyDefinitions) {
+    // An OAuth caller's search is never a render's, whatever it says: a tab
+    // token's tab answers its caller with what it draws, and an access
+    // token's caller sets their own headers.
+    if (
+      unshareableFormats.length > 0 &&
+      (!cacheOnlyDefinitions || getMultiRealmAuthorization(ctxt).oauthCaller)
+    ) {
       searchOpts.unshareableFormats = unshareableFormats;
     }
     if (jobPriority !== null) searchOpts.priority = jobPriority;
