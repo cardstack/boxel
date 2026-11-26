@@ -10,10 +10,16 @@ import type {
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { prepareRunCommand } from '@cardstack/runtime-common/run-command-request';
 import { userInitiatedPriority } from '@cardstack/runtime-common/queue';
+import type { CreateOAuthTabAuth } from '@cardstack/runtime-common/oauth-tab-token';
+import { realmPermissionCeiling } from '@cardstack/runtime-common/oauth-route-admission';
+
+import type { BoxelApi } from '../lib/oauth-provider/boxel-api.ts';
+import type { OAuthCaller } from '../lib/oauth-provider/lookup.ts';
 
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
+  sendResponseForForbiddenRequest,
   sendResponseForSystemError,
   setContextResponse,
   requestUser,
@@ -46,13 +52,19 @@ import {
  * }
  * ```
  *
- * The `runAs` user is derived from the authenticated JWT.
+ * The `runAs` user is derived from the authenticated JWT, or from the grant
+ * of the Boxel API OAuth token the request was admitted with. The command's
+ * tab runs code the caller chose, so for an OAuth caller it holds tab tokens
+ * (`runtime-common/oauth-tab-token.ts`), bounded by the caller's grant, and
+ * never the user's sessions (ADR 021 §1.5).
  */
 export default function handleRunCommand({
   dbAdapter,
   matrixClient,
   prerenderer,
   createPrerenderAuth,
+  createOAuthTabAuth,
+  boxelApi,
 }: {
   dbAdapter: DBAdapter;
   matrixClient: MatrixClient;
@@ -61,6 +73,10 @@ export default function handleRunCommand({
     userId: string,
     permissions: RealmPermissions,
   ) => string;
+  createOAuthTabAuth: CreateOAuthTabAuth;
+  // The Boxel API, whose scopes bound an OAuth caller's tab tokens. Unset,
+  // no OAuth caller reaches this route.
+  boxelApi?: BoxelApi;
 }): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (!prerenderer) {
@@ -104,12 +120,40 @@ export default function handleRunCommand({
     }
     let userId = user;
 
+    // An OAuth caller's tab holds tab tokens for the realms the user's own
+    // sessions would have covered, held to what the grant's scopes allow.
+    let oauthCaller = ctxt.state.oauthCaller as OAuthCaller | undefined;
+    let createAuth = createPrerenderAuth;
+    if (oauthCaller) {
+      let permissionCeiling = boxelApi
+        ? realmPermissionCeiling(boxelApi.resource.scopes, oauthCaller.scopes)
+        : undefined;
+      // The route map admits only a scope that allows writing here, so this
+      // refuses only a caller the map would have refused.
+      if (!permissionCeiling) {
+        return sendResponseForForbiddenRequest(
+          ctxt,
+          'This OAuth token does not allow running commands',
+        );
+      }
+      let { grantId, scopes } = oauthCaller;
+      createAuth = (authUserId, permissions) =>
+        createOAuthTabAuth({
+          userId: authUserId,
+          permissions,
+          grantId,
+          scopes,
+          purpose: 'run-command',
+          permissionCeiling,
+        });
+    }
+
     let result: RunCommandResponse;
     try {
       let outcome = await prepareRunCommand({
         dbAdapter,
         matrixServerName: matrixClient.serverName,
-        createPrerenderAuth,
+        createPrerenderAuth: createAuth,
         realmURL,
         runAs: userId,
         command,
