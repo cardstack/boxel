@@ -190,4 +190,35 @@ module('Pretui | Tabs', function (hooks) {
     assert.dom('[data-test-pretui-tabpanel]').doesNotExist();
     assert.dom(tab('overview')).doesNotHaveAttribute('aria-controls');
   });
+
+  // `boxel test` applies no `<style scoped>`, so the ring itself (an inset
+  // outline that moves nothing) is a CSS claim this harness can't see; it
+  // asserts only that an arrow key lands visible focus on the next tab.
+  test('arrow keys move focus to the next tab', async function (assert) {
+    await render(<template><Tabs @options={{OPTIONS}} /></template>);
+    await focus(tab('overview'));
+    await triggerKeyEvent(tab('overview'), 'keydown', 'ArrowRight');
+    assert.strictEqual(document.activeElement, tab('activity'));
+  });
+
+  test('@label names the tab list', async function (assert) {
+    await render(
+      <template><Tabs @options={{OPTIONS}} @label='Sections' /></template>,
+    );
+    assert
+      .dom('[data-test-pretui-tablist]')
+      .hasAttribute('aria-label', 'Sections');
+  });
+
+  test("@overflow='scroll' is reflected and End reaches the last tab", async function (assert) {
+    await render(
+      <template><Tabs @options={{OPTIONS}} @overflow='scroll' /></template>,
+    );
+    // The overflow itself needs the scoped CSS, which this harness doesn't
+    // apply: assert the reflected mode and that End reaches the last tab.
+    assert.dom('[data-overflow="scroll"]').exists();
+    await focus(tab('overview'));
+    await triggerKeyEvent(tab('overview'), 'keydown', 'End');
+    assert.strictEqual(document.activeElement, tab('settings'));
+  });
 });

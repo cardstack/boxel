@@ -13,6 +13,7 @@ const TAB_OPTIONS = [
   { value: 'sample-apps', label: 'Sample Apps' },
   { value: 'favorites', label: 'Favorites' },
 ];
+const OVERFLOW_OPTIONS = ['scroll', 'none'];
 const TAB_IDS = [
   'dashboard',
   'requirements',
@@ -28,6 +29,13 @@ const TAB_IDS = [
 export class TabsUsage extends GlimmerComponent {
   @tracked defaultValue = 'dashboard';
   setDefault = (v: string) => (this.defaultValue = v);
+  @tracked label = 'Sections';
+  setLabel = (v: string) => (this.label = v);
+  @tracked overflow = 'scroll';
+  setOverflow = (v: string) => (this.overflow = v);
+  get overflowArg(): 'scroll' | undefined {
+    return this.overflow === 'scroll' ? 'scroll' : undefined;
+  }
   <template>
     <FreestyleUsage
       @name='Tabs'
@@ -35,7 +43,12 @@ export class TabsUsage extends GlimmerComponent {
     >
       <:example>
         <div class='tabs-host'>
-          <Tabs @options={{TAB_OPTIONS}} @defaultValue={{this.defaultValue}}>
+          <Tabs
+            @options={{TAB_OPTIONS}}
+            @defaultValue={{this.defaultValue}}
+            @label={{this.label}}
+            @overflow={{this.overflowArg}}
+          >
             <:default as |active|>
               <p class='tabs-note'>Active section: <b>{{active}}</b></p>
             </:default>
@@ -59,6 +72,19 @@ export class TabsUsage extends GlimmerComponent {
           @name='value'
           @description='Controlled active tab value; when set, Tabs defers to it entirely and reports picks via onValueChange.'
           @hideControls={{true}}
+        />
+        <Args.String
+          @name='label'
+          @description='Accessible name for the tab list (aria-label on the tablist).'
+          @value={{this.label}}
+          @onInput={{this.setLabel}}
+        />
+        <Args.String
+          @name='overflow'
+          @description="'scroll' lets a list that doesn't fit scroll sideways: no scrollbar, an edge fade on each side that hides tabs, and the selected tab kept in view. The fade width is the --pretui-tabs-fade knob (default 1.5rem). Unset, the tabs shrink to fit and long labels wrap."
+          @value={{this.overflow}}
+          @options={{OVERFLOW_OPTIONS}}
+          @onInput={{this.setOverflow}}
         />
         <Args.Action
           @name='onValueChange'
