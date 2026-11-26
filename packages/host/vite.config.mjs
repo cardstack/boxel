@@ -245,6 +245,53 @@ function quietOptimizedDepSourcemapWarnings() {
   };
 }
 
+// A build extracts the stylesheets app/app.ts imports and links them in
+// index.html, so they apply from the first paint. The dev server adds them
+// from script only when the app starts, and until then the page has none of
+// boxel-ui's base styles (a published realm's stored HTML shows the browser's
+// default body margin, for example). Link the same stylesheets in the dev
+// server's index.html, in the order app.ts imports them, so a page looks the
+// same before the app starts as it does on a built host. When the app starts,
+// its imports add the same rules again; they are identical and in the same
+// layers, so the second copy changes nothing.
+const appEntry = path.join(__dirname, 'app', 'app.ts');
+const appStylesheetImportRE = /^import\s+'([^']+\.css)';/gm;
+
+function linkAppStylesheetsInDev() {
+  return {
+    name: 'boxel-link-app-stylesheets-in-dev',
+    apply: 'serve',
+    async transformIndexHtml(_html, { server }) {
+      if (!server) {
+        return [];
+      }
+      let source = await readFile(appEntry, 'utf8');
+      let tags = [];
+      for (let [, specifier] of source.matchAll(appStylesheetImportRE)) {
+        let resolved = await server.pluginContainer.resolveId(
+          specifier,
+          appEntry,
+        );
+        if (!resolved) {
+          continue;
+        }
+        let file = resolved.id.split('?')[0];
+        let relative = path.relative(server.config.root, file);
+        let href =
+          relative.startsWith('..') || path.isAbsolute(relative)
+            ? `/@fs${file}`
+            : `/${relative.split(path.sep).join('/')}`;
+        tags.push({
+          tag: 'link',
+          attrs: { rel: 'stylesheet', href },
+          injectTo: 'head',
+        });
+      }
+      return tags;
+    },
+  };
+}
+
 // In environment mode (BOXEL_ENVIRONMENT set), scripts/vite-with-traefik.js
 // exposes the public Traefik hostname via BOXEL_HOST_HOSTNAME so we can let it
 // through Vite's host check (for both `vite` and `vite preview`) and tell the
@@ -369,6 +416,7 @@ export default defineConfig(({ mode }) => ({
     classicEmberSupport(),
     ember(),
     quietOptimizedDepSourcemapWarnings(),
+    linkAppStylesheetsInDev(),
     // extra plugins here
     babel({
       babelHelpers: 'runtime',
