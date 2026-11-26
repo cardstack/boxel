@@ -33,10 +33,11 @@ Where it is behind Spectrum's `TagGroup`: **no per-option removal and no Delete-
 
 The row is a labelled group of native inputs, so the role matches how the chips behave:
 
-- **Single-select** is `role="radiogroup"` over visually hidden `<input type="radio">` elements sharing one `name`, with each chip's `<label>` wearing the chip dress. The row is one Tab stop, and the arrow keys move _and_ select, with the platform's wrapping.
+- **Single-select** is `role="radiogroup"` over visually hidden `<input type="radio">` elements sharing one `name`, with each chip's `<label>` wearing the chip dress. The chips are one Tab stop, and the arrow keys move _and_ select, with the platform's wrapping.
 - **`@multiple`** is `role="group"` over native `<input type="checkbox">` elements. Each chip is its own Tab stop, and Space toggles it. A radiogroup would be wrong here, since any combination is legal.
 - **It is not a tablist.** A filter row picks a value; it does not swap a panel, and there are no `aria-pressed` buttons.
-- **`@label`** names the group.
+- **`@label`** names the group. Pass it: the prop is optional, but without one the row has no accessible name.
+- **`@display='few'`** adds the `+N` menu trigger as one more Tab stop. The arrow keys move only among the chips on screen, and the chips in the menu are reached through the menu.
 
 Remaining gaps:
 
