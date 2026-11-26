@@ -2103,7 +2103,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 631809,
+      "bytes": 631945,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2701,7 +2701,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-approval-notices.gts",
-          "size": 5429
+          "size": 5577
         },
         {
           "package": "@cardstack/secure-origin",

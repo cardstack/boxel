@@ -14,7 +14,10 @@
 //   automation's use of the key.
 //
 // Each entry names the automation, its workspace and each operation it asks
-// about with where the operation sends. An entry ends once the approval lands,
+// about with where the operation sends. The automation's title is whatever a
+// realm writer typed, so it and the workspace address are isolated (`<bdi>`)
+// rather than let a right-to-left or bidi-override title reorder the sentence
+// around them. An entry ends once the approval lands,
 // the operation leaves the automation's card, or the automation stops
 // waiting.
 import { fn } from '@ember/helper';
@@ -104,9 +107,11 @@ const KeyApprovalNotices: TOC<Signature> = <template>
                       @dot={{false}}
                     />
                     The automation
-                    <strong>“{{automationName entry.notice}}”</strong>
+                    <strong>“<bdi>{{automationName
+                          entry.notice
+                        }}</bdi>”</strong>
                     in
-                    <strong>{{addressOf entry.notice.realm}}</strong>
+                    <strong><bdi>{{addressOf entry.notice.realm}}</bdi></strong>
                     {{#if (approving entry)}}
                       waits for your approval to use your key.
                     {{else}}
