@@ -12,6 +12,7 @@ import {
   ProfileManager,
   type OAuthSessionRecord,
 } from '../../src/lib/profile-manager.ts';
+import { AiCreditsNotAllowedError } from '../../src/lib/oauth-refusals.ts';
 
 const REALM_SERVER_URL = 'https://realms.example.test/';
 const ISSUER = 'https://realms.example.test';
@@ -382,5 +383,114 @@ describe('ProfileManager on an OAuth profile', () => {
     await expect(
       manager().authedRealmFetch(`${REALM_URL}_info`),
     ).rejects.toThrow(/didn't renew, so it ended with its access token/);
+  });
+});
+
+describe('ProfileManager on an OAuth profile, spending AI credits', () => {
+  let dir: string;
+  let requests: string[];
+  let answer: (url: string) => Response;
+
+  function manager() {
+    return new ProfileManager(dir, { now: () => START });
+  }
+
+  function signIn(scope: string | undefined) {
+    manager().addOAuthProfile(
+      USER_ID,
+      oauthRecord(scope === undefined ? {} : { scope }),
+      {
+        matrixUrl: 'https://matrix.example.test/',
+        realmServerUrl: REALM_SERVER_URL,
+      },
+    );
+  }
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-oauth-spend-'));
+    requests = [];
+    answer = () => jsonResponse({ ok: true });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        let url = String(input instanceof Request ? input.url : input);
+        requests.push(url);
+        return answer(url);
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('refuses a route that spends credits before any request, on a connection signed in without it', async () => {
+    signIn('boxel:read boxel:write');
+    let pm = manager();
+    expect(pm.canSpendAiCredits()).toBe(false);
+    for (let route of ['_request-forward', '_openrouter/chat/completions']) {
+      await expect(
+        pm.authedRealmServerFetch(`${REALM_SERVER_URL}${route}`, {
+          method: 'POST',
+        }),
+      ).rejects.toThrow(AiCreditsNotAllowedError);
+    }
+    expect(requests).toEqual([]);
+    await expect(
+      pm.authedRealmServerFetch(`${REALM_SERVER_URL}_request-forward`, {
+        method: 'POST',
+      }),
+    ).rejects.toThrow('boxel profile add --oauth --allow-ai-credits');
+  });
+
+  it('sends a route that spends credits on a connection signed in with it', async () => {
+    signIn('boxel:read boxel:write boxel:spend-credit');
+    let pm = manager();
+    expect(pm.canSpendAiCredits()).toBe(true);
+    let response = await pm.authedRealmServerFetch(
+      `${REALM_SERVER_URL}_request-forward`,
+      { method: 'POST' },
+    );
+    expect(response.status).toBe(200);
+    expect(requests).toEqual([`${REALM_SERVER_URL}_request-forward`]);
+  });
+
+  it("answers the realm server's refusal for want of the scope with the same error, when the scopes weren't known", async () => {
+    signIn(undefined);
+    let pm = manager();
+    expect(pm.canSpendAiCredits()).toBeUndefined();
+    answer = () =>
+      new Response(JSON.stringify({ error: 'insufficient_scope' }), {
+        status: 403,
+        headers: {
+          'WWW-Authenticate':
+            'Bearer error="insufficient_scope", scope="boxel:spend-credit"',
+        },
+      });
+    await expect(
+      pm.authedRealmServerFetch(`${REALM_SERVER_URL}_request-forward`, {
+        method: 'POST',
+      }),
+    ).rejects.toThrow(AiCreditsNotAllowedError);
+    expect(requests).toHaveLength(1);
+  });
+
+  it('leaves every other route and refusal alone', async () => {
+    signIn('boxel:read boxel:write');
+    let pm = manager();
+    answer = () =>
+      new Response(JSON.stringify({ error: 'insufficient_scope' }), {
+        status: 403,
+        headers: {
+          'WWW-Authenticate':
+            'Bearer error="insufficient_scope", scope="boxel:write"',
+        },
+      });
+    let response = await pm.authedRealmServerFetch(
+      `${REALM_SERVER_URL}_create-realm`,
+      { method: 'POST' },
+    );
+    expect(response.status).toBe(403);
   });
 });

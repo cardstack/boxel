@@ -122,6 +122,7 @@ describe('boxel profile add --oauth', () => {
 
     expect(d.oauthLogin).toHaveBeenCalledWith({
       realmServerUrl: environment.realmServerUrl,
+      allowAiCredits: false,
     });
     let profile = manager.getProfile(matrixId)!;
     expect(profile).toEqual({
@@ -364,6 +365,80 @@ describe('boxel profile add --oauth', () => {
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining("This connection doesn't renew"),
     );
+  });
+});
+
+describe('boxel profile add --oauth --allow-ai-credits', () => {
+  let tmpDir: string;
+  let manager: ProfileManager;
+  let logged: string[];
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-oauth-'));
+    manager = new ProfileManager(tmpDir);
+    logged = [];
+    vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+      logged.push(String(line));
+    });
+    vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+      logged.push(String(line));
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.exitCode = undefined;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('asks to spend AI credits, keeps the scopes granted, and says it may spend', async () => {
+    let { deps: d } = deps({
+      tty: false,
+      oauthLogin: async () =>
+        signedIn({ scope: 'boxel:read boxel:write boxel:spend-credit' }),
+    });
+
+    await addOAuthProfile(manager, environment, d, { allowAiCredits: true });
+
+    expect(d.oauthLogin).toHaveBeenCalledWith({
+      realmServerUrl: environment.realmServerUrl,
+      allowAiCredits: true,
+    });
+    expect(manager.getProfile(matrixId)!.oauth!.scope).toBe(
+      'boxel:read boxel:write boxel:spend-credit',
+    );
+    expect(logged.join('\n')).toContain('It may spend your AI credits.');
+    expect(manager.canSpendAiCredits()).toBe(true);
+  });
+
+  it('says how to let a connection without it spend', async () => {
+    let { deps: d } = deps({
+      tty: false,
+      oauthLogin: async () => signedIn({ scope: 'boxel:read boxel:write' }),
+    });
+
+    await addOAuthProfile(manager, environment, d);
+
+    expect(logged.join('\n')).toContain('--allow-ai-credits');
+    expect(manager.canSpendAiCredits()).toBe(false);
+  });
+
+  it('refuses --allow-ai-credits without --oauth, before signing in', async () => {
+    let { profileCommand } = await import('../../src/commands/profile.js');
+    let { setProfileManager, resetProfileManager } =
+      await import('../../src/lib/profile-manager.js');
+    setProfileManager(tmpDir);
+    try {
+      await profileCommand('add', undefined, {
+        allowAiCredits: true,
+        staging: true,
+      });
+    } finally {
+      resetProfileManager();
+    }
+    expect(manager.listProfiles()).toEqual([]);
+    expect(process.exitCode).toBe(1);
+    expect(logged.join('\n')).toContain('--allow-ai-credits goes with --oauth');
   });
 });
 

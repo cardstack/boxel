@@ -17,6 +17,7 @@ import {
 import { prompt, promptPassword } from '../lib/prompt.ts';
 import { SsoTimeoutError, browserLogin } from '../lib/sso-login.ts';
 import {
+  grantsSpendCredit,
   oauthLogin,
   revokeConnection,
   type OAuthLoginOptions,
@@ -48,6 +49,9 @@ export interface ProfileCommandOptions {
   browser?: boolean;
   // `--oauth`: sign in with OAuth instead of Matrix.
   oauth?: boolean;
+  // `--allow-ai-credits`: with `--oauth`, also let the connection spend the
+  // user's AI credits.
+  allowAiCredits?: boolean;
   hostUrl?: string;
   staging?: boolean;
   production?: boolean;
@@ -295,6 +299,14 @@ export async function profileCommand(
 
     case 'add': {
       const password = options?.password || process.env.BOXEL_PASSWORD;
+      if (options?.allowAiCredits && !options?.oauth) {
+        console.error(
+          `${FG_RED}Error:${RESET} --allow-ai-credits goes with --oauth: it lets an OAuth connection spend your AI credits. ` +
+            'A profile signed in with Matrix can spend them already.',
+        );
+        process.exitCode = 1;
+        return;
+      }
       if (options?.oauth) {
         const conflicting = oauthConflicts(options);
         if (conflicting.length > 0) {
@@ -320,7 +332,9 @@ export async function profileCommand(
         );
       }
       if (options?.oauth) {
-        await addOAuthProfile(manager, environment);
+        await addOAuthProfile(manager, environment, undefined, {
+          allowAiCredits: options.allowAiCredits === true,
+        });
       } else if (options?.user && password) {
         // A -u Matrix ID whose domain we don't recognize, with nothing else
         // naming an environment, is a mistake rather than a request for
@@ -427,6 +441,8 @@ export async function listProfiles(
           ...(profile.oauth
             ? {
                 connectionEndsAt: profile.oauth.connectionEndsAt,
+                canSpendAiCredits:
+                  grantsSpendCredit(profile.oauth.scope) ?? null,
                 unavailableCommands: [...OAUTH_UNAVAILABLE_COMMANDS],
               }
             : {}),
@@ -506,7 +522,14 @@ export function describeSignIn(
   if (ends - now <= CONNECTION_ENDING_WARNING_MS) {
     return `OAuth, ${FG_YELLOW}ends ${when}${RESET}. Run \`boxel profile add --oauth\` to sign in again before then.`;
   }
-  return `OAuth, ends ${when}`;
+  return `OAuth, ends ${when}${describeProfileAiCredits(profile)}`;
+}
+
+// For the listing: whether an OAuth profile may spend AI credits.
+function describeProfileAiCredits(profile: Profile): string {
+  return grantsSpendCredit(profile.oauth?.scope) === true
+    ? ', may spend AI credits'
+    : '';
 }
 
 // What adding a profile reaches beyond this module. Tests stand in for the
@@ -885,13 +908,14 @@ export async function addOAuthProfile(
   manager: ProfileManager,
   environment: EnvironmentDefaults,
   deps: AddProfileDeps = {},
+  options: { allowAiCredits?: boolean } = {},
 ): Promise<void> {
   const ctx = addProfileContext(deps);
   console.log(`\n${BOLD}Add New Profile${RESET} ${DIM}(OAuth)${RESET}\n`);
   console.log(
     `${DIM}Environment: ${new URL(environment.realmServerUrl).host}${RESET}`,
   );
-  const outcome = await addProfileViaOAuth(manager, environment, ctx);
+  const outcome = await addProfileViaOAuth(manager, environment, ctx, options);
   if (outcome.status !== 'added') {
     return;
   }
@@ -902,11 +926,12 @@ async function addProfileViaOAuth(
   manager: ProfileManager,
   environment: EnvironmentDefaults,
   ctx: AddProfileContext,
+  { allowAiCredits = false }: { allowAiCredits?: boolean } = {},
 ): Promise<AddProfileOutcome> {
   const { realmServerUrl, matrixUrl } = environment;
   let result;
   try {
-    result = await ctx.oauthLogin({ realmServerUrl });
+    result = await ctx.oauthLogin({ realmServerUrl, allowAiCredits });
   } catch (err) {
     console.error(
       `\n${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
@@ -994,6 +1019,7 @@ async function addProfileViaOAuth(
   }
 
   console.log(describeConnectionEnd(tokens));
+  console.log(describeAiCredits(tokens.scope, allowAiCredits));
   await reportPersonalRealm(
     ctx.ensurePersonalRealmWithOAuth(
       {
@@ -1006,6 +1032,20 @@ async function addProfileViaOAuth(
     realmServerUrl,
   );
   return { status: 'added', matrixId: user.userId };
+}
+
+// Whether the new connection may spend AI credits, said once it is saved.
+function describeAiCredits(scope: string | undefined, asked: boolean): string {
+  if (grantsSpendCredit(scope) === true) {
+    return `${FG_GREEN}\u2713${RESET} It may spend your AI credits.`;
+  }
+  if (asked && grantsSpendCredit(scope) === false) {
+    return `${FG_YELLOW}It was granted without spending AI credits.${RESET}`;
+  }
+  if (asked) {
+    return `${DIM}It asked to spend your AI credits; the realm server decides on each call.${RESET}`;
+  }
+  return `${DIM}It can't spend your AI credits. To let it, sign in again with --allow-ai-credits.${RESET}`;
 }
 
 function describeConnectionEnd(tokens: {
