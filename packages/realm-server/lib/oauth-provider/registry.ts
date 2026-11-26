@@ -222,6 +222,20 @@ const BOXEL_API_WRITE_ROUTES: readonly OAuthRoute[] = [
   server('POST', '/_run-command'),
 ];
 
+// The routes that spend the user's AI credits: each forwards a call to an AI
+// provider with a system key the caller never sees, and charges its cost to
+// the caller's user. Spending money is its own scope, which no other scope
+// implies, so a grant that may change workspaces can't also drain the user's
+// balance unless the user agreed to that too (ADR 021 §1.6). The AI batches
+// routes are left out: only an automation run's token reaches them.
+const BOXEL_API_SPEND_CREDIT_ROUTES: readonly OAuthRoute[] = [
+  server('POST', '/_request-forward'),
+  server('POST', '/_openrouter/chat/completions'),
+];
+
+// The scope that lets a token spend the user's AI credits.
+export const SPEND_CREDIT_SCOPE = 'boxel:spend-credit';
+
 const BOXEL_API: OAuthResourceDefinition = {
   path: '',
   name: 'Boxel',
@@ -247,6 +261,15 @@ const BOXEL_API: OAuthResourceDefinition = {
       caution: true,
       routes: BOXEL_API_WRITE_ROUTES,
       realmPermission: 'write',
+    },
+    {
+      name: SPEND_CREDIT_SCOPE,
+      description:
+        'Use your AI credits to call AI models through Boxel. What it spends is charged to your account.',
+      label: 'Spend credits',
+      caution: true,
+      routes: BOXEL_API_SPEND_CREDIT_ROUTES,
+      // No realm permission: on its own, it admits nothing in a realm.
     },
   ],
   clients: 'pre-registered',

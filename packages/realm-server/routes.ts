@@ -400,7 +400,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   let jwtMiddleware = (
     secretSeed: string,
     dbAdapter: DBAdapter,
-    opts: { expiredWithinSeconds?: number } = {},
+    opts: {
+      expiredWithinSeconds?: number;
+      admitsCommandTabTokens?: boolean;
+    } = {},
   ) => userTokenMiddleware(secretSeed, dbAdapter, { ...opts, boxelApi });
   let multiRealmDeps = { ...args, boxelApi };
 
@@ -727,9 +730,13 @@ export function createRoutes(args: CreateRoutesArgs) {
   // the session check's place, so a bearer that only looks like a run token
   // is refused before the handler reads anything. The handler then checks
   // the run itself.
+  //
+  // The route spends the user's AI credits, so a command an OAuth app runs may reach
+  // it from its tab with a tab token whose grant holds `boxel:spend-credit`.
   let requestForwardSession = jwtMiddleware(
     args.realmSecretSeed,
     args.dbAdapter,
+    { admitsCommandTabTokens: true },
   );
   router.post(
     REQUEST_FORWARD_PATH,
@@ -802,7 +809,9 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     OPENROUTER_PASSTHROUGH_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter, {
+      admitsCommandTabTokens: true,
+    }),
     handleOpenRouterPassthrough({
       dbAdapter: args.dbAdapter,
     }),

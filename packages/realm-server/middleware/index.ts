@@ -29,8 +29,11 @@ import {
 } from '../lib/oauth-provider/boxel-api.ts';
 import {
   resolveOAuthAccessToken,
+  resolveOAuthGrant,
   type OAuthCaller,
 } from '../lib/oauth-provider/lookup.ts';
+import { verifyOAuthTabToken } from '../lib/oauth-tab-token.ts';
+import { oauthTabTokenOf } from '@cardstack/runtime-common/oauth-tab-token';
 import { getPublicInstanceId, INSTANCE_ID_HEADER } from '../lib/instance-id.ts';
 import {
   verifyOperatorToken,
@@ -704,6 +707,8 @@ export async function fetchRequestFromContext(
   });
 }
 
+const tabTokenLog = getLogger('boxel:oauth-provider');
+
 // `expiredWithinSeconds` is for a route that a token outlived by design: one
 // whose only effect is to end something, or the secure window's renewal,
 // where the row the token names decides (see `retrieveTokenClaim`). Every
@@ -715,12 +720,23 @@ export async function fetchRequestFromContext(
 // route then sees the verified caller as `ctxt.state.oauthCaller`, never a
 // session token's claims, and no `Authorization` header. Without `boxelApi`
 // (the OAuth provider is off), an OAuth token is refused as an invalid JWT.
+//
+// `admitsCommandTabTokens` is for the routes that spend the user's AI
+// credits, which a command an OAuth app runs may call from its tab (ADR 021
+// §1.5): there a command's tab token is judged as the OAuth caller its grant
+// names, after the grant checks, and must then meet the route map like an
+// access token. A capture's tab token is refused, since a capture only reads.
+// On every other route a tab token fails as a session, on its signature.
 export function jwtMiddleware(
   secretSeed: string,
   dbAdapter: DBAdapter,
-  opts: { expiredWithinSeconds?: number; boxelApi?: BoxelApi } = {},
+  opts: {
+    expiredWithinSeconds?: number;
+    boxelApi?: BoxelApi;
+    admitsCommandTabTokens?: boolean;
+  } = {},
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
-  let { boxelApi, ...sessionOpts } = opts;
+  let { boxelApi, admitsCommandTabTokens, ...sessionOpts } = opts;
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     if (boxelApi) {
       let presented = await presentedCredential(ctxt);
@@ -729,6 +745,41 @@ export function jwtMiddleware(
         presented.kind === 'body-too-large'
       ) {
         refusePresentation(ctxt, presented.kind);
+        return;
+      }
+      let tabToken =
+        admitsCommandTabTokens && presented.kind === 'session'
+          ? oauthTabTokenOf(ctxt.get('Authorization'))
+          : undefined;
+      if (tabToken) {
+        let verified = verifyOAuthTabToken(tabToken, secretSeed);
+        if (!verified.ok) {
+          tabTokenLog.info(`tab token refused: ${verified.reason}, Boxel API`);
+          refuseOAuthToken(ctxt, boxelApi);
+          return;
+        }
+        let { grantId, user, scopes, purpose } = verified.context;
+        if (purpose !== 'run-command') {
+          tabTokenLog.info(
+            `tab token refused: a ${purpose} tab token on a route that spends credits, Boxel API`,
+          );
+          refuseOAuthToken(ctxt, boxelApi);
+          return;
+        }
+        let result = await resolveOAuthGrant(
+          boxelApi.dbAdapter,
+          { grantId, user, scopes },
+          boxelApi.resource.id,
+        );
+        if (!result.ok) {
+          refuseOAuthToken(ctxt, boxelApi);
+          return;
+        }
+        if (!admitOAuthCaller(ctxt, boxelApi, result.caller)) {
+          return;
+        }
+        ctxt.state.oauthCaller = result.caller;
+        await next();
         return;
       }
       if (presented.kind === 'oauth') {

@@ -45,7 +45,10 @@ import ENV from '@cardstack/host/config/environment';
 import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
 import { TokenRefreshSchedule } from '@cardstack/host/lib/token-refresh-schedule';
 import { RealmServerSessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
-import { readRealmSessions } from '@cardstack/host/utils/realm-sessions';
+import {
+  heldOAuthTabTokens,
+  readRealmSessions,
+} from '@cardstack/host/utils/realm-sessions';
 
 import { createServerRequestTimingMiddleware } from './client-telemetry';
 
@@ -1623,6 +1626,29 @@ export default class RealmServerService
 
   private reauthenticating: Promise<string | undefined> | undefined;
 
+  // In the tab of a command an OAuth app runs, which holds tab tokens in
+  // memory and no realm-server session, the call carries one of its tab
+  // tokens that this realm server minted: the realm server judges it as the
+  // app's OAuth grant, and admits it only where that grant may spend AI
+  // credits. Such a tab never sends anything else, so it can't fall back to
+  // a session it might find in storage. Undefined in every other tab.
+  private oauthTabTokenForThisServer(): string | undefined {
+    let tokens = heldOAuthTabTokens();
+    if (!tokens) {
+      return undefined;
+    }
+    let held = Object.values(tokens);
+    let forThisServer = held.find(
+      (token) =>
+        (realmClaimsFromRawToken(token) as { realmServerURL?: unknown })
+          ?.realmServerURL === this.url.href,
+    );
+    // A tab token for another realm server would fail here on its
+    // signature, so the first one stands in only to be refused, rather than
+    // the call going out with a session.
+    return forThisServer ?? held[0];
+  }
+
   // The forwarded fields are `RequestForwardBody` in
   // realm-server/handlers/handle-request-forward. `timeoutMs` is not one of
   // them — it is the caller's budget for the call, spent here rather than
@@ -1644,7 +1670,11 @@ export default class RealmServerService
     timeoutMs?: number;
     signal?: AbortSignal;
   }) {
-    await this.login();
+    let bearer = this.oauthTabTokenForThisServer();
+    if (!bearer) {
+      await this.login();
+      bearer = this.token;
+    }
 
     let { timeoutMs, signal: callerSignal, ...forwardedRequest } = args;
     let deadline: AbortController | undefined;
@@ -1667,7 +1697,7 @@ export default class RealmServerService
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.token}`,
+            Authorization: `Bearer ${bearer}`,
           },
           body: JSON.stringify(forwardedRequest),
           signal,

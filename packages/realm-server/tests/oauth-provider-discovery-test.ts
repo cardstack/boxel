@@ -429,10 +429,11 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(registryScopes(buildRegistry('https://a.test')), [
         'boxel:read',
         'boxel:write',
+        'boxel:spend-credit',
       ]);
       assert.deepEqual(
         registryScopes(buildRegistry('https://a.test', [testResource])),
-        ['boxel:read', 'boxel:write', 'test:probe'],
+        ['boxel:read', 'boxel:write', 'boxel:spend-credit', 'test:probe'],
       );
     });
 
@@ -545,7 +546,12 @@ module(basename(import.meta.filename), function () {
         token_endpoint_auth_methods_supported: ['none'],
         authorization_response_iss_parameter_supported: true,
         grant_types_supported: ['authorization_code', 'refresh_token'],
-        scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
+        scopes_supported: [
+          'boxel:read',
+          'boxel:write',
+          'boxel:spend-credit',
+          'test:probe',
+        ],
         authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
         token_endpoint: 'http://127.0.0.1:0/_oauth-provider/token',
         revocation_endpoint:
