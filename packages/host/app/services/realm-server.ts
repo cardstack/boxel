@@ -205,8 +205,9 @@ export default class RealmServerService
   // be provided. Doubles on each failure up to a minute; reset on success.
   private realmEventRoomsRetryMs = REALM_EVENT_ROOMS_FIRST_RETRY_MS;
   // Realms the user reaches only through their policy, whose events the
-  // realm server sends to the session room while the user watches them. A
-  // watch lapses on the server unless renewed, so these are asked about again
+  // realm server sends to the session room while the user watches them, and
+  // those a watch was refused for only because a limit was reached. A watch
+  // lapses on the server unless renewed, so these are asked about again
   // while they stay open (see `renewRealmEventWatchesTask`).
   private watchedRealms = new Set<string>();
 
@@ -915,13 +916,19 @@ export default class RealmServerService
       );
       // A 503 still carries the rooms the server could provide; the rest are
       // asked about again below.
-      let { rooms, watched } = (
+      let { rooms, watched, capped } = (
         response.ok || response.status === 503 ? await response.json() : {}
-      ) as { rooms?: Record<string, string>; watched?: string[] };
+      ) as {
+        rooms?: Record<string, string>;
+        watched?: string[];
+        capped?: string[];
+      };
       // A watched realm's events arrive in the session room, which the host
-      // has joined already; all that is left is keeping the watch alive.
+      // has joined already; all that is left is keeping the watch alive. A
+      // realm refused only because a limit was reached is asked about again
+      // on the same interval, by when a place may have come free.
       if (response.ok || response.status === 503) {
-        let watchedNow = new Set(watched ?? []);
+        let watchedNow = new Set([...(watched ?? []), ...(capped ?? [])]);
         for (let realm of realms) {
           if (watchedNow.has(realm)) {
             this.watchedRealms.add(realm);
