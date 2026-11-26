@@ -231,9 +231,59 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   data-test-approve-done-shares
                 >{{this.done.shares}}</strong>
               {{/if}}
-              on every scheduled run, without asking you again. Boxel asks again
-              if someone changes the automation’s script, triggers, params or
-              operations.
+              {{#if this.done.anonymous}}
+                on every scheduled run, and whenever anyone opens a card of the
+                kind,
+                <strong data-test-approve-done-anonymous>including people who
+                  aren’t signed in</strong>, without asking you again.
+              {{else if this.done.interactive}}
+                on every scheduled run, and whenever someone opens a card of the
+                kind, without asking you again.
+              {{else}}
+                on every scheduled run, without asking you again.
+              {{/if}}
+              Boxel asks again if someone changes the automation’s script,
+              triggers, params or operations.
+              {{#if this.done.ownKey}}
+                <span
+                  class='done-audience'
+                  data-test-approve-done-audience='userKey'
+                >
+                  {{#if this.done.interactive}}
+                    Your own key is sent on the automation’s scheduled runs and
+                    whenever you use a card of the kind. Everyone else who uses
+                    a card of the kind chooses a key of their own.
+                  {{else}}
+                    Only the automation’s scheduled runs send your own key.
+                    Opening a card doesn’t use your own key.
+                  {{/if}}
+                </span>
+              {{/if}}
+              {{#if this.done.shares}}
+                <span
+                  class='done-audience'
+                  data-test-approve-done-audience='apiKey'
+                >
+                  {{#if this.done.interactive}}
+                    Everyone who uses a card of the kind in
+                    <strong>{{this.done.realm}}</strong>
+                    makes the calls that send
+                    {{if (gt this.done.shareCount 1) 'the keys' 'the key'}}
+                    you share, and the calls count against
+                    {{if
+                      (gt this.done.shareCount 1)
+                      'each share’s'
+                      'the share’s'
+                    }}
+                    limits.
+                  {{else}}
+                    Only the automation’s scheduled runs send
+                    {{if (gt this.done.shareCount 1) 'the keys' 'the key'}}
+                    you share. Opening a card doesn’t use
+                    {{if (gt this.done.shareCount 1) 'the keys' 'the key'}}.
+                  {{/if}}
+                </span>
+              {{/if}}
             {{/if}}
           </span>
         {{else if (eq this.done.count 0)}}
@@ -798,6 +848,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         padding-top: var(--boxel-sp-xs);
       }
       .tick {
+        flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
         align-items: baseline;
       }

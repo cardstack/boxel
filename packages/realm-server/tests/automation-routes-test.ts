@@ -1564,6 +1564,43 @@ module(basename(import.meta.filename), function (hooks) {
       await reachesState(SHARED, 'active');
     });
 
+    test('an automation’s batch says which operations the realm’s policy opens to people who aren’t signed in, per card type', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      let asked: unknown[] = [];
+      let original = realm.sharedKeyOperationsOpenToAnonymous.bind(realm);
+      realm.sharedKeyOperationsOpenToAnonymous = async (type) => {
+        asked.push(type);
+        return ['shared'];
+      };
+      try {
+        let batch = await request
+          .post('/_key-bindings/batch')
+          .set('Authorization', await secureSessionAuth(dbAdapter, WRITER))
+          .set('Content-Type', 'application/vnd.api+json')
+          .send({
+            data: {
+              type: 'key-binding-batch',
+              attributes: { automation: cardURL(SHARED) },
+            },
+          });
+        assert.strictEqual(batch.status, 200, batch.text);
+        let [operation] = batch.body.data.attributes.groups[0].operations;
+        assert.strictEqual(operation.name, 'shared');
+        assert.true(
+          operation.openToAnonymous,
+          'the approve page can warn that approving for open cards serves people who aren’t signed in',
+        );
+        assert.strictEqual(asked.length, 1, 'the realm is asked once per type');
+        assert.deepEqual(
+          batch.body.data.attributes.shares.map((s: { id: string }) => s.id),
+          [share.id],
+        );
+      } finally {
+        realm.sharedKeyOperationsOpenToAnonymous = original;
+      }
+    });
+
     test('an automation that is not switched on has no approval batch', async function (assert) {
       let asked = await request
         .post('/_key-bindings/batch')

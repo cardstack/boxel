@@ -625,6 +625,80 @@ module('Integration | approve pages', function (hooks) {
       .includesText('on every scheduled run, without asking you again');
   });
 
+  test('an automation approved for open cards says so on the done page', async function (assert) {
+    const AUTOMATION = `${REALM}Automation/nightly`;
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: withFillers(
+              batch({
+                automation: { id: AUTOMATION, version: 'v1.40' },
+                groups: [
+                  {
+                    destination: {
+                      href: GRAPHQL,
+                      host: 'api.github.com',
+                      path: '/graphql/',
+                      registrableDomain: 'github.com',
+                    },
+                    operations: [
+                      operation('listPRs', 'List your open pull requests', {
+                        card: {
+                          name: 'PR Inbox',
+                          module: MODULE,
+                          exportName: 'Inbox',
+                        },
+                        key: `${MODULE}#Inbox/listPRs`,
+                        status: 'automation',
+                        slots: [
+                          {
+                            slot: '1.userKey',
+                            token: 'userKey',
+                            card: 'PR Inbox',
+                            key: 'userKey',
+                            status: 'automation',
+                            snapshot: snapshot('{"query":"listPRs"}'),
+                            fingerprint: 'fp-listPRs',
+                            approved: {
+                              snapshot: snapshot('{"query":"listPRs"}'),
+                              keyId: 'key-gh',
+                              shareId: null,
+                              interactive: true,
+                            },
+                          },
+                        ],
+                      }),
+                    ],
+                  },
+                ],
+              }),
+            ),
+          },
+        }),
+    });
+    visitShell(`approve#${new URLSearchParams({ automation: AUTOMATION })}`);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-pretui-radio-option="interactive"] input')
+      .isChecked('a slot last approved for open cards starts on open cards');
+    await click('[data-test-approve-save]');
+    await settled();
+    assert.true(approvals()[0].interactive, 'approved for open cards');
+    assert
+      .dom('[data-test-approve-done-automation]')
+      .includesText(
+        'on every scheduled run, and whenever someone opens a card of the kind',
+      );
+    assert
+      .dom('[data-test-approve-done-audience="userKey"]')
+      .includesText(
+        'Your own key is sent on the automation’s scheduled runs and whenever you use a card of the kind.',
+      );
+  });
+
   test('an unticked operation is left out, and a group with none ticked asks for no grant', async function (assert) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
