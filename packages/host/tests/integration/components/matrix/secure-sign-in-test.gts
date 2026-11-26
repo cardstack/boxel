@@ -74,7 +74,8 @@ module('Integration | Component | matrix/secure-sign-in', function (hooks) {
   });
 
   test('a signed-out app names the account a link asks it to sign in as, and leaves it off the page to come back to', async function (assert) {
-    window.location.href = `${APP_PAGE}&signInAs=${encodeURIComponent('@alice:localhost')}`;
+    window.location.href = `${APP_PAGE}&signInAs=${encodeURIComponent('@example-other:localhost')}`;
+    let expectedReturn = new URL(APP_PAGE, window.location.origin).href;
     await render(<template><SecureSignIn /></template>);
 
     let landed = new URL(window.location.href);
@@ -83,10 +84,10 @@ module('Integration | Component | matrix/secure-sign-in', function (hooks) {
       secureURL('sign-in').href,
     );
     let fragment = new URLSearchParams(landed.hash.slice(1));
-    assert.strictEqual(fragment.get('user'), '@alice:localhost');
+    assert.strictEqual(fragment.get('user'), '@example-other:localhost');
     assert.strictEqual(
       fragment.get('return'),
-      new URL(APP_PAGE, window.location.origin).href,
+      expectedReturn,
       'the page to come back to no longer asks for an account',
     );
   });
