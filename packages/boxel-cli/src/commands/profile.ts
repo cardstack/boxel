@@ -806,78 +806,105 @@ async function addProfileViaPassword(
   return { status: 'added', matrixId };
 }
 
-// What ends a profile's sign-ins on the servers that issued them.
-interface SignInEnders {
-  revokeConnection: typeof revokeConnection;
-  matrixLogout: typeof matrixLogout;
-  secureSignOut: typeof secureSignOut;
+// What ends a profile's sign-ins on the servers that issued them. Tests stand
+// in for those servers through it.
+export interface SignInEnderDeps {
+  revokeConnection?: typeof revokeConnection;
+  matrixLogout?: typeof matrixLogout;
+  secureSignOut?: typeof secureSignOut;
 }
 
-const defaultSignInEnders: SignInEnders = {
-  revokeConnection,
-  matrixLogout,
-  secureSignOut,
-};
+type SignInEnders = Required<SignInEnderDeps>;
 
-// The sign-ins `endDroppedSignIns` couldn't end.
-interface UnendedSignIns {
-  oauth: boolean;
-  matrix: boolean;
-  secureSession: boolean;
+function signInEnders(deps: SignInEnderDeps): SignInEnders {
+  return {
+    revokeConnection: deps.revokeConnection ?? revokeConnection,
+    matrixLogout: deps.matrixLogout ?? matrixLogout,
+    secureSignOut: deps.secureSignOut ?? secureSignOut,
+  };
 }
 
 // Ends, on the server that issued it, each sign-in `previous` held that
 // `kept` no longer holds: an OAuth connection, a Matrix access token and a
 // secure session. Saving a profile again, or removing it, drops them from the
-// profiles file, and nothing else holds them: a Matrix access token never
-// expires, and stays on the account's session list until it is signed out.
+// profiles file. A Matrix access token never expires, and stays on the
+// account's session list until it is signed out.
+//
 // A sign-in `kept` still holds is left alone, so signing in again can't end
-// the new session. Each is best-effort: the caller has already saved or
-// removed the profile, and the result names any that couldn't be ended.
+// the new session. Each is best-effort, since the caller has already saved
+// or removed the profile: one that couldn't be ended gets a warning saying
+// how to end it. A `boxel` command already running as the profile when its
+// Matrix token is signed out takes up the new one from the profiles file
+// (`ProfileManager.reAuthenticate`).
 async function endDroppedSignIns(
   previous: Profile | undefined,
   kept: Profile | undefined,
   enders: SignInEnders,
-): Promise<UnendedSignIns> {
-  let unended: UnendedSignIns = {
-    oauth: false,
-    matrix: false,
-    secureSession: false,
-  };
+): Promise<void> {
   if (!previous) {
-    return unended;
+    return;
   }
+  // `its` for a removed profile, `the replaced` for one saved again.
+  let whose = kept ? 'the replaced' : 'its';
   if (
     previous.oauth &&
     previous.oauth.accessToken !== kept?.oauth?.accessToken
   ) {
-    unended.oauth = !(await enders
+    let ended = await enders
       .revokeConnection(previous.oauth, previous.oauth)
-      .catch(() => false));
+      .catch(() => false);
+    if (!ended) {
+      // Connected apps would also list the connection that replaced it, so
+      // only a removed profile's connection is sent there.
+      console.log(
+        `${FG_YELLOW}Warning:${RESET} could not end ${whose} OAuth connection. ` +
+          (kept
+            ? `It ends on its own at ${new Date(
+                previous.oauth.connectionEndsAt,
+              ).toLocaleString()}.`
+            : 'Disconnect Boxel CLI on Connected apps to end it.'),
+      );
+    }
   }
   if (
     previous.matrixAccessToken &&
     previous.matrixAccessToken !== kept?.matrixAccessToken
   ) {
-    unended.matrix = await enders
+    let ended = await enders
       .matrixLogout(previous.matrixUrl, previous.matrixAccessToken)
       .then(
-        () => false,
         () => true,
+        () => false,
       );
+    if (!ended) {
+      let device = previous.matrixDeviceId
+        ? ` (device ${previous.matrixDeviceId})`
+        : '';
+      console.log(
+        `${FG_YELLOW}Warning:${RESET} could not sign out ${whose} Matrix session${device}. ` +
+          "Sign it out from the session list in Element's settings to end it.",
+      );
+    }
   }
   if (
     previous.secureSession &&
     previous.secureSession.token !== kept?.secureSession?.token
   ) {
-    unended.secureSession = await enders
+    let ended = await enders
       .secureSignOut(previous.realmServerUrl, previous.secureSession.token)
       .then(
-        () => false,
         () => true,
+        () => false,
       );
+    if (!ended) {
+      console.log(
+        `${FG_YELLOW}Warning:${RESET} could not end ${whose} key-management sign-in. ` +
+          `It ends on its own at ${new Date(
+            previous.secureSession.expiresAt,
+          ).toLocaleString()}.`,
+      );
+    }
   }
-  return unended;
 }
 
 export async function addProfile(
@@ -1142,11 +1169,8 @@ async function switchProfile(
 
 // What removing a profile reaches beyond this module. Tests stand in for the
 // person at the terminal and for the servers its sign-ins are ended on.
-export interface RemoveProfileDeps {
+export interface RemoveProfileDeps extends SignInEnderDeps {
   prompt?: (question: string) => Promise<string>;
-  revokeConnection?: typeof revokeConnection;
-  matrixLogout?: typeof matrixLogout;
-  secureSignOut?: typeof secureSignOut;
 }
 
 export async function removeProfile(
@@ -1173,34 +1197,7 @@ export async function removeProfile(
     // Its sign-ins are ended too, rather than left live with nothing holding
     // them: an OAuth connection leaves Connected apps, and a Matrix token
     // leaves the account's session list.
-    const unended = await endDroppedSignIns(profile, undefined, {
-      revokeConnection: deps.revokeConnection ?? revokeConnection,
-      matrixLogout: deps.matrixLogout ?? matrixLogout,
-      secureSignOut: deps.secureSignOut ?? secureSignOut,
-    });
-    if (unended.oauth) {
-      console.log(
-        `${FG_YELLOW}Warning:${RESET} could not end its OAuth connection. ` +
-          'Disconnect Boxel CLI on Connected apps to end it.',
-      );
-    }
-    if (unended.matrix) {
-      const device = profile.matrixDeviceId
-        ? ` (device ${profile.matrixDeviceId})`
-        : '';
-      console.log(
-        `${FG_YELLOW}Warning:${RESET} could not sign out its Matrix session${device}. ` +
-          "Sign it out from the session list in Element's settings to end it.",
-      );
-    }
-    if (unended.secureSession) {
-      console.log(
-        `${FG_YELLOW}Warning:${RESET} could not end its key-management sign-in. ` +
-          `It ends on its own at ${new Date(
-            profile.secureSession!.expiresAt,
-          ).toLocaleString()}.`,
-      );
-    }
+    await endDroppedSignIns(profile, undefined, signInEnders(deps));
 
     const newActive = manager.getActiveProfileId();
     if (newActive) {
@@ -1212,13 +1209,14 @@ export async function removeProfile(
   }
 }
 
-async function addProfileNonInteractive(
+export async function addProfileNonInteractive(
   manager: ProfileManager,
   matrixId: string,
   password: string,
   displayName?: string,
   matrixUrl?: string,
   realmServerUrl?: string,
+  deps: SignInEnderDeps = {},
 ): Promise<void> {
   if (!matrixId.startsWith('@') || !matrixId.includes(':')) {
     console.error(
@@ -1264,7 +1262,7 @@ async function addProfileNonInteractive(
     await endDroppedSignIns(
       previous,
       manager.getProfile(matrixId),
-      defaultSignInEnders,
+      signInEnders(deps),
     );
     console.log(
       `${FG_GREEN}\u2713${RESET} Profile updated: ${formatProfileBadge(matrixId)}`,

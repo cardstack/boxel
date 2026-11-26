@@ -785,6 +785,27 @@ export class ProfileManager implements RealmAuthenticator {
       throw new Error(NO_ACTIVE_PROFILE_ERROR);
     }
 
+    // Another process may have signed this profile in again since this one
+    // loaded the profiles file, and signed out the token this process holds.
+    // The session it saved is taken up rather than asking for a password, as
+    // long as it is for the same Matrix server. Only the Matrix session is
+    // taken: the rest of the profile a running command acts as stays as it
+    // was.
+    let read = this.readProfilesFile();
+    let saved = read.kind === 'ok' ? read.config.profiles[targetId] : undefined;
+    if (
+      saved &&
+      !saved.oauth &&
+      saved.matrixAccessToken &&
+      saved.matrixAccessToken !== profile.matrixAccessToken &&
+      saved.matrixUrl === profile.matrixUrl
+    ) {
+      profile.matrixAccessToken = saved.matrixAccessToken;
+      profile.matrixUserId = saved.matrixUserId;
+      profile.matrixDeviceId = saved.matrixDeviceId;
+      return this.getStoredMatrixAuth(targetId);
+    }
+
     if (!this.isTtyFn()) {
       throw new Error(
         `Stored Matrix token for "${targetId}" is no longer valid. ` +

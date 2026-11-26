@@ -14,6 +14,7 @@ import {
 } from '../../src/lib/profile-manager.js';
 import { MatrixAuthError, type MatrixAuth } from '../../src/lib/auth.js';
 import {
+  addProfileNonInteractive,
   removeProfile,
   type RemoveProfileDeps,
 } from '../../src/commands/profile.js';
@@ -652,6 +653,52 @@ describe('reAuthenticate', () => {
     );
   });
 
+  it('takes up the session another process saved since, without asking for a password', async () => {
+    const matrixUrl = 'https://matrix-staging.stack.cards';
+    const running = new ProfileManager(tmpDir, {
+      ...stubLogin(),
+      isTty: () => false,
+    });
+    await running.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', matrixUrl),
+    );
+    // `boxel profile add` in another process signs the profile in again.
+    await new ProfileManager(tmpDir).addProfileWithAuth('@user:stack.cards', {
+      accessToken: 'signed-in-again',
+      userId: '@user:stack.cards',
+      deviceId: 'NEW_DEVICE',
+      matrixUrl,
+    });
+
+    const fresh = await running.reAuthenticate();
+
+    expect(fresh.accessToken).toBe('signed-in-again');
+    expect(fresh.deviceId).toBe('NEW_DEVICE');
+    expect(running.getStoredMatrixAuth().accessToken).toBe('signed-in-again');
+  });
+
+  it("doesn't take up a session saved for another Matrix server", async () => {
+    const running = new ProfileManager(tmpDir, {
+      ...stubLogin(),
+      isTty: () => false,
+    });
+    await running.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    await new ProfileManager(tmpDir).addProfileWithAuth('@user:stack.cards', {
+      accessToken: 'other-server-token',
+      userId: '@user:stack.cards',
+      deviceId: 'OTHER_DEVICE',
+      matrixUrl: 'https://matrix.example.test',
+    });
+
+    await expect(running.reAuthenticate()).rejects.toThrow(
+      /no longer valid.*boxel profile add/,
+    );
+  });
+
   it('prompts for password, re-runs matrixLogin, and writes new tokens on TTY', async () => {
     const loginStub = vi.fn(async () => ({
       accessToken: 'fresh-token',
@@ -1069,5 +1116,73 @@ describe('boxel profile remove', () => {
 
     expect(manager.getProfile(matrixId)).toBeDefined();
     expect(d.matrixLogout).not.toHaveBeenCalled();
+  });
+});
+
+describe('boxel profile add -u for a profile it signs in again', () => {
+  const matrixUrl = 'https://matrix-staging.stack.cards';
+  const matrixId = '@user:stack.cards';
+  let tmpDir: string;
+  let manager: ProfileManager;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-add-u-'));
+    manager = new ProfileManager(tmpDir, {
+      matrixLogin: vi.fn(async () => ({
+        accessToken: 'signed-in-again',
+        userId: matrixId,
+        deviceId: 'NEW_DEVICE',
+        matrixUrl,
+      })),
+    });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('signs out the old token, and ends the secure session a move to another realm server drops, on the servers that issued them', async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      fakeAuth(matrixId, matrixUrl),
+      undefined,
+      'https://other-realm.example.test/',
+      {
+        token: 'other-server-session',
+        userId: matrixId,
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      },
+    );
+    let d = {
+      revokeConnection: vi.fn(async () => true),
+      matrixLogout: vi.fn(async () => {}),
+      secureSignOut: vi.fn(async () => {}),
+    };
+
+    await addProfileNonInteractive(
+      manager,
+      matrixId,
+      'example-password',
+      undefined,
+      matrixUrl,
+      'https://realms-staging.stack.cards/',
+      d,
+    );
+
+    let profile = manager.getProfile(matrixId)!;
+    expect(profile.matrixAccessToken).toBe('signed-in-again');
+    expect(profile.realmServerUrl).toBe('https://realms-staging.stack.cards/');
+    expect(profile.secureSession).toBeUndefined();
+    expect(d.matrixLogout).toHaveBeenCalledWith(
+      matrixUrl,
+      `token-for-${matrixId}`,
+    );
+    expect(d.secureSignOut).toHaveBeenCalledWith(
+      'https://other-realm.example.test/',
+      'other-server-session',
+    );
+    expect(d.revokeConnection).not.toHaveBeenCalled();
   });
 });
