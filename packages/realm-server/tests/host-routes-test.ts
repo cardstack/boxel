@@ -5,6 +5,10 @@ import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import hostRoutesTests from '@cardstack/runtime-common/tests/host-routes-test';
 
 module(basename(import.meta.filename), function () {
+  test('validateHostRoutes: a type must be in the realm itself or in a realm the server maps by prefix', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
   test('validateHostRoutes: the fixed routing map is what it was', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
@@ -50,6 +54,26 @@ module(basename(import.meta.filename), function () {
   });
 
   test('validateHostRoutes: two links between the types need parent', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: a query-backed link is not a parent link candidate', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: parent cannot name a query-backed link', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: a named query-backed link when one type is known', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: a subtype that stores an inherited query-backed link', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('hostRouteTypeInfo: a link field with a query is query-backed', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 

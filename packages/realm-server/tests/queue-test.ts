@@ -22,6 +22,7 @@ import type {
 import {
   automationInitiatedPriority,
   Deferred,
+  INDEX_JOB_TYPES,
   registerQueueJobDefinition,
   systemInitiatedPrerenderHtmlPriority,
   systemInitiatedPriority,
@@ -4063,6 +4064,188 @@ module(basename(import.meta.filename), function () {
       });
     },
   );
+
+  // A system-index worker floors at the system indexing tier and registers
+  // only the indexing job types (the worker-manager's `--systemIndexCount`
+  // lane). The all-priority worker beside it registers everything. A stand-in
+  // job type plays the realm's HTML pass, so the test exercises the claim
+  // query's floor and job-type filter without the prerender-html coalescer.
+  module('queue - system-index lane', function (hooks) {
+    const realmURL = 'http://test-realm/system-index/';
+    const renderJobType = 'stand-in-prerender-html';
+
+    let publisher: QueuePublisher;
+    let adapters: PgAdapter[];
+    let systemIndexRunner: PgQueueRunner;
+    let allPriorityRunner: PgQueueRunner;
+    let startedBy: Map<string, string>;
+    let starts: Map<string, Deferred<void>>;
+    let gates: Map<string, Deferred<void>>;
+    let published: Promise<unknown>[];
+
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapters = [await createTestPgAdapter(), new PgAdapter()];
+      publisher = new PgQueuePublisher(adapters[0]);
+      startedBy = new Map();
+      starts = new Map();
+      gates = new Map();
+      published = [];
+      let handler =
+        (worker: string) =>
+        async ({ name }: { name: string }) => {
+          startedBy.set(name, worker);
+          starts.get(name)?.fulfill();
+          await gates.get(name)?.promise;
+          return { name };
+        };
+      systemIndexRunner = new PgQueueRunner({
+        adapter: adapters[0],
+        workerId: 'system-index',
+        priority: systemInitiatedPriority,
+      });
+      for (let jobType of INDEX_JOB_TYPES) {
+        systemIndexRunner.register(jobType, handler('system-index'));
+      }
+      allPriorityRunner = new PgQueueRunner({
+        adapter: adapters[1],
+        workerId: 'all-priority',
+        priority: systemInitiatedPrerenderHtmlPriority,
+      });
+      for (let jobType of [...INDEX_JOB_TYPES, renderJobType]) {
+        allPriorityRunner.register(jobType, handler('all-priority'));
+      }
+      await systemIndexRunner.start();
+      await allPriorityRunner.start();
+    });
+
+    hooks.afterEach(async function () {
+      for (let gate of gates.values()) {
+        gate.fulfill();
+      }
+      await adapters[0].execute('NOTIFY jobs');
+      await Promise.allSettled(published);
+      await systemIndexRunner.destroy();
+      await allPriorityRunner.destroy();
+      await publisher.destroy();
+      await adapters[1].close();
+      await closeTestPgAdapter(adapters[0]);
+    });
+
+    function track(name: string) {
+      starts.set(name, new Deferred());
+      gates.set(name, new Deferred());
+    }
+
+    async function publishRender(name: string, priority: number) {
+      track(name);
+      let job = await publisher.publish({
+        jobType: renderJobType,
+        concurrencyGroup: `prerender-html:${realmURL}${name}/`,
+        timeout: 60,
+        priority,
+        args: { name },
+      });
+      published.push(job.done);
+    }
+
+    // Published the way the reconcile sweep publishes a transient-render
+    // index retry: system tier, on the realm's own indexing lane.
+    async function publishIndexRetry(name: string, url: string) {
+      track(name);
+      let job = await publisher.publish({
+        jobType: 'incremental-index',
+        concurrencyGroup: `indexing:${realmURL}`,
+        timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        priority: systemInitiatedPriority,
+        args: {
+          ...makeIncrementalArgsWithCallerMetadata(
+            {
+              realmURL,
+              realmUsername: 'owner',
+              changes: [{ url, operation: 'update' }],
+              ignoreData: {},
+            },
+            null,
+          ),
+          name,
+        },
+      });
+      published.push(job.done);
+    }
+
+    async function started(name: string, timeoutMs = 15_000) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          starts.get(name)!.promise,
+          new Promise((_, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `${name} did not start within ${timeoutMs}ms; started=${JSON.stringify([...startedBy])}`,
+                  ),
+                ),
+              timeoutMs,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    test('an index job queued behind a running HTML pass is claimed by the system-index worker', async function (assert) {
+      await publishRender('html pass', systemInitiatedPrerenderHtmlPriority);
+      await started('html pass');
+      assert.strictEqual(
+        startedBy.get('html pass'),
+        'all-priority',
+        'the all-priority worker runs the HTML pass',
+      );
+
+      await publishIndexRetry('index retry', `${realmURL}card.json`);
+      await started('index retry');
+      assert.strictEqual(
+        startedBy.get('index retry'),
+        'system-index',
+        'the system-index worker runs the index job while the HTML pass is still running',
+      );
+    });
+
+    test('a free system-index worker passes over HTML work at every tier', async function (assert) {
+      // Only the all-priority worker registers the HTML job type, so this
+      // holds it.
+      await publishRender('held', systemInitiatedPrerenderHtmlPriority);
+      await started('held');
+      await publishRender('system html', systemInitiatedPrerenderHtmlPriority);
+      await publishRender('user html', userInitiatedPrerenderHtmlPriority);
+
+      // An index job published after both HTML jobs: the system-index worker
+      // claims oldest-first among what it may run, so its start proves it
+      // passed over the older HTML jobs rather than not having looked yet.
+      await publishIndexRetry('control', `${realmURL}control.json`);
+      await started('control');
+      assert.strictEqual(startedBy.get('control'), 'system-index');
+      assert.false(
+        startedBy.has('system html'),
+        'the free system-index worker left the system-tier HTML job pending',
+      );
+      assert.false(
+        startedBy.has('user html'),
+        'the free system-index worker left the user-tier HTML job pending',
+      );
+
+      for (let name of ['held', 'system html', 'user html']) {
+        gates.get(name)!.fulfill();
+      }
+      await started('system html');
+      await started('user html');
+      assert.strictEqual(startedBy.get('user html'), 'all-priority');
+      assert.strictEqual(startedBy.get('system html'), 'all-priority');
+    });
+  });
 
   module('queue - automation lane and system-tier work', function (hooks) {
     const allPriority = systemInitiatedPrerenderHtmlPriority;

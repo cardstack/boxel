@@ -4,6 +4,7 @@ import type { Task } from './index.ts';
 
 import {
   ANONYMOUS_RENDER,
+  oauthCaptureReader,
   captureLedgerSourceURL,
   captureSpecHash,
   fetchEffectiveRealmPermissions,
@@ -40,12 +41,27 @@ export interface CapturePersistArgs extends JSONTypes.Object {
   lane: MediaCacheLane;
 }
 
+// The OAuth app a capture is drawn for (see `CaptureArgs.oauth`).
+export interface CaptureOAuthArgs extends JSONTypes.Object {
+  // The Matrix user id of the grant's user.
+  user: string;
+  grantId: string;
+  // The access token's scopes when the capture was asked for.
+  scopes: string[];
+}
+
 export interface CaptureArgs extends JSONTypes.Object {
   realmURL: string;
   realmUsername: string;
-  // The reader the capture renders as: the user who asked for it, or
-  // `ANONYMOUS_RENDER` for a reader who authenticated nobody.
+  // The reader the capture renders as: the user who asked for it,
+  // `ANONYMOUS_RENDER` for a reader who authenticated nobody, or
+  // `oauthCaptureReader(user)` for an OAuth app the user connected.
   runAs: string;
+  // Set for an OAuth app's capture, which is published as
+  // `OAUTH_CAPTURE_JOB_TYPE` and renders with tab tokens the app's grant
+  // bounds (`oauth-tab-token.ts`), never the user's sessions (ADR 021 §1.5).
+  // `| null` for the JSONTypes index-signature reason below.
+  oauth: CaptureOAuthArgs | null;
   // The URL of what is captured: a card instance, or — when `sourceKind` is
   // 'file' — a file in the realm, captured through its FileDef rendering.
   cardId: string;
@@ -94,6 +110,7 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
   dbAdapter,
   prerenderer,
   createPrerenderAuth,
+  createOAuthTabAuth,
   matrixServerName,
   mediaCacheAdapter,
 }) =>
@@ -184,10 +201,32 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
     // with no session, reaching only what anyone may read. The authority it
     // renders with also keys it in the ledger, so it is served back only to
     // the reader it was drawn as.
-    let anonymous = runAs === ANONYMOUS_RENDER;
-    let renderedAs = anonymous
-      ? ANONYMOUS_RENDER
-      : ensureFullMatrixUserId(runAs, matrixServerName);
+    //
+    // An OAuth app's capture renders as the grant's user, with tab tokens the
+    // grant bounds in place of the user's sessions (ADR 021 §1.5), and is
+    // kept under the app's own reader. A capture that names one without the
+    // other, or that this worker can't mint tab tokens for, is refused rather
+    // than rendered with the user's sessions.
+    let oauth = args.oauth ?? null;
+    if (
+      oauth
+        ? runAs !== oauthCaptureReader(oauth.user) || !createOAuthTabAuth
+        : runAs.startsWith(oauthCaptureReader(''))
+    ) {
+      let message = `${jobIdentity(jobInfo)} an OAuth app's capture needs its grant, its own reader and tab tokens`;
+      log.error(message);
+      reportStatus(jobInfo, 'finish');
+      return { status: 'error', error: message };
+    }
+    let anonymous = !oauth && runAs === ANONYMOUS_RENDER;
+    // Whose permissions the capture renders with.
+    let renderUser = oauth
+      ? oauth.user
+      : anonymous
+        ? ANONYMOUS_RENDER
+        : ensureFullMatrixUserId(runAs, matrixServerName);
+    // Who the capture is kept and served under.
+    let renderedAs = oauth ? runAs : renderUser;
     try {
       // The effective set the realm itself enforces: its `users` and `*`
       // grants unioned with the runner's own row. A session token is rejected
@@ -201,7 +240,7 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
         : await fetchEffectiveRealmPermissions(
             dbAdapter,
             new URL(normalizedRealmURL),
-            renderedAs,
+            renderUser,
             matrixServerName,
           );
       if (userPermissions.length === 0) {
@@ -241,19 +280,28 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
         auth = JSON.stringify({});
       } else {
         let allUserPermissions = await fetchUserPermissions(dbAdapter, {
-          userId: renderedAs,
+          userId: renderUser,
           includePublicRealms: true,
         });
         for (let realm of await fetchRealmsNamingPolicy(dbAdapter)) {
           allUserPermissions[realm] = await fetchEffectiveRealmPermissions(
             dbAdapter,
             new URL(realm),
-            renderedAs,
+            renderUser,
             matrixServerName,
           );
         }
         allUserPermissions[normalizedRealmURL] = userPermissions;
-        auth = createPrerenderAuth(renderedAs, allUserPermissions);
+        auth = oauth
+          ? createOAuthTabAuth!({
+              userId: renderUser,
+              permissions: allUserPermissions,
+              grantId: oauth.grantId,
+              scopes: oauth.scopes,
+              purpose: 'capture',
+              permissionCeiling: 'read',
+            })
+          : createPrerenderAuth(renderUser, allUserPermissions);
       }
       permissionsMs = Date.now() - permissionsStart;
 

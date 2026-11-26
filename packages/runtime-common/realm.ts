@@ -753,8 +753,16 @@ import {
   admitsRoute,
   isOAuthAccessTokenShaped,
   realmPermissionCeiling,
+  type OAuthLookupResult,
   type RealmOAuthResource,
 } from './oauth-route-admission.ts';
+import {
+  oauthTabPermissionCeiling,
+  oauthTabTokenContext,
+  oauthTabTokenOf,
+  oauthTabTokenSecret,
+  type OAuthTabPurpose,
+} from './oauth-tab-token.ts';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -3219,12 +3227,14 @@ export type RequestContext = {
   // request was judged as: the user its grant is for, read with that user's
   // permissions, and never more than its scopes allow in a realm
   // (`permissionCeiling`). Its token was removed from the request once it
-  // was checked.
+  // was checked. A tab token (`oauth-tab-token.ts`) gives the same caller,
+  // naming the work its tab does as `tabPurpose`.
   oauthCaller?: {
     user: string;
     clientId: string;
     scopes: readonly string[];
     permissionCeiling: 'read' | 'write' | undefined;
+    tabPurpose?: OAuthTabPurpose;
   };
   // Set for a dispatch made from inside the realm-server process (a worker's
   // or definition lookup's in-process fetch), which never reaches the realm
@@ -12879,6 +12889,9 @@ export class Realm {
         realmURL: this.url,
         realmUsername: await this.getRealmOwnerUserId(),
         runAs: reader,
+        // No OAuth caller reaches this route (ADR 021 §1.3): it is no Boxel
+        // API route.
+        oauth: null,
         cardId: entryKey.sourceURL,
         sourceKind,
         format: spec.format,
@@ -13817,13 +13830,13 @@ export class Realm {
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}): ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e?.constructor?.name === 'JsonWebTokenError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}): ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
@@ -14107,33 +14120,64 @@ export class Realm {
       return notInHeader();
     }
     let header = request.headers.get('Authorization') ?? '';
-    let bearer = /^Bearer[ ]+(\S+)[ ]*$/i.exec(header)?.[1];
-    if (header && !(bearer && isOAuthAccessTokenShaped(bearer))) {
-      return undefined;
-    }
-    // A token in a form-encoded body is refused as one in the query string
-    // is, whatever the header carries, as the realm server's controllers do.
-    if (
-      (request.headers.get('content-type') ?? '')
-        .split(';')[0]
-        .trim()
-        .toLowerCase() === 'application/x-www-form-urlencoded'
-    ) {
-      let body = await readFormBody(request);
-      if (body === undefined) {
+    // A tab token is judged as the OAuth caller whose grant it names, after
+    // the same grant checks an access token gets. One this realm can't admit
+    // (minted by another realm server or for another realm, expired, or whose
+    // grant is gone or unknown here) is no credential here, and is judged as
+    // any session that doesn't verify is: a realm anyone may read answers it
+    // as it answers nobody, and any other refuses it. A tab reads realms on
+    // other servers, such as the base realm, with the same tokens, and no
+    // client stands behind it to restart an OAuth flow on a refusal.
+    let tabToken = oauthTabTokenOf(header);
+    let tabPurpose: OAuthTabPurpose | undefined;
+    let result: OAuthLookupResult;
+    if (tabToken) {
+      let verified = this.#verifyOAuthTabToken(request, tabToken);
+      if (!verified) {
+        return undefined;
+      }
+      tabPurpose = verified.purpose;
+      result = await oauth.resolveGrant({
+        grantId: verified.grantId,
+        user: verified.user,
+        scopes: verified.scopes,
+      });
+      if (!result.ok) {
         this.#log.info(
-          `request refused for ${request.method} ${maskLoggedURL(request.url)}: form body too large to read`,
+          `OAuth tab token not accepted for ${request.method} ${maskLoggedURL(request.url)}, judged as a session: its grant was refused`,
         );
-        return refuse(413, 'invalid_request');
+        return undefined;
       }
-      if (new URLSearchParams(body).has('access_token')) {
-        return notInHeader();
+    } else {
+      let bearer = /^Bearer[ ]+(\S+)[ ]*$/i.exec(header)?.[1];
+      if (header && !(bearer && isOAuthAccessTokenShaped(bearer))) {
+        return undefined;
       }
+      // A token in a form-encoded body is refused as one in the query string
+      // is, whatever the header carries, as the realm server's controllers
+      // do.
+      if (
+        (request.headers.get('content-type') ?? '')
+          .split(';')[0]
+          .trim()
+          .toLowerCase() === 'application/x-www-form-urlencoded'
+      ) {
+        let body = await readFormBody(request);
+        if (body === undefined) {
+          this.#log.info(
+            `request refused for ${request.method} ${maskLoggedURL(request.url)}: form body too large to read`,
+          );
+          return refuse(413, 'invalid_request');
+        }
+        if (new URLSearchParams(body).has('access_token')) {
+          return notInHeader();
+        }
+      }
+      if (!bearer) {
+        return undefined;
+      }
+      result = await oauth.resolve(bearer);
     }
-    if (!bearer) {
-      return undefined;
-    }
-    let result = await oauth.resolve(bearer);
     if (!result.ok) {
       return refuse(
         401,
@@ -14142,7 +14186,7 @@ export class Realm {
       );
     }
     let { caller } = result;
-    let described = `${request.method} ${maskLoggedURL(request.url)}, client ${caller.clientId}`;
+    let described = `${request.method} ${maskLoggedURL(request.url)}, client ${caller.clientId}${tabPurpose ? `, ${tabPurpose} tab token` : ''}`;
     let admitted = dispatch.route
       ? admitsRoute(oauth.scopes, caller, { on: 'realm', ...dispatch.route })
       : { admitted: false as const, scopes: [] as string[] };
@@ -14172,8 +14216,12 @@ export class Realm {
     // The scopes are a ceiling on what the realm requires of the caller,
     // over and above the route map, so a route the map admits can't be
     // reached for more than the token allows. Nothing admits administering
-    // the realm.
-    let permissionCeiling = realmPermissionCeiling(oauth.scopes, caller.scopes);
+    // the realm. A tab token is held to its work's ceiling too: a capture's
+    // only reads.
+    let scopeCeiling = realmPermissionCeiling(oauth.scopes, caller.scopes);
+    let permissionCeiling = tabPurpose
+      ? oauthTabPermissionCeiling(scopeCeiling, tabPurpose)
+      : scopeCeiling;
     if (
       requiredPermission === 'administer' ||
       !permissionCeiling ||
@@ -14215,9 +14263,64 @@ export class Realm {
       clientId: caller.clientId,
       scopes: caller.scopes,
       permissionCeiling,
+      ...(tabPurpose ? { tabPurpose } : {}),
     };
     request.headers.delete('Authorization');
     return undefined;
+  }
+
+  // What a tab token presented to this realm says, when it verifies under the
+  // tab-token key, within its expiry, and was minted for this realm;
+  // otherwise undefined, with the reason logged, and the request is judged as
+  // one with a session that doesn't verify. Its grant is the caller's to
+  // check.
+  #verifyOAuthTabToken(
+    request: Request,
+    token: string,
+  ):
+    | {
+        user: string;
+        grantId: string;
+        scopes: string[];
+        purpose: OAuthTabPurpose;
+      }
+    | undefined {
+    let described = `${request.method} ${maskLoggedURL(request.url)}`;
+    let claims: TokenClaims & { iat: number; exp: number };
+    try {
+      claims = this.#adapter.verifyJWT(
+        token,
+        oauthTabTokenSecret(this.#realmSecretSeed),
+      );
+    } catch (e: any) {
+      this.#log.info(
+        `OAuth tab token not accepted for ${described}, judged as a session: ${e?.constructor?.name === 'TokenExpiredError' ? 'expired' : 'did not verify'}`,
+      );
+      return undefined;
+    }
+    let context = oauthTabTokenContext(claims);
+    if (!context) {
+      this.#log.info(
+        `OAuth tab token not accepted for ${described}, judged as a session: malformed`,
+      );
+      return undefined;
+    }
+    let realmURL = this.#sameRealmSpelling(this.url);
+    if (
+      realmURL === undefined ||
+      this.#sameRealmSpelling(context.realm) !== realmURL
+    ) {
+      this.#log.info(
+        `OAuth tab token not accepted for ${described}, judged as a session: minted for another realm`,
+      );
+      return undefined;
+    }
+    return {
+      user: context.user,
+      grantId: context.grantId,
+      scopes: context.scopes,
+      purpose: context.purpose,
+    };
   }
 
   // The realm ACL's decision for an OAuth caller (`#admitOAuthToken`): the
@@ -21067,8 +21170,13 @@ export class Realm {
           // embedding card's own prerendered HTML, which that card's own
           // declarations govern — and a render served a row data-only would
           // draw the row from its data under the realm's authority, baking in
-          // the same content its markup holds.
-          ...(duringPrerender ? {} : { unshareableFormats }),
+          // the same content its markup holds. An OAuth caller's search is
+          // never such a render, whatever it says: a tab token's tab runs
+          // code its caller chose and answers them with what it draws, and
+          // an access token's caller sets their own headers.
+          ...(duringPrerender && !requestContext.oauthCaller
+            ? {}
+            : { unshareableFormats }),
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget live search off (408) rather than run it to
@@ -22737,11 +22845,17 @@ export class Realm {
     // dropped as `type-unavailable` until the realm is indexed again, and an
     // index of realm.json is started to store the tree: nothing else may
     // index this realm for a long time.
-    if (hostRouteTypeRefs(rules).length > 0) {
+    if (
+      hostRouteTypeRefs(rules, {
+        realmURL: new URL(this.url),
+        virtualNetwork: this.#virtualNetwork,
+      }).length > 0
+    ) {
       this.#indexRealmConfigForHostRoutes();
     }
     return validateHostRoutes(rules, {
       realmURL: new URL(this.url),
+      virtualNetwork: this.#virtualNetwork,
       lookupType: () => 'unavailable',
     });
   }

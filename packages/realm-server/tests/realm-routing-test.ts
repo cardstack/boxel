@@ -730,8 +730,24 @@ module(basename(import.meta.filename), function () {
         return value?.hostRoutes ?? {};
       }
 
+      // A route's type must be in the realm itself or in a realm the server
+      // maps by prefix, as it maps the base realm and the catalog. The
+      // unreachable realm is mapped by prefix for these tests only, and the
+      // realm is indexed again with it, so its type is read and the read
+      // fails.
+      const UNREACHABLE_PREFIX = '@routing-test/unreachable/';
+
       hooks.beforeEach(async function () {
         await testRealm.indexing();
+        testRealm.virtualNetwork.addRealmMapping(
+          UNREACHABLE_PREFIX,
+          'http://127.0.0.1:9/unreachable-realm/',
+        );
+        await testRealm.fullIndex();
+      });
+
+      hooks.afterEach(function () {
+        testRealm.virtualNetwork.removeRealmMapping(UNREACHABLE_PREFIX);
       });
 
       test('drops each route whose type can not be read, with a warning, and serves the rest', async function (assert) {
