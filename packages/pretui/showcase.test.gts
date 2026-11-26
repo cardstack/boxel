@@ -148,6 +148,10 @@ module('Pretui | showcase', function (hooks) {
           brief: 'Toolbar row that fits its controls',
         },
         { id: 'd', componentName: 'EmptyState', brief: 'Nothing-here surface' },
+        { id: 'e', componentName: 'SheetToolbar', brief: 'Spreadsheet bar' },
+        { id: 'f', componentName: 'Toolbar', brief: 'A row of controls' },
+        { id: 'g', componentName: 'Spinner', brief: 'Loading ring' },
+        { id: 'h', componentName: 'PinInput', brief: 'One box per digit' },
       ],
       false,
     );
@@ -157,13 +161,23 @@ module('Pretui | showcase', function (hooks) {
       ['b'],
       'a spaced name finds the joined one',
     );
-    assert.deepEqual(ids('toolbar'), ['c'], 'the brief says what it is for');
+    assert.deepEqual(
+      ids('toolbar'),
+      ['f', 'e', 'c'],
+      'the exact name first, then a longer name, then a brief',
+    );
+    assert.deepEqual(ids('pin'), ['h'], 'a word inside a name is no match');
+    assert.deepEqual(
+      ids('date pick'),
+      ['b'],
+      'every word must match when some component matches them all',
+    );
     assert.deepEqual(
       ids('empty list'),
       ['a', 'd'],
-      'each word finds its own component',
+      'when none matches every word, each word finds its own',
     );
     assert.deepEqual(ids('picker date'), ['b'], 'word order does not matter');
-    assert.deepEqual(ids('  '), [], 'a blank search lists nothing');
+    assert.deepEqual(ids(' - '), [], 'a search without words lists nothing');
   });
 });

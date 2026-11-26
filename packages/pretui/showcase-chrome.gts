@@ -110,22 +110,37 @@ export class SpecCatalog {
     let terms = words(text);
     if (!terms.length) return [];
     let phrase = terms.join(' ');
-    let scored: { spec: SpecLike; score: number }[] = [];
+    let every: { spec: SpecLike; score: number }[] = [];
+    let some: { spec: SpecLike; score: number }[] = [];
     for (let spec of this.all) {
       let name = words(specName(spec));
       let prose = [spec.cardTitle, spec.brief]
         .map((value) => value?.toLowerCase() ?? '')
         .join(' ');
-      let score = name.join(' ').includes(phrase) ? terms.length * 2 : 0;
-      for (let term of terms) {
-        if (name.some((word) => word.startsWith(term))) score += 2;
-        else if (prose.includes(term)) score += 1;
-      }
-      if (score) scored.push({ spec, score });
+      let scores = terms.map((term): number =>
+        name.includes(term)
+          ? 3
+          : name.some((word) => word.startsWith(term))
+            ? 2
+            : prose.includes(term)
+              ? 1
+              : 0,
+      );
+      let score = scores.reduce((sum, s) => sum + s, 0);
+      if (!score) continue;
+      if (name.join(' ') === phrase) score += 10;
+      (scores.every(Boolean) ? every : some).push({ spec, score });
     }
-    // stable: equal scores keep the index order
-    return scored.sort((a, b) => b.score - a.score).map(({ spec }) => spec);
+    // every word must match; only when nothing does, any word will.
+    // Sort is stable, so equal scores keep the index order
+    return (every.length ? every : some)
+      .sort((a, b) => b.score - a.score)
+      .map(({ spec }) => spec);
   };
+}
+
+export function hasSearchWords(text: string): boolean {
+  return words(text).length > 0;
 }
 
 // "DatePicker" and "date picker" both become ["date", "picker"]

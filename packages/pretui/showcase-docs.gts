@@ -16,7 +16,12 @@ import {
   sameSpec,
   type ShowcaseCategory,
 } from './showcase-data';
-import { specName, type SpecCatalog, type SpecLike } from './showcase-chrome';
+import {
+  hasSearchWords,
+  specName,
+  type SpecCatalog,
+  type SpecLike,
+} from './showcase-chrome';
 
 // brings the page head back into view when the reader moves to another
 // component from the pager at the bottom
@@ -199,7 +204,7 @@ export class DocsView extends Component<DocsSignature> {
     return categoryNamed(this.args.category);
   }
   get searching(): boolean {
-    return this.search.trim().length > 0;
+    return hasSearchWords(this.search);
   }
   get matches(): SpecLike[] {
     return this.args.specs.search(this.search);
