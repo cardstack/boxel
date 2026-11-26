@@ -749,7 +749,11 @@ async function returnToRoom(page: Page, roomId: string): Promise<boolean> {
 async function confirmAutomationGate(page: Page): Promise<boolean> {
   let gate = page
     .locator('[data-test-tool-call-approval]')
-    .filter({ has: page.locator('[data-test-automation-confirmation]') })
+    .filter({
+      has: page.locator(
+        '[data-test-automation-confirmation], [data-test-automation-confirmation-loading]',
+      ),
+    })
     .first();
   if ((await gate.count()) === 0) {
     return false;
