@@ -7,6 +7,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   ensureTrailingSlash,
+  hasExecutableExtension,
   invalidationsMayChangeHostRoutes,
   hostRouteLink,
   isCardInstance,
@@ -28,10 +29,7 @@ import { scopedRenderContext } from '@cardstack/runtime-common/render-context';
 
 import { currentRenderScope } from '@cardstack/host/lib/gc-card-store';
 import { visitorHostRouteLookups } from '@cardstack/host/lib/host-route-lookups';
-import {
-  pathNamesFile,
-  plainLinkClickURL,
-} from '@cardstack/host/lib/link-clicks';
+import { plainLinkClickURL } from '@cardstack/host/lib/link-clicks';
 import { duringPrerenderHeaders } from '@cardstack/host/lib/prerender-fetch-headers';
 
 import type HostModeService from './host-mode-service';
@@ -685,10 +683,15 @@ export default class HostRouteLinksService
 
   // Whether an address no route serves is a card's own URL, which the app
   // opens as host mode does (`HostLinkNavigationService.findDestination`).
-  // An address whose path names a file, and one whose card can't be
-  // loaded, are the browser's to load.
+  // The store decides, because a card's id can have a dot in its last
+  // segment (`Milestone/v1.2`), as a file's name does. A card's `.json`
+  // file and a module are never asked for. An address whose card can't be
+  // loaded, such as an image, is the browser's to load.
   private async isCardURL(address: URL): Promise<boolean> {
-    if (pathNamesFile(address.pathname)) {
+    if (
+      address.pathname.endsWith('.json') ||
+      hasExecutableExtension(address.pathname)
+    ) {
       return false;
     }
     try {

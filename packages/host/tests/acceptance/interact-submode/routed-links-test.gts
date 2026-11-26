@@ -162,6 +162,15 @@ module('Acceptance | interact submode | routed links', function (hooks) {
           <a data-test-link='own' href='{{this.realm}}Author/joe'>Joe</a>
           <a data-test-link='file' href='{{this.realm}}Author/joe.json'>Joe's
             file</a>
+          <a data-test-link='module' href='{{this.realm}}blog.gts'>Module</a>
+          <a
+            data-test-link='own-dotted'
+            href='{{this.realm}}Author/v1.2'
+          >Version</a>
+          <a
+            data-test-link='routed-dotted'
+            href='{{this.realm}}people/v1.2'
+          >Version, routed</a>
         </template>
       };
     }
@@ -186,6 +195,13 @@ module('Acceptance | interact submode | routed links', function (hooks) {
         'Author/joe.json': {
           data: {
             attributes: { name: 'Joe' },
+            meta: { adoptsFrom: { module: '../blog', name: 'Author' } },
+          },
+        },
+        // A card's id can have a dot in its last segment.
+        'Author/v1.2.json': {
+          data: {
+            attributes: { name: 'Version' },
             meta: { adoptsFrom: { module: '../blog', name: 'Author' } },
           },
         },
@@ -283,6 +299,31 @@ module('Acceptance | interact submode | routed links', function (hooks) {
     let href = (document.querySelector(link('file')) as HTMLAnchorElement).href;
 
     await click(link('file'));
+
+    assert.strictEqual(window.location.href, href);
+  });
+
+  test('a link to the own URL of a card whose id has a dot opens the card in the stack', async function (assert) {
+    await openPost();
+    let pageURL = window.location.href;
+
+    await click(link('own-dotted'));
+
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Author/v1.2"]`,
+      )
+      .exists();
+    assert.deepEqual(leftToBrowser, [], 'the app took the click');
+    assert.strictEqual(window.location.href, pageURL, 'no page load');
+  });
+
+  test('a link to a module is loaded by the browser', async function (assert) {
+    await openPost();
+    let href = (document.querySelector(link('module')) as HTMLAnchorElement)
+      .href;
+
+    await click(link('module'));
 
     assert.strictEqual(window.location.href, href);
   });
@@ -439,6 +480,19 @@ module('Acceptance | interact submode | routed links', function (hooks) {
       assert
         .dom('[data-test-card-url-bar-input]')
         .hasValue(`${testRealmURL}Author/joe.json`);
+      assert.deepEqual(leftToBrowser, [], 'the app took the click');
+      assert.strictEqual(window.location.href, pageURL, 'no page load');
+    });
+
+    test("a routed link to a card whose id has a dot opens the card's file", async function (assert) {
+      await openPostFile();
+      let pageURL = window.location.href;
+
+      await click(link('routed-dotted'));
+
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}Author/v1.2.json`);
       assert.deepEqual(leftToBrowser, [], 'the app took the click');
       assert.strictEqual(window.location.href, pageURL, 'no page load');
     });

@@ -63,9 +63,10 @@ export function plainLinkClickURL(event: MouseEvent): URL | undefined {
   return isPlainClick(event) ? followableLinkURL(event) : undefined;
 }
 
-// Whether a path's last segment has a file extension. A card's own path has
-// none, so a link to a path that has one is to a file, unless a route
-// serves it.
+// Whether a path's last segment has a dot, as a file's name has. A card's
+// id can have one too (`Milestone/v1.2`), so a caller that must tell a card
+// from a file asks something that knows before it treats the path as a
+// file's.
 export function pathNamesFile(path: string): boolean {
   let last = path.replace(/\/+$/, '').split('/').pop() ?? '';
   return last.includes('.');

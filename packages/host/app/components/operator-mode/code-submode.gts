@@ -47,7 +47,6 @@ import {
   type LocalPath,
   CardContextName,
   hasExecutableExtension,
-  hasExtension,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -888,9 +887,11 @@ export default class CodeSubmode extends Component<Signature> {
   // `HostRouteLinksService.followRoutedLinks`.
   private followRoutedLinks = modifier((element: HTMLElement) =>
     this.hostRouteLinks.followRoutedLinks(element.ownerDocument, {
+      // `cardHref` is always a card's URL, which has no `.json`, and which
+      // can have a dot (`Milestone/v1.2`).
       opener: () => (cardHref) => {
         void this.operatorModeStateService.updateCodePath(
-          rri(hasExtension(cardHref) ? cardHref : `${cardHref}.json`),
+          rri(`${cardHref}.json`),
         );
       },
       load: (href) => {
