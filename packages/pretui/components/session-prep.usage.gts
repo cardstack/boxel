@@ -10,7 +10,6 @@ import type { SessionPrepStep } from './session-prep';
 // ── SessionPrep ──────────────────────────────────────────────────────────
 const PREP_VARIANTS = ['steps', 'track'];
 
-
 class SessionPrepUsage extends GlimmerComponent {
   @tracked stage = 1;
   @tracked variant = 'steps';

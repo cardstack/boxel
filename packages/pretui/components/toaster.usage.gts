@@ -48,7 +48,6 @@ const RECEIPTS: { tone: ToastTone; title: string; message?: string }[] = [
   },
 ];
 
-
 class ToasterState extends GlimmerComponent {
   toasts = new ToastStore();
 

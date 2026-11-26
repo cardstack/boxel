@@ -17,7 +17,6 @@ import type { RowKey, SelectionMode, SortState } from '../data-component';
 import { GRADES, LOTS, MODES, SIZES, lotLabel } from '../examples-listing';
 import type { Lot } from '../examples-listing';
 
-
 const GRADE_OPTIONS = GRADES.map((g) => ({ value: g, label: g }));
 const PLACE_OPTIONS = Array.from(new Set(LOTS.map((l) => l.place))).map(
   (p) => ({ value: p, label: p }),
@@ -44,7 +43,6 @@ const COLUMNS: DataColumn<Lot>[] = [
 const PINNED_COLUMNS: DataColumn<Lot>[] = COLUMNS.map((col) =>
   col.key === 'id' ? { ...col, pin: 'start' as const } : col,
 );
-
 
 class DataTableUsage extends Component {
   modes = MODES;
@@ -79,7 +77,9 @@ class DataTableUsage extends Component {
     if (this.flush) bits.push('@flush={{true}}');
     if (this.pageSize) bits.push(`@pageSize={{${this.pageSize}}}`);
     bits.push('@onSortChange={{this.onSortChange}}');
-    return `<DataTable ${bits.join(' ')} />`;
+    return this.showDetail
+      ? `<DataTable ${bits.join(' ')}>\n  <:expanded as |row|>…</:expanded>\n</DataTable>`
+      : `<DataTable ${bits.join(' ')} />`;
   }
 
   setSelectionMode = (v: string) => (this.selectionMode = v as SelectionMode);

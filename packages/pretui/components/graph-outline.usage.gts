@@ -5,7 +5,6 @@ import { FreestyleUsage } from './freestyle-usage';
 import { GraphOutline } from './graph-outline';
 import type { OutlineEdge, OutlineNode } from './graph-outline';
 
-
 const OUTLINE_NODES: OutlineNode[] = [
   { id: 'origin', data: { title: 'Wuyi Origins', status: 'contracted' } },
   { id: 'lot', data: { title: 'Spring Lot 14', status: 'curing' } },
@@ -32,8 +31,12 @@ class GraphOutlineUsage extends GlimmerComponent {
   select = (id: string) => (this.activeId = id);
 
   get usage() {
-    let mode = this.mode === 'sr-only' ? '' : ` @mode="${this.mode}"`;
-    return `<GraphOutline @nodes={{this.nodes}} @edges={{this.edges}}${mode} />`;
+    let bits = ['@nodes={{this.nodes}}', '@edges={{this.edges}}'];
+    if (this.label) bits.push(`@label="${this.label}"`);
+    if (this.mode !== 'sr-only') bits.push(`@mode="${this.mode}"`);
+    if (this.activeId) bits.push(`@activeId="${this.activeId}"`);
+    bits.push('@onSelect={{this.select}}');
+    return `<GraphOutline ${bits.join(' ')} />`;
   }
 
   get modeValue() {
