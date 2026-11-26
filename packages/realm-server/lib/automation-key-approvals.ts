@@ -29,7 +29,8 @@ import { bindingType, checkSlots, slotToken } from './key-bindings.ts';
 import { lookupGrantOperation } from './user-key-grants.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
-import { sendableKeySql } from './oauth.ts';
+import { apiHostList, apiHostsOfKeySql, sendableKeySql } from './oauth.ts';
+import { keyOfferedForSlot, type SlotSend } from './slot-fill.ts';
 
 // Automation approvals (ADR 039 §1.2): a key owner's approval for one
 // automation, named by its card, to use one of their bindings, as the
@@ -168,6 +169,7 @@ export async function checkAutomationKeyApprovals(
           dbAdapter,
           realmURL.href,
           payer,
+          { slot: check.slot, callApi: request },
         );
         missing.push({
           slot,
@@ -338,14 +340,9 @@ async function shareApprover(
   dbAdapter: DBAdapter,
   realmURL: string,
   payer: string,
+  send: SlotSend,
 ): Promise<{ canApprove: KeyApprover; shares: MissingShare[] }> {
-  // The shares a call can send, as the approval batch offers them
-  // (`sendableKeySql`): a share of a sign-in app is never one.
-  let rows = (await query(dbAdapter, [
-    'SELECT id, label, owner, state FROM key_shares WHERE realm_url = ',
-    param(realmURL),
-    ` AND state = 'active' AND key_id IS NOT NULL AND ${sendableKeySql('key_id')} ORDER BY label, id`,
-  ])) as unknown as ShareRow[];
+  let rows = await sharesFittingSlot(dbAdapter, realmURL, send);
   let own = rows.filter((row) => row.owner === payer);
   if (own.length) {
     return { canApprove: 'payer', shares: own.map(shareOf) };
@@ -356,6 +353,30 @@ async function shareApprover(
 }
 
 type MissingShare = NonNullable<MissingKeyApproval['shares']>[number];
+
+// The realm's shares the approval batch offers for one slot: active, holding
+// a key a call can send (`sendableKeySql`; a share of a sign-in app is never
+// one), whose key fits the slot where its request sends (`keyOfferedForSlot`:
+// a kind the slot takes, good at the request's host). Ordered by label.
+async function sharesFittingSlot(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  send: SlotSend,
+): Promise<ShareRow[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT s.id, s.label, s.owner, s.state, k.kind AS key_kind, ${apiHostsOfKeySql('s.key_id')} AS api_hosts FROM key_shares s JOIN user_keys k ON k.id = s.key_id WHERE s.realm_url = `,
+    param(realmURL),
+    ` AND s.state = 'active' AND ${sendableKeySql('s.key_id')} ORDER BY s.label, s.id`,
+  ])) as unknown as (ShareRow & { key_kind: string; api_hosts: unknown })[];
+  return rows
+    .filter((row) =>
+      keyOfferedForSlot(
+        { kind: row.key_kind, apiHosts: apiHostList(row.api_hosts) },
+        [send],
+      ),
+    )
+    .map(({ id, label, owner, state }) => ({ id, label, owner, state }));
+}
 
 interface ShareRow {
   id: string;
