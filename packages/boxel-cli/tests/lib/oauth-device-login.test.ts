@@ -186,6 +186,32 @@ describe('oauthDeviceLogin', () => {
     expect(time.waits).toEqual([5000, 10000, 10000, 15000]);
   });
 
+  it('backs off and keeps waiting when a poll gets no answer, or a busy one', async () => {
+    let server = realmServer({ polls: ['issued'] });
+    let failures = ['network', 'temporarily_unavailable'];
+    let fetchFn = (async (input: string | URL, init?: RequestInit) => {
+      let url = typeof input === 'string' ? input : input.href;
+      if (url === TOKEN_ENDPOINT && failures.length > 0) {
+        let failure = failures.shift();
+        if (failure === 'network') {
+          throw new TypeError('fetch failed');
+        }
+        return jsonResponse({ error: failure }, 503);
+      }
+      return server.fetchFn(input, init);
+    }) as typeof fetch;
+    let time = clock();
+    let result = await oauthDeviceLogin({
+      realmServerUrl: REALM_SERVER_URL,
+      fetchFn,
+      log: () => {},
+      now: time.now,
+      sleep: time.sleep,
+    });
+    expect(result.user.userId).toBe(USER_ID);
+    expect(time.waits).toEqual([5000, 10000, 20000]);
+  });
+
   it('stops when the sign-in is denied', async () => {
     await expect(
       signIn(realmServer({ polls: ['access_denied'] })),

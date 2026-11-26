@@ -646,6 +646,10 @@ export async function oauthLogin(
 const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
 // RFC 8628 §3.5: each `slow_down` adds five seconds to the interval.
 const SLOW_DOWN_SECONDS = 5;
+// A poll that couldn't reach the realm server, or that it answered as busy,
+// is tried again later rather than ending the sign-in: the wait doubles each
+// time, up to this.
+const MAX_BACKOFF_SECONDS = 60;
 
 // A device code, as the provider answers a device authorization request.
 interface DeviceAuthorization {
@@ -763,14 +767,25 @@ export async function oauthDeviceLogin(
       );
     }
     let requestedAt = now();
-    let body = await tokenRequest(
-      provider,
-      {
-        grant_type: DEVICE_CODE_GRANT_TYPE,
-        device_code: device.deviceCode,
-      },
-      fetchFn,
-    );
+    let body: TokenResponse & { status: number };
+    try {
+      body = await tokenRequest(
+        provider,
+        {
+          grant_type: DEVICE_CODE_GRANT_TYPE,
+          device_code: device.deviceCode,
+        },
+        fetchFn,
+      );
+    } catch {
+      // No answer: the network, or the realm server, is down for now.
+      intervalSeconds = backedOff(intervalSeconds);
+      continue;
+    }
+    if (isTransient(body)) {
+      intervalSeconds = backedOff(intervalSeconds);
+      continue;
+    }
     if (body.status === 200) {
       tokens = issuedTokens(body, { requestedAt, startedAt });
       break;
@@ -802,4 +817,18 @@ export async function oauthDeviceLogin(
     throw e;
   }
   return { provider, tokens, user };
+}
+
+// A poll the realm server answered as busy or failing, which a later poll
+// may get past.
+function isTransient(body: TokenResponse & { status: number }): boolean {
+  return (
+    body.status === 429 ||
+    body.status >= 500 ||
+    body.error === 'temporarily_unavailable'
+  );
+}
+
+function backedOff(intervalSeconds: number): number {
+  return Math.min(intervalSeconds * 2, MAX_BACKOFF_SECONDS);
 }

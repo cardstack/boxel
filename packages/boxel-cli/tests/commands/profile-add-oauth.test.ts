@@ -12,6 +12,7 @@ import {
 import {
   addOAuthProfile,
   addProfile,
+  noBrowserHere,
   describeSignIn,
   resolveEnvironment,
   type AddProfileDeps,
@@ -65,7 +66,7 @@ function deps({
   tty: boolean;
   answers?: Record<string, string>;
   oauthLogin?: AddProfileDeps['oauthLogin'];
-  // Whether the terminal was reached over SSH.
+  // Whether there is no browser here: SSH, or Linux with no display.
   remote?: boolean;
 }) {
   let prompt = vi.fn(async (question: string) => {
@@ -79,7 +80,7 @@ function deps({
     deps: {
       oauthLogin: vi.fn(oauthLogin),
       oauthDeviceLogin: vi.fn(async () => signedIn()),
-      isRemoteTerminal: () => remote,
+      noBrowserHere: () => remote,
       revokeConnection: vi.fn(async () => true),
       secureSignOut: vi.fn(async () => {}),
       matrixLogout: vi.fn(async () => {}),
@@ -124,6 +125,18 @@ describe('boxel profile add --oauth, signing in with a code', () => {
     expect(manager.getProfile(matrixId)?.oauth?.accessToken).toBe(
       'access-token-placeholder',
     );
+  });
+
+  it('finds no browser over SSH, or on Linux with no display', () => {
+    expect(noBrowserHere({ SSH_CONNECTION: '1 2 3 4' }, 'darwin')).toBe(true);
+    expect(noBrowserHere({ SSH_TTY: '/dev/pts/0' }, 'linux')).toBe(true);
+    expect(noBrowserHere({}, 'linux')).toBe(true);
+    expect(noBrowserHere({ DISPLAY: ':0' }, 'linux')).toBe(false);
+    expect(noBrowserHere({ WAYLAND_DISPLAY: 'wayland-0' }, 'linux')).toBe(
+      false,
+    );
+    expect(noBrowserHere({}, 'darwin')).toBe(false);
+    expect(noBrowserHere({}, 'win32')).toBe(false);
   });
 
   it('over SSH, signs in with a code without being asked to', async () => {

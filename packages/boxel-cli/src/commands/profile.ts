@@ -533,9 +533,9 @@ export interface AddProfileDeps {
   isTty?: () => boolean;
   oauthLogin?: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
   oauthDeviceLogin?: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
-  // Whether the CLI runs in a terminal reached over SSH, where a browser it
-  // opens, if any, isn't the user's.
-  isRemoteTerminal?: () => boolean;
+  // Whether this computer has no browser in front of the user: a terminal
+  // reached over SSH, or Linux with no display.
+  noBrowserHere?: () => boolean;
   revokeConnection?: typeof revokeConnection;
   matrixLogout?: typeof matrixLogout;
   ensurePersonalRealmWithOAuth?: typeof ensurePersonalRealmWithOAuth;
@@ -551,7 +551,7 @@ interface AddProfileContext {
   interactive: boolean;
   oauthLogin: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
   oauthDeviceLogin: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
-  remoteTerminal: boolean;
+  noBrowserHere: boolean;
   revokeConnection: typeof revokeConnection;
   matrixLogout: typeof matrixLogout;
   ensurePersonalRealmWithOAuth: typeof ensurePersonalRealmWithOAuth;
@@ -569,7 +569,7 @@ function addProfileContext(deps: AddProfileDeps): AddProfileContext {
     interactive: (deps.isTty ?? (() => Boolean(process.stdin.isTTY)))(),
     oauthLogin: deps.oauthLogin ?? oauthLogin,
     oauthDeviceLogin: deps.oauthDeviceLogin ?? oauthDeviceLogin,
-    remoteTerminal: (deps.isRemoteTerminal ?? isRemoteTerminal)(),
+    noBrowserHere: (deps.noBrowserHere ?? (() => noBrowserHere()))(),
     revokeConnection: deps.revokeConnection ?? revokeConnection,
     matrixLogout: deps.matrixLogout ?? matrixLogout,
     ensurePersonalRealmWithOAuth:
@@ -981,15 +981,23 @@ export async function addProfile(
   await announceAdded(manager, outcome.matrixId, ctx);
 }
 
-// Whether this terminal was reached over SSH: a browser opened here, if one
-// opens at all, is on the remote computer, not in front of the user.
-function isRemoteTerminal(): boolean {
-  return Boolean(process.env.SSH_CONNECTION || process.env.SSH_TTY);
+// Whether there is no browser in front of the user here: a terminal reached
+// over SSH, where a browser opened here would be on the remote computer, or
+// Linux with no display, where `xdg-open` starts but nothing appears.
+export function noBrowserHere(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  if (env.SSH_CONNECTION || env.SSH_TTY) {
+    return true;
+  }
+  return platform === 'linux' && !env.DISPLAY && !env.WAYLAND_DISPLAY;
 }
 
 // `boxel profile add --oauth`: the OAuth sign-in. Through the browser on this
 // computer, or with a code entered on any device (`oauthDeviceLogin`) with
-// `--no-browser`, over SSH, or when no browser opens here. It never falls
+// `--no-browser`, over SSH, on Linux with no display, or when no browser
+// opens here. It never falls
 // back to a Matrix sign-in: the user asked for OAuth.
 export async function addOAuthProfile(
   manager: ProfileManager,
@@ -1002,7 +1010,7 @@ export async function addOAuthProfile(
   console.log(
     `${DIM}Environment: ${new URL(environment.realmServerUrl).host}${RESET}`,
   );
-  const withCode = browser === false || ctx.remoteTerminal;
+  const withCode = browser === false || ctx.noBrowserHere;
   const outcome = await addProfileViaOAuth(manager, environment, ctx, {
     withCode,
   });
