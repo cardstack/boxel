@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   checkedReturn,
+  checkedUser,
   handOffURL,
   needsConfirmation,
 } from '../src/security/app-handoff.js';
@@ -74,4 +75,30 @@ test("the realm server's own origin is never asked about", () => {
   let local = { realmServerURL: new URL('https://localhost:4205/') };
   assert.equal(needsConfirmation('https://localhost:4205/test/', local), false);
   assert.equal(needsConfirmation('https://localhost:4200/', local), true);
+});
+
+test('an account is named only by a Matrix user ID', () => {
+  for (let value of [
+    '@someone:example.test',
+    '@some.one_2=x/y+z-w:boxel.ai',
+    '@someone:localhost:8008',
+  ]) {
+    assert.equal(checkedUser(value), value);
+  }
+  for (let value of [
+    'someone',
+    'someone@example.test',
+    '@someone',
+    '@:example.test',
+    '@some one:example.test',
+    '@someone:example.test/path',
+    '@someone:example.test#x',
+    '@someone:exa mple.test',
+    `@${'a'.repeat(250)}:example.test`,
+    '',
+    undefined,
+    42,
+  ]) {
+    assert.equal(checkedUser(value), undefined, String(value));
+  }
 });

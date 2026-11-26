@@ -28,6 +28,14 @@ module('Unit | secure-sign-in', function () {
     );
   });
 
+  test('signing in names the account a link asks for beside the page to come back to', function (assert) {
+    let url = new URL(secureSignInURL(LOCAL_APP, '@alice:localhost'));
+    let fragment = new URLSearchParams(url.hash.slice(1));
+    assert.strictEqual(fragment.get('return'), LOCAL_APP);
+    assert.strictEqual(fragment.get('user'), '@alice:localhost');
+    assert.strictEqual(url.search, '', 'nothing rides in the query string');
+  });
+
   test('signing out carries the page to come back to in the fragment', function (assert) {
     let url = new URL(secureSignOutURL('http://127.0.0.1:4200/'));
     assert.strictEqual(url.href.split('#')[0], secureOriginPage('sign-out'));

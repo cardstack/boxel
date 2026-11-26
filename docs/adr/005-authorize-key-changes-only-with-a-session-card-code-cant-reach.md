@@ -150,6 +150,15 @@ scheme, which any program on the user's machine can listen on; the realm
 server's own origin is exempt, since the realm server is configured with
 it.
 
+The page that sends the user to sign in MAY name the account it needs, as
+`user` beside `return` in the fragment. The secure origin MUST take it only
+as a Matrix user ID, and MUST forget it along with `return`. While a page
+named one, the secure origin MUST hand a token over only when its session is
+that account's. Filling the account into the sign-in form MUST NOT count as
+that check, since the user can sign in as anyone there. The account named is
+not a credential, and the app MUST NOT send the user to sign in as it without
+a link asking it to.
+
 A login token is something card code can get (§1.3), so the session the app
 redeems it for MUST NOT be a secure session. Signing out of the app SHOULD
 also sign out on the secure origin, by a top-level navigation there once the
@@ -315,6 +324,15 @@ program happens to listen there, so only a hand-off to one is confirmed. An
 already-signed-in window hands over to any other listed origin with no click,
 as an app already signed in would show the user straight into the app.
 
+A page that names the account it needs, as `boxel browse` does for a profile
+with no Matrix token (ADR 021 §1.5 forbids it turning its OAuth token into a
+sign-in), lets a browser signed in as another account sign in as the right
+one, instead of handing over whatever session the window holds. Anyone can
+link to the sign-in page naming any account, so the name decides only which
+account's sign-in the window offers, never which one it hands over: a
+hand-off still needs that account's session, signed in with its own
+credential.
+
 A window's session lasts a week, but the app's can last much longer, and the
 app comes back from the secure origin only when it signs in. Without
 renewal, a user signed in to the app for over a week would find the key pages
@@ -424,6 +442,13 @@ beside a device of its own, and `boxel keys sign-in` signs it in again.
 - **Confirming every hand-off, not only a loopback one.** Every sign-in
   would ask a question whose answer is always yes; the listed origins other
   than loopback are the deployment's own.
+
+- **Keeping a session for each account the window signs in, so a page naming
+  another account switches to it with no password.** Each would be a secure
+  session, so every account a browser was ever opened as would keep key
+  authority there, and a link naming another stored account would move card
+  code into it with one click. A separate browser profile for each account
+  keeps each signed in without either.
 
 ## 4. Sources
 

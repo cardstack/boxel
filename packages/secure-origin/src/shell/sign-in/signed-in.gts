@@ -2,7 +2,9 @@
 // a page to come back to, it hands the sign-in over: a single-use login token,
 // carried to that page by navigating there, which the app redeems for a Matrix
 // session of its own. A hand-off to a program on the user's own machine waits
-// for the user to confirm it. Otherwise the window says it is signed in, and
+// for the user to confirm it. A page that named the account it needs is
+// handed a sign-in only by that account: signed in as another, the window
+// says so and hands nothing over. Otherwise the window says it is signed in, and
 // offers a link to the key page: the app asks the realm server whether the
 // window has a session, rather than hearing it from the window.
 import { on } from '@ember/modifier';
@@ -16,6 +18,7 @@ import {
   handOffURL,
   needsConfirmation,
   pendingReturn,
+  pendingReturnUser,
 } from '../../security/app-handoff.js';
 import {
   loginToken,
@@ -35,6 +38,7 @@ type State =
   | { name: 'signed-in' }
   | { name: 'confirming'; target: string; origin: string }
   | { name: 'handing-off' }
+  | { name: 'wrong-account'; signedInAs: string; wanted: string }
   | { name: 'failed'; error: string };
 
 export default class SignedIn extends Component {
@@ -58,6 +62,29 @@ export default class SignedIn extends Component {
             type='button'
             @variant='secondary'
             data-test-secure-loopback-cancel
+            {{on 'click' this.cancel}}
+          >Cancel</AuthButton>
+        </div>
+      </MessagePage>
+    {{else if this.wrongAccount}}
+      <MessagePage @heading='Signed in as another account'>
+        <p class='info' data-test-secure-wrong-account>
+          You’re signed in as
+          <span class='user-id'>{{this.wrongAccount.signedInAs}}</span>, but the
+          page that sent you here needs
+          <span class='user-id'>{{this.wrongAccount.wanted}}</span>. Sign in as
+          that account to continue.
+        </p>
+        <div class='button-wrapper'>
+          <AuthButton
+            @href={{this.signInPage}}
+            @variant='primary'
+            data-test-secure-wrong-account-sign-in
+          >Sign in as another account</AuthButton>
+          <AuthButton
+            type='button'
+            @variant='secondary'
+            data-test-secure-wrong-account-cancel
             {{on 'click' this.cancel}}
           >Cancel</AuthButton>
         </div>
@@ -101,6 +128,10 @@ export default class SignedIn extends Component {
         line-height: 20px;
         color: var(--foreground);
       }
+      .user-id {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
       .error {
         color: var(--destructive-ink);
         padding: 0;
@@ -123,7 +154,11 @@ export default class SignedIn extends Component {
   // The key page is a link away, never where signing in lands: a sign-in
   // the app started hands back to the app, and one that didn't ends here.
   private keyPage = pageURL('keys');
+  // Back to this page's sign-in, where the window offers the form for the
+  // account the page to go back to needs.
+  private signInPage = pageURL('sign-in');
   private target = pendingReturn(appOrigins(this.config));
+  private wanted = this.target ? pendingReturnUser() : undefined;
   private page = trackedObject<{ state: State }>({
     state: { name: 'signed-in' },
   });
@@ -131,6 +166,9 @@ export default class SignedIn extends Component {
   constructor(owner: Owner, args: object) {
     super(owner, args);
     if (!this.target) {
+      return;
+    }
+    if (this.isWrongAccount()) {
       return;
     }
     if (needsConfirmation(this.target, this.config)) {
@@ -152,14 +190,36 @@ export default class SignedIn extends Component {
     return this.page.state.name === 'handing-off';
   }
 
+  private get wrongAccount() {
+    return this.page.state.name === 'wrong-account'
+      ? this.page.state
+      : undefined;
+  }
+
+  // Whether the window's session is another account than the one the page to
+  // go back to needs, saying so when it is. Checked again just before a
+  // hand-off, since another tab may have signed the window in as someone else.
+  private isWrongAccount(): boolean {
+    let session = storedSession();
+    if (!this.wanted || !session || session.user === this.wanted) {
+      return false;
+    }
+    this.page.state = {
+      name: 'wrong-account',
+      signedInAs: session.user,
+      wanted: this.wanted,
+    };
+    return true;
+  }
+
   private get failure() {
     return this.page.state.name === 'failed' ? this.page.state : undefined;
   }
 
   private confirm = () => this.handOff();
 
-  // Declining a loopback hand-off leaves the user signed in here, handing
-  // nothing over.
+  // Declining a loopback hand-off, or one for another account, leaves the user
+  // signed in here, handing nothing over.
   private cancel = () => {
     forgetReturn();
     this.page.state = { name: 'signed-in' };
@@ -170,6 +230,9 @@ export default class SignedIn extends Component {
     let session = storedSession();
     if (!target || !session) {
       this.page.state = { name: 'signed-in' };
+      return;
+    }
+    if (this.isWrongAccount()) {
       return;
     }
     this.page.state = { name: 'handing-off' };

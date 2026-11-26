@@ -176,6 +176,7 @@ module('Integration | sign-in', function (hooks) {
     SESSION.token,
     STATE,
     'single-use-login-token',
+    '@wanted:example.test',
   ]);
 
   module('the sign-in form', function () {
@@ -1257,6 +1258,147 @@ module('Integration | sign-in', function (hooks) {
           how: 'replace',
           url: `${APP}/some/path?operatorModeState=%7B%7D#loginToken=a-login-token`,
         },
+      ]);
+    });
+
+    const WANTED = '@wanted:example.test';
+    const WANTED_SESSION = { ...SESSION, user: WANTED };
+
+    function returnAs(target: string, user: string) {
+      return `#return=${encodeURIComponent(target)}&user=${encodeURIComponent(user)}`;
+    }
+
+    test('a window signed in as the account the page names hands over at once', async function (assert) {
+      storeSession(WANTED_SESSION);
+      serve(NO_GOOGLE, MINTS, {
+        'GET _secure-session': () => json(200, { data: {} }),
+      });
+      visitShell(`sign-in${returnAs(`${APP}/`, WANTED)}`);
+      await render(SignInPage);
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `${APP}/#loginToken=a-login-token` },
+      ]);
+      assert.strictEqual(
+        window.location.hash,
+        '',
+        'the page and the account are taken out of the address',
+      );
+      assert.strictEqual(
+        sessionStorage.getItem('boxel-secure-return-user'),
+        null,
+        'the account is forgotten once handed over',
+      );
+    });
+
+    test('a window signed in as another account offers the named account’s sign-in, filled in', async function (assert) {
+      storeSession(SESSION);
+      let server = serve(
+        NO_GOOGLE,
+        MINTS,
+        { 'GET _secure-session': () => json(200, { data: {} }) },
+        signsIn(json(201, { data: { attributes: WANTED_SESSION } })),
+      );
+      visitShell(`sign-in${returnAs(`${APP}/`, WANTED)}`);
+      await render(SignInPage);
+      await waitFor('[data-test-secure-other-account]');
+      assert
+        .dom('[data-test-secure-other-account]')
+        .includesText(SESSION.user)
+        .includesText(WANTED);
+      assert.dom('[data-test-secure-username]').hasValue(WANTED);
+      assert.deepEqual(navigations, [], 'nothing is handed over yet');
+      assert.false(
+        server.requests.some((r) => r.path === '_secure-session/login-token'),
+        'no login token is minted for the window’s own account',
+      );
+      await fillIn('[data-test-secure-password]', 'a-password');
+      await click('[data-test-secure-password-submit]');
+      await settled();
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `${APP}/#loginToken=a-login-token` },
+      ]);
+      assert.deepEqual(
+        JSON.parse(localStorage.getItem('boxel-secure-session') ?? 'null'),
+        WANTED_SESSION,
+        'the window keeps the named account’s session',
+      );
+    });
+
+    test('keeping the window’s account hands nothing over', async function (assert) {
+      storeSession(SESSION);
+      let server = serve(NO_GOOGLE, MINTS, {
+        'GET _secure-session': () => json(200, { data: {} }),
+      });
+      visitShell(`sign-in${returnAs(`${APP}/`, WANTED)}`);
+      await render(SignInPage);
+      await waitFor('[data-test-secure-sign-in-cancel]');
+      await click('[data-test-secure-sign-in-cancel]');
+      await waitFor('[data-test-secure-signed-in]');
+      assert.deepEqual(navigations, []);
+      assert.false(
+        server.requests.some((r) => r.path === '_secure-session/login-token'),
+      );
+      assert.strictEqual(sessionStorage.getItem('boxel-secure-return'), null);
+      assert.strictEqual(
+        sessionStorage.getItem('boxel-secure-return-user'),
+        null,
+      );
+    });
+
+    test('a sign-in as yet another account hands nothing over, and says so', async function (assert) {
+      let server = serve(NO_GOOGLE, signsIn(SIGNED_IN), MINTS);
+      visitShell(`sign-in${returnAs(`${APP}/`, WANTED)}`);
+      await render(SignInPage);
+      await waitFor('[data-test-secure-sign-in-form]');
+      assert
+        .dom('[data-test-secure-username]')
+        .hasValue(WANTED, 'a signed-out window fills in the named account');
+      await fillIn('[data-test-secure-username]', 'someone');
+      await fillIn('[data-test-secure-password]', 'a-password');
+      await click('[data-test-secure-password-submit]');
+      await waitFor('[data-test-secure-wrong-account]');
+      assert
+        .dom('[data-test-secure-wrong-account]')
+        .includesText(SESSION.user)
+        .includesText(WANTED);
+      assert.deepEqual(navigations, []);
+      assert.false(
+        server.requests.some((r) => r.path === '_secure-session/login-token'),
+        'no login token is minted',
+      );
+      await click('[data-test-secure-wrong-account-cancel]');
+      await waitFor('[data-test-secure-signed-in]');
+      assert.strictEqual(sessionStorage.getItem('boxel-secure-return'), null);
+    });
+
+    test('the named account survives the round trip to Google, and another account is not handed over', async function (assert) {
+      sessionStorage.setItem('boxel-secure-return', RETURN);
+      sessionStorage.setItem('boxel-secure-return-user', WANTED);
+      sessionStorage.setItem(
+        'boxel-secure-google-sign-in',
+        JSON.stringify({
+          state: 'google-state',
+          nonce: 'a-nonce',
+          codeVerifier: 'a-verifier',
+          resume: { client: 'window' },
+        }),
+      );
+      serve(MINTS, { 'POST _secure-session/google': () => SIGNED_IN });
+      visitShell('?state=google-state&code=a-code', '/secure/google-callback');
+      await render(GoogleCallback);
+      await waitFor('[data-test-secure-wrong-account]');
+      assert.deepEqual(navigations, []);
+    });
+
+    test('an account named in any other shape is ignored', async function (assert) {
+      storeSession(SESSION);
+      serve(NO_GOOGLE, MINTS, {
+        'GET _secure-session': () => json(200, { data: {} }),
+      });
+      visitShell(`sign-in${returnAs(`${APP}/`, 'wanted')}`);
+      await render(SignInPage);
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `${APP}/#loginToken=a-login-token` },
       ]);
     });
 

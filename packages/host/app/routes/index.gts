@@ -18,6 +18,12 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
 import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
+import {
+  framing,
+  peekSignInAs,
+  redirectedRecently,
+  stripSignInAs,
+} from '@cardstack/host/lib/secure-sign-in';
 import type { StackItemType } from '@cardstack/host/lib/stack-item';
 
 import type BillingService from '@cardstack/host/services/billing-service';
@@ -182,6 +188,34 @@ export default class Card extends Route {
     }
 
     let { operatorModeState, cardPath } = params;
+
+    // A link that names the account to sign in as (`?signInAs=`, from
+    // `boxel browse` on a profile with no Matrix token). Already that
+    // account, the app carries on and drops it. Signed in as another, the
+    // stored session isn't booted: <SecureSignIn> sends the user to the
+    // secure origin to sign in as the named account, and the login token it
+    // hands back switches accounts below. Signed out, <SecureSignIn> names the
+    // account in the same way. A frame is never navigated, and a page back
+    // from the secure origin without switching boots the stored account
+    // rather than going round again.
+    let signInAs = peekLoginToken() ? undefined : peekSignInAs();
+    if (signInAs && !this.didMatrixServiceStart) {
+      await this.matrixService.ready;
+      let storedUser = this.matrixService.persistedUserId;
+      if (
+        storedUser &&
+        storedUser !== signInAs &&
+        !framing.isFramed() &&
+        !redirectedRecently()
+      ) {
+        return;
+      }
+      if (storedUser) {
+        stripSignInAs();
+      }
+    } else if (signInAs) {
+      stripSignInAs();
+    }
 
     // Account switch: a loginToken next to a session stored in this browser
     // means "switch to the token's account" (`boxel browse --profile B` against
