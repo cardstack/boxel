@@ -9,6 +9,7 @@ const {
 } = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
 import { buildMintRunToken, mintRunToken } from '../../lib/run-token.ts';
+import { buildCreateOAuthTabAuth } from '../../lib/oauth-tab-token.ts';
 import type {
   AccountStanding,
   AutomationAdmissionChecks,
@@ -502,6 +503,7 @@ export async function ensureMatrixAdminUser(): Promise<void> {
 }
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
+export const testCreateOAuthTabAuth = buildCreateOAuthTabAuth(realmSecretSeed);
 
 const PRERENDER_POOL_CAPACITY_OVERRIDE_ENV_KEYS = [
   'PRERENDER_PAGE_POOL_MIN',
@@ -1736,6 +1738,7 @@ export async function createRealm({
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
+      createOAuthTabAuth: testCreateOAuthTabAuth,
       mintRunToken: buildMintRunToken(realmSecretSeed),
       automationAdmissionChecks: testAutomationAdmissionChecks,
       mediaCacheAdapter,
@@ -1965,6 +1968,7 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    createOAuthTabAuth: testCreateOAuthTabAuth,
     mintRunToken: buildMintRunToken(realmSecretSeed),
     automationAdmissionChecks: testAutomationAdmissionChecks,
     // The indexing worker persists declared captures when a store is
@@ -2189,6 +2193,7 @@ export async function runTestRealmServerWithRealms({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    createOAuthTabAuth: testCreateOAuthTabAuth,
     mintRunToken: buildMintRunToken(realmSecretSeed),
     automationAdmissionChecks: testAutomationAdmissionChecks,
     mediaCacheAdapter,
@@ -2871,6 +2876,7 @@ type InternalPermissionedRealmSetupOptions = {
   linkShapePolicy?: LinkShapePolicy;
   secureOriginURL?: URL;
   cardDocumentCache?: CardDocumentCache;
+  oauthProvider?: ConstructorParameters<typeof RealmServer>[0]['oauthProvider'];
 };
 
 async function startPermissionedRealmFixture(
@@ -2895,6 +2901,7 @@ async function startPermissionedRealmFixture(
     linkShapePolicy,
     secureOriginURL,
     cardDocumentCache,
+    oauthProvider,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2969,6 +2976,7 @@ async function startPermissionedRealmFixture(
     linkShapePolicy,
     secureOriginURL,
     cardDocumentCache,
+    ...(oauthProvider ? { oauthProvider } : {}),
     ...(published ? { published: true as const } : {}),
     ...(history ? { history } : {}),
   });
@@ -3045,6 +3053,7 @@ export function setupPermissionedRealm(
     linkShapePolicy,
     secureOriginURL,
     cardDocumentCache,
+    oauthProvider,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -3080,6 +3089,12 @@ export function setupPermissionedRealm(
     linkShapePolicy?: LinkShapePolicy;
     // Gives the server a secure origin (see `lib/secure-origin.ts`).
     secureOriginURL?: URL;
+    // Turns Boxel's OAuth provider on (see `lib/oauth-provider/`), which
+    // needs a secure origin too. The realm is then one of the Boxel API's
+    // controllers.
+    oauthProvider?: ConstructorParameters<
+      typeof RealmServer
+    >[0]['oauthProvider'];
     // Inject a cache configured for the test (e.g. one that holds its
     // computation open, so a second request is guaranteed to join rather than
     // race). Omit for the production default.
@@ -3121,6 +3136,7 @@ export function setupPermissionedRealm(
         linkShapePolicy,
         secureOriginURL,
         cardDocumentCache,
+        oauthProvider,
         history,
       });
       testRealmServer = server;
@@ -3181,6 +3197,8 @@ function permissionedRealmTemplateCacheKey(
     // or server and leaves no trace in the template database, so keying on
     // any of them would only fragment the template cache.
     prerenderer: prerendererCacheKeyPart(options.prerenderer),
+    // The provider's startup may write rows of its own.
+    oauthProvider: Boolean(options.oauthProvider),
   });
 }
 

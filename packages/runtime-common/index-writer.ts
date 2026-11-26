@@ -918,6 +918,13 @@ export class Batch {
     return this.#realmHasHostURL;
   }
 
+  // The URL this batch's renders are made against, which each rendering it
+  // writes records in `prerendered_html.rendered_against_url` (ADR 033 §1.8).
+  // Every render is made against the realm's URL.
+  get renderedAgainstURL(): string {
+    return this.realmURL.href;
+  }
+
   // The generation this batch stages its rows under (see
   // `#provisionalGeneration`). For work that runs before the pass commits.
   // Committed state is compared against `committedGeneration` instead.
@@ -2289,6 +2296,7 @@ export class Batch {
           error_doc: null,
           diagnostics,
           captures: entry.captures ?? null,
+          rendered_against_url: this.renderedAgainstURL,
         };
         break;
       }
@@ -2450,6 +2458,9 @@ export class Batch {
           // artifact — its objects still exist in the MediaCache and the
           // preserved HTML may reference them by name.
           captures: production?.captures ?? null,
+          // The kept HTML names the URL its own render was made against, so
+          // the row keeps that URL with it.
+          rendered_against_url: production?.rendered_against_url ?? null,
         };
         break;
       }
@@ -3689,7 +3700,10 @@ export class Batch {
     let stored = await prior();
     if (
       stored &&
-      hostRouteTypeRefs(rules).some((ref) => !reads.has(typeLookupKey(ref)))
+      hostRouteTypeRefs(rules, {
+        realmURL: this.realmURL,
+        virtualNetwork: this.virtualNetwork,
+      }).some((ref) => !reads.has(typeLookupKey(ref)))
     ) {
       return stored;
     }
@@ -3709,6 +3723,7 @@ export class Batch {
     }
     let validation = validateHostRoutes(rules, {
       realmURL: this.realmURL,
+      virtualNetwork: this.virtualNetwork,
       lookupType: (ref) => {
         let key = typeLookupKey(ref);
         return key in types ? (types[key] ?? undefined) : 'unavailable';

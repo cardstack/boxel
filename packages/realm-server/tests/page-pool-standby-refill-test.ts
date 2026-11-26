@@ -26,18 +26,20 @@ interface BrowserStubOptions {
   // Gate that every `browser.createBrowserContext` call awaits. Tests
   // toggle this to make standby refill arbitrarily slow.
   gate: () => Promise<void>;
-  onContextCreated?: () => void;
-  onContextClosed?: () => void;
+  // Gate that every `context.newPage` call awaits, after the context exists.
+  newPageGate?: () => Promise<void>;
+  onContextCreated?: (context: unknown) => void;
+  onContextClosed?: (context: unknown) => void;
 }
 
 function makeBrowserStub(opts: BrowserStubOptions) {
   let browser = {
     async createBrowserContext() {
       await opts.gate();
-      opts.onContextCreated?.();
       let context: any;
       context = {
         async newPage() {
+          await opts.newPageGate?.();
           return {
             async goto() {},
             async waitForFunction() {
@@ -55,9 +57,10 @@ function makeBrowserStub(opts: BrowserStubOptions) {
           };
         },
         async close() {
-          opts.onContextClosed?.();
+          opts.onContextClosed?.(context);
         },
       };
+      opts.onContextCreated?.(context);
       return context;
     },
   };
@@ -127,6 +130,8 @@ module(basename(import.meta.filename), function (hooks) {
     maxPages: number;
     browserManager: any;
     disableStandbyRefill?: boolean;
+    standbyCreationTimeoutMs?: number;
+    standbyRefillWaitMs?: number;
   }): PagePool {
     let pool = new PagePool({
       maxPages: opts.maxPages,
@@ -136,6 +141,8 @@ module(basename(import.meta.filename), function (hooks) {
       standbyTimeoutMs: 500,
       disableFileAdmission: true,
       disableStandbyRefill: opts.disableStandbyRefill ?? false,
+      standbyCreationTimeoutMs: opts.standbyCreationTimeoutMs,
+      standbyRefillWaitMs: opts.standbyRefillWaitMs,
     });
     pools.push(pool);
     return pool;
@@ -213,16 +220,6 @@ module(basename(import.meta.filename), function (hooks) {
     result.release();
   });
 
-  // `closeAll` awaiting the in-flight refill is a contract rather than
-  // teardown hygiene, because a caller can be closing the pool in order to
-  // replace the browser under it: the prerender server's host-shell recycle
-  // does exactly that, on a boot where the initial warm is usually still
-  // running. If `closeAll` returned first, the browser would be replaced while
-  // a standby was still being created, and that standby would land in the live
-  // standby set holding a page on a browser that no longer exists — a tab a
-  // later `getPage` can commandeer, and a `#creatingStandbys` decrement below
-  // the zero `closeAll` resets, which under-reports pool occupancy for the
-  // life of the process.
   // The refill takes one generation snapshot and threads it downstream. It has
   // to, because it yields between taking it and reaching the retry loop: a
   // close landing in that window has already bumped the counter, so a second
@@ -291,7 +288,18 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('closeAll waits for an in-flight standby refill and closes what it created', async function (assert) {
+  // A caller can close the pool in order to replace the browser under it: the
+  // prerender server's host-shell recycle does that on a boot where the
+  // initial warm is usually still running, and the restart of a browser that
+  // stopped answering does it while a creation is stuck on that browser. A
+  // standby whose creation finished after the close would land in the live
+  // standby set holding a page on a browser that no longer exists, and its
+  // `#creatingStandbys` decrement would go below the zero `closeAll` resets.
+  // Waiting for the creation to end avoids both, but on a browser that stopped
+  // answering it holds the restart for the full creation deadline. So
+  // `closeAll` abandons the creation: the count is released before the reset,
+  // and whatever the creation makes later is closed.
+  test('closeAll abandons an in-flight standby creation, and closes what it makes later', async function (assert) {
     let gate = makeManualGate();
     let created = 0;
     let closed = 0;
@@ -312,28 +320,28 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(created, 0, 'no context exists yet');
 
-    let closeAllSettled = false;
-    let closeAll = pool.closeAll().then(() => {
-      closeAllSettled = true;
-    });
-    // Everything else `closeAll` does resolves within a few turns of the
-    // event loop against an empty pool, so still-pending here isolates the
-    // await being asserted.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.false(
-      closeAllSettled,
-      'closeAll is still pending while a standby is mid-creation',
+    // The creation is still parked on its browser call, as it is on a
+    // browser that has stopped answering, the usual reason to close the pool.
+    // closeAll must not wait for it.
+    await pool.closeAll();
+    await refill;
+    assert.strictEqual(
+      gate.waiterCount(),
+      1,
+      'closeAll settled while the creation was still waiting on its browser call',
     );
 
+    // The browser call answers after the close. The creation finishes, and
+    // what it made is closed instead of joining the closed pool's standbys.
     gate.unblockAll();
-    await closeAll;
-    await refill;
-
-    assert.true(created > 0, 'the refill created at least one context');
+    await waitUntil(
+      () => created > 0 && closed === created,
+      'the late standby context to be closed',
+    );
     assert.strictEqual(
       closed,
       created,
-      'every context the refill created was closed by closeAll',
+      'every context the abandoned creation made was closed',
     );
   });
 
@@ -434,5 +442,144 @@ module(basename(import.meta.filename), function (hooks) {
     }
     held.release();
     gate.unblockAll();
+  });
+
+  // Without a deadline, a CDP call inside a standby creation that never
+  // answers holds the refill open for the life of the process:
+  // `#creatingStandbys` stays at one, the refill never reports a failure,
+  // and a caller with no tab parks until its own abort. Every render on the
+  // server then fails by timeout while the server keeps reporting itself
+  // healthy. The creation deadline
+  // turns that hang into a refill failure, which the caller answers by
+  // throwing, and a throw from a render makes the Prerenderer restart the
+  // browser.
+  test('a standby creation that never finishes fails the refill, and a caller with no tab throws instead of waiting for its abort', async function (assert) {
+    let gate = makeManualGate();
+    let browserManager = makeBrowserStub({ gate: gate.gate });
+    let pool = makePool({
+      maxPages: 1,
+      browserManager,
+      standbyCreationTimeoutMs: 100,
+      standbyRefillWaitMs: 50,
+    });
+    gate.block();
+
+    let abortAfterMs = 5000;
+    let controller = new AbortController();
+    let abortTimer = setTimeout(() => controller.abort(), abortAfterMs);
+    let start = Date.now();
+    try {
+      await pool.getPage('A', 'file', { signal: controller.signal });
+      assert.ok(false, 'getPage should not get a tab while creation hangs');
+    } catch (e) {
+      let elapsed = Date.now() - start;
+      assert.false(
+        controller.signal.aborted,
+        `getPage failed before its own abort (after ${elapsed}ms)`,
+      );
+      assert.true(
+        /No standby page available for prerender/.test(String(e)),
+        `getPage threw the no-tab error that restarts the browser (got: ${String(e)})`,
+      );
+    } finally {
+      clearTimeout(abortTimer);
+      gate.unblockAll();
+    }
+  });
+
+  // Puppeteer's `context.newPage()` waits, with no timeout, for Chrome to
+  // report a URL for the new page target. When Chrome never does, the context
+  // exists and the page never arrives. That hang is one step later than the
+  // context creation the test above holds.
+  test('a standby creation stuck in newPage fails the refill, and a caller with no tab throws instead of waiting for its abort', async function (assert) {
+    let contextGate = makeManualGate();
+    let pageGate = makeManualGate();
+    let created = 0;
+    let browserManager = makeBrowserStub({
+      gate: contextGate.gate,
+      newPageGate: pageGate.gate,
+      onContextCreated: () => created++,
+    });
+    let pool = makePool({
+      maxPages: 1,
+      browserManager,
+      standbyCreationTimeoutMs: 100,
+      standbyRefillWaitMs: 50,
+    });
+    pageGate.block();
+
+    let controller = new AbortController();
+    let abortTimer = setTimeout(() => controller.abort(), 5000);
+    let start = Date.now();
+    try {
+      await pool.getPage('A', 'file', { signal: controller.signal });
+      assert.ok(false, 'getPage should not get a tab while newPage hangs');
+    } catch (e) {
+      let elapsed = Date.now() - start;
+      assert.true(created > 0, 'the context was created before newPage hung');
+      assert.true(
+        pageGate.waiterCount() > 0,
+        'a creation is still waiting in newPage',
+      );
+      assert.false(
+        controller.signal.aborted,
+        `getPage failed before its own abort (after ${elapsed}ms)`,
+      );
+      assert.true(
+        /No standby page available for prerender/.test(String(e)),
+        `getPage threw the no-tab error that restarts the browser (got: ${String(e)})`,
+      );
+    } finally {
+      clearTimeout(abortTimer);
+      pageGate.unblockAll();
+    }
+  });
+
+  test('a standby creation that finishes after its deadline is closed and never joins the pool', async function (assert) {
+    let gate = makeManualGate();
+    let contexts: unknown[] = [];
+    let closedContexts = new Set<unknown>();
+    let browserManager = makeBrowserStub({
+      gate: gate.gate,
+      onContextCreated: (context) => contexts.push(context),
+      onContextClosed: (context) => closedContexts.add(context),
+    });
+    let pool = makePool({
+      maxPages: 1,
+      browserManager,
+      standbyCreationTimeoutMs: 100,
+    });
+    gate.block();
+
+    // The refill settles once its creation passes the deadline, though the
+    // browser call it made is still unanswered.
+    await pool.warmStandbys();
+    assert.strictEqual(
+      gate.waiterCount(),
+      1,
+      'the abandoned creation is still waiting on its browser call',
+    );
+
+    // The browser answers late. The creation finishes, and what it made is
+    // closed instead of joining the pool.
+    gate.unblockAll();
+    await waitUntil(
+      () => contexts.length > 0 && closedContexts.has(contexts[0]),
+      'the late standby context to be closed',
+    );
+    let abandoned = contexts[0];
+
+    // The pool still makes tabs once the browser answers. The refill may make
+    // a spare standby beside the one getPage takes, so the test identifies
+    // the tab by its context rather than by counting creations.
+    let result = await pool.getPage('A');
+    let context = result.page.browserContext();
+    assert.notStrictEqual(
+      context,
+      abandoned,
+      'getPage got a tab from a new creation, not from the abandoned one',
+    );
+    assert.false(closedContexts.has(context), 'the new tab is still open');
+    result.release();
   });
 });

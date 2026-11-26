@@ -42,29 +42,43 @@ export function currentAppPage(): string {
 }
 
 // Whether this page opens on the workspace chooser once the session is up.
-// The index route opens it for the app's root page when the page names no
-// card and its operator-mode state, if any, is an interact submode with no
-// stacks (see `routes/index.gts`).
+// The index route reopens it whenever the page's operator-mode state says it
+// is open, and opens it for the app's root page when the page names no card
+// and its state, if any, is an interact submode with no stacks (see
+// `routes/index.gts`). The boot script in `index.html` repeats this check,
+// since it runs before the app's modules: keep the two in step.
 export function landsOnWorkspaceChooser(): boolean {
   let { pathname, search } = window.location;
   let params = new URLSearchParams(search);
+  let serialized = params.get('operatorModeState');
+  let state:
+    | { submode?: unknown; stacks?: unknown; workspaceChooserOpened?: unknown }
+    | null
+    | undefined;
+  if (serialized) {
+    try {
+      state = JSON.parse(serialized);
+    } catch {
+      return false;
+    }
+  }
+  if (state?.workspaceChooserOpened === true) {
+    return true;
+  }
+  // A path the route can't resolve to a card also lands on the chooser, but
+  // that can't be known before the app boots.
   if (pathname !== ENV.rootURL || params.has('cardPath')) {
     return false;
   }
-  let serialized = params.get('operatorModeState');
-  if (!serialized) {
+  // The route takes a null state as no state.
+  if (!state) {
     return true;
   }
-  try {
-    let state = JSON.parse(serialized);
-    return (
-      state?.submode === Submodes.Interact &&
-      Array.isArray(state.stacks) &&
-      state.stacks.length === 0
-    );
-  } catch {
-    return false;
-  }
+  return (
+    state?.submode === Submodes.Interact &&
+    Array.isArray(state.stacks) &&
+    state.stacks.length === 0
+  );
 }
 
 // Where a signed-out app sends the user to sign in.

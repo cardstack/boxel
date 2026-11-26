@@ -9,7 +9,7 @@ import { isTesting } from '@embroider/macros';
 import window from 'ember-window-mock';
 
 import { SessionLocalStorageKey } from './local-storage-keys';
-import { realmSessionsAreInMemory } from './realm-sessions';
+import { heldOAuthTabTokens, realmSessionsAreInMemory } from './realm-sessions';
 
 // Structural so tests can stub without the full service surface.
 export interface AuthServiceWorkerDeps {
@@ -80,9 +80,14 @@ export function createTokenRequestHandler(deps: AuthServiceWorkerDeps) {
     }
     let requestURL: string | undefined = event.data.requestURL;
 
-    let { realmURL, token } = resolveTokenForRequestURL(requestURL);
+    let { realmURL, token, forThisRequestOnly } =
+      resolveTokenForRequestURL(requestURL);
     if (realmURL && token) {
-      port.postMessage({ realmURL, token });
+      port.postMessage(
+        forThisRequestOnly
+          ? { realmURL, token, forThisRequestOnly }
+          : { realmURL, token },
+      );
       return;
     }
 
@@ -125,7 +130,7 @@ export function syncTokenToServiceWorker(
   realmURL: string,
   token: string | undefined,
 ): void {
-  // A tab holding its sessions in memory never hands one to the worker, but
+  // A tab holding its sessions in memory never syncs one to the worker, but
   // still tells it to forget a session it drops.
   if (
     !isServiceWorkerSupported() ||
@@ -186,7 +191,7 @@ export function clearServiceWorkerTokens(): void {
   controller.postMessage({ type: 'clear-tokens' });
 }
 
-// A tab holding its sessions in memory hands none of them to the service
+// A tab holding its sessions in memory syncs none of them to the service
 // worker, which keeps them past the tab's visit.
 function readTokensFromStorage(): Record<string, string> | undefined {
   if (realmSessionsAreInMemory()) {
@@ -203,18 +208,34 @@ function readTokensFromStorage(): Record<string, string> | undefined {
   return undefined;
 }
 
-// Find the longest realm-URL prefix in localStorage that matches the given
-// request URL. Returns `undefined` for both fields when nothing matches —
-// the SW will then preserve its existing pass-through behavior for that
-// request.
+// The sessions the tab answers the worker's ask with. A tab holding its
+// sessions in memory answers only with tab tokens, and only for the request
+// asked about: the worker uses the token for that request and doesn't keep
+// it (`forThisRequestOnly`).
+function tokensToAnswerWith(): {
+  tokens?: Record<string, string>;
+  forThisRequestOnly?: true;
+} {
+  if (realmSessionsAreInMemory()) {
+    let tokens = heldOAuthTabTokens();
+    return tokens ? { tokens, forThisRequestOnly: true } : {};
+  }
+  return { tokens: readTokensFromStorage() };
+}
+
+// Find the longest realm-URL prefix among the tab's sessions that matches
+// the given request URL. Returns `undefined` for both fields when nothing
+// matches — the SW will then preserve its existing pass-through behavior for
+// that request.
 function resolveTokenForRequestURL(requestURL: string | undefined): {
   realmURL?: string;
   token?: string;
+  forThisRequestOnly?: true;
 } {
   if (!requestURL) {
     return {};
   }
-  let tokens = readTokensFromStorage();
+  let { tokens, forThisRequestOnly } = tokensToAnswerWith();
   if (!tokens) {
     return {};
   }
@@ -230,5 +251,9 @@ function resolveTokenForRequestURL(requestURL: string | undefined): {
   if (!bestRealmURL) {
     return {};
   }
-  return { realmURL: bestRealmURL, token: tokens[bestRealmURL] };
+  return {
+    realmURL: bestRealmURL,
+    token: tokens[bestRealmURL],
+    ...(forThisRequestOnly ? { forThisRequestOnly } : {}),
+  };
 }

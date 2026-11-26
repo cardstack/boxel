@@ -1068,8 +1068,10 @@ export class RealmServer {
       // of every route that looks a realm up (ADR 033 §1.2).
       .use(resolveHostURLs(this.hostURLResolver))
       // Then the rest of the request is translated to the realm's URL, and
-      // its response back to the host URL it came in on (ADR 033 §1.5).
-      .use(translateAtHostURLs())
+      // its response back to the host URL it came in on (ADR 033 §1.5). On
+      // the realm's own URL, stored HTML that names a URL it was rendered
+      // against names the realm's URL instead (ADR 033 §1.8).
+      .use(translateAtHostURLs(this.hostURLResolver))
       .use(
         leaveCORSToOAuthProvider(
           cors({

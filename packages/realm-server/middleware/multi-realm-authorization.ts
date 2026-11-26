@@ -49,8 +49,11 @@ import {
 } from '../lib/oauth-provider/boxel-api.ts';
 import {
   resolveOAuthAccessToken,
+  resolveOAuthGrant,
   type OAuthCaller,
 } from '../lib/oauth-provider/lookup.ts';
+import { verifyOAuthTabToken } from '../lib/oauth-tab-token.ts';
+import { oauthTabTokenOf } from '@cardstack/runtime-common/oauth-tab-token';
 import {
   retrieveDiagnosticSessionClaim,
   retrieveTokenClaim,
@@ -95,6 +98,10 @@ export type MultiRealmAuthorizationState = {
   // counts the search against that caller's budget. These are the request's
   // only grant candidates.
   anonymousCallers?: Map<string, AnonymousCaller>;
+  // Set when the request was judged as an OAuth caller, by an access token or
+  // a tab token. Such a request is never a render's, whatever headers it
+  // carries.
+  oauthCaller?: true;
 };
 
 const MULTI_REALM_AUTH_STATE = 'multiRealmAuthorization';
@@ -226,6 +233,35 @@ export function multiRealmAuthorization(
         let result = await resolveOAuthAccessToken(
           boxelApi.dbAdapter,
           presented.token,
+          boxelApi.resource.id,
+        );
+        if (!result.ok) {
+          refuseOAuthToken(ctxt, boxelApi);
+          return;
+        }
+        if (!admitOAuthCaller(ctxt, boxelApi, result.caller)) {
+          return;
+        }
+        oauthCaller = result.caller;
+      }
+      // A tab token arrives as a session does, and is judged as the OAuth
+      // caller whose grant it names, after the same grant checks. Without the
+      // Boxel API it fails as a session on its signature.
+      let tabToken =
+        presented.kind === 'session'
+          ? oauthTabTokenOf(ctxt.get('Authorization'))
+          : undefined;
+      if (tabToken) {
+        let verified = verifyOAuthTabToken(tabToken, realmSecretSeed);
+        if (!verified.ok) {
+          log.info(`tab token refused: ${verified.reason}, Boxel API`);
+          refuseOAuthToken(ctxt, boxelApi);
+          return;
+        }
+        let { grantId, user, scopes } = verified.context;
+        let result = await resolveOAuthGrant(
+          boxelApi.dbAdapter,
+          { grantId, user, scopes },
           boxelApi.resource.id,
         );
         if (!result.ok) {
@@ -452,6 +488,7 @@ export function multiRealmAuthorization(
       grantCandidates,
       ...(principal === undefined ? {} : { principal }),
       ...(anonymousCallers ? { anonymousCallers } : {}),
+      ...(oauthCaller ? { oauthCaller: true as const } : {}),
     } satisfies MultiRealmAuthorizationState;
 
     await next();

@@ -441,7 +441,7 @@ export default class GetStarted extends Component<Signature> {
     {{yield this.toggleState to='head'}}
     {{#if this.toggleState.isOpen}}
       <section
-        class='get-started'
+        class={{cn 'get-started' is-folded=(unless this.isExpanded true)}}
         id={{this.panelId}}
         aria-labelledby={{this.titleId}}
         data-test-get-started
@@ -449,55 +449,66 @@ export default class GetStarted extends Component<Signature> {
       >
         <div class='get-started-body'>
           <header class='get-started-head'>
-            <h2 class='get-started-title' id={{this.titleId}}>Get started</h2>
-            <ProgressBar
-              class='get-started-progress'
-              @value={{this.doneCount}}
-              @max={{this.steps.length}}
-              aria-labelledby={{this.titleId}}
-            />
-            <p class='get-started-count' data-test-get-started-count>
-              {{this.doneCount}}
-              of
-              {{this.steps.length}}
-              done
-              {{#unless this.isExpanded}}
-                {{#if this.nextStep}}
-                  · Next:
-                  {{this.nextStep.title}}
-                {{/if}}
-              {{/unless}}
-            </p>
-            <Button
-              class='get-started-dismiss'
-              @tone='danger'
-              @appearance='link'
-              @size='s'
-              @busy={{this.dismissTask.isRunning}}
-              aria-describedby={{if
-                (eq this.failedControl 'dismiss')
-                this.errorId
-              }}
-              {{on 'click' this.dismissTask.perform}}
-              {{this.focusIfNext 'dismiss'}}
-              data-test-get-started-dismiss
-            >
-              Dismiss
-            </Button>
-            {{! The minimize button sits at the far end. Its tooltip wraps it,
-                so this wrapper is what the layout places. }}
-            <div class='get-started-actions'>
-              <IconButton
-                @icon={{if this.isExpanded ChevronUp ChevronDown}}
-                @label={{if this.isExpanded 'Minimize steps' 'Expand steps'}}
-                @tooltip={{if this.isExpanded 'Minimize steps' 'Expand steps'}}
-                @appearance='plain'
-                @size='s'
-                aria-expanded={{if this.isExpanded 'true' 'false'}}
-                aria-controls={{if this.isExpanded this.stepsId}}
-                {{on 'click' this.toggleExpanded}}
-                data-test-get-started-toggle
+            {{! The title, progress and count wrap among themselves, so a long
+                count drops under the title while Dismiss and the minimize
+                button stay at the end of the row. }}
+            <div class='get-started-summary'>
+              <h2 class='get-started-title' id={{this.titleId}}>Get started</h2>
+              <ProgressBar
+                class='get-started-progress'
+                @value={{this.doneCount}}
+                @max={{this.steps.length}}
+                aria-labelledby={{this.titleId}}
               />
+              <p class='get-started-count' data-test-get-started-count>
+                {{this.doneCount}}
+                of
+                {{this.steps.length}}
+                done
+                {{#unless this.isExpanded}}
+                  {{#if this.nextStep}}
+                    · Next:
+                    {{this.nextStep.title}}
+                  {{/if}}
+                {{/unless}}
+              </p>
+            </div>
+            <div class='get-started-controls'>
+              <Button
+                class='get-started-dismiss'
+                @tone='danger'
+                @appearance='link'
+                @size='s'
+                @busy={{this.dismissTask.isRunning}}
+                aria-describedby={{if
+                  (eq this.failedControl 'dismiss')
+                  this.errorId
+                }}
+                {{on 'click' this.dismissTask.perform}}
+                {{this.focusIfNext 'dismiss'}}
+                data-test-get-started-dismiss
+              >
+                Dismiss
+              </Button>
+              {{! The minimize button sits at the far end. Its tooltip wraps it,
+                  so this wrapper is what the layout places. }}
+              <div class='get-started-actions'>
+                <IconButton
+                  @icon={{if this.isExpanded ChevronUp ChevronDown}}
+                  @label={{if this.isExpanded 'Minimize steps' 'Expand steps'}}
+                  @tooltip={{if
+                    this.isExpanded
+                    'Minimize steps'
+                    'Expand steps'
+                  }}
+                  @appearance='plain'
+                  @size='s'
+                  aria-expanded={{if this.isExpanded 'true' 'false'}}
+                  aria-controls={{if this.isExpanded this.stepsId}}
+                  {{on 'click' this.toggleExpanded}}
+                  data-test-get-started-toggle
+                />
+              </div>
             </div>
             {{#if (eq this.failedControl 'dismiss')}}
               <p
@@ -679,6 +690,22 @@ export default class GetStarted extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xs) var(--boxel-sp);
       }
+      /* A zero basis keeps the summary from pushing the controls onto a
+         line of their own; it takes the room they leave and wraps inside. */
+      .get-started-summary {
+        display: flex;
+        flex: 1 1 0;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xs) var(--boxel-sp);
+        min-width: 0;
+      }
+      .get-started-controls {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: var(--boxel-sp);
+      }
       .get-started-title {
         margin: 0;
         font-size: var(--boxel-font-size);
@@ -691,10 +718,6 @@ export default class GetStarted extends Component<Signature> {
         margin: 0;
         font-size: var(--boxel-font-size-sm);
         color: var(--muted-foreground);
-      }
-      /* Dismiss and the minimize button sit together at the far end. */
-      .get-started-dismiss {
-        margin-inline-start: auto;
       }
       .get-started-actions {
         display: flex;
@@ -770,57 +793,46 @@ export default class GetStarted extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
         font-style: italic;
       }
+      /* Where each part sits once the box stacks, below. They place nothing
+         until the body is a grid. */
+      .get-started-title {
+        grid-area: title;
+      }
+      .get-started-dismiss {
+        grid-area: dismiss;
+      }
+      .get-started-actions {
+        grid-area: actions;
+      }
+      /* The rest take a whole row each, in DOM order, and only while they
+         show, so a missing error or folded steps leave no empty row. */
+      .get-started-progress,
+      .get-started-count,
+      .get-started-error,
+      .get-started-steps {
+        grid-column: 1 / -1;
+      }
       /* Narrow, the box stacks: the title row with Dismiss and the
          minimize button, the progress bar across the box, the count, a
          failed dismissal's error when there is one, then the steps. The
          header's items join the body's grid for that, in their DOM order
-         so Tab follows what's on screen. */
+         so Tab follows what's on screen. The folded layout below repeats
+         this grid, so keep the two in step. */
       @container get-started (max-width: 30rem) {
         .get-started-body {
           display: grid;
           grid-template-columns: minmax(0, 1fr) auto auto;
-          grid-template-areas:
-            'title dismiss actions'
-            'progress progress progress'
-            'count count count'
-            'steps steps steps';
+          grid-template-areas: 'title dismiss actions';
           align-items: center;
           gap: var(--boxel-sp-xs);
         }
-        .get-started-head {
+        .get-started-head,
+        .get-started-summary,
+        .get-started-controls {
           display: contents;
         }
-        .get-started-steps {
-          grid-area: steps;
-        }
-        .get-started-title {
-          grid-area: title;
-        }
-        .get-started-actions {
-          grid-area: actions;
-        }
         .get-started-progress {
-          grid-area: progress;
           width: 100%;
-        }
-        .get-started-count {
-          grid-area: count;
-        }
-        .get-started-dismiss {
-          grid-area: dismiss;
-        }
-        .get-started-error {
-          grid-area: error;
-        }
-        /* An empty row would still add a gap, so the row exists only while
-           an error shows. Keep this map in step with the one above. */
-        .get-started-body:has(.get-started-error) {
-          grid-template-areas:
-            'title dismiss actions'
-            'progress progress progress'
-            'count count count'
-            'error error error'
-            'steps steps steps';
         }
         .get-started-step {
           grid-template-columns: var(--_get-started-tick-size) minmax(0, 1fr);
@@ -831,6 +843,27 @@ export default class GetStarted extends Component<Signature> {
         .step-action {
           grid-column: 1 / -1;
           justify-self: end;
+        }
+      }
+      /* Folded, the box stacks the same way until it is wide enough for the
+         title, progress, buttons and the count with the longest next step to
+         share one line. Narrower, the count would wrap beside a short
+         progress bar. Its grid repeats the narrow one above. */
+      @container get-started (max-width: 48rem) {
+        .get-started.is-folded .get-started-body {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto auto;
+          grid-template-areas: 'title dismiss actions';
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+        }
+        .get-started.is-folded .get-started-head,
+        .get-started.is-folded .get-started-summary,
+        .get-started.is-folded .get-started-controls {
+          display: contents;
+        }
+        .get-started.is-folded .get-started-progress {
+          width: 100%;
         }
       }
     </style>

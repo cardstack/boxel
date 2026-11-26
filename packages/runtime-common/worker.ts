@@ -32,6 +32,7 @@ import type { OAuthProviderCleanup } from './tasks/oauth-provider-cleanup.ts';
 import type { AIBatchSettlement } from './ai-batches.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs, MintRunToken } from './tasks/index.ts';
+import type { CreateOAuthTabAuth } from './oauth-tab-token.ts';
 import type { AutomationAdmissionChecks } from './automation-admission.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { heartbeatJob } from './queue.ts';
@@ -233,6 +234,7 @@ export class Worker {
   #skipPrerenderHtmlRealms: string[];
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #createPrerenderAuth: CreatePrerenderAuth;
+  #createOAuthTabAuth: CreateOAuthTabAuth | undefined;
   #mintRunToken: MintRunToken | undefined;
   #automationAdmissionChecks: AutomationAdmissionChecks | undefined;
   #meteredCharges: MeteredCharges | undefined;
@@ -254,6 +256,7 @@ export class Worker {
     reportRealmEvent,
     prerenderer,
     createPrerenderAuth,
+    createOAuthTabAuth,
     mintRunToken,
     automationAdmissionChecks,
     indexJobsOnly,
@@ -286,6 +289,8 @@ export class Worker {
     // configured (media-cache tasks then no-op).
     mediaCacheAdapter?: MediaCacheAdapter;
     createPrerenderAuth: CreatePrerenderAuth;
+    // See `TaskArgs.createOAuthTabAuth`.
+    createOAuthTabAuth?: CreateOAuthTabAuth;
     // See `TaskArgs.mintRunToken`.
     mintRunToken?: MintRunToken;
     // See `TaskArgs.automationAdmissionChecks`.
@@ -311,6 +316,7 @@ export class Worker {
     this.#queuePublisher = queuePublisher;
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
+    this.#createOAuthTabAuth = createOAuthTabAuth;
     this.#mintRunToken = mintRunToken;
     this.#automationAdmissionChecks = automationAdmissionChecks;
     this.#indexJobsOnly = indexJobsOnly ?? false;
@@ -344,6 +350,7 @@ export class Worker {
       reportProgress: this.reportProgress.bind(this),
       reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
+      createOAuthTabAuth: this.#createOAuthTabAuth,
       mintRunToken: this.#mintRunToken,
       automationAdmissionChecks: this.#automationAdmissionChecks,
       mediaCacheAdapter: this.#mediaCacheAdapter,
@@ -416,6 +423,9 @@ export class Worker {
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
       capture: () =>
         this.#queue.register(`capture`, Tasks['capture'](taskArgs)),
+      // An OAuth app's capture, which the same task renders with tab tokens.
+      'capture-oauth': () =>
+        this.#queue.register(`capture-oauth`, Tasks['capture'](taskArgs)),
       // The job type's former names. Workers roll before realm servers, and a
       // realm server still on a previous revision publishes captures under
       // them; the args are wire-identical, so the same task claims them.
