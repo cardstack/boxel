@@ -4030,53 +4030,87 @@ module('Acceptance | automation view', function (hooks) {
         );
     });
 
-    test('a run’s event during the key check still shows the key approvals', async function (assert) {
+    test('a run’s event during the key check doesn’t drop the check', async function (assert) {
+      let waitingSlot = {
+        slot: 'userKey',
+        kind: 'userKey',
+        state: 'waiting',
+        viewerIsKeyOwner: true,
+        keyOwner: ME,
+        fix: 'approve',
+      };
       answer = {
         status: 200,
-        attributes: withApprovals([
-          operationWith('list', [
-            {
-              slot: 'userKey',
-              kind: 'userKey',
-              state: 'waiting',
-              viewerIsKeyOwner: true,
-              keyOwner: ME,
-              fix: 'approve',
-            },
-          ]),
-        ]),
+        attributes: withApprovals([operationWith('list', [waitingSlot])]),
       };
-      let release!: () => void;
-      holdKeyedReads = new Promise<void>((resolve) => (release = resolve));
       await openIsolated();
-      await waitUntil(() => askedKeyApprovals.includes(true), {
-        timeout: 10000,
-      });
-      // A run moves while the slow key check is still out.
-      mockMatrixUtils.simulateRemoteMessage(
-        mockMatrixUtils.getRoomIdForRealmAndUser(testRealmURL, ME),
-        testRealmInfo.realmUserId!,
-        {
-          eventName: 'job',
-          runId: 'run-live',
-          automation: AUTOMATION,
-          state: 'running',
-          step: 'script',
-          milestone: null,
-          realmURL: testRealmURL,
-        },
-        { type: APP_BOXEL_REALM_EVENT_TYPE },
-      );
-      await waitUntil(() => askedKeyApprovals.length > 1, { timeout: 10000 });
-      assert.true(
-        askedKeyApprovals[askedKeyApprovals.length - 1],
-        'the run’s read makes the key check the read it replaced still owed',
-      );
-      release();
       await waitFor('[data-test-automation-key-approval-state="waiting"]', {
         timeout: 10000,
       });
-      assert.dom('[data-test-automation-key-approvals]').exists();
+
+      function simulate(content: Record<string, unknown>) {
+        mockMatrixUtils.simulateRemoteMessage(
+          mockMatrixUtils.getRoomIdForRealmAndUser(testRealmURL, ME),
+          testRealmInfo.realmUserId!,
+          { automation: AUTOMATION, realmURL: testRealmURL, ...content },
+          { type: APP_BOXEL_REALM_EVENT_TYPE },
+        );
+      }
+
+      // The approval lands; the key check it sets off is slow.
+      answer = {
+        status: 200,
+        attributes: withApprovals(
+          [
+            {
+              ...operationWith('list', [
+                {
+                  ...waitingSlot,
+                  state: 'approved',
+                  fix: undefined,
+                  approvedAt: '2030-01-01T09:00:00.000Z',
+                },
+              ]),
+              state: 'approved',
+            },
+          ],
+          { approved: true, state: 'active' },
+        ),
+      };
+      let release!: () => void;
+      holdKeyedReads = new Promise<void>((resolve) => (release = resolve));
+      try {
+        let before = askedKeyApprovals.length;
+        simulate({ eventName: 'automation' });
+        await waitUntil(() => askedKeyApprovals.length > before, {
+          timeout: 10000,
+        });
+        // A run moves while the key check is still out: its read replaces
+        // the keyed one, so it has to make the check itself.
+        simulate({
+          eventName: 'job',
+          runId: 'run-live',
+          state: 'running',
+          step: 'script',
+          milestone: null,
+        });
+        await waitUntil(() => askedKeyApprovals.length > before + 1, {
+          timeout: 10000,
+        });
+        assert.true(
+          askedKeyApprovals[askedKeyApprovals.length - 1],
+          'the run’s read makes the key check the read it replaced still owed',
+        );
+      } finally {
+        holdKeyedReads = undefined;
+        release();
+      }
+      await waitFor('[data-test-automation-key-approval-state="approved"]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-key-approval-state="waiting"]')
+        .doesNotExist();
     });
 
     test('an approval that lands updates the section without a reload', async function (assert) {
