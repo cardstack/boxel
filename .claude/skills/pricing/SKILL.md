@@ -80,7 +80,7 @@ every prerender server. The code holds no prices and no fallbacks.
   share, which never under-charges. `PRICING_WORKER_TASK_PROCESSES` is every
   worker process one worker task runs: `WORKER_ALL_PRIORITY_COUNT` plus
   `WORKER_AUTOMATION_PRIORITY_COUNT` plus `WORKER_HIGH_PRIORITY_COUNT`, plus the worker manager's `--userIndexCount`
-  when its start script passes one. When a task definition is resized or its
+  and `--systemIndexCount` when its start script passes them. When a task definition is resized or its
   pool or worker counts change, change its shape values in the same deploy,
   or a tab's or process's share of the task is wrong.
 - **Values are plain decimals**: digits, optionally a `.` and more digits.
