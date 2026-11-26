@@ -44,6 +44,10 @@ interface Signature {
     label: string;
     headline?: string;
     line?: string;
+    // For an automation's approval, the display name of the card type the
+    // slot is on: the automation makes the scheduled calls, and cards of
+    // that type make the calls when opened.
+    automationCard?: string;
   };
   Blocks: { default: [] };
   Element: HTMLElement;
@@ -200,7 +204,9 @@ export default class KeyAudience extends Component<Signature> {
       return 'Only you';
     }
     if (this.automations) {
-      return `The card’s schedule in ${this.where}`;
+      return this.args.automationCard
+        ? `The automation’s schedule in ${this.where}`
+        : `The card’s schedule in ${this.where}`;
     }
     if (this.visitors) {
       return 'Anyone, signed in or not';
@@ -211,6 +217,9 @@ export default class KeyAudience extends Component<Signature> {
   get line() {
     if (this.args.line) {
       return this.args.line;
+    }
+    if (this.args.automationCard) {
+      return this.automationLine(`a ${this.args.automationCard} card`);
     }
     if (!this.shared) {
       if (this.automations) {
@@ -231,5 +240,24 @@ export default class KeyAudience extends Component<Signature> {
       return 'Boxel uses this key for the card’s scheduled calls and whenever anyone uses the card in this workspace, and their calls count against the share’s limits. Approving replaces any key chosen for these calls before.';
     }
     return 'Boxel uses this key for the card’s calls in this workspace, whoever makes them.';
+  }
+
+  // The line for an automation's approval: the automation makes the
+  // scheduled calls, and `card` (a card of the slot's type) makes the calls
+  // when someone opens one.
+  private automationLine(card: string) {
+    if (!this.shared) {
+      if (this.automations) {
+        return `Boxel uses this key only for the automation’s scheduled calls you approve here. Opening ${card} doesn’t use the key, and everyone else who uses ${card} chooses a key of their own.`;
+      }
+      return `Boxel uses this key for the automation’s scheduled calls and whenever you use ${card}. Everyone else who uses ${card} chooses a key of their own.`;
+    }
+    if (this.automations) {
+      return `Boxel uses this key only for the automation’s scheduled calls in this workspace. Opening ${card} doesn’t use the key, and scheduled calls don’t count against the share’s limits. Approving replaces any key chosen for these calls before.`;
+    }
+    if (this.visitors) {
+      return `Boxel uses this key for the automation’s scheduled calls and whenever anyone uses ${card} in this workspace, including people who aren’t signed in, and their calls count against the share’s limits. Approving replaces any key chosen for these calls before.`;
+    }
+    return `Boxel uses this key for the automation’s scheduled calls and whenever anyone uses ${card} in this workspace, and their calls count against the share’s limits. Approving replaces any key chosen for these calls before.`;
   }
 }

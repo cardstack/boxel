@@ -1610,6 +1610,56 @@ module(basename(import.meta.filename), function (hooks) {
       await reachesState(SHARED, 'active');
     });
 
+    test('an automation’s batch says which operations the realm’s policy opens to people who aren’t signed in, per card type', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      let asked: { module: string; name: string }[] = [];
+      let opened: string[] = [];
+      let original = realm.sharedKeyOperationsOpenToAnonymous.bind(realm);
+      realm.sharedKeyOperationsOpenToAnonymous = async (type) => {
+        asked.push({ module: String(type.module), name: type.name });
+        return opened;
+      };
+      let openToAnonymous = async () => {
+        let batch = await request
+          .post('/_key-bindings/batch')
+          .set('Authorization', await secureSessionAuth(dbAdapter, WRITER))
+          .set('Content-Type', 'application/vnd.api+json')
+          .send({
+            data: {
+              type: 'key-binding-batch',
+              attributes: { automation: cardURL(SHARED) },
+            },
+          });
+        assert.strictEqual(batch.status, 200, batch.text);
+        let [operation] = batch.body.data.attributes.groups[0].operations;
+        assert.strictEqual(operation.name, 'shared');
+        return operation.openToAnonymous;
+      };
+      try {
+        assert.false(
+          await openToAnonymous(),
+          'an operation the policy doesn’t open to them is not',
+        );
+        opened = ['shared'];
+        assert.true(
+          await openToAnonymous(),
+          'an operation the policy opens to them is, so the approve page warns about approving it for open cards',
+        );
+        assert.deepEqual(
+          asked.map(({ name }) => name),
+          ['Inbox', 'Inbox'],
+          'the realm is asked about the card type the operation is on, once per batch',
+        );
+        assert.true(
+          asked.every(({ module }) => module.endsWith('/inbox')),
+          'with the type’s own module',
+        );
+      } finally {
+        realm.sharedKeyOperationsOpenToAnonymous = original;
+      }
+    });
+
     test('an automation that is not switched on has no approval batch', async function (assert) {
       let asked = await request
         .post('/_key-bindings/batch')
