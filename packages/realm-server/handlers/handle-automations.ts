@@ -16,6 +16,7 @@ import {
   SupportedMimeType,
   type AutomationRun,
   type DBAdapter,
+  type Expression,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type VirtualNetwork,
@@ -88,6 +89,7 @@ import {
 } from '../lib/automation-estimate.ts';
 import { buildAdmitPayerSpending } from '../lib/automation-spending.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
+import { namedToViewer } from '../lib/named-users.ts';
 import { followAutomationKeyApprovals } from '../lib/automation-key-approvals.ts';
 import { exactMeteredCredits } from '../lib/metered-charge.ts';
 import { currentPricing } from '../lib/pricing.ts';
@@ -362,12 +364,52 @@ function uncheckedKeyApprovals(retry: string): AutomationRouteError {
 
 // Key approvals as a route answers them: whether every one is there, the
 // version a confirmation approving the rest names (`confirmationOf`: the
-// version and its `callApiCalls` cap), and each operation's state.
-function serializeKeyApprovals(approvals: AutomationKeyApprovals) {
+// version and its `callApiCalls` cap), and each operation's state. The owner
+// of a share a missing approval names is shown to `caller` only as the
+// key-share listings show a share's owner (`namedToViewer`, ADR 011: a person
+// named with the caller in the share's realm), and is null otherwise.
+async function serializeKeyApprovals(
+  dbAdapter: DBAdapter,
+  caller: string,
+  realmURL: URL,
+  approvals: AutomationKeyApprovals,
+) {
+  let owners = approvals.operations.flatMap((operation) =>
+    (operation.missing ?? []).flatMap((missing) =>
+      (missing.shares ?? []).map((share) => share.owner),
+    ),
+  );
+  let isNamed = await namedToViewer(
+    (expression: Expression) => query(dbAdapter, expression),
+    caller,
+    [realmURL.href],
+    owners.filter((owner): owner is string => typeof owner === 'string'),
+  );
   return {
     approved: approvals.approved,
     version: confirmationOf(approvals.version),
-    operations: approvals.operations,
+    operations: approvals.operations.map((operation) =>
+      operation.missing
+        ? {
+            ...operation,
+            missing: operation.missing.map((missing) =>
+              missing.shares
+                ? {
+                    ...missing,
+                    shares: missing.shares.map((share) => ({
+                      ...share,
+                      owner:
+                        share.owner !== null &&
+                        isNamed(realmURL.href, share.owner)
+                          ? share.owner
+                          : null,
+                    })),
+                  }
+                : missing,
+            ),
+          }
+        : operation,
+    ),
   };
 }
 
@@ -630,7 +672,14 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
           monthlyCredits: declaration.caps.monthlyCredits,
           estimate,
           ...(keyApprovals
-            ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+            ? {
+                keyApprovals: await serializeKeyApprovals(
+                  args.dbAdapter,
+                  caller,
+                  realmURL,
+                  keyApprovals,
+                ),
+              }
             : {}),
         },
       },
@@ -704,7 +753,12 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
       : undefined;
     await answerChange(ctxt, args, change, caller, 201, {
       ...(estimate ? { estimate } : {}),
-      keyApprovals: serializeKeyApprovals(keyApprovals),
+      keyApprovals: await serializeKeyApprovals(
+        args.dbAdapter,
+        caller,
+        realmURL,
+        keyApprovals,
+      ),
     });
   });
 }
@@ -880,7 +934,14 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
     }
     await answerChange(ctxt, args, change, caller, 200, {
       ...(keyApprovals
-        ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+        ? {
+            keyApprovals: await serializeKeyApprovals(
+              args.dbAdapter,
+              caller,
+              realmURL,
+              keyApprovals,
+            ),
+          }
         : {}),
     });
   });

@@ -1,6 +1,7 @@
 import {
   keyFitsSlot,
   logger,
+  type RealmResourceIdentifier,
   param,
   query,
   rri,
@@ -15,6 +16,12 @@ import {
   type OperationDefinition,
 } from '@cardstack/runtime-common/card-operations';
 import { operationDisplayLabel } from '@cardstack/runtime-common/card-operations/label';
+import { getAutomation } from '@cardstack/runtime-common/automations';
+import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
+import {
+  confirmationOf,
+  operationKeyOf,
+} from '@cardstack/runtime-common/automation-key-approval';
 import {
   bindingSnapshot,
   canonicalInstance,
@@ -78,12 +85,25 @@ const log = logger('realm:key-bindings');
 
 // `new`: never approved, or its grant is gone. `changed`: its request changed
 // since it was approved. `automations-only`: approved, unchanged, for automations
-// only, in a batch asked for with `interactive`.
-export type BatchSlotStatus = 'new' | 'changed' | 'automations-only';
+// only, in a batch asked for with `interactive`. `automation`: approved and
+// unchanged, but not yet for the automation an automation's batch is asked
+// for (ADR 039), or approved for it at a version it has changed since.
+export type BatchSlotStatus =
+  | 'new'
+  | 'changed'
+  | 'automations-only'
+  | 'automation';
 
 export interface BatchSlot {
   // The token the slot is written as: `userKey`, `apiKey`, `apiKey:<name>`.
+  // In an automation's batch, which spans card definitions, each definition's
+  // slots are chosen apart, since two services' `userKey` slots take
+  // different keys: `slot` is then `<n>.<token>`, numbering the definitions
+  // in the order the batch first meets them, `token` is the slot's own token,
+  // which an approval names, and `card` is the definition's display name.
   slot: string;
+  token?: string;
+  card?: string;
   key: CallApiSlot['key'];
   status: BatchSlotStatus;
   snapshot: BindingSnapshot;
@@ -100,6 +120,13 @@ export interface BatchSlot {
 
 export interface BatchOperation {
   name: string;
+  // In an automation's batch, which spans card definitions: the card
+  // definition the operation is on, and the key `operations` names the
+  // operation by (`<module>#<export>/<operation>`, as the automation declares
+  // it). Absent from a card's batch, whose definition is the batch's `card`
+  // and whose operations are named by `name`.
+  card?: { name: string; module: string; exportName: string };
+  key?: string;
   label: string;
   method: string;
   // The URL as declared, without its origin: its path, with `{name}`
@@ -154,6 +181,10 @@ export interface ApprovalBatch {
   card: { name: string; module: string; exportName: string };
   instance: string | null;
   review: boolean;
+  // An automation's batch: the automation card, and the version of the
+  // automation its approver is shown (`confirmationOf`), which the
+  // confirmation names back.
+  automation?: { id: string; version: string };
   groups: BatchGroup[];
   // How many more operations need approving than one confirmation can take:
   // they are asked for again once these are approved.
@@ -179,7 +210,9 @@ export interface ApprovalBatch {
 // only from automations.
 export type BatchUse = 'interactive' | 'automations';
 
-export interface ApprovalBatchRequest {
+export type ApprovalBatchRequest = CardBatchRequest | AutomationBatchRequest;
+
+export interface CardBatchRequest {
   target: SecureWindowTarget;
   review?: boolean;
   // Also answer slots approved for automations only.
@@ -188,6 +221,18 @@ export interface ApprovalBatchRequest {
   // the batch's: `fillers` then weigh only these, so a key that fits where
   // they send is offered even if another operation sends the same slot token
   // somewhere it can't reach. The batch itself still holds every operation.
+  operations?: string[];
+}
+
+// An automation's batch (ADR 039): every operation the switched-on
+// automation `automation` (its card) declares whose key approval is missing
+// and is the caller's to give, across the card definitions the operations are
+// on. A slot is the caller's to give when it takes the caller's own key and
+// the caller is the automation's payer, or it takes a share and the caller
+// owns the share that fills it, or, with none bound, owns an active share in
+// the realm. Slots already approved for the automation are left out.
+export interface AutomationBatchRequest {
+  automation: string;
   operations?: string[];
 }
 
@@ -252,13 +297,12 @@ function approvable(
 export async function approvalBatch(
   deps: Deps,
   user: string,
-  {
-    target,
-    review = false,
-    interactive = false,
-    operations,
-  }: ApprovalBatchRequest,
+  request: ApprovalBatchRequest,
 ): Promise<ApprovalBatch> {
+  if ('automation' in request) {
+    return await automationApprovalBatch(deps, user, request);
+  }
+  let { target, review = false, interactive = false, operations } = request;
   let { dbAdapter } = deps;
   let resolved = await resolveWindowRequest(deps, user, { target });
   let { realm, realmName } = resolved;
@@ -284,10 +328,7 @@ export async function approvalBatch(
   );
   let ownShares = await sharesIn(dbAdapter, realmURL.href, user);
 
-  let groups = new Map<string, BatchGroup>();
-  // How each slot of the batch is sent, for deciding which keys fill it once
-  // the batch is cut to what one confirmation holds.
-  let sendOf = new Map<BatchSlot, SlotSend>();
+  let collected = collectedBatch();
   for (let [name, operation] of Object.entries(definition.operations ?? {})) {
     if (!approvable(operation)) {
       continue;
@@ -337,34 +378,314 @@ export async function approvalBatch(
           : {}),
       };
       slots.push(batchSlot);
-      sendOf.set(batchSlot, { slot, callApi: request });
+      collected.sendOf.set(batchSlot, { slot, callApi: request });
     }
-    if (slots.length === 0) {
-      continue;
-    }
-    let destination = normalizeGrantDestination(request.destination);
-    let group = groups.get(destination);
-    if (!group) {
-      group = { destination: describeDestination(destination), operations: [] };
-      groups.set(destination, group);
-    }
-    group.operations.push({
+    collected.add(request, {
       name,
       label: operationDisplayLabel(name, operation),
       method: request.method,
       path: pathOf(request.url),
       instance: forInstance,
-      status: slots.some((s) => s.status === 'changed')
-        ? 'changed'
-        : slots.some((s) => s.status === 'new')
-          ? 'new'
-          : 'automations-only',
+      status: operationStatus(slots),
       slots,
       openToAnonymous: openToAnonymous.has(name),
     });
   }
+  return completeBatch(dbAdapter, user, collected, {
+    realm: { url: realm.url, name: realmName },
+    card: {
+      name: definition.displayName ?? codeRef.name,
+      module: codeRef.module,
+      exportName: codeRef.name,
+    },
+    instance,
+    review,
+    operations,
+    ownShares,
+  });
+}
 
-  let sorted: BatchGroup[] = [...groups.values()].sort((a, b) =>
+// An automation's batch (`AutomationBatchRequest`). The window is opened on
+// the automation card, which the caller must be able to read, and the
+// automation must be switched on in the card's realm: an approval for an
+// automation is given to the automation as its row names its payer.
+async function automationApprovalBatch(
+  deps: Deps,
+  user: string,
+  { automation, operations }: AutomationBatchRequest,
+): Promise<ApprovalBatch> {
+  let { dbAdapter, definitionLookup, virtualNetwork } = deps;
+  // The automation is found by its row, and the caller must be able to read
+  // the realm the row names. An automation that isn't switched on, and one in
+  // a realm the caller can't read, answer alike. The card's own definition
+  // isn't read: the batch is the operations the automation declares.
+  let notFound = () =>
+    new UserKeyError(404, 'no switched-on automation by that name');
+  let cardURL = virtualNetwork
+    .toURLHref(automation as RealmResourceIdentifier)
+    .replace(/\.json$/, '');
+  let automationId = rri(virtualNetwork.unresolveURL(cardURL));
+  let row = await getAutomation(dbAdapter, automationId);
+  if (!row) {
+    throw notFound();
+  }
+  let { realm, realmName } = await resolveWindowRequest(deps, user, {
+    realm: row.realm as unknown as RealmResourceIdentifier,
+  }).catch((e) => {
+    throw e instanceof UserKeyError && e.status === 404 ? notFound() : e;
+  });
+  let realmURL = new URL(realm.url);
+  if (virtualNetwork.toURLHref(row.realm) !== realmURL.href) {
+    throw notFound();
+  }
+  let read = await readRunDeclaration({
+    dbAdapter,
+    definitionLookup,
+    virtualNetwork,
+    automationId,
+  });
+  let approvals = read.ok
+    ? await realm.checkAutomationKeyApprovals({
+        automationId,
+        declaration: read.declaration,
+        payer: row.payer,
+      })
+    : undefined;
+  if (!approvals) {
+    throw new UserKeyError(
+      409,
+      "the automation's card or script can't be read, so its key approvals can't be given now",
+    );
+  }
+
+  let ownShares = await sharesIn(dbAdapter, realmURL.href, user);
+  let collected = collectedBatch();
+  let rowsOf = new Map<string, Awaited<ReturnType<typeof bindingRows>>>();
+  let typeNumbers = new Map<string, number>();
+  for (let missing of approvals.operations) {
+    if (missing.state !== 'missing') {
+      continue;
+    }
+    // The slots whose approval is the caller's to give.
+    let tokens = new Set(
+      (missing.missing ?? [])
+        .filter(({ slot, shares }) =>
+          slot === 'userKey'
+            ? user === row.payer
+            : (shares ?? []).some((share) => share.owner === user),
+        )
+        .map(({ slot }) => slot),
+    );
+    if (tokens.size === 0) {
+      continue;
+    }
+    // The card type is read as a card's batch reads one
+    // (`resolveWindowRequest`): only from a module realm the caller may
+    // read. A type the caller can't read is left out, and says nothing of
+    // itself.
+    let typed;
+    try {
+      typed = await resolveWindowRequest(deps, user, {
+        target: {
+          kind: 'type',
+          module: missing.targetType.module as RealmResourceIdentifier,
+          name: missing.targetType.name,
+          realm: realm.url as RealmResourceIdentifier,
+        },
+      });
+    } catch (e) {
+      if (e instanceof UserKeyError && e.status === 404) {
+        continue;
+      }
+      throw e;
+    }
+    let typeDefinition = typed.target!.definition;
+    let resolvedType = realm.operationCore.resolveCodeRef(
+      typed.target!.codeRef,
+      realmURL,
+    );
+    let operation = typeDefinition.operations?.[missing.operation];
+    if (!resolvedType || !operation || !approvable(operation)) {
+      continue;
+    }
+    let type = {
+      module: trimExecutableExtension(String(resolvedType.module)),
+      name: resolvedType.name,
+    };
+    let typeName = typeDefinition.displayName ?? type.name;
+    let typeKey = `${type.module}#${type.name}`;
+    let typeNumber = typeNumbers.get(typeKey) ?? typeNumbers.size + 1;
+    typeNumbers.set(typeKey, typeNumber);
+    let rows = rowsOf.get(typeKey);
+    if (!rows) {
+      rows = await bindingRows(dbAdapter, realmURL.href, type, user);
+      rowsOf.set(typeKey, rows);
+    }
+    let request = operation.callApi;
+    let slots: BatchSlot[] = [];
+    for (let slot of request.slots) {
+      let token = slotToken(slot);
+      if (!tokens.has(token)) {
+        continue;
+      }
+      let snapshot = bindingSnapshot(request, slot);
+      let fingerprint = fingerprintOf(snapshot);
+      let bound = rows.find(
+        (r) =>
+          r.operation_name === missing.operation &&
+          r.instance_url === null &&
+          r.slot === token &&
+          (slot.key === 'userKey'
+            ? r.key_id !== null && r.approved_by === user
+            : r.share_id !== null),
+      );
+      // A share someone else's key fills is theirs to approve, and a
+      // suspended share is resumed or swapped, not approved again.
+      if (
+        slot.key !== 'userKey' &&
+        bound &&
+        (bound.share_owner !== user || bound.share_state !== 'active')
+      ) {
+        continue;
+      }
+      let needs = slotStatus(bound, slot, fingerprint, {
+        user,
+        ownsShareHere: ownShares.length > 0,
+        interactive: false,
+      });
+      // A slot whose binding needs nothing more of the caller needs only
+      // the automation's approval. One with no binding that the caller has
+      // nothing to fill is left out.
+      if (!needs && !bound) {
+        continue;
+      }
+      let status: BatchSlotStatus = needs ?? 'automation';
+      let batchSlot: BatchSlot = {
+        slot: `${typeNumber}.${token}`,
+        token,
+        card: typeName,
+        key: slot.key,
+        status,
+        snapshot,
+        fingerprint,
+        ...(bound
+          ? {
+              approved: {
+                snapshot: snapshotOf(bound),
+                keyId: bound.key_id,
+                shareId: bound.share_id,
+                interactive: Boolean(bound.interactive),
+              },
+            }
+          : {}),
+      };
+      slots.push(batchSlot);
+      collected.sendOf.set(batchSlot, { slot, callApi: request });
+    }
+    collected.add(request, {
+      name: missing.operation,
+      card: {
+        name: typeName,
+        module: virtualNetwork.unresolveURL(type.module),
+        exportName: type.name,
+      },
+      key: operationKeyOf(missing),
+      label: operationDisplayLabel(missing.operation, operation),
+      method: request.method,
+      path: pathOf(request.url),
+      instance: null,
+      status: operationStatus(slots),
+      slots,
+      // An automation runs as its payer, never as someone who isn't signed
+      // in.
+      openToAnonymous: false,
+    });
+  }
+  return completeBatch(dbAdapter, user, collected, {
+    realm: { url: realm.url, name: realmName },
+    // An automation's batch names each operation's own card definition
+    // (`BatchOperation.card`); the batch's `card` names the automation.
+    card: { name: 'Automation', module: cardURL, exportName: 'Automation' },
+    instance: null,
+    review: false,
+    automation: {
+      id: virtualNetwork.toURLHref(automationId),
+      version: confirmationOf(approvals.version),
+    },
+    operations,
+    ownShares,
+  });
+}
+
+// The operations a batch holds, grouped by where each sends, and how each of
+// their slots is sent.
+interface CollectedBatch {
+  groups: Map<string, BatchGroup>;
+  sendOf: Map<BatchSlot, SlotSend>;
+  add(request: OperationCallApi, operation: BatchOperation): void;
+}
+
+function collectedBatch(): CollectedBatch {
+  let groups = new Map<string, BatchGroup>();
+  return {
+    groups,
+    // How each slot of the batch is sent, for deciding which keys fill it
+    // once the batch is cut to what one confirmation holds.
+    sendOf: new Map(),
+    add(request, operation) {
+      if (operation.slots.length === 0) {
+        return;
+      }
+      let destination = normalizeGrantDestination(request.destination);
+      let group = groups.get(destination);
+      if (!group) {
+        group = {
+          destination: describeDestination(destination),
+          operations: [],
+        };
+        groups.set(destination, group);
+      }
+      group.operations.push(operation);
+    },
+  };
+}
+
+// An operation needs approving as much as its neediest slot does.
+function operationStatus(slots: BatchSlot[]): BatchSlotStatus {
+  for (let status of [
+    'changed',
+    'new',
+    'automation',
+  ] as const satisfies BatchSlotStatus[]) {
+    if (slots.some((s) => s.status === status)) {
+      return status;
+    }
+  }
+  return 'automations-only';
+}
+
+// Cuts the collected operations to what one confirmation holds, in the order
+// the window shows them, and names the caller's keys and shares each slot can
+// take.
+async function completeBatch(
+  dbAdapter: DBAdapter,
+  user: string,
+  collected: CollectedBatch,
+  {
+    realm,
+    card,
+    instance,
+    review,
+    automation,
+    operations,
+    ownShares,
+  }: Pick<ApprovalBatch, 'realm' | 'card' | 'instance' | 'review'> & {
+    automation?: ApprovalBatch['automation'];
+    operations: string[] | undefined;
+    ownShares: Awaited<ReturnType<typeof sharesIn>>;
+  },
+): Promise<ApprovalBatch> {
+  let sorted: BatchGroup[] = [...collected.groups.values()].sort((a, b) =>
     a.destination.href.localeCompare(b.destination.href),
   );
   for (let group of sorted) {
@@ -383,7 +704,8 @@ export async function approvalBatch(
   // How each slot token is sent, by the operations of the batch `include`
   // keeps.
   let covered = (operation: BatchOperation) =>
-    operations === undefined || operations.includes(operation.name);
+    operations === undefined ||
+    operations.includes(operation.key ?? operation.name);
   let sendsOf = (include: (operation: BatchOperation) => boolean) => {
     let found = new Map<string, { key: BatchSlot['key']; sends: SlotSend[] }>();
     for (let group of sorted) {
@@ -392,7 +714,7 @@ export async function approvalBatch(
       )) {
         for (let slot of operation.slots) {
           let entry = found.get(slot.slot) ?? { key: slot.key, sends: [] };
-          entry.sends.push(sendOf.get(slot)!);
+          entry.sends.push(collected.sendOf.get(slot)!);
           found.set(slot.slot, entry);
         }
       }
@@ -435,14 +757,11 @@ export async function approvalBatch(
     automations: fillersOf(slotSends.automations),
   };
   return {
-    realm: { url: realm.url, name: realmName },
-    card: {
-      name: definition.displayName ?? codeRef.name,
-      module: codeRef.module,
-      exportName: codeRef.name,
-    },
+    realm,
+    card,
     instance,
     review,
+    ...(automation ? { automation } : {}),
     groups: sorted,
     remaining,
     remainingAutomationsOnly,

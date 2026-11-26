@@ -165,6 +165,8 @@ type State =
       ownKey: boolean;
       shareCount: number;
       shares: string;
+      // Whether the approval was for an automation.
+      automation?: boolean;
     };
 type ChoosingState = Extract<State, { name: 'choosing' }>;
 
@@ -175,11 +177,12 @@ interface ApproveArgs {
 
 // What kind of key a slot's section is for.
 function slotLabel(choice: SlotChoice): string {
+  let forCard = choice.card ? ` for ${choice.card}` : '';
   if (choice.kind === 'userKey') {
-    return 'Your own key';
+    return `Your own key${forCard}`;
   }
   let [, name] = choice.slot.split(':');
-  return name ? `Shared key: ${name}` : 'Shared key';
+  return name ? `Shared key: ${name}${forCard}` : `Shared key${forCard}`;
 }
 
 // "A", "A and B", "A, B and C".
@@ -205,7 +208,35 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       />
     {{else if this.done}}
       <DonePage @heading='Approved' @onClose={{this.finish}}>
-        {{#if (eq this.done.count 0)}}
+        {{#if this.done.automation}}
+          <span data-test-approve-done-automation>
+            {{#if (eq this.done.count 0)}}
+              The automation in
+              <strong>{{this.done.realm}}</strong>
+              needs no key approval from you.
+            {{else}}
+              The automation in
+              <strong>{{this.done.realm}}</strong>
+              can make
+              <strong data-test-approve-done-count>{{this.done.count}}</strong>
+              {{if (eq this.done.count 1) 'call' 'calls'}}
+              with
+              {{#if this.done.ownKey}}
+                your own key{{#if this.done.shares}} and{{/if}}
+              {{/if}}
+              {{#if this.done.shares}}
+                {{if (gt this.done.shareCount 1) 'the keys' 'the key'}}
+                you share as
+                <strong
+                  data-test-approve-done-shares
+                >{{this.done.shares}}</strong>
+              {{/if}}
+              on every scheduled run, without asking you again. Boxel asks again
+              if someone changes the automation’s script, triggers, params or
+              operations.
+            {{/if}}
+          </span>
+        {{else if (eq this.done.count 0)}}
           Nothing on
           <strong>{{this.done.card}}</strong>
           in
@@ -285,7 +316,15 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       >
         <EditPage @heading={{this.heading}} data-test-approve>
           <:intro>
-            {{#if @review}}
+            {{#if this.forAutomation}}
+              <span data-test-approve-automation-intro>
+                The automation calls other services with keys you own. Approve
+                the calls below once, and Boxel makes the calls exactly as shown
+                on every scheduled run of the automation. If someone changes the
+                automation’s script, triggers, params or operations, Boxel asks
+                you to approve the calls again before the next run.
+              </span>
+            {{else if @review}}
               This card changed these calls since you approved them. Boxel won’t
               make them until you approve them again.
             {{else}}
@@ -482,6 +521,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                         <span class='label' data-test-approve-label>
                           {{operation.label}}
                         </span>
+                        {{#if operation.card}}
+                          <span class='card-type' data-test-approve-card-type>on
+                            {{operation.card.name}}</span>
+                        {{/if}}
                         {{#if (eq operation.status 'changed')}}
                           <span
                             class='changed'
@@ -492,6 +535,11 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             class='automations-only'
                             data-test-approve-automations-only
                           >Approved for the schedule</span>
+                        {{else if (eq operation.status 'automation')}}
+                          <span
+                            class='automations-only'
+                            data-test-approve-for-automation
+                          >Needs approval for the automation</span>
                         {{/if}}
                         {{#if (approvedForOpenCards operation)}}
                           <span
@@ -763,6 +811,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       .automations-only {
         flex-shrink: 0;
         white-space: nowrap;
+      }
+      .card-type {
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-xs);
       }
       .changed {
         padding: 0 var(--boxel-sp-4xs);
@@ -1295,14 +1347,36 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     if (!operations || !this.opened.target) {
       return undefined;
     }
-    let { fillers } = await approvalBatch(this.args.api.config, {
-      target: this.opened.target,
-      review: this.args.review,
-      interactive: true,
-      operations,
-    });
+    let { fillers } = await approvalBatch(
+      this.args.api.config,
+      this.batchRequest(operations),
+    );
     return fillers;
   };
+
+  // The batch the page approves: the automation's, when the page was opened
+  // for an automation, or else the target's.
+  private batchRequest(operations?: string[]) {
+    let named = operations ? { operations } : {};
+    if (this.opened.automation) {
+      return { automation: this.opened.automation, ...named };
+    }
+    return {
+      target: this.opened.target!,
+      review: this.args.review,
+      interactive: true,
+      ...named,
+    };
+  }
+
+  // Whether the page approves an automation's key approvals.
+  private get forAutomation() {
+    return (
+      !this.args.review &&
+      (this.opened.automation !== undefined ||
+        this.choosing?.batch.automation !== undefined)
+    );
+  }
 
   // Asks what fills each slot in the ticked operations alone, when only some
   // are ticked, and keeps a chosen key while it is still offered. Without an
@@ -1357,11 +1431,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       let [context, batch] = await Promise.all([
         windowContext(config, request),
-        approvalBatch(config, {
-          target: this.opened.target,
-          review: this.args.review,
-          interactive: true,
-        }),
+        approvalBatch(config, this.batchRequest()),
       ]);
       let operations = batch.groups.flatMap((g) => g.operations);
       if (operations.length === 0) {
@@ -1374,6 +1444,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           ownKey: false,
           shareCount: 0,
           shares: '',
+          automation: Boolean(batch.automation),
         };
         this.args.api.visit.loaded();
         this.args.api.tellCliDone();
@@ -1509,6 +1580,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         operations,
         interactive,
         dailyBudgets,
+        ...(state.batch.automation
+          ? { automation: state.batch.automation }
+          : {}),
       });
       this.page.state = {
         name: 'done',
@@ -1520,6 +1594,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         ownKey,
         shareCount: shares.length,
         shares: listPhrase(shares),
+        automation: Boolean(state.batch.automation),
       };
       if (!this.args.api.tellCliDone() && !this.fromKeyPage) {
         this.args.api.close();

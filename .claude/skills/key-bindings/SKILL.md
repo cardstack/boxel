@@ -164,10 +164,36 @@ operation's `openToAnonymous` says whether the realm's policy opens it to
 people who aren't signed in through a shared key, for the card's type or one
 it descends from (`Realm.sharedKeyOperationsOpenToAnonymous`; see
 _Anonymous use_).
-A batch
+A card's batch
 never spans card definitions or realms: approving one card's batch says
 nothing about another card calling the same host, which gets its own batch
 and reuses the grant.
+
+An automation's batch is the one exception that spans card definitions. Asked
+with `attributes.automation` (the automation card) in place of `target`
+(and no `review` or `interactive`), the batch is every operation the
+switched-on automation declares whose key approval
+(`checkAutomationKeyApprovals`, with the row's payer) is missing and the caller
+can give: a `{{userKey}}` slot when the caller is the payer, an `{{apiKey}}`
+slot whose share the caller owns. Slots already approved for the automation
+are left out, and so is a share another person owns, a suspended share, and a
+slot with no binding the caller has nothing to fill. Each operation's card
+type is read as a card's batch reads one (`resolveWindowRequest`), so a type
+in a module realm the caller can't read is left out and says nothing of
+itself. Each operation carries `card` (the definition it is on) and `key`
+(`<module>#<export>/<operation>`, the name `operations` filters by). Two card
+types' slots are chosen apart, since two services' `userKey` slots take
+different keys: each slot's `slot` is `<n>.<token>` (the definitions numbered
+in the order the batch first meets them), its `token` is the token the
+confirmation names, and its `card` is the definition's display name, which
+the page adds to the slot's heading ("Your own key for PR Inbox"). A slot
+bound and unchanged but not approved for the automation's version answers
+status `automation`. The batch carries `automation: { id, version }`, which the
+confirmation names back (`automation` on `POST /_key-bindings`). The batch
+answers 404 for an automation that isn't switched on in the card's realm, and
+409 when the card or script can't be read. The approve page opened with
+`#automation=<card>` asks for it (see the `automations` skill's _The switch-on
+screen_).
 
 The answer carries each binding with `meta.request` (the snapshot below) and
 `meta.grant` (with `created`). `GET /_key-bindings` lists the caller's own

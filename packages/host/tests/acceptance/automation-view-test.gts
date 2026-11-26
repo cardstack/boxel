@@ -7,6 +7,7 @@ import {
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
+import windowMock from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import {
@@ -31,6 +32,7 @@ import {
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import { stubWindowOpen } from '../helpers/window-open';
 
 const AUTOMATION = `${testRealmURL}automations/nightly`;
 const PLANNED = `${testRealmURL}automations/planned`;
@@ -3190,6 +3192,326 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-switch-on-fact="estimate"]')
         .hasText('1,234 credits a month');
+    });
+
+    module('key approvals', function () {
+      const INBOX = { module: `${testRealmURL}inbox`, name: 'Inbox' };
+      const SHARE = {
+        id: 'share-1',
+        label: 'Team GitHub',
+        owner: '@writer:localhost',
+      };
+
+      function keyApprovals(
+        operations: Record<string, unknown>[],
+        approved = false,
+      ) {
+        return { approved, version: 'v1.40', operations };
+      }
+      const APPROVED = {
+        operation: 'listPRs',
+        targetType: INBOX,
+        state: 'approved',
+      };
+      const PAYER_MISSING = {
+        operation: 'listIssues',
+        targetType: INBOX,
+        state: 'missing',
+        missing: [{ slot: 'userKey', canApprove: 'payer' }],
+      };
+      const OTHER_MISSING = {
+        operation: 'postComment',
+        targetType: INBOX,
+        state: 'missing',
+        missing: [
+          { slot: 'apiKey', canApprove: 'another-key-owner', shares: [SHARE] },
+        ],
+      };
+      const NOBODY_YET = {
+        operation: 'postComment',
+        targetType: INBOX,
+        state: 'missing',
+        missing: [{ slot: 'apiKey', canApprove: 'nobody-yet' }],
+      };
+
+      function keyStates() {
+        return [
+          ...document.querySelectorAll(
+            '[data-test-automation-switch-on-key-state]',
+          ),
+        ].map((e) =>
+          e.getAttribute('data-test-automation-switch-on-key-state'),
+        );
+      }
+
+      test('every key approved: the screen lists each operation as approved, and turning on closes the screen', async function (assert) {
+        let { calls } = stubWindowOpen(windowMock);
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([APPROVED], true),
+        });
+        postAnswer = {
+          status: 201,
+          body: {
+            data: { type: 'automation' },
+            meta: { keyApprovals: keyApprovals([APPROVED], true) },
+          },
+        };
+        await openScreen(OFF);
+        assert.deepEqual(keyStates(), ['Approved']);
+        assert
+          .dom('[data-test-automation-switch-on-payer-approves]')
+          .doesNotExist();
+        await click('[data-test-automation-switch-on-confirm]');
+        await waitUntil(() => posted.length > 0, { timeout: 10000 });
+        await settled();
+        assert
+          .dom('dialog[open] [data-test-automation-switch-on-screen]')
+          .doesNotExist('the screen closes');
+        assert.deepEqual(calls, [], 'no secure window opens');
+      });
+
+      test('approvals the payer gives open the secure window in the same step, for the automation, and the screen shows the automation as on once the approvals land', async function (assert) {
+        let { calls } = stubWindowOpen(windowMock);
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([APPROVED, PAYER_MISSING]),
+        });
+        postAnswer = {
+          status: 201,
+          body: {
+            data: {
+              type: 'automation',
+              attributes: { state: 'waiting-for-key-approval' },
+            },
+            meta: { keyApprovals: keyApprovals([APPROVED, PAYER_MISSING]) },
+          },
+        };
+        await openScreen(OFF);
+        assert.deepEqual(keyStates(), ['Approved', 'You approve']);
+        assert
+          .dom('[data-test-automation-switch-on-payer-approves]')
+          .includesText(
+            'Turning on the automation opens Boxel’s secure window, where you approve the calls the automation makes with your keys.',
+          );
+        await click('[data-test-automation-switch-on-confirm]');
+        await waitFor('[data-test-automation-switch-on-waiting]', {
+          timeout: 10000,
+        });
+        assert.strictEqual(calls.length, 1, 'one secure window opens');
+        let opened = new URL(calls[0].url);
+        assert.strictEqual(opened.pathname.split('/').pop(), 'approve');
+        assert.deepEqual(
+          Object.fromEntries(new URLSearchParams(opened.hash.slice(1))),
+          {
+            automation: AUTOMATION,
+            reason: 'To approve the calls the automation makes with your keys',
+          },
+          'for the automation, which the window reads the missing approvals of',
+        );
+        assert
+          .dom('[data-test-automation-switch-on-approve-keys]')
+          .includesText('Approve the calls in the secure window');
+        assert.deepEqual(keyStates(), ['Approved', 'Waiting for you']);
+
+        estimateAnswer = estimate({
+          switchedOn: true,
+          keyApprovals: keyApprovals(
+            [
+              APPROVED,
+              { ...PAYER_MISSING, state: 'approved', missing: undefined },
+            ],
+            true,
+          ),
+        });
+        window.dispatchEvent(new Event('focus'));
+        await waitFor('[data-test-automation-switch-on-active]', {
+          timeout: 10000,
+        });
+        assert
+          .dom('[data-test-automation-switch-on-active]')
+          .includesText('The automation is on');
+        assert.deepEqual(keyStates(), ['Approved', 'Approved']);
+        await click('[data-test-automation-switch-on-close]');
+        assert
+          .dom('dialog[open] [data-test-automation-switch-on-screen]')
+          .doesNotExist('the screen closes');
+      });
+
+      test('a secure window the browser blocks: the screen says so and offers to open the window', async function (assert) {
+        let stub = stubWindowOpen(windowMock);
+        stub.state.blocked = true;
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([PAYER_MISSING]),
+        });
+        postAnswer = {
+          status: 201,
+          body: {
+            data: { type: 'automation' },
+            meta: { keyApprovals: keyApprovals([PAYER_MISSING]) },
+          },
+        };
+        await openScreen(OFF);
+        await click('[data-test-automation-switch-on-confirm]');
+        await waitFor('[data-test-automation-switch-on-approve-keys]', {
+          timeout: 10000,
+        });
+        await settled();
+        assert
+          .dom('[data-test-automation-switch-on-approve-keys]')
+          .includesText('Open the secure window')
+          .includesText(
+            'The browser kept Boxel from opening the secure window.',
+          );
+        stub.state.blocked = false;
+        await click('[data-test-automation-switch-on-reopen-window]');
+        await waitUntil(() => stub.calls.length === 2, { timeout: 10000 });
+        assert
+          .dom('[data-test-automation-switch-on-approve-keys]')
+          .includesText('Boxel opened the secure window');
+      });
+
+      test('a suspended share waits on the share’s owner, and never opens the secure window for the payer', async function (assert) {
+        let { calls } = stubWindowOpen(windowMock);
+        let suspended = {
+          ...PAYER_MISSING,
+          missing: [
+            {
+              slot: 'apiKey',
+              canApprove: 'payer',
+              shares: [
+                { ...SHARE, owner: '@testuser:localhost', suspended: true },
+              ],
+            },
+          ],
+        };
+        estimateAnswer = estimate({ keyApprovals: keyApprovals([suspended]) });
+        postAnswer = {
+          status: 201,
+          body: {
+            data: { type: 'automation' },
+            meta: { keyApprovals: keyApprovals([suspended]) },
+          },
+        };
+        await openScreen(OFF);
+        assert.deepEqual(keyStates(), ['Share suspended']);
+        assert
+          .dom('[data-test-automation-switch-on-key-detail]')
+          .hasText(
+            '@testuser:localhost resumes the share Team GitHub before anyone approves the call.',
+          );
+        assert
+          .dom('[data-test-automation-switch-on-payer-approves]')
+          .doesNotExist();
+        await click('[data-test-automation-switch-on-confirm]');
+        await waitFor('[data-test-automation-switch-on-waiting]', {
+          timeout: 10000,
+        });
+        assert.deepEqual(calls, [], 'no secure window opens');
+      });
+
+      test('an approval another person gives: the screen names the key and its owner, and the automation switches on waiting with no secure window', async function (assert) {
+        let { calls } = stubWindowOpen(windowMock);
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([OTHER_MISSING]),
+        });
+        postAnswer = {
+          status: 201,
+          body: {
+            data: { type: 'automation' },
+            meta: { keyApprovals: keyApprovals([OTHER_MISSING]) },
+          },
+        };
+        await openScreen(OFF);
+        assert.deepEqual(keyStates(), ['Another person approves']);
+        assert
+          .dom('[data-test-automation-switch-on-key-detail]')
+          .hasText(
+            '@writer:localhost approves the use of the key Team GitHub.',
+          );
+        assert
+          .dom('[data-test-automation-switch-on-other-approvers]')
+          .includesText(
+            '@writer:localhost approves the automation’s use of the key Team GitHub.',
+          )
+          .includesText(
+            'The automation waits and runs nothing until all approvals are in place.',
+          );
+        await click('[data-test-automation-switch-on-confirm]');
+        await waitFor('[data-test-automation-switch-on-waiting]', {
+          timeout: 10000,
+        });
+        assert.deepEqual(calls, [], 'no secure window opens');
+        assert
+          .dom('[data-test-automation-switch-on-approve-keys]')
+          .doesNotExist();
+      });
+
+      test('a share’s owner the viewer may not see is named as the owner of the key', async function (assert) {
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([
+            {
+              ...OTHER_MISSING,
+              missing: [
+                {
+                  slot: 'apiKey',
+                  canApprove: 'another-key-owner',
+                  shares: [{ ...SHARE, owner: null }],
+                },
+              ],
+            },
+          ]),
+        });
+        await openScreen(OFF);
+        assert
+          .dom('[data-test-automation-switch-on-key-detail]')
+          .hasText(
+            'The owner of the key approves the use of the key Team GitHub.',
+          );
+      });
+
+      test('no share yet: the screen says a realm administrator shares a key, and Share a key opens the secure window’s share page', async function (assert) {
+        let { calls } = stubWindowOpen(windowMock);
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([NOBODY_YET]),
+        });
+        await openScreen(OFF);
+        assert.deepEqual(keyStates(), ['No key shared']);
+        assert
+          .dom('[data-test-automation-switch-on-no-share]')
+          .includesText(
+            'The automation calls a service with a key that a realm administrator shares with the realm, and nobody has shared a key yet.',
+          )
+          .includesText(
+            'Share a key with the realm first, and then turn on the automation.',
+          );
+        assert
+          .dom('[data-test-automation-switch-on-confirm]')
+          .doesNotExist('the screen can’t turn the automation on yet');
+        assert
+          .dom('[data-test-automation-switch-on-share-key]')
+          .exists({ count: 1 })
+          .hasText('Share a key', 'Share a key is the primary action');
+        await click('[data-test-automation-switch-on-share-key]');
+        await waitUntil(() => calls.length > 0, { timeout: 10000 });
+        let opened = new URL(calls[0].url);
+        assert.strictEqual(opened.pathname.split('/').pop(), 'share-key');
+        assert.strictEqual(
+          new URLSearchParams(opened.hash.slice(1)).get('realm'),
+          testRealmURL,
+        );
+
+        // A realm administrator shares a key meanwhile; coming back to the
+        // page reads the key approvals again.
+        estimateAnswer = estimate({
+          keyApprovals: keyApprovals([PAYER_MISSING]),
+        });
+        window.dispatchEvent(new Event('focus'));
+        await waitUntil(() => keyStates().join() === 'You approve', {
+          timeout: 10000,
+        });
+        assert
+          .dom('[data-test-automation-switch-on-confirm]')
+          .exists('the screen can turn the automation on once a key is shared');
+      });
     });
 
     test('a switch-on the realm server refuses shows the server’s message, and the screen stays open', async function (assert) {
