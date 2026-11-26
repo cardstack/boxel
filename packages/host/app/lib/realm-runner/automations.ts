@@ -1,6 +1,10 @@
 import { tracked } from '@glimmer/tracking';
 
-import { RealmPaths, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  RealmPaths,
+  resolveRRIReference,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import {
   AUTOMATION_PREVIEW_FILE_PATH,
   AUTOMATION_PREVIEW_PATH,
@@ -265,6 +269,8 @@ export interface AutomationIO {
   readCardDocument(cardURL: string): Promise<Record<string, any>>;
   // Reads a file's source text from its realm.
   readSourceText(url: string): Promise<string>;
+  // A realm identifier in URL form, as the realm serves it.
+  toURLHref(identifier: string): string;
   viewerTimeZone: string;
 }
 
@@ -274,7 +280,10 @@ export function automationIOFor(services: {
     url: URL;
     authedFetch(url: string, init?: RequestInit): Promise<Response>;
   };
-  network: { authedFetch: typeof globalThis.fetch };
+  network: {
+    authedFetch: typeof globalThis.fetch;
+    virtualNetwork: { toURLHref(identifier: string): string };
+  };
 }): AutomationIO {
   return {
     realmServerFetch: (url, init) =>
@@ -298,6 +307,8 @@ export function automationIOFor(services: {
       }
       return await response.text();
     },
+    toURLHref: (identifier) =>
+      services.network.virtualNetwork.toURLHref(identifier),
     viewerTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
 }
@@ -373,7 +384,11 @@ export async function loadAutomationConfirmation(
     confirmation.monthlyCredits = typeof monthly === 'number' ? monthly : null;
     let scriptLink = doc?.data?.relationships?.script?.links?.self;
     if (typeof scriptLink === 'string') {
-      confirmation.scriptURL = new URL(scriptLink, cardURL).href;
+      // Joined as the realm server joins the card's script link, so the
+      // gate reads, and the run protects, the script the server runs.
+      confirmation.scriptURL = io.toURLHref(
+        resolveRRIReference(scriptLink, new URL(cardURL)),
+      );
     }
     let script = confirmation.scriptURL
       ? await io.readSourceText(confirmation.scriptURL)
@@ -384,7 +399,7 @@ export async function loadAutomationConfirmation(
     return confirmation;
   }
   if (confirmation.monthlyCredits === null) {
-    confirmation.problem = `${named.path} sets no monthly credit cap (caps.monthlyCredits), and Boxel runs or switches on an automation only at a monthly cap the person confirms`;
+    confirmation.problem = `${named.path} sets no monthly credit cap (caps.monthlyCredits), and Boxel runs or switches on an automation only at a monthly cap you confirm`;
     return confirmation;
   }
   let estimate = await automationEstimate(io, cardURL, realmURL);

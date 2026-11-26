@@ -25,7 +25,8 @@ const SALE_END = `${testRealmURL}automations/sale-end`;
 // here, decides which cards are automations; the gate and the run read only
 // the card's triggers, monthly cap and name.
 const AUTOMATION_SHAPE = `
-  import { CardDef, FieldDef, field, contains, containsMany } from '@cardstack/base/card-api';
+  import { CardDef, FieldDef, field, contains, containsMany, linksTo } from '@cardstack/base/card-api';
+  import { FileDef } from '@cardstack/base/file-api';
   import StringField from '@cardstack/base/string';
   import NumberField from '@cardstack/base/number';
 
@@ -43,6 +44,7 @@ const AUTOMATION_SHAPE = `
   export class AutomationShape extends CardDef {
     @field triggers = containsMany(Trigger);
     @field caps = contains(Caps);
+    @field script = linksTo(FileDef);
   }
 `;
 
@@ -63,12 +65,17 @@ function saleEndJSON(time = '15:00') {
         ],
         caps: { monthlyCredits: 25 },
       },
+      relationships: {
+        script: { links: { self: '../scripts/end-sale.js' } },
+      },
       meta: {
         adoptsFrom: { module: '../automation-shape', name: 'AutomationShape' },
       },
     },
   };
 }
+
+const END_SALE_SCRIPT = `await realm.cards.update('Sale/flash-sale', { status: 'ended' });\n`;
 
 interface Posted {
   route: string;
@@ -234,6 +241,7 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
       contents: {
         'automation-shape.gts': AUTOMATION_SHAPE,
         'automations/sale-end.json': saleEndJSON(),
+        'scripts/end-sale.js': END_SALE_SCRIPT,
       },
     });
     Object.defineProperty(getService('realm-server'), 'authedFetch', {
@@ -433,6 +441,49 @@ module('Integration | tools | run-realm-code | automations', function (hooks) {
       /would change automations\/sale-end, which this script's automation call names/,
     );
     assert.deepEqual(posted, [], 'no run started');
+  });
+
+  test('a script that switches an automation on may not then write the script the automation runs', async function (assert) {
+    let code = `
+      let switched = await realm.automations.switchOn('automations/sale-end.json');
+      await realm.fs.replace('scripts/end-sale.js', "'ended'", "'cancelled'");
+      return switched;
+    `;
+    let tool = runTool();
+    tool.confirmedAutomations = await confirmationsFor(code);
+    assert.strictEqual(
+      tool.confirmedAutomations[0].scriptURL,
+      `${testRealmURL}scripts/end-sale.js`,
+      'the gate read the script the card links',
+    );
+    await assert.rejects(
+      tool.execute({ realm: testRealmURL, roomId: '!room:example.com', code }),
+      /would change scripts\/end-sale\.js, which this script's automation call names or runs/,
+    );
+    let source = await getService('card-service').getSource(
+      new URL('scripts/end-sale.js', testRealmURL),
+    );
+    assert.strictEqual(
+      source.content,
+      END_SALE_SCRIPT,
+      'the script is unchanged',
+    );
+  });
+
+  test('a switch-on refuses a script whose source changed after the reader confirmed the automation', async function (assert) {
+    let code = `return await realm.automations.switchOn('automations/sale-end.json');`;
+    let tool = runTool();
+    tool.confirmedAutomations = await confirmationsFor(code);
+    await getService('card-service').saveSource(
+      new URL('scripts/end-sale.js', testRealmURL),
+      `await realm.cards.update('Sale/flash-sale', { status: 'cancelled' });\n`,
+      'editor',
+    );
+    await assert.rejects(
+      tool.execute({ realm: testRealmURL, roomId: '!room:example.com', code }),
+      /changed after the person confirmed the automation/,
+    );
+    assert.deepEqual(posted, [], 'nothing was switched on');
   });
 
   test('a run reads a run report with its log lines, and a file a Preview staged', async function (assert) {

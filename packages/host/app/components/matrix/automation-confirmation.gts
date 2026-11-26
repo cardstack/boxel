@@ -144,7 +144,7 @@ export default class AutomationConfirmationView extends Component<Signature> {
             {{#if shown.confirmation.problem}}
               <Alert
                 @tone='danger'
-                @title='Boxel can’t show the automation, so the run will refuse the call'
+                @title='Boxel can’t show the automation, so the automation can’t run. Deny the call, and tell the assistant why in the chat, so the assistant can fix the card.'
                 data-test-automation-confirmation-problem
               >{{shown.confirmation.problem}}</Alert>
             {{else}}
