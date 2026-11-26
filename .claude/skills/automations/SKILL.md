@@ -1199,24 +1199,48 @@ answers.
   `realm.resolve.batch` is a method on `realm.resolve`; `onSurface` in
   `worker.ts` keeps it only where `resolve.batch` is on the surface.
 - **The submit** (`RunAutomationTool#runTokenBatchSubmit`) posts to the
-  realm server's `/_ai-batches` with the run's token. The handler
-  (`handle-ai-batches.ts`) refuses it unless `AI_BATCH_SUBMITS_ENABLED` is
-  `true` on the realm server (`aiBatchSubmitsEnabled`), refuses a Preview and
+  realm server's `/_ai-batches` with the run's token, the requests and the
+  batch's milestone. The handler (`handle-ai-batches.ts`) refuses it when
+  `AI_BATCH_SUBMITS_ENABLED` is `false` on the realm server
+  (`aiBatchSubmitsEnabled`; on otherwise), refuses a Preview and
   an automation whose caps snapshot has `batchedAI` off, and a run that already has a batch in `ai_batches` (409, so a retried attempt can't submit a second), reserves the batch on
   `aiCredits` (_The AI spending cap_), and counts each request against
   `resolveCalls` in one statement (`countRunCall` with a call count): a batch
   past the cap ends the run with `hit-a-cap`, releases its reservation and
   sends nothing. The refusal comes back to the script as the call's error.
 - **The record** is the batch's `ai_batches` row, whose `run_id` names the
-  submitting run, whose `deadline` is the follow-up's schedule, and whose
-  `follow_up_run_id` names the follow-up once it starts.
+  submitting run, whose `deadline` is the follow-up's schedule, whose
+  `milestone` is the run milestone it started, and whose `follow_up_run_id`
+  names the follow-up once it starts. Its requests, as the chat completion
+  bodies sent, are its `ai_batch_requests` row, which the tick drops once
+  the follow-up has ended (complete, error, or canceled other than to be
+  held) or the batch was dropped (`dropFinishedAIBatchRequests`).
 - **The follow-up**: once the deadline passes, the minute tick starts it
   (_The tick: enqueueing due runs_). Its run row has trigger `batch`
   (`BATCH_RUN_TRIGGER`, a label no card trigger may take) and the batch's id
   as its slot; its job has `triggerKind: 'batch'`. It acts as the batch's
   `acts_as`, or, once a resume came after the submit, as whoever resumed
   (`follow_up_acts_as`). A pause holds it until the resume starts it
-  (_When the row is recomputed: the card's index hook_).
+  (_When the row is recomputed: the card's index hook_). The worker gives
+  its tab the batch's id (`followUpBatchId`, its slot); before the script
+  runs, the tab reads `GET /_ai-batches/<id>/follow-up` with the run's token
+  (`handleAIBatchFollowUp`, which answers only the batch's own follow-up run)
+  and gets an `AIBatchFollowUpRead`. A batch OpenRouter reports `completed`
+  with its results, that no run found still open past its deadline, gives
+  each request its result by `customId`; the tab reads each one as
+  `realm.resolve` reads its answer (`readResolveAnswer`). Any other batch is
+  `late` (still open, `failed`, `expired`, `cancelled`, `404`/`410` as
+  `gone`, or unreadable as `unread`): the handler sets the batch's
+  `deadline_missed_at` when it was still open, so its results are never
+  used, and the tab sends each stored body at the normal price through the
+  run's `_request-forward` (`resolveChat`), a few at a time, each a
+  `resolve` call against the run's cap, inside its time limit. Either way
+  the tab first reports the submitting run's plan from the batch's
+  milestone on and enters that milestone, adds one task saying how it ended
+  (`Batch completed: …` or `Deadline reached: … at the normal price`), and
+  the script gets `realm.current.automation.batch` =
+  `{ id, deadline, milestone, late, results }`. The run's log gets a
+  `trigger` line saying which.
 - **In a Preview** nothing is submitted (ADR 030 §1.1). When the card turns
   on `batchedAI` (the worker passes `batchedAI` in the script input),
   `realm.resolve.batch` sends each request at once through `realm.resolve`'s

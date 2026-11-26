@@ -42,6 +42,9 @@ export interface AIBatch {
   automationId: RealmResourceIdentifier;
   model: string;
   requestCount: number;
+  // The run milestone the batch started, which its follow-up enters again.
+  // Null on a batch recorded without one.
+  milestone: string | null;
   // The most the batch can cost, in USD: each request's input and
   // output-token limit at the model's listed batch price.
   estimatedUsd: number;
@@ -117,6 +120,11 @@ export interface NewAIBatch {
   automationId: RealmResourceIdentifier;
   model: string;
   requestCount: number;
+  // The run milestone the batch started.
+  milestone?: string;
+  // The batch's requests as the batch path sent them, in the order the
+  // script listed them, kept for its follow-up (`AIBatchRequest`).
+  requests?: AIBatchRequest[];
   estimatedUsd: number;
   runAIReservation: string;
   reservedCredits: number;
@@ -216,8 +224,46 @@ export function isFinalAIBatchState(state: string): boolean {
   return AI_BATCH_FINAL_STATES.includes(state);
 }
 
+// One request of a batch: the id OpenRouter answers it under, and the chat
+// completion body sent for it.
+export interface AIBatchRequest {
+  customId: string;
+  body: Record<string, unknown>;
+}
+
+// What a batch's follow-up run reads of its batch before its script runs
+// (`/_ai-batches/<id>/follow-up`): one entry per request, in the order the
+// script listed them. A batch that completed gives each request its
+// `answer`, OpenRouter's chat completion for it, or the `error` it got. A
+// batch that has no results to give (it was still open at its deadline, or
+// it failed, expired or was canceled, or OpenRouter no longer holds it) is
+// `late`: each request carries no answer, and the follow-up sends its `body`
+// at the normal price (ADR 030 §1.3). A request whose body the platform no
+// longer holds carries the `error` that says so instead.
+export interface AIBatchFollowUpRead {
+  id: string;
+  // ISO 8601.
+  deadline: string;
+  // The run milestone the batch started.
+  milestone: string;
+  // The milestones the submitting run's script planned, which the follow-up
+  // carries on with. Empty when it planned none.
+  plan: string[];
+  late: boolean;
+  // OpenRouter's status for the batch as the follow-up read it: one of its
+  // statuses, or `gone` when OpenRouter no longer holds the batch, or
+  // `unread` when it couldn't be read.
+  state: string;
+  requests: {
+    body?: Record<string, unknown>;
+    answer?: unknown;
+    error?: string;
+  }[];
+}
+
 // Records a submitted batch, or returns the record already there for its id,
-// so recording the same submit twice gives one row.
+// so recording the same submit twice gives one row. The batch's requests are
+// recorded with it, for its follow-up.
 export async function recordAIBatch(
   dbAdapter: DBAdapter,
   batch: NewAIBatch,
@@ -238,7 +284,7 @@ export async function recordAIBatch(
     );
   }
   let [created] = await query(dbAdapter, [
-    'INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, estimated_usd, run_ai_reservation, reserved_credits, deadline, expires_at, state, submitted_at) VALUES (',
+    'WITH created AS (INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, milestone, estimated_usd, run_ai_reservation, reserved_credits, deadline, expires_at, state, submitted_at) VALUES (',
     param(batch.batchId),
     ',',
     param(batch.runId),
@@ -252,6 +298,8 @@ export async function recordAIBatch(
     param(batch.model),
     ',',
     param(batch.requestCount),
+    ',',
+    param(batch.milestone ?? null),
     ',',
     param(batch.estimatedUsd),
     ',',
@@ -267,7 +315,15 @@ export async function recordAIBatch(
     ', COALESCE(CAST(',
     param(batch.submittedAt ? batch.submittedAt.toISOString() : null),
     'AS timestamptz), now())',
-    ') ON CONFLICT (batch_id) DO NOTHING RETURNING *',
+    ') ON CONFLICT (batch_id) DO NOTHING RETURNING *)',
+    ...((batch.requests
+      ? [
+          ', kept AS (INSERT INTO ai_batch_requests (batch_id, requests) SELECT batch_id,',
+          param(JSON.stringify(batch.requests)),
+          '::jsonb FROM created)',
+        ]
+      : []) as Expression),
+    'SELECT * FROM created',
   ]);
   if (created) {
     return batchFromRow(created);
@@ -370,6 +426,56 @@ export async function recordAIBatchReadByRun(
     'RETURNING *',
   ]);
   return row ? batchFromRow(row) : undefined;
+}
+
+// The requests recorded with a batch, in the order the script listed them,
+// or undefined when none are held for it.
+export async function getAIBatchRequests(
+  dbAdapter: DBAdapter,
+  batchId: string,
+): Promise<AIBatchRequest[] | undefined> {
+  let [row] = await query(dbAdapter, [
+    'SELECT requests FROM ai_batch_requests WHERE batch_id =',
+    param(batchId),
+  ]);
+  if (!row) {
+    return undefined;
+  }
+  let requests =
+    typeof row.requests === 'string' ? JSON.parse(row.requests) : row.requests;
+  return Array.isArray(requests) ? (requests as AIBatchRequest[]) : undefined;
+}
+
+// Drops the requests held for each batch whose follow-up has ended for good
+// (completed, failed, or canceled other than to be held), or that can never
+// get one (`follow_up_dropped_at`). A held follow-up's run is replaced under
+// the batch's slot, so the run that ends the batch's follow-up is the one
+// whose slot is the batch's id.
+export async function dropFinishedAIBatchRequests(
+  dbAdapter: DBAdapter,
+): Promise<void> {
+  await query(dbAdapter, [
+    'DELETE FROM ai_batch_requests q USING ai_batches b WHERE q.batch_id = b.batch_id AND (b.follow_up_dropped_at IS NOT NULL OR EXISTS (SELECT 1 FROM automation_runs r WHERE',
+    "r.automation_id = b.automation_id AND r.trigger = 'batch' AND r.slot = b.batch_id",
+    "AND r.state IN ('complete', 'error', 'canceled')))",
+  ]);
+}
+
+// Records that a batch's follow-up found the batch still open and sends its
+// requests at the normal price, whether or not its deadline has passed: the
+// batch is late from then on, and its results, once it ends, are never used.
+// A batch already in a final status is left as it is.
+export async function recordAIBatchFallback(
+  dbAdapter: DBAdapter,
+  batchId: string,
+): Promise<void> {
+  await query(dbAdapter, [
+    'UPDATE ai_batches SET deadline_missed_at = COALESCE(deadline_missed_at, now()) WHERE batch_id =',
+    param(batchId),
+    'AND state NOT IN (',
+    ...finalStatesList(),
+    ')',
+  ]);
 }
 
 // The batches a run submitted, oldest first.
@@ -577,6 +683,7 @@ function batchFromRow(row: Record<string, PgPrimitive>): AIBatch {
     automationId: row.automation_id as RealmResourceIdentifier,
     model: String(row.model),
     requestCount: Number(row.request_count),
+    milestone: row.milestone == null ? null : String(row.milestone),
     estimatedUsd: Number(row.estimated_usd),
     runAIReservation: String(row.run_ai_reservation),
     reservedCredits:

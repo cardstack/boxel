@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import {
   ensureTrailingSlash,
   isAutomationScriptInput,
+  type AIBatchFollowUpRead,
   type AutomationScriptOutcome,
 } from '@cardstack/runtime-common';
 import { presentsAsRunToken } from '@cardstack/runtime-common/run-token';
@@ -16,6 +17,7 @@ import {
 } from '../lib/realm-runner/automation';
 import {
   resolve as resolveJSON,
+  resolveChat,
   type ProxySend,
 } from '../lib/realm-runner/research';
 import { RunLogSink } from '../lib/realm-runner/run-log-sink';
@@ -106,7 +108,9 @@ export default class RunAutomationTool extends HostBaseTool<
     let io: AutomationRealmIO = {
       ...runner.automationRealmIO(realmURL),
       resolve: (request, signal) => resolveJSON(request, send, signal),
+      resolveChat: (body, signal) => resolveChat(body, send, signal),
       resolveBatch: this.runTokenBatchSubmit(runToken),
+      readBatchFollowUp: this.runTokenBatchFollowUp(runToken),
     };
 
     // The run's time limit counts from its start, so the time it waited for
@@ -144,6 +148,9 @@ export default class RunAutomationTool extends HostBaseTool<
               secondsCap,
               batchDeadlineMinutes: scriptInput.batchDeadlineMinutes,
               batchedAI: scriptInput.batchedAI === true,
+              ...(typeof scriptInput.followUpBatchId === 'string'
+                ? { followUpBatchId: scriptInput.followUpBatchId }
+                : {}),
               io,
               progress,
               secrets,
@@ -239,6 +246,47 @@ export default class RunAutomationTool extends HostBaseTool<
         );
       }
       return { id };
+    };
+  }
+
+  // A batch's follow-up reads its batch with the run's token, from the realm
+  // server's batch path, which answers only the batch's own follow-up run:
+  // the batch's results, or its requests to send at the normal price.
+  private runTokenBatchFollowUp(
+    runToken: string,
+  ): (batchId: string, signal: AbortSignal) => Promise<AIBatchFollowUpRead> {
+    let batchesURL = `${realmServerOf(runToken)}_ai-batches`;
+    return async (batchId, signal) => {
+      let response = await this.network.fetch(
+        `${batchesURL}/${encodeURIComponent(batchId)}/follow-up`,
+        {
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${runToken}`,
+          },
+          signal,
+        },
+      );
+      let text = await response.text();
+      if (!response.ok) {
+        throw new Error(
+          `The follow-up couldn't read batch ${batchId}: ${response.status} - ${batchRefusal(text)}`,
+        );
+      }
+      let read: AIBatchFollowUpRead;
+      try {
+        read = JSON.parse(text);
+      } catch {
+        throw new Error(
+          `The follow-up couldn't read batch ${batchId}: the batch path answered with no batch`,
+        );
+      }
+      if (!read || !Array.isArray(read.requests)) {
+        throw new Error(
+          `The follow-up couldn't read batch ${batchId}: the batch path answered with no requests`,
+        );
+      }
+      return read;
     };
   }
 }

@@ -165,6 +165,11 @@ export interface AutomationScriptInput extends JSONTypes.Object {
   // requests at once, at the normal price, only when it is on, as a run's
   // batch is submitted only then.
   batchedAI: boolean;
+  // For a batch's follow-up, the batch's id; null for any other run. The tab
+  // reads the batch with it before the script runs, and gives the script its
+  // results, or the answers its requests get at the normal price, as
+  // `realm.current.automation.batch`.
+  followUpBatchId: string | null;
 }
 
 export function isAutomationScriptInput(
@@ -185,6 +190,9 @@ export function isAutomationScriptInput(
     !Number.isNaN(Date.parse(input.endsAt)) &&
     (input.batchDeadlineMinutes === undefined ||
       typeof input.batchDeadlineMinutes === 'number') &&
+    (input.followUpBatchId == null ||
+      (typeof input.followUpBatchId === 'string' &&
+        input.followUpBatchId.length > 0)) &&
     !!automation &&
     typeof automation === 'object' &&
     typeof automation.url === 'string' &&

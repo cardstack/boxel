@@ -591,6 +591,8 @@ async function attemptRun(
     endsAt: new Date(deadline).toISOString(),
     batchDeadlineMinutes: declaration.declaration.batchDeadlineMinutes,
     batchedAI: declaration.declaration.batchedAI,
+    // A batch's follow-up: its slot is its batch's id.
+    followUpBatchId: kind === 'batch' ? run.slot : null,
   };
 
   let outcome: AutomationScriptOutcome;

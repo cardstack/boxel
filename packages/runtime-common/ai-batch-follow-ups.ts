@@ -53,6 +53,14 @@
 // (`follow_up_dropped_at`), which takes it out of the tick's search. A
 // removed automation's held follow-up is canceled with its other runs, and
 // its hold cleared. The settle job still bills every such batch.
+//
+// Before its script runs, the follow-up's tab reads its batch through the
+// batch path (`/_ai-batches/<id>/follow-up`): the results of a batch that
+// completed, or, for one that has none to give, the requests the submit
+// recorded (`ai_batch_requests`), which the tab sends again at the normal
+// price. The script gets either as `realm.current.automation.batch`. Each
+// tick drops the requests of a batch whose follow-up has ended for good, or
+// that can get none (`dropFinishedAIBatchRequests`).
 
 import { BATCH_RUN_TRIGGER } from './automation-declaration.ts';
 import type { AutomationJobInput } from './automation-run-command.ts';
@@ -61,7 +69,10 @@ import {
   emitAutomationRunEvent,
   type AutomationRunEnqueuedEvent,
 } from './automation-run-telemetry.ts';
-import { AI_BATCH_FINAL_STATES } from './ai-batches.ts';
+import {
+  AI_BATCH_FINAL_STATES,
+  dropFinishedAIBatchRequests,
+} from './ai-batches.ts';
 import { insertOrFindAutomationRun } from './automation-runs.ts';
 import type { DBAdapter } from './db.ts';
 import {
@@ -146,6 +157,7 @@ export async function startDueAIBatchFollowUps(
 ): Promise<AIBatchFollowUpOutcome[]> {
   let now = options.now ?? Math.floor(Date.now() / 1000);
   await dropUnreachableFollowUps(dbAdapter, now);
+  await dropFinishedAIBatchRequests(dbAdapter);
   return [
     ...(await startFollowUps(dbAdapter, 'held', now, options)),
     ...(await startFollowUps(dbAdapter, 'due', now, options)),

@@ -4,7 +4,10 @@ import {
   endAutomationRunNotADirectWriter,
   runActsAsDirectWriter,
   getAIBatch,
+  getAIBatchRequests,
+  isFinalAIBatchState,
   isLateAIBatch,
+  recordAIBatchFallback,
   listAIBatchesForRun,
   recordAIBatchReadByRun,
   reserveAutomationRunAICredits,
@@ -12,6 +15,9 @@ import {
   logger,
   recordAIBatch,
   recordAIBatchState,
+  type AIBatch,
+  type AIBatchFollowUpRead,
+  type AIBatchRequest,
   type AutomationRun,
   type DBAdapter,
   type ReportRunChange,
@@ -54,6 +60,12 @@ import { verifyRunToken } from '../lib/run-token.ts';
 import { aiBatchSubmitsEnabled } from '../lib/ai-batch-submits-config.ts';
 import { runTokenOf } from '@cardstack/runtime-common/run-token';
 import { countRunCall } from '@cardstack/runtime-common/automation-run-limits';
+import {
+  readRunMilestones,
+  RUN_MILESTONE_MAX_NAME_CHARS,
+} from '@cardstack/runtime-common/automation-run-milestones';
+import { BATCH_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
+import { logRunPlatformLine } from '@cardstack/runtime-common/automation-run-log';
 
 const log = logger('ai-batches');
 
@@ -71,9 +83,13 @@ const log = logger('ai-batches');
 // doesn't, so a follow-up run can always read a batch that is already paid
 // for.
 //
-// A submit is refused unless the realm server turns batch submits on
-// (`AI_BATCH_SUBMITS_ENABLED`, `aiBatchSubmitsEnabled`). A status read never
-// is, so a batch already submitted can always be read.
+// A submit is refused when the realm server turns batch submits off
+// (`AI_BATCH_SUBMITS_ENABLED=false`, `aiBatchSubmitsEnabled`). A status read
+// or a follow-up's read never is, so a batch already submitted can always be
+// read.
+//
+// A submit records the batch's requests and the run milestone it starts,
+// for its follow-up (`handleAIBatchFollowUp`).
 //
 // A run submits at most one batch, whichever attempt sends it.
 //
@@ -95,6 +111,8 @@ interface SubmitBody {
   model?: unknown;
   // How long the script waits for the results, in seconds.
   deadlineSeconds?: unknown;
+  // The run milestone the batch starts, which its follow-up enters again.
+  milestone?: unknown;
   requests?: unknown;
 }
 
@@ -173,7 +191,7 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
     if (!submit) {
       return;
     }
-    let { model, deadlineSeconds, requests } = submit;
+    let { model, deadlineSeconds, milestone, requests } = submit;
 
     let modelsRealmURL = openRouterModelsRealmURL(virtualNetwork);
     if (!modelsRealmURL) {
@@ -317,6 +335,8 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
         automationId: run.automationId,
         model,
         requestCount: requests.length,
+        ...(milestone ? { milestone } : {}),
+        requests,
         estimatedUsd: estimated.estimate.usd,
         runAIReservation: reservationId,
         reservedCredits,
@@ -401,6 +421,216 @@ export function handleAIBatchStatus(args: AIBatchHandlerArgs) {
     }
     sendJson(ctxt, status, text);
   };
+}
+
+// A batch's follow-up reads its batch before its script runs (ADR 030 §1.3,
+// §1.5). Only the batch's own follow-up run reads it this way: a run whose
+// trigger is `batch` and whose slot is the batch's id. It answers an
+// `AIBatchFollowUpRead`:
+//
+// - A batch OpenRouter reports completed, with its results, that no run has
+//   found still open past its deadline: each request gets its result, by
+//   its `customId`, as OpenRouter's chat completion for it or the error it
+//   got.
+// - Any other batch is late: it was still open, or failed, expired or was
+//   canceled, or OpenRouter no longer holds it (`410`, 30 days after submit),
+//   or couldn't be read. Each request carries the body the submit recorded,
+//   which the follow-up sends at the normal price. A batch read still open is
+//   recorded as late, so its results are never used, even once it ends.
+//
+// Each request also carries its body when the batch completed: the follow-up
+// reads each result against the request's output schema, as `realm.resolve`
+// reads its answer. The answer names the batch's milestone, and the
+// milestones the submitting run's script planned from it on, so the
+// follow-up carries on where the submitting run stopped.
+export function handleAIBatchFollowUp(args: AIBatchHandlerArgs) {
+  return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    let { dbAdapter } = args;
+    let caller = await batchCaller(ctxt, args);
+    if (!caller) {
+      return;
+    }
+    let { run } = caller;
+    let batchId = String(ctxt.params.batchId ?? '');
+    let batch = batchId ? await getAIBatch(dbAdapter, batchId) : undefined;
+    // Another automation's batch reads as missing, so its existence isn't
+    // disclosed.
+    if (!batch || batch.automationId !== run.automationId) {
+      await sendResponseForNotFound(ctxt, `There is no batch ${batchId}`);
+      return;
+    }
+    if (run.trigger !== BATCH_RUN_TRIGGER || run.slot !== batch.batchId) {
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        `Only the follow-up run of batch ${batch.batchId} reads it for its results`,
+      );
+      return;
+    }
+    let [requests, read, submitting] = await Promise.all([
+      getAIBatchRequests(dbAdapter, batch.batchId),
+      readBatchResults(dbAdapter, batch),
+      readRunMilestones(dbAdapter, batch.runId),
+    ]);
+    let current = (await getAIBatch(dbAdapter, batch.batchId)) ?? batch;
+    let late = !read.results || isLateAIBatch(current);
+    if (late && !isFinalAIBatchState(current.state)) {
+      // Its results, once it ends, are never used: these requests are sent
+      // at the normal price instead.
+      await recordAIBatchFallback(dbAdapter, batch.batchId);
+    }
+    let milestone = batch.milestone ?? DEFAULT_BATCH_MILESTONE;
+    let plan = submitting?.plan ?? [];
+    let from = plan.indexOf(milestone);
+    let answer: AIBatchFollowUpRead = {
+      id: batch.batchId,
+      deadline: batch.deadline,
+      milestone,
+      // The plan from the batch's milestone on, or, for a milestone the plan
+      // doesn't name, the batch's milestone and what the plan had ahead.
+      plan:
+        plan.length === 0
+          ? []
+          : from >= 0
+            ? plan.slice(from)
+            : [milestone, ...(submitting?.ahead ?? [])],
+      late,
+      state: read.state,
+      requests: followUpRequests(
+        batch,
+        requests,
+        late ? undefined : read.results,
+      ),
+    };
+    let count = answer.requests.length;
+    await logRunPlatformLine(dbAdapter, run.id, {
+      kind: 'trigger',
+      level: late ? 'warn' : 'info',
+      message: late
+        ? `Batch ${batch.batchId} has no results to give (${describeLate(read.state, current)}), so this run sends its ${count} AI request${count === 1 ? '' : 's'} at the normal price`
+        : `Batch ${batch.batchId} completed, and this run picks up its ${count} result${count === 1 ? '' : 's'}`,
+      data: {
+        trigger: BATCH_RUN_TRIGGER,
+        slot: batch.batchId,
+        late,
+        state: read.state,
+      },
+    });
+    sendJson(ctxt, 200, JSON.stringify(answer));
+  };
+}
+
+// The run milestone a batch whose submit named none started: the automation
+// surface's default (`DEFAULT_BATCH_MILESTONE` in host
+// `lib/realm-runner/research.ts`).
+const DEFAULT_BATCH_MILESTONE = 'batched AI';
+
+// The batch's status as OpenRouter reports it now, recorded on its row, and
+// its results when it completed with them. `gone` when OpenRouter no longer
+// holds the batch; `unread` when it couldn't be read.
+async function readBatchResults(
+  dbAdapter: DBAdapter,
+  batch: AIBatch,
+): Promise<{ state: string; results?: unknown[] }> {
+  let answer = await callOpenRouterBatchAPI(dbAdapter, {
+    url: openRouterBatchURL(batch.batchId),
+    method: 'GET',
+  });
+  if (answer.kind !== 'answered') {
+    log.warn(
+      `could not read batch ${batch.batchId} for its follow-up: ${answer.kind === 'no-key' ? 'no OpenRouter key for batches' : String((answer.error as Error)?.message ?? answer.error)}`,
+    );
+    return { state: 'unread' };
+  }
+  let { status, json } = answer;
+  if (status === 404 || status === 410) {
+    return { state: 'gone' };
+  }
+  let read =
+    status >= 200 && status < 300 ? readOpenRouterBatch(json) : undefined;
+  if (!read || read.id !== batch.batchId) {
+    log.warn(
+      `could not read batch ${batch.batchId} for its follow-up: OpenRouter answered ${status}`,
+    );
+    return { state: 'unread' };
+  }
+  await recordAIBatchState(dbAdapter, batch.batchId, {
+    state: read.status,
+    expiresAt: read.expiresAt,
+    finalizedAt: read.finalizedAt,
+  });
+  let results = (json as { results?: unknown }).results;
+  return read.status === 'completed' && Array.isArray(results)
+    ? { state: read.status, results }
+    : { state: read.status };
+}
+
+// Each of the batch's requests, in the order the script listed them, with its
+// result when `results` is given. A request whose body is no longer held, or
+// that the results don't answer, carries the error that says so.
+function followUpRequests(
+  batch: AIBatch,
+  requests: AIBatchRequest[] | undefined,
+  results: unknown[] | undefined,
+): AIBatchFollowUpRead['requests'] {
+  if (!requests) {
+    return Array.from({ length: batch.requestCount }, () => ({
+      error: `The platform no longer holds the requests of batch ${batch.batchId}, so this request has no answer`,
+    }));
+  }
+  let byId = new Map<string, Record<string, any>>();
+  for (let result of results ?? []) {
+    let entry = result as Record<string, any> | null;
+    if (entry && typeof entry.custom_id === 'string') {
+      byId.set(entry.custom_id, entry);
+    }
+  }
+  return requests.map(({ customId, body }) => {
+    if (!results) {
+      return { body };
+    }
+    let result = byId.get(customId);
+    if (!result) {
+      return { body, error: 'The batch has no answer for this request' };
+    }
+    if (result.error) {
+      return {
+        body,
+        error: `OpenRouter failed this request in the batch: ${String(result.error.message ?? JSON.stringify(result.error))}`,
+      };
+    }
+    let status = result.response?.status_code;
+    let answer = result.response?.body;
+    if (typeof status === 'number' && (status < 200 || status >= 300)) {
+      return {
+        body,
+        error: `OpenRouter answered this request in the batch with ${status}${answer?.error?.message ? `: ${answer.error.message}` : ''}`,
+      };
+    }
+    if (answer === undefined || answer === null) {
+      return { body, error: 'The batch answered this request with no body' };
+    }
+    return { body, answer };
+  });
+}
+
+// Why a late batch has no results to give, for the run's log.
+function describeLate(state: string, batch: AIBatch): string {
+  switch (state) {
+    case 'gone':
+      return 'OpenRouter no longer holds it';
+    case 'unread':
+      return "it couldn't be read from OpenRouter";
+    case 'completed':
+      return batch.deadlineMissedAt
+        ? `a run found it still open past its deadline, at ${batch.deadlineMissedAt}`
+        : 'OpenRouter gave no results for it';
+    case 'failed':
+    case 'expired':
+    case 'cancelled':
+      return `it ${state === 'cancelled' ? 'was canceled' : state}`;
+    default:
+      return `it is still ${state} past its deadline, ${batch.deadline}`;
+  }
 }
 
 // The run a batch call comes from, and its automation, after checking that
@@ -556,10 +786,13 @@ function formatCredits(credits: number): string {
   return Number(credits.toFixed(3)).toString();
 }
 
-async function readSubmit(
-  ctxt: Koa.Context,
-): Promise<
-  | { model: string; deadlineSeconds: number; requests: BatchRequest[] }
+async function readSubmit(ctxt: Koa.Context): Promise<
+  | {
+      model: string;
+      deadlineSeconds: number;
+      milestone: string | undefined;
+      requests: BatchRequest[];
+    }
   | undefined
 > {
   let request = await fetchRequestFromContext(ctxt);
@@ -574,7 +807,7 @@ async function readSubmit(
     await sendResponseForBadRequest(ctxt, 'Request body must be a JSON object');
     return undefined;
   }
-  let { model, deadlineSeconds, requests } = submit;
+  let { model, deadlineSeconds, milestone, requests } = submit;
   if (typeof model !== 'string' || model.length === 0) {
     await sendResponseForBadRequest(ctxt, 'A batch must name its model');
     return undefined;
@@ -588,6 +821,18 @@ async function readSubmit(
     await sendResponseForBadRequest(
       ctxt,
       `deadlineSeconds must be a whole number of seconds from 1 to ${MAX_AI_BATCH_DEADLINE_SECONDS} (24 hours)`,
+    );
+    return undefined;
+  }
+  if (
+    milestone !== undefined &&
+    (typeof milestone !== 'string' ||
+      !milestone.trim() ||
+      milestone.length > RUN_MILESTONE_MAX_NAME_CHARS)
+  ) {
+    await sendResponseForBadRequest(
+      ctxt,
+      `milestone must be a name of 1 to ${RUN_MILESTONE_MAX_NAME_CHARS} characters`,
     );
     return undefined;
   }
@@ -637,7 +882,12 @@ async function readSubmit(
     // to that model.
     read.push({ customId, body: { ...requestBody, model } });
   }
-  return { model, deadlineSeconds, requests: read };
+  return {
+    model,
+    deadlineSeconds,
+    milestone: typeof milestone === 'string' ? milestone.trim() : undefined,
+    requests: read,
+  };
 }
 
 // Sends one call to OpenRouter's Batch API with the platform's OpenRouter

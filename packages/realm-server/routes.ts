@@ -85,6 +85,7 @@ import handleInviteCheck from './handlers/handle-invite-check.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
 import {
+  handleAIBatchFollowUp,
   handleAIBatchStatus,
   handleSubmitAIBatch,
 } from './handlers/handle-ai-batches.ts';
@@ -764,6 +765,21 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(
     AI_BATCHES_PATH,
     handleSubmitAIBatch({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
+      matrixServerName: args.matrixClient.serverName,
+      reportRunChange: realmServerRunChangeReporter({
+        ...args,
+        background: true,
+      }),
+    }),
+  );
+  // A batch's follow-up reads its batch's results, or its requests to send
+  // at the normal price, before its script runs.
+  router.get(
+    `${AI_BATCHES_PATH}/:batchId/follow-up`,
+    handleAIBatchFollowUp({
       dbAdapter: args.dbAdapter,
       realmSecretSeed: args.realmSecretSeed,
       virtualNetwork: args.virtualNetwork,
