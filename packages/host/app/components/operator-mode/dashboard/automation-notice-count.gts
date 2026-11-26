@@ -1,6 +1,8 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { Badge } from '@cardstack/pretui/components/badge';
 import { Chip } from '@cardstack/pretui/components/chip';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -27,7 +29,7 @@ class AutomationNoticeCount extends Component {
   <template>
     {{#if this.count}}
       <Chip
-        @tone='danger'
+        @tone='attention'
         @appearance='soft'
         data-test-realm-settings-automation-notices={{this.count}}
       >
@@ -44,3 +46,44 @@ export function automationNoticeCount(realm: string): ComponentLike {
     protected realm = realm;
   };
 }
+
+interface WorkspaceIconCountSignature {
+  Args: { count: number };
+  Blocks: { default: [] };
+  Element: HTMLSpanElement;
+}
+
+// A workspace's icon with the count of its automation notices on its corner.
+// The count is only seen here: the workspace's own button carries the spoken
+// count as a description (see `Workspace`), so this mark is hidden from
+// assistive tech and never becomes part of the button's name.
+export const WorkspaceIconCount: TemplateOnlyComponent<WorkspaceIconCountSignature> =
+  <template>
+    <span class='icon-with-count' ...attributes>
+      {{yield}}
+      {{#if @count}}
+        <span class='count-mark' aria-hidden='true'>
+          <Badge @count={{@count}} @tone='attention' class='count-badge'>
+            <span class='count-anchor'></span>
+          </Badge>
+        </span>
+      {{/if}}
+    </span>
+    <style scoped>
+      .icon-with-count {
+        position: relative;
+        display: inline-flex;
+      }
+      .count-mark {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .count-badge,
+      .count-anchor {
+        display: block;
+        inline-size: 100%;
+        block-size: 100%;
+      }
+    </style>
+  </template>;

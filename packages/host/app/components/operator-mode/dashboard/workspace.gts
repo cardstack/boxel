@@ -9,7 +9,6 @@ import { tracked } from '@glimmer/tracking';
 import DotsHorizontal from '@cardstack/boxel-icons/dots';
 import Globe from '@cardstack/boxel-icons/globe';
 import IconX from '@cardstack/boxel-icons/x';
-import { Badge } from '@cardstack/pretui/components/badge';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
@@ -43,6 +42,7 @@ import {
   DuplicateWorkspaceModal,
 } from '../dashboard-modals/workspace-modals';
 
+import { WorkspaceIconCount } from './automation-notice-count';
 import HostedPill from './hosted-pill';
 import ItemContainer from './item-container';
 import PinnedCards from './pinned-cards';
@@ -134,6 +134,14 @@ export default class Workspace extends Component<Signature> {
         }}
         ...attributes
       >
+        {{#if this.automationNoticeCount}}
+          <span
+            id={{this.automationNoticeDescriptionId}}
+            class='boxel-sr-only'
+            data-test-workspace-automation-notices-spoken
+          >{{this.automationNoticeCount}}
+            {{this.automationNoticeLabel}}</span>
+        {{/if}}
         {{#if this.workspace.reindexError}}
           <div class='reindex-error' role='alert' data-test-reindex-error>
             <span
@@ -193,9 +201,8 @@ export default class Workspace extends Component<Signature> {
                   {{! The name beside it labels the button. While an
                       automation in the workspace needs the user, the icon
                       carries the count. }}
-                  <Badge
+                  <WorkspaceIconCount
                     @count={{this.automationNoticeCount}}
-                    @label={{this.automationNoticeLabel}}
                     data-test-workspace-automation-notices={{if
                       this.automationNoticeCount
                       this.automationNoticeCount
@@ -206,7 +213,7 @@ export default class Workspace extends Component<Signature> {
                       @realmInfo={{this.workspace.realmInfo}}
                       aria-hidden='true'
                     />
-                  </Badge>
+                  </WorkspaceIconCount>
                   <span
                     class='desk-pill-name'
                     data-test-workspace-name
@@ -312,9 +319,8 @@ export default class Workspace extends Component<Signature> {
               @realmURL={{@realmIdentifier}}
               {{on 'click' this.workspace.openWorkspace}}
             >
-              <Badge
+              <WorkspaceIconCount
                 @count={{this.automationNoticeCount}}
-                @label={{this.automationNoticeLabel}}
                 data-test-workspace-automation-notices={{if
                   this.automationNoticeCount
                   this.automationNoticeCount
@@ -326,7 +332,7 @@ export default class Workspace extends Component<Signature> {
                     @realmInfo={{this.workspace.realmInfo}}
                   />
                 </span>
-              </Badge>
+              </WorkspaceIconCount>
             </RealmURLTooltip>
           </span>
         {{else}}
@@ -340,9 +346,8 @@ export default class Workspace extends Component<Signature> {
           >
             <span class='wallpaper'>
               <RealmURLTooltip @realmURL={{@realmIdentifier}}>
-                <Badge
+                <WorkspaceIconCount
                   @count={{this.automationNoticeCount}}
-                  @label={{this.automationNoticeLabel}}
                   data-test-workspace-automation-notices={{if
                     this.automationNoticeCount
                     this.automationNoticeCount
@@ -355,7 +360,7 @@ export default class Workspace extends Component<Signature> {
                       @canAnimate={{true}}
                     />
                   </span>
-                </Badge>
+                </WorkspaceIconCount>
               </RealmURLTooltip>
             </span>
           </ItemContainer>
@@ -1296,6 +1301,10 @@ export default class Workspace extends Component<Signature> {
     return `${guidFor(this)}-visibility`;
   }
 
+  private get automationNoticeDescriptionId() {
+    return `${guidFor(this)}-automation-notices`;
+  }
+
   private get updatedDescriptionId() {
     return `${guidFor(this)}-updated`;
   }
@@ -1312,6 +1321,9 @@ export default class Workspace extends Component<Signature> {
       ids.push(this.updatedDescriptionId);
     }
     ids.push(this.workspace.realmURLDescriptionId);
+    if (this.automationNoticeCount) {
+      ids.push(this.automationNoticeDescriptionId);
+    }
     return ids.join(' ');
   }
 

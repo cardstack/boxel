@@ -127,11 +127,23 @@ module('Acceptance | dashboard automation notices', function (hooks) {
       .dom(badge.querySelector('[data-test-pretui-badge-mark]'))
       .hasText('2', 'the workspace icon shows the count');
     assert
-      .dom(badge.querySelector('[data-test-pretui-badge-spoken]'))
+      .dom(badge.querySelector('[aria-hidden="true"]'))
+      .exists('the mark is hidden from assistive tech');
+    let workspace = badge.closest('[data-test-workspace]')!;
+    let spoken = workspace.querySelector(
+      '[data-test-workspace-automation-notices-spoken]',
+    )!;
+    assert
+      .dom(spoken)
       .hasText(
         '2 automations need attention',
         'the count says what the count means',
       );
+    let button = workspace.querySelector('[data-test-workspace-button]')!;
+    assert.ok(
+      button.getAttribute('aria-describedby')?.split(' ').includes(spoken.id),
+      'the workspace button is described by the count, after the button’s own name',
+    );
 
     await click(tileOf(realmAURL));
     assert

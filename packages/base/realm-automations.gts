@@ -777,7 +777,13 @@ export class RealmAutomationNotices extends GlimmerComponent<RealmAutomationNoti
     }
     this.load.perform(realm);
     let unsubscribe = subscribeToRealm(realm, (event) => {
-      if (event.eventName === 'job' || event.eventName === 'automation') {
+      // A notice changes only when an automation's row changes, or one of
+      // its runs ends.
+      if (
+        event.eventName === 'automation' ||
+        (event.eventName === 'job' &&
+          (event.state === 'complete' || event.state === 'error'))
+      ) {
         this.load.perform(realm, { settle: true });
       }
     });
@@ -835,9 +841,10 @@ export class RealmAutomationNotices extends GlimmerComponent<RealmAutomationNoti
   };
 
   <template>
-    <div class='realm-automation-notices' {{this.follow @realm}}>
+    <div {{this.follow @realm}}>
       {{#if this.noticed.length}}
         <Alert
+          class='realm-automation-notices'
           @tone='warning'
           @title={{if
             (eq this.noticed.length 1)
@@ -870,11 +877,8 @@ export class RealmAutomationNotices extends GlimmerComponent<RealmAutomationNoti
       {{/if}}
     </div>
     <style scoped>
-      .realm-automation-notices:empty {
-        display: none;
-      }
       .realm-automation-notices {
-        padding: var(--boxel-sp) var(--boxel-sp-lg) 0;
+        margin: var(--boxel-sp) var(--boxel-sp-lg) 0;
       }
       .notices {
         display: grid;
@@ -938,7 +942,7 @@ class AutomationGlance extends GlimmerComponent<AutomationGlanceSignature> {
       </:description>
       <:trailing>
         {{#if @automation.attributes.notice.forViewer}}
-          <Chip @tone='danger' data-test-realm-automation-needs-attention>
+          <Chip @tone='attention' data-test-realm-automation-needs-attention>
             Needs attention
           </Chip>
         {{/if}}
