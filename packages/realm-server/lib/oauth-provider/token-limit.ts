@@ -76,7 +76,7 @@ import {
   noteNetworkMatch,
   type NetworkMatch,
 } from './network-binding.ts';
-import { sha256Hex, takeFinishNetwork } from './objects.ts';
+import { findFinishNetwork, sha256Hex } from './objects.ts';
 import {
   PRE_REGISTERED_CLIENTS,
   type PreRegisteredClients,
@@ -353,9 +353,9 @@ async function grantOfExchange(
 }
 
 // How the network of a code exchange compares with the network whose browser
-// finished the flow. The finish's record is taken, so it is read once. Only
-// the exchange's log line reads the outcome, so a failure to read the record
-// is logged and the exchange goes on, as `unknown`.
+// finished the flow. Only the exchange's log line reads the outcome, so a
+// failure to read the record is logged and the exchange goes on, as
+// `unknown`.
 async function exchangeNetworkMatch(
   dbAdapter: DBAdapter,
   grantId: string,
@@ -363,7 +363,7 @@ async function exchangeNetworkMatch(
 ): Promise<NetworkMatch> {
   let finished;
   try {
-    finished = await takeFinishNetwork(dbAdapter, grantId);
+    finished = await findFinishNetwork(dbAdapter, grantId);
   } catch (error) {
     log.error(
       `failed to read a flow's network: ${

@@ -728,13 +728,16 @@ export async function recordFinishNetwork(
   );
 }
 
-// Takes the network the flow that created a grant finished from, so the one
-// exchange of the grant's code reads it and it is gone after.
-export async function takeFinishNetwork(
+// The network the flow that created a grant finished from. It is read, not
+// taken: Boxel's check of a token request comes before the library's, which
+// may still refuse the exchange without spending the code, and the exchange
+// that follows must find the record as the first did. It goes when it
+// expires.
+export async function findFinishNetwork(
   dbAdapter: DBAdapter,
   grantId: string,
 ): Promise<CallerNetwork | undefined> {
-  let payload = await takeObject(dbAdapter, FINISH_NETWORK_KIND, grantId);
+  let payload = await findObject(dbAdapter, FINISH_NETWORK_KIND, grantId);
   if (
     !payload ||
     (payload.family !== 4 && payload.family !== 6) ||

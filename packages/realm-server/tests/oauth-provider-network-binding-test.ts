@@ -13,6 +13,7 @@ import {
 } from './helpers/index.ts';
 import {
   OAUTH_TEST_CODE_CHALLENGE,
+  OAUTH_TEST_CODE_VERIFIER,
   OAUTH_TEST_SERVER_URL,
   OAUTH_TEST_WEB_REDIRECT_URI,
   decideOAuthFlow,
@@ -20,6 +21,7 @@ import {
   finishOAuthFlow,
   startOAuthFlow,
   startOAuthProviderServer,
+  tokenRequest,
   type OAuthRequester,
 } from './helpers/oauth-provider-flow.ts';
 import {
@@ -152,7 +154,7 @@ module(basename(import.meta.filename), function (hooks) {
       .find((line) => line.startsWith('token issued:'));
   }
 
-  test('the finish of a boxel-cli flow records its network, for two minutes at most, and the exchange takes it', async function (assert) {
+  test('the finish of a boxel-cli flow records its network, for two minutes at most', async function (assert) {
     let code = await cliCodeFinishedAt(HOME);
     let [recorded, ...others] = await finishNetworks();
     assert.strictEqual(others.length, 0, 'one record');
@@ -170,7 +172,6 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let exchanged = await cliExchangeFrom(HOME, code);
     assert.strictEqual(exchanged.status, 200, exchanged.text);
-    assert.deepEqual(await finishNetworks(), [], 'the exchange took it');
   });
 
   test('an exchange from another address in the same IPv4 /24 is logged as the same network', async function (assert) {
@@ -204,6 +205,34 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(
       await issuedLine(assert, HOME_V6, HOME),
       'token issued: client boxel-cli, network other-family',
+    );
+  });
+
+  test("an exchange the library refuses doesn't spend the record, so the one that follows still compares", async function (assert) {
+    let code = await cliCodeFinishedAt(HOME);
+    // With no `redirect_uri`, Boxel's check finds the code's grant, and the
+    // library refuses the exchange without spending the code.
+    let refused = await tokenRequest(server!, {
+      grant_type: 'authorization_code',
+      client_id: BOXEL_CLI_CLIENT_ID,
+      code,
+      code_verifier: OAUTH_TEST_CODE_VERIFIER,
+    }).set('X-Forwarded-For', ELSEWHERE);
+    assert.strictEqual(refused.status, 400, refused.text);
+    assert.strictEqual(
+      (await finishNetworks()).length,
+      1,
+      'the record is still there',
+    );
+    let telemetry = await telemetryDuring(async () => {
+      let exchanged = await cliExchangeFrom(ELSEWHERE, code);
+      assert.strictEqual(exchanged.status, 200, exchanged.text);
+    });
+    assert.true(
+      telemetry.logs
+        .split('\n')
+        .includes('token issued: client boxel-cli, network other'),
+      telemetry.logs,
     );
   });
 

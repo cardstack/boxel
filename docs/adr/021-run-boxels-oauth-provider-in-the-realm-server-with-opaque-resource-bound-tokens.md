@@ -279,9 +279,11 @@ whether or not the flow finishes.
 
 When a flow of a pre-registered app on the user's computer finishes with
 Allow, the provider MUST record the network of the browser that finished it,
-grouped as the provider's rate limits group a caller, and the exchange of its
-code MUST compare its own network with that record. The record MUST NOT
-outlast the time the code can be exchanged in. The provider MUST NOT log
+as the IPv4 /24 or IPv6 /48 its address is in (the grouping of the rate
+limits' `network` limit), and the exchange of its code MUST compare its own
+network with that record. The record MUST expire within a few minutes of the
+finish. An exchange the provider refuses MUST NOT spend the record, so the
+exchange that follows compares against it too. The provider MUST NOT log
 either network or send it to error reporting: it logs only how they compared.
 
 In the device authorization grant, the user MUST enter the user code on the
@@ -429,9 +431,14 @@ the flow picks the code. The attacker exchanges the code from their own
 network, though, not the one whose browser finished the flow, so comparing
 the two is the one check that fails the attack itself. A browser and an app
 on one computer can still leave by different routes (IPv6 for one and IPv4
-for the other, a VPN that covers only the browser, a proxy), and a user
-refused that way can't fix it by retrying. So the comparison is logged, not
-enforced, until its outcomes show how often a real sign-in differs.
+for the other, a VPN that covers only the browser, a proxy). The app can also
+run on another machine than the browser, as in a development container, a
+cloud workspace, or over SSH with its callback port forwarded, and its
+exchange then always comes from another network. A user refused in either
+case can't fix it by retrying. So the comparison is logged, not enforced,
+until its outcomes show how often a real sign-in differs. The record is never
+sent to error reporting, though an error report carries the caller's address
+among its request's headers, on this route as on every other.
 
 The library binds a flow to its browser only through its own cookie, which
 the secure origin's pages never send, so Boxel adds the ticket check itself.
