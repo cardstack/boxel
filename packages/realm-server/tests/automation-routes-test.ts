@@ -1005,18 +1005,16 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(automation?.pauseReason, 'webhook-owner-lost-access');
     });
 
-    test('an automation switched on before its snapshot recorded webhooks takes a delivery its card names', async function (assert) {
+    test('an automation whose snapshot has no webhookPaths takes no delivery, even to a webhook its card names', async function (assert) {
       await switchOnHooked();
       await dbAdapter.execute(
         `UPDATE automations SET caps_snapshot = caps_snapshot - 'webhookPaths' WHERE automation_id = $1`,
         { bind: [automationId(HOOKED)] },
       );
-      let response = await deliver('delivery-6', { legacy: true });
+      let response = await deliver('delivery-6', { unagreed: true });
       assert.strictEqual(response.status, 200, response.text);
-      assert.strictEqual(response.body.automationRunsStarted, 1);
-      let [run] = await runsOfHooked();
-      assert.strictEqual(run?.slot, 'delivery:delivery-6');
-      await ended(run.id);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
     });
 
     test('an automation that is off takes no delivery', async function (assert) {
