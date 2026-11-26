@@ -2047,6 +2047,7 @@ export * from './db-queries/realm-permission-queries.ts';
 export * from './db-queries/session-room-queries.ts';
 export * from './db-queries/realm-event-room-queries.ts';
 export * from './db-queries/realm-event-watcher-queries.ts';
+export * from './realm-event-watcher-copy.ts';
 export * from './db-queries/user-queries.ts';
 export * from './send-event.ts';
 

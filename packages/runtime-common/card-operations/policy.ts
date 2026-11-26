@@ -238,6 +238,25 @@ export interface CompiledPolicyPredicate {
   readsActor?: true;
 }
 
+// Which signed-in callers a compiled predicate could ever admit: whether it
+// reads nothing of the card (see `readsNothingOfTheCard`), so it holds or
+// fails for a caller whatever the card, and whether it can never hold for a
+// signed-in caller, as `actor() == "anonymous"` can't. Kept beside the
+// compiled policy rather than in it. Undefined for a predicate this process
+// didn't compile, which a caller reads as one that could admit anyone.
+export interface PredicateReach {
+  cardIndependent: boolean;
+  neverSignedIn: boolean;
+}
+
+const predicateReaches = new WeakMap<CompiledPolicyPredicate, PredicateReach>();
+
+export function predicateReach(
+  where: CompiledPolicyPredicate,
+): PredicateReach | undefined {
+  return predicateReaches.get(where);
+}
+
 // The type every policy card adopts from. It is defined in the catalog realm,
 // which a deployment serves under this prefix.
 export const realmPolicyRef: ResolvedCodeRef = {
@@ -1678,29 +1697,35 @@ async function compileDocument(
         );
         continue;
       }
-      if (settleActor(outcome.body, 'signed-in') === false) {
+      let closedToSignedIn = settleActor(outcome.body, 'signed-in') === false;
+      if (closedToSignedIn) {
         neverSignedIn.add(grantPath);
       }
-      grants.push(
-        await withFilter(
-          {
-            operation,
-            path: grantPath,
-            ...(paths ? { paths } : {}),
-            where: {
-              source: where.source,
-              canonical: outcome.canonical,
-              snapshot,
-              ...(outcome.readsActor ? { readsActor: true as const } : {}),
-            },
-            ...(anonymous ? { anonymous } : {}),
+      let compiledGrant = await withFilter(
+        {
+          operation,
+          path: grantPath,
+          ...(paths ? { paths } : {}),
+          where: {
+            source: where.source,
+            canonical: outcome.canonical,
+            snapshot,
+            ...(outcome.readsActor ? { readsActor: true as const } : {}),
           },
-          granted.base,
-          { body: outcome.body, snapshot },
-          resolved,
-          definition,
-        ),
+          ...(anonymous ? { anonymous } : {}),
+        },
+        granted.base,
+        { body: outcome.body, snapshot },
+        resolved,
+        definition,
       );
+      if (compiledGrant.where) {
+        predicateReaches.set(compiledGrant.where, {
+          cardIndependent: readsNothingOfTheCard(outcome.body),
+          neverSignedIn: closedToSignedIn,
+        });
+      }
+      grants.push(compiledGrant);
     }
     rules.push({ targetType: resolved, path: rulePath, grants });
   }
