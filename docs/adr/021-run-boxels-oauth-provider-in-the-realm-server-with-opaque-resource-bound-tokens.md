@@ -231,7 +231,7 @@ request with no credential lacks. A tab token for work that only reads, such as
 a capture, MUST allow reading only, whatever its grant allows. A realm-server
 route MUST refuse a tab token, except the federated reads a tab makes through
 `multiRealmAuthorization`, and the routes that spend AI credits (§1.6), which
-MUST admit a command's tab token only, never a capture's. The tab MUST hold nothing but its tab tokens,
+MUST refuse a capture's tab token and judge a command's as above. The tab MUST hold nothing but its tab tokens,
 and those only in memory. It MAY give one to its browser context's auth
 service worker for the one request the worker asks about, so its images draw,
 and the worker MUST NOT keep it. The tab MUST NOT share a browser context with

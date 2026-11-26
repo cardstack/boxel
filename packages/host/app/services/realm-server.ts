@@ -1627,26 +1627,26 @@ export default class RealmServerService
   private reauthenticating: Promise<string | undefined> | undefined;
 
   // In the tab of a command an OAuth app runs, which holds tab tokens in
-  // memory and no realm-server session, the call carries one of its tab
-  // tokens that this realm server minted: the realm server judges it as the
-  // app's OAuth grant, and admits it only where that grant may spend AI
-  // credits. Such a tab never sends anything else, so it can't fall back to
-  // a session it might find in storage. Undefined in every other tab.
+  // memory and no realm-server session, the call carries the tab token this
+  // realm server minted: the realm server judges it as the app's OAuth
+  // grant, and admits it only where that grant may spend AI credits. Such a
+  // tab never sends anything else, so it can't fall back to a session it
+  // might find in storage, and it never hands one server's tab token to
+  // another. Undefined in every other tab.
   private oauthTabTokenForThisServer(): string | undefined {
     let tokens = heldOAuthTabTokens();
     if (!tokens) {
       return undefined;
     }
-    let held = Object.values(tokens);
-    let forThisServer = held.find(
-      (token) =>
-        (realmClaimsFromRawToken(token) as { realmServerURL?: unknown })
-          ?.realmServerURL === this.url.href,
+    let forThisServer = Object.values(tokens).find(
+      (token) => tabTokenRealmServerURL(token) === this.url.href,
     );
-    // A tab token for another realm server would fail here on its
-    // signature, so the first one stands in only to be refused, rather than
-    // the call going out with a session.
-    return forThisServer ?? held[0];
+    if (!forThisServer) {
+      throw new Error(
+        `This tab holds no tab token for ${this.url.href}, so it can't call it.`,
+      );
+    }
+    return forThisServer;
   }
 
   // The forwarded fields are `RequestForwardBody` in
@@ -2266,6 +2266,23 @@ function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
 function isTokenExpired(rawToken: string): boolean {
   let exp = realmClaimsFromRawToken(rawToken)?.exp;
   return !Number.isFinite(exp) || (exp as number) * 1000 <= Date.now();
+}
+
+// The `realmServerURL` claim of a tab token, read without verifying it: it
+// only chooses which server a token is sent to. A JWT's payload is base64url,
+// which `atob` doesn't read as it stands.
+function tabTokenRealmServerURL(token: string): string | undefined {
+  try {
+    let payload = token.split('.')[1] ?? '';
+    let claims = JSON.parse(
+      atob(payload.replace(/-/g, '+').replace(/_/g, '/')),
+    ) as { realmServerURL?: unknown };
+    return typeof claims.realmServerURL === 'string'
+      ? claims.realmServerURL
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function realmClaimsFromRawToken(
