@@ -114,15 +114,13 @@ export class SpecCatalog {
     let some: { spec: SpecLike; score: number }[] = [];
     for (let spec of this.all) {
       let name = words(specName(spec));
-      let prose = [spec.cardTitle, spec.brief]
-        .map((value) => value?.toLowerCase() ?? '')
-        .join(' ');
+      let prose = words(`${spec.cardTitle ?? ''} ${spec.brief ?? ''}`);
       let scores = terms.map((term): number =>
         name.includes(term)
           ? 3
           : name.some((word) => word.startsWith(term))
             ? 2
-            : prose.includes(term)
+            : prose.some((word) => word.startsWith(term))
               ? 1
               : 0,
       );

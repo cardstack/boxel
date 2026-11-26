@@ -140,18 +140,54 @@ module('Pretui | showcase', function (hooks) {
   test('search matches split names and each word, best match first', function (assert) {
     let specs = new SpecCatalog(
       [
-        { id: 'a', componentName: 'List', brief: 'Rows with selection' },
-        { id: 'b', componentName: 'DatePicker', brief: 'Pick a day' },
+        {
+          id: 'a',
+          componentName: 'List',
+          cardTitle: 'List',
+          brief: 'Rows with selection',
+        },
+        {
+          id: 'b',
+          componentName: 'DatePicker',
+          cardTitle: 'DatePicker',
+          brief: 'Pick a day',
+        },
         {
           id: 'c',
           componentName: 'LayoutControl',
+          cardTitle: 'LayoutControl',
           brief: 'Toolbar row that fits its controls',
         },
-        { id: 'd', componentName: 'EmptyState', brief: 'Nothing-here surface' },
-        { id: 'e', componentName: 'SheetToolbar', brief: 'Spreadsheet bar' },
-        { id: 'f', componentName: 'Toolbar', brief: 'A row of controls' },
-        { id: 'g', componentName: 'Spinner', brief: 'Loading ring' },
-        { id: 'h', componentName: 'PinInput', brief: 'One box per digit' },
+        {
+          id: 'd',
+          componentName: 'EmptyState',
+          cardTitle: 'EmptyState',
+          brief: 'Nothing-here surface',
+        },
+        {
+          id: 'e',
+          componentName: 'SheetToolbar',
+          cardTitle: 'SheetToolbar',
+          brief: 'Spreadsheet bar',
+        },
+        {
+          id: 'f',
+          componentName: 'Toolbar',
+          cardTitle: 'Toolbar',
+          brief: 'A row of controls',
+        },
+        {
+          id: 'g',
+          componentName: 'Spinner',
+          cardTitle: 'Spinner',
+          brief: 'Loading ring',
+        },
+        {
+          id: 'h',
+          componentName: 'PinInput',
+          cardTitle: 'PinInput',
+          brief: 'One box per digit',
+        },
       ],
       false,
     );
@@ -178,6 +214,11 @@ module('Pretui | showcase', function (hooks) {
       'when none matches every word, each word finds its own',
     );
     assert.deepEqual(ids('picker date'), ['b'], 'word order does not matter');
+    assert.deepEqual(
+      ids('spread'),
+      ['e'],
+      'a brief matches from the start of a word',
+    );
     assert.deepEqual(ids(' - '), [], 'a search without words lists nothing');
   });
 });
