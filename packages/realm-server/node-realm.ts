@@ -3,6 +3,7 @@ import type { StagedFile } from '@cardstack/runtime-common/staged-file';
 import type {
   RealmAdapter,
   RealmEventDelivery,
+  SessionRoomEvent,
   Kind,
   FileRef,
   DBAdapter,
@@ -19,6 +20,7 @@ import {
   clearSessionRoom,
   fetchRealmEventRoom,
   fetchRealmSessionRooms,
+  fetchSessionRoom,
   isRealmServerNotInRoomError,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -600,6 +602,32 @@ export class NodeAdapter implements RealmAdapter {
     });
   }
 
+  // The line holds a placeholder that names nothing, which only paces and
+  // orders the sends; what each user receives is what `events` answers once
+  // the placeholder reaches the head of the realm's line. Never rejects.
+  async broadcastToSessionRooms(
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+    events: () => Promise<SessionRoomEvent[]>,
+  ): Promise<void> {
+    if (dbAdapter.isClosed) {
+      return;
+    }
+    await this.dispatcher.broadcast({
+      realmURL: realmUrl,
+      event: {
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [],
+        realmURL: realmUrl,
+      },
+      newTxnId: () => matrixClient.nextTxnId(),
+      prepare: () =>
+        this.prepareSessionRoomSends(realmUrl, matrixClient, dbAdapter, events),
+    });
+  }
+
   async ensureRealmEventRoom(
     realmUrl: string,
     matrixClient: MatrixClient,
@@ -653,24 +681,7 @@ export class NodeAdapter implements RealmAdapter {
     if (dbAdapter.isClosed) {
       return [];
     }
-    // A logged-in client reuses its session; this logs in only on the first
-    // broadcast, or after the session was revoked.
-    try {
-      await matrixClient.login();
-      if (!matrixClient.getUserId()) {
-        realmEventsLog.error(
-          'Matrix client has no user ID after login, unable to broadcast realm event',
-          event,
-        );
-        return [];
-      }
-    } catch (e) {
-      // An overloaded or unreachable homeserver is back-pressure: the
-      // dispatcher pauses and prepares the event again rather than skip it.
-      if (isBackPressure(e)) {
-        throw e;
-      }
-      realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
+    if (!(await this.loggedIn(matrixClient, event))) {
       return [];
     }
 
@@ -736,7 +747,108 @@ export class NodeAdapter implements RealmAdapter {
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 
-    return Object.entries(dmRooms).map(([userId, roomId]) => ({
+    return Object.entries(dmRooms).map(([userId, roomId]) =>
+      this.sessionRoomSend(
+        event,
+        realmUrl,
+        userId,
+        roomId,
+        matrixClient,
+        dbAdapter,
+      ),
+    );
+  }
+
+  // Whether the client holds a session to send with, logging in if it must.
+  // A logged-in client reuses its session; this logs in only on the first
+  // broadcast, or after the session was revoked.
+  private async loggedIn(
+    matrixClient: MatrixClient,
+    event: RealmEventContent | undefined,
+  ): Promise<boolean> {
+    try {
+      await matrixClient.login();
+      if (!matrixClient.getUserId()) {
+        realmEventsLog.error(
+          'Matrix client has no user ID after login, unable to broadcast realm event',
+          event,
+        );
+        return false;
+      }
+    } catch (e) {
+      // An overloaded or unreachable homeserver is back-pressure: the
+      // dispatcher pauses and prepares the event again rather than skip it.
+      if (isBackPressure(e)) {
+        throw e;
+      }
+      realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
+      return false;
+    }
+    return true;
+  }
+
+  // Each user's own event, into that user's session room. Unlike
+  // `prepareRoomSends` this consults neither the realm's room nor its
+  // permissions: whoever `events` names is who receives.
+  private async prepareSessionRoomSends(
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+    events: () => Promise<SessionRoomEvent[]>,
+  ): Promise<RealmEventSend[]> {
+    if (dbAdapter.isClosed) {
+      return [];
+    }
+    let answered: SessionRoomEvent[];
+    try {
+      answered = await events();
+    } catch (e) {
+      realmEventsLog.error(
+        `Error preparing per-user realm events for ${realmUrl}; skipping them`,
+        e,
+      );
+      return [];
+    }
+    if (answered.length === 0) {
+      return [];
+    }
+    if (!(await this.loggedIn(matrixClient, undefined))) {
+      return [];
+    }
+    let sends: RealmEventSend[] = [];
+    for (let { user, event } of answered) {
+      let roomId: string | null;
+      try {
+        roomId = await fetchSessionRoom(dbAdapter, user);
+      } catch (e) {
+        realmEventsLog.error(`Error looking up the session room of ${user}`, e);
+        continue;
+      }
+      if (roomId) {
+        sends.push(
+          this.sessionRoomSend(
+            { ...event, realmURL: realmUrl },
+            realmUrl,
+            user,
+            roomId,
+            matrixClient,
+            dbAdapter,
+          ),
+        );
+      }
+    }
+    return sends;
+  }
+
+  private sessionRoomSend(
+    event: RealmEventContent,
+    realmUrl: string,
+    userId: string,
+    roomId: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+  ): RealmEventSend {
+    return {
       roomId,
       send: async (txnId: string) => {
         // A send can start while a revoked session is being replaced, when
@@ -781,7 +893,7 @@ export class NodeAdapter implements RealmAdapter {
           }`,
         );
       },
-    }));
+    };
   }
 
   private realmEventRoomSend(

@@ -718,6 +718,7 @@ import type {
   CoalescedIndexWrite,
   FileWatcherEventContent,
   IncrementalIndexEventContent,
+  IndexRealmEventContent,
   JobEventContent,
   RealmEventContent,
   RealmWideIncrementalIndexEventContent,
@@ -738,6 +739,7 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries.ts';
+import { fetchLiveRealmEventWatchers } from './db-queries/realm-event-watcher-queries.ts';
 import { REALMS_LIST_UPDATED_EVENT_TYPE } from './matrix-constants.ts';
 import { createSendEvent } from './send-event.ts';
 import { userExists } from './db-queries/user-queries.ts';
@@ -1767,6 +1769,11 @@ function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
 // being wrong in the cautious direction is a client re-reading a card, and the
 // cost of being wrong the other way is an event nobody receives.
 const MAX_EVENT_CONTENT_BYTES = 56 * 1024;
+
+// The most cards one index completion is put through the policy gate for, per
+// watcher. Each is a gate decision that reads the card's index row, so a
+// larger pass goes to watchers as a realm-wide completion instead.
+const MAX_WATCHER_FILTERED_INVALIDATIONS = 250;
 
 // `versions` on the event when the event still fits with it, and absent when it
 // does not.
@@ -2888,6 +2895,17 @@ export interface RealmEventDelivery {
   >;
 }
 
+type IndexCompletion = Exclude<
+  IndexRealmEventContent,
+  { indexType: 'incremental-index-initiation' }
+>;
+
+// One user's copy of a realm event, for `RealmAdapter.broadcastToSessionRooms`.
+export interface SessionRoomEvent {
+  user: string;
+  event: RealmEventContent;
+}
+
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
@@ -2999,6 +3017,21 @@ export interface RealmAdapter {
     matrixClient: MatrixClient,
     dbAdapter: DBAdapter,
     opts?: RealmEventDelivery,
+  ): Promise<void>;
+
+  // Sends each named user's session room its own event, whatever the realm's
+  // permissions say, on the same line as the realm's other events. `events`
+  // is asked once the send reaches the head of that line and answers who gets
+  // what; a user it leaves out, or one with no session room, receives
+  // nothing, and nothing at all is sent when it rejects. This is how a realm
+  // reaches the users watching it through its policy (see
+  // `realm-event-watcher-queries.ts`). A realm whose adapter lacks it has no
+  // such watchers.
+  broadcastToSessionRooms?(
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+    events: () => Promise<SessionRoomEvent[]>,
   ): Promise<void>;
 
   // A private realm sends its realm events into a room of its own, whose
@@ -23973,6 +24006,7 @@ export class Realm {
       this.#dbAdapter,
       delivery,
     );
+    this.#broadcastToWatchers(event, delivery);
   }
 
   // Public entry point for broadcasting a realm event that does not originate
@@ -23994,12 +24028,156 @@ export class Realm {
       await this.broadcastAutomationEvent(event);
       return;
     }
-    await this.#adapter.broadcastRealmEvent(
+    let sent = this.#adapter.broadcastRealmEvent(
       event,
       this.url,
       this.#matrixClient,
       this.#dbAdapter,
     );
+    this.#broadcastToWatchers(event);
+    await sent;
+  }
+
+  // The users watching this realm through its policy (see
+  // `realm-event-watcher-queries.ts`) get their own copy of each index
+  // completion, queued right behind the original on the realm's line so the
+  // two keep their order. Who is watching, and what each may see, is read
+  // when the copy reaches the head of the line, so a watch that lapsed or a
+  // grant that was withdrawn while it waited is honoured. Fire-and-forget,
+  // like the broadcast it follows.
+  //
+  // Only completions are copied: an initiation names the file being written,
+  // and job, automation and file events concern writers. An event narrowed to
+  // named recipients concerns only them.
+  #broadcastToWatchers(
+    event: RealmEventContent,
+    delivery?: RealmEventDelivery,
+  ): void {
+    let send = this.#adapter.broadcastToSessionRooms?.bind(this.#adapter);
+    if (
+      !send ||
+      delivery?.recipients ||
+      event.eventName !== 'index' ||
+      (event.indexType !== 'incremental' && event.indexType !== 'full')
+    ) {
+      return;
+    }
+    let completion: IndexCompletion = event;
+    send(this.url, this.#matrixClient, this.#dbAdapter, () =>
+      this.#watcherEvents(completion),
+    ).catch((e: unknown) => {
+      this.#log.error(
+        `Unable to send ${this.url}'s index event to its watchers`,
+        e,
+      );
+    });
+  }
+
+  async #watcherEvents(event: IndexCompletion): Promise<SessionRoomEvent[]> {
+    if ((await this.getRealmPolicy()) === undefined) {
+      return [];
+    }
+    let watchers = await fetchLiveRealmEventWatchers(this.#dbAdapter, this.url);
+    if (watchers.length === 0) {
+      return [];
+    }
+    let checker = new RealmPermissionChecker(
+      await fetchRealmPermissions(this.#dbAdapter, new URL(this.url)),
+      this.#dbAdapter,
+      this.#matrixClient.serverName,
+    );
+    let events: SessionRoomEvent[] = [];
+    for (let user of watchers) {
+      // A watcher the ACL now lets read the realm hears its events the way
+      // every reader does, so a copy here would be a second one.
+      if (await checker.can(user, 'read')) {
+        continue;
+      }
+      let copy = await this.#watcherEvent(user, event);
+      if (copy) {
+        events.push({ user, event: copy });
+      }
+    }
+    return events;
+  }
+
+  // One watcher's copy of an index completion, or undefined when they are
+  // sent nothing.
+  //
+  // The copy is assembled from an allowlist rather than trimmed from the
+  // original, so a member added to the event later is never sent to a
+  // watcher by default. What the original carries besides the cards — the
+  // other writers in `coalescedWrites`, `versions`, `invalidatedTypes`, the
+  // generation — describes cards and writers the watcher may not know about.
+  //
+  // Which cards the watcher hears of is the policy gate's own decision, asked
+  // through the capability check as a `read` of each card by a signed-in
+  // caller the ACL declined everything, which is what a watcher is. Only a
+  // pair the gate admitted outright counts. A copy that would name no card is
+  // not sent: an empty event would itself say that something this watcher
+  // cannot read changed.
+  //
+  // A completion that names no cards (a full index, or a pass too large to
+  // list) goes to every watcher as a bare realm-wide completion, so their
+  // hosts re-read what they hold, and so does a pass too large to put through
+  // the gate card by card.
+  async #watcherEvent(
+    user: string,
+    event: IndexCompletion,
+  ): Promise<RealmEventContent | undefined> {
+    if (event.indexType === 'full') {
+      return { eventName: 'index', indexType: 'full', realmURL: this.url };
+    }
+    let realmWide: RealmWideIncrementalIndexEventContent = {
+      eventName: 'index',
+      indexType: 'incremental',
+      realmWide: true,
+      realmURL: this.url,
+    };
+    if ('realmWide' in event) {
+      return realmWide;
+    }
+    let { invalidations } = event;
+    if (invalidations.length === 0) {
+      return undefined;
+    }
+    if (invalidations.length > MAX_WATCHER_FILTERED_INVALIDATIONS) {
+      return realmWide;
+    }
+    let { admitted } = await checkCapabilities(
+      this.operationCore,
+      invalidations.map((target) => ({ target, operation: 'read' })),
+      {
+        caller: scopeCallerFor(user),
+        searchPrincipal: searchPrincipal(user, undefined),
+        coarseDeclined: 'all',
+        // Only reads are asked, so this never decides an answer; it is here
+        // so a pair that resolved as a write would be refused, not judged.
+        writesRefused: 'operation-not-permitted',
+      },
+    );
+    let readable = invalidations.filter((_url, index) => admitted[index]);
+    if (readable.length === 0) {
+      return undefined;
+    }
+    // The watcher's own write needs its request id and which cards it sent
+    // the content of: a host that recognizes its own id and finds no
+    // `clientAuthored` keeps every card the write touched as it holds it,
+    // which leaves a card the realm transformed stale. Narrowed to the cards
+    // the watcher may read, it names nothing else.
+    let clientAuthored = event.clientAuthored?.filter((url) =>
+      readable.includes(url),
+    );
+    return {
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: readable,
+      ...(Object.prototype.hasOwnProperty.call(event, 'clientRequestId')
+        ? { clientRequestId: event.clientRequestId }
+        : {}),
+      ...(clientAuthored ? { clientAuthored } : {}),
+      realmURL: this.url,
+    };
   }
 
   // An automation run's `job` event goes to the session rooms of the realm's
