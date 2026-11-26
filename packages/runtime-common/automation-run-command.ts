@@ -11,7 +11,10 @@
 
 import type * as JSONTypes from 'json-typescript';
 
-import { MAX_RUN_SECONDS } from './automation-declaration.ts';
+import {
+  BATCH_RUN_TRIGGER,
+  MAX_RUN_SECONDS,
+} from './automation-declaration.ts';
 
 // The command a run executes, as the command runner resolves it. No other
 // path may run it: `prepareRunCommand` refuses it, so it runs only with a
@@ -27,13 +30,28 @@ export function isAutomationCommand(command: string): boolean {
 // three a run row is unique by. The worker runs a job that names the
 // automation command only when its key is its run's, so a `run-command` job
 // that some other publisher enqueued (a bot command, a webhook receiver)
-// can't start a run by naming its id.
+// can't start a run by naming its id. A batch's follow-up that a hold ended
+// keeps the key it was enqueued under (`heldFollowUpSlot`), so a retry of its
+// job still finds it, and charges what it used.
 export function automationRunDedupeKey(run: {
   automationId: string;
   trigger: string;
   slot: string;
 }): string {
-  return `automation:${run.automationId}:${run.trigger}:${run.slot}`;
+  let slot =
+    run.trigger === BATCH_RUN_TRIGGER
+      ? run.slot.split(HELD_FOLLOW_UP_SLOT_MARK)[0]
+      : run.slot;
+  return `automation:${run.automationId}:${run.trigger}:${slot}`;
+}
+
+// What a hold appends to the slot of a batch's follow-up it ends in favor of
+// a new run, so the new run can take the batch's id as its slot.
+const HELD_FOLLOW_UP_SLOT_MARK = ':held:';
+
+// The slot of a batch's follow-up `runId`, slot `slot`, that a hold ended.
+export function heldFollowUpSlot(slot: string, runId: string): string {
+  return `${slot}${HELD_FOLLOW_UP_SLOT_MARK}${runId}`;
 }
 
 // A webhook run's slot: `delivery:` and the delivery's id. The prefix marks
@@ -143,6 +161,10 @@ export interface AutomationScriptInput extends JSONTypes.Object {
   // with `realm.resolve.batch` and no `by` of its own may take. A tab given
   // none takes `DEFAULT_BATCH_DEADLINE_MINUTES`.
   batchDeadlineMinutes: number;
+  // The card's `batchedAI`. A Preview's `realm.resolve.batch` sends its
+  // requests at once, at the normal price, only when it is on, as a run's
+  // batch is submitted only then.
+  batchedAI: boolean;
 }
 
 export function isAutomationScriptInput(

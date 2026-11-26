@@ -42,8 +42,12 @@
 // Pausing and removing cancel the automation's pending run, so nothing it
 // queued starts once it stops, and its running run, which the realm server
 // refuses from its next call and its tab stops (unless the run already
-// claimed its commit). A person cancels one run, leaving the automation as it
-// is, with `cancelAutomationRunFor`.
+// claimed its commit). A pause holds a batch's follow-up instead, pending or
+// running, and so does a wait for a key approval
+// (`holdAutomationFollowUpRuns`): the batch is paid for either way, and a
+// resume, or the automation going active again, starts the follow-up (ADR 030
+// §1.5). Remove drops it with the automation's other runs. A person cancels
+// one run, leaving the automation as it is, with `cancelAutomationRunFor`.
 //
 // The tick, the card's index hook and the run task own `next_run`,
 // `trigger_runs`, *waiting for credits*, *done* and the `last_*` columns once
@@ -80,10 +84,12 @@ import {
   reportRunChanges,
   type ReportRunChange,
 } from './automation-run-events.ts';
+import { logRunPlatformLine } from './automation-run-log.ts';
 import {
   cancelAutomationRunIn,
   cancelUnfinishedAutomationRuns,
   getAutomationRun,
+  holdAutomationFollowUpRuns,
   insertOrFindAutomationRun,
   logAutomationRunEnded,
   type AutomationRun,
@@ -441,9 +447,10 @@ export async function switchOnAutomation(
   });
 }
 
-// Pauses an automation for `user`, a direct writer of its realm, and cancels
-// its pending run and its running one (see `cancelUnfinishedAutomationRuns`).
-// An automation that is paused already keeps the reason it has.
+// Pauses an automation for `user`, a direct writer of its realm, cancels its
+// pending run and its running one (see `cancelUnfinishedAutomationRuns`), and
+// holds its batch follow-ups (`holdAutomationFollowUpRuns`). An automation
+// that is paused already keeps the reason it has.
 export async function pauseAutomation(
   dbAdapter: DBAdapter,
   {
@@ -478,7 +485,12 @@ export async function pauseAutomation(
 // the card now) sets. Its schedule starts again now, so the slots that passed
 // while it was paused don't run. Each trigger keeps its run count. Its
 // failure streak starts afresh: runs created before the resume no longer
-// count toward a pause for repeated failures.
+// count toward a pause for repeated failures. Each batch follow-up the pause
+// held acts as, and is billed to, `user` from the resume on
+// (`follow_up_acts_as`), its authority dating from the resume
+// (`follow_up_resumed_at`); the batch itself stays billed to the submitting
+// run's identity (ADR 030 §1.5). The caller then starts those follow-ups
+// (`startResumedAIBatchFollowUps`).
 //
 // `admit` admits `user` as the payer the way a run of the automation's
 // triggers would be admitted (`admitPayer`), told when the automation's
@@ -677,6 +689,16 @@ async function resumeInTransaction(
       param(automationId),
       'RETURNING *',
     ]);
+    await txQuery([
+      'UPDATE ai_batches b SET follow_up_acts_as =',
+      param(user),
+      ', follow_up_resumed_at =',
+      param(unixSecondsToISO(now)),
+      '::timestamptz WHERE b.automation_id =',
+      param(automationId),
+      'AND',
+      ...followUpNotStarted(),
+    ]);
     let automation = automationFromRow(row);
     changes.automations.push(automation);
     return { ok: true, automation };
@@ -705,6 +727,7 @@ export async function removeAutomation(
         canceledBy: user,
       })),
     );
+    await dropHeldFollowUps(txQuery, automationId);
     await txQuery([
       'DELETE FROM automations WHERE automation_id =',
       param(automationId),
@@ -1360,9 +1383,10 @@ export async function waitForKeyApproval(
   });
 }
 
-// Moves the locked row to *waiting for key approval*, with no next run, and
-// cancels its pending runs. A running run finishes: its calls are checked
-// as every call is.
+// Moves the locked row to *waiting for key approval*, with no next run,
+// cancels its pending runs and holds its pending batch follow-ups
+// (`holdAutomationFollowUpRuns`), which start again once it is active. A
+// running run finishes: its calls are checked as every call is.
 async function toKeyApprovalWait(
   txQuery: Querier,
   changes: AutomationChanges,
@@ -1378,9 +1402,14 @@ async function toKeyApprovalWait(
       txQuery,
       automationId,
       { reason: 'waiting-for-key-approval' },
-      { pendingOnly: true },
+      { pendingOnly: true, keepFollowUps: true },
     )),
   );
+  let waitHeld = await holdAutomationFollowUpRuns(txQuery, automationId, {
+    pendingOnly: true,
+  });
+  changes.held.push(...waitHeld.held);
+  changes.canceled.push(...waitHeld.ended);
   let waiting = automationFromRow(row);
   changes.automations.push(waiting);
   return waiting;
@@ -1746,6 +1775,7 @@ async function removeForCard(
       reason,
     })),
   );
+  await dropHeldFollowUps(txQuery, automation.automationId);
   await txQuery([
     'DELETE FROM automations WHERE automation_id =',
     param(automation.automationId),
@@ -1846,9 +1876,10 @@ export function lastDeclaredLabels(
     .map(([label]) => label);
 }
 
-// Pauses the row and cancels its pending and running runs. A run a person's
-// pause cancels names them in `canceled_by`; one any other pause cancels
-// names no one, and carries the pause's reason in `error_reason`.
+// Pauses the row, cancels its pending and running runs, and holds its batch
+// follow-ups, pending or running (`holdAutomationFollowUpRuns`). A run a
+// person's pause cancels names them in `canceled_by`; one any other pause
+// cancels names no one, and carries the pause's reason in `error_reason`.
 async function pause(
   txQuery: Querier,
   changes: AutomationChanges,
@@ -1861,7 +1892,8 @@ async function pause(
   }: {
     pausedBy?: string;
     problems?: AutomationProblem[];
-    // Leave a running run to finish, and cancel only pending ones.
+    // Leave a running run to finish, a follow-up among them, and cancel or
+    // hold only pending ones.
     keepRunning?: boolean;
   } = {},
 ): Promise<AutomationRow> {
@@ -1881,18 +1913,24 @@ async function pause(
       txQuery,
       automationId,
       pausedBy ? { canceledBy: pausedBy } : { reason },
-      { pendingOnly: keepRunning },
+      { pendingOnly: keepRunning, keepFollowUps: true },
     )),
   );
+  let pauseHeld = await holdAutomationFollowUpRuns(txQuery, automationId, {
+    pendingOnly: keepRunning,
+  });
+  changes.held.push(...pauseHeld.held);
+  changes.canceled.push(...pauseHeld.ended);
   let paused = automationFromRow(row);
   changes.automations.push(paused);
   return paused;
 }
 
-// What a change did, for its reporters: the runs it canceled and the
-// automations whose rows it changed.
+// What a change did, for its reporters: the runs it canceled, the batch
+// follow-ups it held, and the automations whose rows it changed.
 interface AutomationChanges {
   canceled: AutomationRun[];
+  held: AutomationRun[];
   automations: ChangedAutomation[];
 }
 
@@ -1943,15 +1981,27 @@ async function withChanges<T>(
   { reportRunChange, reportAutomationChange }: AutomationReporters,
   change: (txQuery: Querier, changes: AutomationChanges) => Promise<T>,
 ): Promise<T> {
-  let changes: AutomationChanges = { canceled: [], automations: [] };
+  let changes: AutomationChanges = { canceled: [], held: [], automations: [] };
   let result = await dbAdapter.withTransaction((txQuery) => {
-    changes = { canceled: [], automations: [] };
+    changes = { canceled: [], held: [], automations: [] };
     return change(txQuery, changes);
   });
   for (let run of changes.canceled) {
     await logAutomationRunEnded(dbAdapter, run);
   }
-  await reportRunChanges(reportRunChange, changes.canceled);
+  for (let run of changes.held) {
+    await logRunPlatformLine(dbAdapter, run.id, {
+      kind: 'trigger',
+      level: 'info',
+      message:
+        "The automation stopped, so this batch's follow-up is held: it starts again once the automation is resumed or active again",
+      data: { held: true },
+    });
+  }
+  await reportRunChanges(reportRunChange, [
+    ...changes.canceled,
+    ...changes.held,
+  ]);
   await reportAutomationChanges(reportAutomationChange, changes.automations);
   return result;
 }
@@ -2208,4 +2258,34 @@ function unixSecondsToISO(seconds: number): string {
 
 function currentUnixSeconds(): number {
   return Math.floor(Date.now() / 1000);
+}
+
+// A batch of the automation, aliased `b`, whose follow-up hasn't started: it
+// has none yet and none was dropped, or the one it has is held, or pending
+// (enqueued and not yet taken). A held follow-up counts whatever its run's
+// state: a job enqueued before the pause can take the run just before the
+// resume, and admission then holds it again for the identity the resume
+// sets. Its batch was submitted since the automation was last switched on,
+// so it can still get a follow-up.
+function followUpNotStarted(): Expression {
+  return [
+    'b.follow_up_dropped_at IS NULL',
+    'AND b.submitted_at >= (SELECT a.switched_on_at FROM automations a WHERE a.automation_id = b.automation_id)',
+    'AND (b.follow_up_held_at IS NOT NULL OR b.follow_up_run_id IS NULL OR EXISTS (SELECT 1 FROM automation_runs r',
+    "WHERE r.id = b.follow_up_run_id AND r.state = 'pending'))",
+  ];
+}
+
+// Clears the hold on each batch of a removed automation: its follow-up was
+// canceled with the automation's other runs, and nothing starts it again.
+// The batch is still settled and billed.
+async function dropHeldFollowUps(
+  txQuery: Querier,
+  automationId: RealmResourceIdentifier,
+): Promise<void> {
+  await txQuery([
+    'UPDATE ai_batches SET follow_up_held_at = NULL WHERE automation_id =',
+    param(automationId),
+    'AND follow_up_held_at IS NOT NULL',
+  ]);
 }

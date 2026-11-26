@@ -51,6 +51,7 @@ import {
   type RunLogLevel,
 } from '@cardstack/runtime-common/automation-run-log';
 import { admitPayer } from '@cardstack/runtime-common/automation-admission';
+import { startResumedAIBatchFollowUps } from '@cardstack/runtime-common/ai-batch-follow-ups';
 import {
   confirmationOf,
   KEY_APPROVAL_REFUSAL_REASONS,
@@ -843,8 +844,8 @@ async function automationRequest(
   return { caller, realmURL, automationId, attributes };
 }
 
-// `POST /_automation-pause`: pauses the automation and cancels its pending
-// and running runs.
+// `POST /_automation-pause`: pauses the automation, cancels its pending and
+// running runs, and holds its batch follow-ups until a resume starts them.
 export function handleAutomationPause(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let { caller, automationId } = await automationRequest(ctxt, args);
@@ -875,7 +876,10 @@ export function handleAutomationPause(args: CreateRoutesArgs): Handler {
 // 422 with the run's refusal code in `meta.code`, and the automation stays
 // paused. A key approval the caller as payer would need doesn't refuse the
 // resume: as at switch-on, the automation resumes *waiting for key approval*
-// until it lands, and `meta.keyApprovals` says what is missing.
+// until it lands, and `meta.keyApprovals` says what is missing. Each batch
+// follow-up the pause held then acts as the caller, and starts at once when
+// its batch's deadline passed or the batch reached a final status, otherwise
+// at its deadline.
 export function handleAutomationResume(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let { caller, realmURL, automationId, attributes } =
@@ -950,6 +954,9 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
         change = { ok: true, automation: followed.automation };
       }
     }
+    if (change.ok) {
+      await startHeldFollowUps(args, automationId);
+    }
     await answerChange(ctxt, args, change, caller, 200, {
       ...(keyApprovals
         ? {
@@ -963,6 +970,38 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
         : {}),
     });
   });
+}
+
+// Starts each batch follow-up a resume lets start at once: one the pause
+// held, and one whose batch's deadline passed or that reached a final status
+// (ADR 030 §1.5). The resume has committed, so a failure here is logged, and
+// the minute tick starts what this missed.
+async function startHeldFollowUps(
+  args: CreateRoutesArgs,
+  automationId: RealmResourceIdentifier,
+) {
+  try {
+    let reportRunChange = realmServerRunChangeReporter(args);
+    for (let followUp of await startResumedAIBatchFollowUps(
+      args.dbAdapter,
+      automationId,
+      { queue: args.queue, virtualNetwork: args.virtualNetwork },
+    )) {
+      if (followUp.kind === 'failed') {
+        log.error(
+          `couldn't start batch ${followUp.batchId}'s follow-up after resuming ${automationId}; the tick starts it:`,
+          followUp.error,
+        );
+      } else if (followUp.kind === 'started' || followUp.kind === 'resumed') {
+        await reportRunChange?.(followUp.runId);
+      }
+    }
+  } catch (error) {
+    log.error(
+      `couldn't start the batch follow-ups of ${automationId} after its resume; the tick starts them:`,
+      error,
+    );
+  }
 }
 
 // `POST /_automation-remove`: switches the automation off, deleting its row
