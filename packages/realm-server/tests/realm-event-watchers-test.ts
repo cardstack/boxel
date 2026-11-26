@@ -42,8 +42,9 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 // The Education realm's policy, kept in an Org realm, lets a teacher read the
 // classrooms that list them. The teacher holds no permission on the Education
 // realm; a reader holds a read grant, so the normal paths already reach them.
-// The Staff realm's policy names the teacher alone, so it could never admit
-// anyone else.
+// The Staff realm's policy lets the teacher alone read, so it could never
+// admit anyone else to a read: its create grant and its grant on a setting
+// the realm doesn't have let nobody else read anything.
 
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
@@ -97,6 +98,11 @@ function classroom(title: string, teacherIds: string[]) {
   });
 }
 
+const TS_FILE_DEF = {
+  module: rri('@cardstack/base/ts-file-def'),
+  name: 'TsFileDef',
+};
+
 const STAFF_POLICY = JSON.stringify({
   data: {
     type: 'card',
@@ -104,7 +110,17 @@ const STAFF_POLICY = JSON.stringify({
       rules: [
         {
           targetType: { module: `${STAFF}classroom`, name: 'Classroom' },
-          grants: [{ operation: 'read', where: `actor() == "${TEACHER}"` }],
+          grants: [
+            { operation: 'read', where: `actor() == "${TEACHER}"` },
+            { operation: 'read', where: 'realmConfig("open") == true' },
+            { operation: 'create' },
+          ],
+        },
+        {
+          targetType: TS_FILE_DEF,
+          grants: [
+            { operation: 'readSource', where: `actor() == "${TEACHER}"` },
+          ],
         },
       ],
     },
@@ -219,10 +235,16 @@ module(basename(import.meta.filename), function (hooks) {
   function record(adapter: RealmAdapter, realmURL: string) {
     // The realm queues its watchers' copy straight after the original, so the
     // most recent original is the one a copy belongs to.
+    // Only completions are copied, so only a completion is a copy's original.
     let lastOriginal: RealmEventContent | undefined;
     let broadcast = adapter.broadcastRealmEvent.bind(adapter);
     adapter.broadcastRealmEvent = (event, ...rest) => {
-      lastOriginal = event;
+      if (
+        event.eventName === 'index' &&
+        (event.indexType === 'incremental' || event.indexType === 'full')
+      ) {
+        lastOriginal = event;
+      }
       return broadcast(event, ...rest);
     };
     adapter.broadcastToSessionRooms = async (
@@ -351,7 +373,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(await staff.policyMayAdmit(TEACHER), 'the teacher could be');
       assert.false(
         await staff.policyMayAdmit(COLLEAGUE),
-        'nobody else could be',
+        'nobody else could be: a create grant lets them read nothing, and a condition that reads nothing of the card is settled for them',
       );
       let refused = await realmEventRooms(COLLEAGUE, [STAFF]);
       assert.strictEqual(refused.status, 200, 'HTTP 200 status');
@@ -568,6 +590,7 @@ module(basename(import.meta.filename), function (hooks) {
             indexType: 'incremental',
             invalidations: [],
             clientRequestId: 'teacher-request-h',
+            clientAuthored: [],
             realmURL: EDUCATION,
           },
         },
@@ -594,6 +617,53 @@ module(basename(import.meta.filename), function (hooks) {
             indexType: 'incremental',
             invalidations: [ROOM_204],
             realmURL: EDUCATION,
+          },
+        },
+      ]);
+    });
+
+    test('a pass too large to gate goes out realm-wide, naming nothing', async function (assert) {
+      await watch(TEACHER);
+      let missing = Array.from(
+        { length: 1_001 },
+        (_, i) => `${EDUCATION}classrooms/missing-${i}`,
+      );
+      await education.broadcastEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [...missing, ROOM_204],
+        realmURL: EDUCATION,
+      });
+      assert.deepEqual(await sentFor(`${EDUCATION}classrooms/missing-1000`), [
+        {
+          user: TEACHER,
+          event: {
+            eventName: 'index',
+            indexType: 'incremental',
+            realmWide: true,
+            realmURL: EDUCATION,
+          },
+        },
+      ]);
+    });
+
+    test('a module is named to a watcher who may read its source', async function (assert) {
+      await watch(TEACHER, STAFF);
+      let module = `${STAFF}classroom.gts`;
+      await staff.broadcastEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [module],
+        realmURL: STAFF,
+      });
+      assert.deepEqual(await sentFor(module), [
+        {
+          user: TEACHER,
+          event: {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [module],
+            realmURL: STAFF,
           },
         },
       ]);
@@ -687,15 +757,69 @@ module(`${basename(import.meta.filename)}: watcher copies`, function () {
       eventName: 'index',
       indexType: 'incremental',
       invalidations: [A, B],
-      coalescedWrites: [
-        {
-          clientRequestId: 'teacher-request',
-          changed: [B],
-          clientAuthored: [B],
-        },
-      ],
+      clientRequestId: 'teacher-request',
+      clientAuthored: [B],
       realmURL: REALM,
     });
+  });
+
+  test("a watcher's own write takes the same shape whether or not another write shared the pass", function (assert) {
+    let own = {
+      actor: TEACHER_ID,
+      clientRequestId: 'teacher',
+      changed: [A],
+      clientAuthored: [A],
+    };
+    let alone = watcherListedCopy(
+      { kind: 'listed', invalidations: [A], coalescedWrites: [own] },
+      TEACHER_ID,
+      [A],
+      REALM,
+    );
+    let shared = watcherListedCopy(
+      {
+        kind: 'listed',
+        invalidations: [A, C],
+        coalescedWrites: [
+          own,
+          { actor: ADMIN_ID, clientRequestId: 'admin', changed: [C] },
+        ],
+      },
+      TEACHER_ID,
+      [A],
+      REALM,
+    );
+    assert.deepEqual(shared, alone);
+    assert.deepEqual(alone, {
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: [A],
+      clientRequestId: 'teacher',
+      clientAuthored: [A],
+      realmURL: REALM,
+    });
+  });
+
+  test("several writes of the watcher's own go in as their own coalesced writes", function (assert) {
+    let copy = watcherListedCopy(
+      {
+        kind: 'listed',
+        invalidations: [A, B],
+        coalescedWrites: [
+          { actor: TEACHER_ID, clientRequestId: 'first', changed: [A] },
+          { actor: TEACHER_ID, clientRequestId: 'second', changed: [B] },
+          { actor: ADMIN_ID, clientRequestId: 'admin', changed: [B] },
+        ],
+      },
+      TEACHER_ID,
+      [A, B],
+      REALM,
+    );
+    assert.deepEqual(copy?.coalescedWrites, [
+      { clientRequestId: 'first', changed: [A], clientAuthored: [A] },
+      { clientRequestId: 'second', changed: [B], clientAuthored: [] },
+    ]);
+    assert.strictEqual(copy?.clientRequestId, undefined);
   });
 
   test("a card another writer also changed is not the watcher's own content", function (assert) {
@@ -712,9 +836,12 @@ module(`${basename(import.meta.filename)}: watcher copies`, function () {
       [A, B],
       REALM,
     );
-    assert.deepEqual(copy?.coalescedWrites, [
-      { clientRequestId: 'teacher', changed: [A, B], clientAuthored: [B] },
-    ]);
+    assert.strictEqual(copy?.clientRequestId, 'teacher');
+    assert.deepEqual(
+      copy?.clientAuthored,
+      [B],
+      'the card the admin changed too is re-read',
+    );
   });
 
   test('a writer the realm cannot name shares their id with nobody', function (assert) {
