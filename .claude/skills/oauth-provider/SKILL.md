@@ -169,7 +169,8 @@ was ended.
 
 No row holds a token, code, verifier, ticket, interaction ID or error
 reference readable (ADR 021 §1.2), and neither the request log, the
-provider's channel nor Sentry names one, or a grant ID.
+provider's channel nor Sentry names one. A grant ID, a user or a network
+appears only as an event's pseudonym (The log channel).
 `tests/oauth-provider-secrecy-test.ts` drives two whole connections with
 known values and checks every `oauth_provider_*` table at each step, the
 `realm:requests` and `boxel:oauth-provider` lines at info level, and Sentry.
@@ -216,9 +217,13 @@ while on the log channel and to Sentry, before the limit is reached.
 
 ## The log channel
 
-Every line is on the `boxel:oauth-provider` logger, plain text. The channel
-name is not part of the line, so in Loki you filter on the line's own text
-(the `tail-logs` skill); the channel name is what `LOG_LEVELS` takes, e.g.
+Every line is on the `boxel:oauth-provider` logger. Most are plain text,
+whose channel name is not part of the line, so in Loki you filter on the
+line's own text (the `tail-logs` skill). The lines operators chart and
+alert on are events instead (Events, below): one JSON line each, carrying
+the channel name, the event's fields, and `message`, the same sentence a
+plain line would have, so a text search still finds them. The channel name
+is what `LOG_LEVELS` takes, e.g.
 `LOG_LEVELS="boxel:oauth-provider=debug"` to also log each accepted token.
 Request log lines (`realm:requests`) show the provider's paths with every
 interaction ID, error reference and grant ID replaced by a label
@@ -230,8 +235,8 @@ document: the authorization, consent, revocation and `grant ended` lines name
 it `metadata document on <host>`, while the token, `flow finished`, `flow
 cancelled` and resource lines give its client ID URL in full. Some lines name
 no client: `flow not finished`, `resume refused`, `token refused: <reason>,
-resource …`, `grants ended` and the reuse lines. A user, token or grant is
-never named.
+resource …`, `grants ended` and the reuse lines. A token is never named; a
+user, grant or network only by an event's pseudonym.
 
 | Line                                                                                                                                                                                   | Level | Means                                                                                                                                                                                                                                                                                                                                                                   | Next                                                                                                                                                                                                                                                                                                                                |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -273,6 +278,72 @@ never named.
 | `failed to record a flow's network: …` / `failed to read a flow's network: …`                                                                                                          | error | The finish or the exchange couldn't write or read the finish network; the flow or exchange went on, logged as `network unknown`                                                                                                                                                                                                                                         | Database health                                                                                                                                                                                                                                                                                                                     |
 | `failed to mark a grant exchanged: …`                                                                                                                                                  | error | The code exchange succeeded but `exchanged_at` wasn't written; the token was stored, and the cleanup counts a grant with tokens as exchanged                                                                                                                                                                                                                            | Database health                                                                                                                                                                                                                                                                                                                     |
 | `OAuth provider error`                                                                                                                                                                 | error | The library raised something Boxel didn't handle                                                                                                                                                                                                                                                                                                                        | The Sentry event                                                                                                                                                                                                                                                                                                                    |
+
+### Events
+
+`lib/oauth-provider/events.ts` (`logOAuthEvent`). Each event line is
+`{"channel":"boxel:oauth-provider","event":…, …fields, "message":…}`, and
+the table above gives each one's `message`.
+
+| `event`                            | Logged by                                                                                                                            | Fields                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `authorization-refused`            | `authorization refused: …`                                                                                                           | `reason`, `error`, `client`, `network`                                    |
+| `consent`                          | `consent allowed` / `consent denied`                                                                                                 | `outcome`, `client`, `user`, `network`, `renew`                           |
+| `token-issued` / `token-refreshed` | `token issued` / `token refreshed`                                                                                                   | `client`, `grant`, and `networkMatch` on a boxel-cli exchange             |
+| `token-refused`                    | `token refused: <error>, client …` (the token endpoint)                                                                              | `error`, `client`, `network`                                              |
+| `reuse`                            | `authorization code reused`, `refresh token reused`                                                                                  | `what`, `grant`, `network` when known                                     |
+| `grant-ended`                      | `grant ended: …`                                                                                                                     | `reason`, `client`, `grant`, `user`                                       |
+| `grants-ended`                     | `grants ended: sessions-revoked, …`                                                                                                  | `reason`, `count`, `user`                                                 |
+| `resource-refused`                 | `token refused: <reason>, resource …`, route-not-mapped and insufficient-scope refusals, and a realm's refusals of a verified caller | `reason`, `resource`, and for a verified caller `client`, `grant`, `user` |
+| `rate-limit-alert`                 | a limit's alert                                                                                                                      | —                                                                         |
+
+`resource-refused` reasons are the lookup's (`unknown`, `expired`, `revoked`,
+`wrong-resource`) and a verified caller's (`route-not-mapped`,
+`insufficient-scope`, `assume-user`). A realm reports its refusals through
+`RealmOAuthResource.refused`, so they appear here with `resource` `Boxel
+API`, beside the realm's own `OAuth token refused for …` line with the URL.
+
+`user`, `grant` and `network` are pseudonyms: the first 16 hex characters of
+the SHA-256 of `users.id`, the grant ID, or the network the rate limits group
+a caller by (IPv4 /24, IPv6 /48). They count and group without naming
+anyone. To find the row behind one, in a read-only session:
+
+```sql
+SELECT id, matrix_user_id FROM users
+ WHERE left(encode(sha256(id::text::bytea), 'hex'), 16) = '<user>';
+SELECT id, client_id, created_at, ended_at, ended_reason FROM oauth_provider_grants
+ WHERE left(encode(sha256(id::bytea), 'hex'), 16) = '<grant>';
+```
+
+Both scan the table; that is fine for an investigation, not for a
+dashboard. A network can't be looked up: compare it with the pseudonyms of
+other events, or hash a candidate on your own machine
+(`printf %s 203.0.113.0/24 | sha256sum`, in the form `networkRateLimitKey`
+writes).
+
+## Alerts
+
+The OAuth Provider dashboard (`boxel-oauth-provider`) charts the events:
+connections made and ended, consents, refusals by reason, the signs of misuse
+below, and active grants by client from `oauth_provider_grants`.
+`packages/observability/provisioning/alerting/oauth-provider-group.json`
+alerts on them in every environment, each to the Techops contact point. Each
+alert's description says what to do; in short:
+
+| Alert                                                 | Fires on                                                                                         | First look                                                                                                         |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| OAuth code or refresh token reused                    | any `reuse` in 5 minutes                                                                         | The grant is already ended. One app reusing for many users is its bug; one user's grant is a copied token          |
+| OAuth flows refused for their confirmation code       | 5 `authorization-refused` `confirmation-code` from one network in 15 minutes                     | An outdated boxel-cli, or flows scripted to impersonate it                                                         |
+| OAuth consents denied in a burst                      | 5 denied consents by one user, or from one network, in 15 minutes                                | A user sent consent links they didn't ask for                                                                      |
+| boxel-cli codes exchanged from another network        | 3 `token-issued` with `networkMatch` `other` in 30 minutes                                       | Grants of different users, each once, is the paste attack; one user's is their own setup (dev container, SSH, VPN) |
+| One OAuth connection probing routes                   | 20 `route-not-mapped`, `insufficient-scope` or `assume-user` refusals of one grant in 15 minutes | An app exploring the API, or a stolen token; end the grant                                                         |
+| One user gaining many OAuth grants                    | 10 allowed consents by one user in 30 minutes                                                    | A script driving their browser, or a user talked through consent repeatedly                                        |
+| OAuth provider traffic past a rate limit's alert mark | any `rate-limit-alert` in 5 minutes                                                              | Rate limits above; also in Sentry                                                                                  |
+| OAuth provider error                                  | any `OAuth provider error` line in 5 minutes                                                     | The Sentry event                                                                                                   |
+
+The thresholds are first guesses, to tune once real traffic shows what
+normal looks like. A query Loki fails to run sends the rule's
+`DatasourceError` alert to the same place.
 
 ## Tracing a failed connection
 
@@ -404,3 +475,7 @@ drives each step; `tests/helpers/oauth-provider-secrets.ts` captures logs and
 Sentry (`telemetryDuring`) and checks values against them
 (`assertNoSecrets`). An endpoint test that hands out a new kind of value
 adds it to its own secrecy check and to the whole-connection one.
+`tests/helpers/oauth-provider-events.ts` reads event lines from captured
+logs (`oauthEvents`, `readableMessage`); a test of a new event asserts its
+fields through it, and that no grant ID, user ID or Matrix ID is on the
+line.

@@ -12,6 +12,8 @@
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
+import { clientIdForLogs } from './client-metadata-document.ts';
+import { logCallerRefused } from './events.ts';
 import { resolveOAuthAccessToken } from './lookup.ts';
 import type { OAuthResource } from './registry.ts';
 import { admitsRoute } from '@cardstack/runtime-common/oauth-route-admission';
@@ -214,13 +216,21 @@ export function oauthResourceController({
     });
     if (!admitted.admitted) {
       if (admitted.scopes.length === 0) {
-        log.info(
+        logCallerRefused(
+          caller,
+          clientIdForLogs(caller.clientId),
+          'route-not-mapped',
+          resource.id,
           `token refused: route not mapped, resource ${resource.id}, client ${caller.clientId}`,
         );
         refuseToken(ctxt, issuer, resource);
         return;
       }
-      log.info(
+      logCallerRefused(
+        caller,
+        clientIdForLogs(caller.clientId),
+        'insufficient-scope',
+        resource.id,
         `token refused: insufficient scope, resource ${resource.id}, client ${caller.clientId}`,
       );
       ctxt.status = 403;

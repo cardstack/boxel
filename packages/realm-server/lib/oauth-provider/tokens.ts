@@ -18,6 +18,7 @@
 
 import Provider, { errors, type AdapterPayload } from 'oidc-provider';
 import { logger, param, type DBAdapter } from '@cardstack/runtime-common';
+import { logOAuthEvent, pseudonym } from './events.ts';
 import { endGrant, markGrantExchanged, type GrantEndReason } from './grants.ts';
 import {
   OAuthProviderAdapter,
@@ -321,7 +322,15 @@ export class TokenAdapter extends OAuthProviderAdapter {
       case 'missing':
         throw new errors.InvalidGrant('refresh token not found');
       case 'reuse':
-        log.info('refresh token reused');
+        logOAuthEvent(
+          'info',
+          {
+            event: 'reuse',
+            what: 'refresh token',
+            grant: pseudonym(outcome.grantId),
+          },
+          'refresh token reused',
+        );
         await endGrant(this.#dbAdapter, outcome.grantId, 'reuse');
         throw new errors.InvalidGrant('refresh token already used');
     }

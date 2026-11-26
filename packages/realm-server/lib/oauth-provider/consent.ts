@@ -35,6 +35,7 @@ import {
   CONFIRMATION_CODE,
   CONFIRMATION_CODE_PARAM,
 } from '@cardstack/secure-origin/security/confirmation-code.js';
+import { logOAuthEvent, networkOf, userPseudonym } from './events.ts';
 import type { PreRegisteredClients } from './pre-registered-clients.ts';
 import type { OAuthResource, OAuthScope } from './registry.ts';
 import { respond, secureWindowUser } from './secure-window-user.ts';
@@ -220,7 +221,16 @@ export function consentDecisionHandler(deps: ConsentDeps): Koa.Middleware {
     if (!ticket) {
       return respond(ctxt, 409, { error: 'decided' });
     }
-    log.info(
+    logOAuthEvent(
+      'info',
+      {
+        event: 'consent',
+        outcome: allowed ? 'allowed' : 'denied',
+        client: clientIdForLogs(flow.client.clientId),
+        user: await userPseudonym(deps.dbAdapter, user),
+        network: networkOf(ctxt),
+        renew,
+      },
       `consent ${allowed ? 'allowed' : 'denied'}: ${describe(
         flow,
         nameOf(flow, deps.preRegistered),

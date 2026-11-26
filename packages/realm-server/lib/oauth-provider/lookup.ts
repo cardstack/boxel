@@ -11,6 +11,7 @@
 // must not end an OAuth grant (§1.9).
 
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
+import { logOAuthEvent } from './events.ts';
 import { GRANT_STATE_COLUMNS, grantUsable, type GrantState } from './grants.ts';
 import { asRecord, sha256Hex } from './objects.ts';
 import type { OAuthCaller } from '@cardstack/runtime-common/oauth-route-admission';
@@ -72,7 +73,11 @@ export async function resolveOAuthAccessToken(
       `token accepted: resource ${resource}, client ${result.caller.clientId}, ${ms}ms`,
     );
   } else {
-    log.info(`token refused: ${result.reason}, resource ${resource}, ${ms}ms`);
+    logOAuthEvent(
+      'info',
+      { event: 'resource-refused', reason: result.reason, resource },
+      `token refused: ${result.reason}, resource ${resource}, ${ms}ms`,
+    );
   }
   return result;
 }

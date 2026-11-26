@@ -47,7 +47,10 @@ import {
   type AuthorizationErrorRecord,
   type ConsentDecisionRecord,
 } from '../lib/oauth-provider/objects.ts';
+import { pseudonym } from '../lib/oauth-provider/events.ts';
 import { buildRegistry } from '../lib/oauth-provider/registry.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
+import { oauthEvents } from './helpers/oauth-provider-events.ts';
 import { BOXEL_CLI_CLIENT_ID } from '../lib/oauth-provider/pre-registered-clients.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
@@ -636,6 +639,44 @@ module(basename(import.meta.filename), function (hooks) {
       let decision = await findConsentDecision(db, uid);
       assert.false(decision!.allowed);
       assert.false(decision!.renew);
+    });
+
+    test('a decision is an event naming its client and user by pseudonym', async function (assert) {
+      let user = await matrixAccount();
+      // A user who consents has an account row, which names them in events.
+      let [{ id }] = (await db.execute(
+        `INSERT INTO users (matrix_user_id) VALUES ($1) RETURNING id`,
+        { bind: [user] },
+      )) as { id: string }[];
+      let clientId = await register();
+      let uid = await startFlow(clientId);
+      let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+        let response = await decide(
+          uid,
+          { decision: 'deny', renew: false },
+          { authorization: await secureSessionAuth(db, user) },
+        );
+        assert.strictEqual(response.status, 201, response.text);
+      });
+      let [decided] = oauthEvents(lines).filter(
+        ({ event }) => event === 'consent',
+      );
+      assert.deepEqual(
+        {
+          outcome: decided?.outcome,
+          client: decided?.client,
+          user: decided?.user,
+          renew: decided?.renew,
+        },
+        {
+          outcome: 'denied',
+          client: clientId,
+          user: pseudonym(id),
+          renew: false,
+        },
+      );
+      let logged = lines.map(({ message }) => message).join('\n');
+      assert.false(logged.includes(user), 'no Matrix ID is logged');
     });
 
     test('a flow is decided once', async function (assert) {

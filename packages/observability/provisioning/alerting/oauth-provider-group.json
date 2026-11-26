@@ -1,0 +1,813 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "oauth-provider-group",
+      "folder": "defd2d156sav4d",
+      "interval": "60s",
+      "rules": [
+        {
+          "uid": "oauth-token-reuse",
+          "title": "OAuth code or refresh token reused",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (what) (count_over_time({service=\"realm-server\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"reuse\" [5m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "title": "{{ if $values }}[${ALERT_ENVIRONMENT}] An OAuth {{ .Labels.what }} was used twice{{ else }}[${ALERT_ENVIRONMENT}] DatasourceError: the OAuth rule \"OAuth code or refresh token reused\" could not run its query{{ end }}",
+            "summary": "{{ if $values }}A spent authorization code, or a refresh token used outside its 30-second grace, came back to the token endpoint in the last 5 minutes. The provider ended its grant (reason reuse). Either the app mishandles its tokens, or someone copied one.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "description": "{{ if $values }}Environment: ${ALERT_ENVIRONMENT}\nWhat was reused: {{ .Labels.what }}\nTimes in the last 5 minutes: {{ printf \"%.0f\" .Values.B.Value }}\n\nThe grant is already ended; its user must connect the app again. The grant-ended event next to the reuse names the client, the grant and the user by pseudonym. Reuse across many users of one app is a bug in that app: tell its maker. Reuse on one user's grant, by an app that otherwise works, is a copied token: ask the user where the app runs, and if a token may have leaked, revoke their sessions, which ends all their grants (the realm-auth skill). Find the rows a pseudonym stands for with the SQL in the oauth-provider skill's Alerts section; the dashboard shows the events around it.{{ else }}Environment: ${ALERT_ENVIRONMENT}\n\nGrafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "runbook": "The oauth-provider skill (Alerts), and the OAuth Provider dashboard.",
+            "__dashboardUid__": "boxel-oauth-provider"
+          },
+          "labels": {
+            "area": "oauth-provider"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Techops",
+            "group_by": ["alertname", "what"]
+          }
+        },
+        {
+          "uid": "oauth-confirmation-code-refusals",
+          "title": "OAuth flows refused for their confirmation code",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 900,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (network) (count_over_time({service=\"realm-server\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"authorization-refused\" | reason=\"confirmation-code\" [15m])) >= 5",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "title": "{{ if $values }}[${ALERT_ENVIRONMENT}] Many OAuth flows refused for their confirmation code from one network{{ else }}[${ALERT_ENVIRONMENT}] DatasourceError: the OAuth rule \"OAuth flows refused for their confirmation code\" could not run its query{{ end }}",
+            "summary": "{{ if $values }}At least 5 flows from one network were refused in the last 15 minutes because their boxel_confirmation_code was missing, malformed, or sent by a client that may not send one. Someone may be scripting flows that impersonate boxel-cli.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "description": "{{ if $values }}Environment: ${ALERT_ENVIRONMENT}\nNetwork (pseudonym): {{ .Labels.network }}\nRefusals in the last 15 minutes: {{ printf \"%.0f\" .Values.B.Value }}\n\nAn outdated boxel-cli sends no code: check the client named on the refusals. Otherwise the network is probing the authorize endpoint; the authorization rate limit caps it. Find the rows a pseudonym stands for with the SQL in the oauth-provider skill's Alerts section; the dashboard shows the events around it.{{ else }}Environment: ${ALERT_ENVIRONMENT}\n\nGrafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "runbook": "The oauth-provider skill (Alerts), and the OAuth Provider dashboard.",
+            "__dashboardUid__": "boxel-oauth-provider"
+          },
+          "labels": {
+            "area": "oauth-provider"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Techops",
+            "group_by": ["alertname", "network"]
+          }
+        },
+        {
+          "uid": "oauth-consent-denials",
+          "title": "OAuth consents denied in a burst",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 900,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "(sum by (user) (count_over_time({service=\"realm-server\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"consent\" | outcome=\"denied\" | user!=\"\" [15m])) >= 5) or (sum by (network) (count_over_time({service=\"realm-server\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"consent\" | outcome=\"denied\" | network!=\"\" [15m])) >= 5)",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "title": "{{ if $values }}[${ALERT_ENVIRONMENT}] Many OAuth consents denied by one {{ if .Labels.user }}user{{ else }}network{{ end }}{{ else }}[${ALERT_ENVIRONMENT}] DatasourceError: the OAuth rule \"OAuth consents denied in a burst\" could not run its query{{ end }}",
+            "summary": "{{ if $values }}At least 5 consents were denied in the last 15 minutes by one user or from one network. A user who denies again and again is likely being sent consent links they didn't ask for: someone is trying to get them to approve an app.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "description": "{{ if $values }}Environment: ${ALERT_ENVIRONMENT}\nUser (pseudonym): {{ .Labels.user }}\nNetwork (pseudonym): {{ .Labels.network }}\nDenials in the last 15 minutes: {{ printf \"%.0f\" .Values.B.Value }}\n\nThe consent events name the client the links were for. Contact the user if it is one user. Find the rows a pseudonym stands for with the SQL in the oauth-provider skill's Alerts section; the dashboard shows the events around it.{{ else }}Environment: ${ALERT_ENVIRONMENT}\n\nGrafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "runbook": "The oauth-provider skill (Alerts), and the OAuth Provider dashboard.",
+            "__dashboardUid__": "boxel-oauth-provider"
+          },
+          "labels": {
+            "area": "oauth-provider"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Techops",
+            "group_by": ["alertname", "user", "network"]
+          }
+        },
+        {
+          "uid": "oauth-network-mismatch",
+          "title": "boxel-cli codes exchanged from another network",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 1800,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (client) (count_over_time({service=\"realm-server\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"token-issued\" | networkMatch=\"other\" [30m])) >= 3",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "title": "{{ if $values }}[${ALERT_ENVIRONMENT}] boxel-cli codes exchanged from another network than the one that consented{{ else }}[${ALERT_ENVIRONMENT}] DatasourceError: the OAuth rule \"boxel-cli codes exchanged from another network\" could not run its query{{ end }}",
+            "summary": "{{ if $values }}At least 3 boxel-cli codes in the last 30 minutes were exchanged from a different network than the browser that finished the flow. This is what pasting a loopback address into someone else's session looks like, but the CLI on another machine than the browser (a dev container, a cloud workspace, an SSH port-forward) or a VPN covering only the browser cause it too.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "description": "{{ if $values }}Environment: ${ALERT_ENVIRONMENT}\nClient: {{ .Labels.client }}\nExchanges from another network in the last 30 minutes: {{ printf \"%.0f\" .Values.B.Value }}\n\nLook at the token-issued events with networkMatch other on the dashboard: many grants from the same few users is someone's own setup; grants of different users, each once, is the paste attack. End those grants. Find the rows a pseudonym stands for with the SQL in the oauth-provider skill's Alerts section; the dashboard shows the events around it.{{ else }}Environment: ${ALERT_ENVIRONMENT}\n\nGrafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "runbook": "The oauth-provider skill (Alerts), and the OAuth Provider dashboard.",
+            "__dashboardUid__": "boxel-oauth-provider"
+          },
+          "labels": {
+            "area": "oauth-provider"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Techops",
+            "group_by": ["alertname", "client"]
+          }
+        },
+        {
+          "uid": "oauth-probing",
+          "title": "One OAuth connection probing routes",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 900,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (client, grant) (count_over_time({service=\"realm-server\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"resource-refused\" | reason=~\"route-not-mapped|insufficient-scope|assume-user\" [15m])) >= 20",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "title": "{{ if $values }}[${ALERT_ENVIRONMENT}] One OAuth connection refused at {{ printf \"%.0f\" $values.B.Value }} routes{{ else }}[${ALERT_ENVIRONMENT}] DatasourceError: the OAuth rule \"One OAuth connection probing routes\" could not run its query{{ end }}",
+            "summary": "{{ if $values }}One connection (one grant) was refused at least 20 times in the last 15 minutes on routes no scope maps, routes its scopes don't reach, or for asking to act as another user. A working app asks for what it needs; this is an app exploring the API, or a stolen token being tried.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "description": "{{ if $values }}Environment: ${ALERT_ENVIRONMENT}\nClient: {{ .Labels.client }}\nGrant (pseudonym): {{ .Labels.grant }}\nRefusals in the last 15 minutes: {{ printf \"%.0f\" .Values.B.Value }}\n\nA known app after a release may have a bug: tell its maker. Otherwise end the grant (the oauth-provider skill's Ending connections). Find the rows a pseudonym stands for with the SQL in the oauth-provider skill's Alerts section; the dashboard shows the events around it.{{ else }}Environment: ${ALERT_ENVIRONMENT}\n\nGrafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "runbook": "The oauth-provider skill (Alerts), and the OAuth Provider dashboard.",
+            "__dashboardUid__": "boxel-oauth-provider"
+          },
+          "labels": {
+            "area": "oauth-provider"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Techops",
+            "group_by": ["alertname", "client", "grant"]
+          }
+        },
+        {
+          "uid": "oauth-grant-growth",
+          "title": "One user gaining many OAuth grants",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 1800,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (user) (count_over_time({service=\"realm-server\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"consent\" | outcome=\"allowed\" | user!=\"\" [30m])) >= 10",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "title": "{{ if $values }}[${ALERT_ENVIRONMENT}] One user allowed {{ printf \"%.0f\" $values.B.Value }} OAuth connections in 30 minutes{{ else }}[${ALERT_ENVIRONMENT}] DatasourceError: the OAuth rule \"One user gaining many OAuth grants\" could not run its query{{ end }}",
+            "summary": "{{ if $values }}One user allowed at least 10 connections in the last 30 minutes. People connect an app once; many in a row is a script driving their signed-in browser, or a user being talked through consent again and again.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "description": "{{ if $values }}Environment: ${ALERT_ENVIRONMENT}\nUser (pseudonym): {{ .Labels.user }}\nConsents allowed in the last 30 minutes: {{ printf \"%.0f\" .Values.B.Value }}\n\nThe consent events name the clients. Find the rows a pseudonym stands for with the SQL in the oauth-provider skill's Alerts section; the dashboard shows the events around it.{{ else }}Environment: ${ALERT_ENVIRONMENT}\n\nGrafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "runbook": "The oauth-provider skill (Alerts), and the OAuth Provider dashboard.",
+            "__dashboardUid__": "boxel-oauth-provider"
+          },
+          "labels": {
+            "area": "oauth-provider"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Techops",
+            "group_by": ["alertname", "user"]
+          }
+        },
+        {
+          "uid": "oauth-rate-limit-alert",
+          "title": "OAuth provider traffic past a rate limit's alert mark",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum (count_over_time({service=\"realm-server\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"rate-limit-alert\" [5m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "title": "{{ if $values }}[${ALERT_ENVIRONMENT}] OAuth provider traffic past a rate limit's alert mark{{ else }}[${ALERT_ENVIRONMENT}] DatasourceError: the OAuth rule \"OAuth provider traffic past a rate limit's alert mark\" could not run its query{{ end }}",
+            "summary": "{{ if $values }}Requests to the provider's registration, authorization or token endpoints passed a limit's alert mark in the last 5 minutes, before the limit refuses everyone. The same warning goes to Sentry.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "description": "{{ if $values }}Environment: ${ALERT_ENVIRONMENT}\nWarnings in the last 5 minutes: {{ printf \"%.0f\" .Values.B.Value }}\n\nThe warning's message names the limit and its window. Look on the dashboard for one client or network behind the traffic, and the oauth-provider skill's Rate limits for the settings.{{ else }}Environment: ${ALERT_ENVIRONMENT}\n\nGrafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "runbook": "The oauth-provider skill (Alerts), and the OAuth Provider dashboard.",
+            "__dashboardUid__": "boxel-oauth-provider"
+          },
+          "labels": {
+            "area": "oauth-provider"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Techops",
+            "group_by": ["alertname"]
+          }
+        },
+        {
+          "uid": "oauth-provider-error",
+          "title": "OAuth provider error",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=\"realm-server\"} |= \"OAuth provider error\" [5m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "title": "{{ if $values }}[${ALERT_ENVIRONMENT}] The OAuth provider raised an error it didn't handle{{ else }}[${ALERT_ENVIRONMENT}] DatasourceError: the OAuth rule \"OAuth provider error\" could not run its query{{ end }}",
+            "summary": "{{ if $values }}The oauth library raised an error Boxel didn't handle, in the last 5 minutes. The request got the library's own error answer. The same error is in Sentry with its stack.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "description": "{{ if $values }}Environment: ${ALERT_ENVIRONMENT}\nErrors in the last 5 minutes: {{ printf \"%.0f\" .Values.B.Value }}\n\nFind the event in Sentry by its message, OAuth provider error (the sentry skill).{{ else }}Environment: ${ALERT_ENVIRONMENT}\n\nGrafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about OAuth activity. The query reads Loki: check the Loki task and its context canceled and context deadline exceeded errors.{{ end }}",
+            "runbook": "The oauth-provider skill (Alerts), and the OAuth Provider dashboard.",
+            "__dashboardUid__": "boxel-oauth-provider"
+          },
+          "labels": {
+            "area": "oauth-provider"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Techops",
+            "group_by": ["alertname"]
+          }
+        }
+      ]
+    }
+  ]
+}

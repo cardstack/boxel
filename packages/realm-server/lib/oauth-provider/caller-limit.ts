@@ -21,7 +21,6 @@ import * as Sentry from '@sentry/node';
 import {
   counterKey,
   isRateLimitUnavailable,
-  logger,
   networkRateLimitKey,
   parseIP,
   parseRateLimitSpec,
@@ -31,8 +30,7 @@ import {
   type RateLimitStore,
   type TokenBucketLimit,
 } from '@cardstack/runtime-common';
-
-const log = logger('boxel:oauth-provider');
+import { logOAuthEvent } from './events.ts';
 
 export interface CallerLimit {
   perAddress: AnonymousRateLimit;
@@ -213,7 +211,7 @@ export class CallerLimitAlert {
 }
 
 function warnOperators(message: string) {
-  log.warn(message);
+  logOAuthEvent('warn', { event: 'rate-limit-alert' }, message);
   Sentry.captureMessage(message, 'warning');
 }
 

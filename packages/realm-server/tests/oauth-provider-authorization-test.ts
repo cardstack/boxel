@@ -26,6 +26,10 @@ import {
 } from './helpers/oauth-provider-secrets.ts';
 import { logLinesDuring } from './helpers/log-capture.ts';
 import {
+  oauthEvents,
+  readableMessage,
+} from './helpers/oauth-provider-events.ts';
+import {
   AUTHORIZATION_REFUSAL_REASONS,
   InteractionAdapter,
   sha256Hex,
@@ -754,7 +758,7 @@ module(basename(import.meta.filename), function () {
         );
       });
       let refusals = lines
-        .map(({ message }) => message)
+        .map(({ message }) => readableMessage(message))
         .filter((message) => message.startsWith('authorization refused:'));
       assert.deepEqual(refusals, [
         `authorization refused: unsupported-parameter (invalid_request): nonce, other, client ${clientId}`,
@@ -1431,6 +1435,50 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(elsewhere.status, 303);
       interactionUid(elsewhere.headers.location);
+    });
+  });
+
+  module('refusal events', function (hooks) {
+    // Behind one proxy of ours, so the caller is the address it forwards.
+    let server = setupServer(hooks, { trustedProxyHops: 1 });
+
+    test('a refusal is an event naming its reason, its client and its network by pseudonym', async function (assert) {
+      let clientId = await server.register();
+      let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+        for (let forwardedFor of [
+          '198.51.100.7',
+          '198.51.100.8',
+          '203.0.113.9',
+        ]) {
+          await server.authorize(validParams(clientId, { nonce: 'n' }), {
+            forwardedFor,
+          });
+        }
+      });
+      let refusals = oauthEvents(lines).filter(
+        ({ event }) => event === 'authorization-refused',
+      );
+      assert.deepEqual(
+        refusals.map(({ reason, error, client }) => ({
+          reason,
+          error,
+          client,
+        })),
+        Array(3).fill({
+          reason: 'unsupported-parameter',
+          error: 'invalid_request',
+          client: clientId,
+        }),
+      );
+      let [first, second, third] = refusals.map(({ network }) => network);
+      assert.true(
+        /^[0-9a-f]{16}$/.test(String(first)),
+        `the network is a pseudonym: ${first}`,
+      );
+      assert.strictEqual(second, first, 'one /24 is one network');
+      assert.notStrictEqual(third, first, 'another /24 is another');
+      let logged = lines.map(({ message }) => message).join('\n');
+      assert.false(logged.includes('198.51.100'), 'no address is logged');
     });
   });
 

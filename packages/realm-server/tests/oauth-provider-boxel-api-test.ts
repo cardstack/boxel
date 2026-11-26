@@ -46,7 +46,10 @@ import {
   endGrant,
   revokeUserOAuthGrants,
 } from '../lib/oauth-provider/grants.ts';
+import { pseudonym } from '../lib/oauth-provider/events.ts';
 import { sha256Hex } from '../lib/oauth-provider/objects.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
+import { oauthEvents } from './helpers/oauth-provider-events.ts';
 import {
   boxelApiResource,
   buildRegistry,
@@ -353,6 +356,39 @@ module(basename(import.meta.filename), function (hooks) {
         .set('Accept', SupportedMimeType.CardSource)
         .set('Authorization', `Bearer ${token}`);
       assert.strictEqual(unwritten.status, 404, 'nothing was written');
+    });
+
+    test('each refusal is an event naming its client, grant and user by pseudonym', async function (assert) {
+      let { token, grantId } = await oauthToken(OWNER, { scope: 'boxel:read' });
+      let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+        await patchCard(token);
+        await request()
+          .get('/_user')
+          .set('Accept', 'application/json')
+          .set('Authorization', `Bearer ${token}`);
+      });
+      let expected = {
+        resource: 'Boxel API',
+        client: 'boxel-cli',
+        grant: pseudonym(grantId),
+        user: pseudonym(userIds[OWNER]),
+      };
+      assert.deepEqual(
+        oauthEvents(lines)
+          .filter(({ event }) => event === 'resource-refused')
+          .map(({ reason, resource, client, grant, user }) => ({
+            reason,
+            resource,
+            client,
+            grant,
+            user,
+          })),
+        [
+          { reason: 'insufficient-scope', ...expected },
+          { reason: 'route-not-mapped', ...expected },
+        ],
+        'the realm and the realm server each record theirs',
+      );
     });
 
     test('can’t reach a realm-server write', async function (assert) {

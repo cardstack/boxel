@@ -69,6 +69,7 @@ import {
   type CallerLimit,
 } from './caller-limit.ts';
 import { browserOriginAllowed } from './client-cors.ts';
+import { logOAuthEvent, networkOf, pseudonym } from './events.ts';
 import { endGrant } from './grants.ts';
 import {
   callerNetwork,
@@ -220,7 +221,19 @@ export function tokenHandler({
       if (!taken.admitted) {
         if (exchange.reused) {
           // What the library does with a reuse it sees.
-          log.info(`${exchange.what} reused`);
+          logOAuthEvent(
+            'info',
+            {
+              event: 'reuse',
+              what:
+                exchange.what === 'code'
+                  ? 'authorization code'
+                  : 'refresh token',
+              grant: pseudonym(exchange.grantId),
+              network: networkOf(ctxt),
+            },
+            `${exchange.what} reused`,
+          );
           await endGrant(dbAdapter, exchange.grantId, 'reuse');
           return answer(400, {
             error: 'invalid_grant',

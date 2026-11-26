@@ -7,11 +7,10 @@
 // (`adapter.ts`), and ends one only through `endGrant`.
 
 import { randomBytes } from 'crypto';
-import { logger, type DBAdapter } from '@cardstack/runtime-common';
+import type { DBAdapter } from '@cardstack/runtime-common';
 import { clientIdForLogs } from './client-metadata-document.ts';
 import { isDynamicClientId } from './dynamic-client-id.ts';
-
-const log = logger('boxel:oauth-provider');
+import { logOAuthEvent, pseudonym, userPseudonym } from './events.ts';
 
 // How long a grant lasts from its consent: 30 days when the user chose to
 // keep the connection, 60 minutes when not (ADR 021 §1.9).
@@ -171,11 +170,11 @@ export async function endGrant(
        FROM users AS u
       WHERE g.id = $1 AND u.id = g.user_id AND g.ended_at IS NULL
         ${owner === undefined ? '' : `AND u.matrix_user_id = $3 AND ${GRANT_USABLE}`}
-      RETURNING g.client_id`,
+      RETURNING g.client_id, g.user_id`,
     {
       bind: owner === undefined ? [grantId, reason] : [grantId, reason, owner],
     },
-  )) as { client_id: string }[];
+  )) as { client_id: string; user_id: string }[];
   let ended = rows.length > 0;
   // An owner's request that ended nothing leaves the tokens too: the grant
   // may be someone else's.
@@ -186,8 +185,17 @@ export async function endGrant(
     );
   }
   if (ended) {
-    log.info(
-      `grant ended: ${reason}, client ${clientIdForLogs(rows[0].client_id)}`,
+    let client = clientIdForLogs(rows[0].client_id);
+    logOAuthEvent(
+      'info',
+      {
+        event: 'grant-ended',
+        reason,
+        client,
+        grant: pseudonym(grantId),
+        user: pseudonym(rows[0].user_id),
+      },
+      `grant ended: ${reason}, client ${client}`,
     );
   }
   return ended;
@@ -247,6 +255,7 @@ export async function revokeUserOAuthGrants(
   )) as { id: string }[];
   return await deleteRevokedGrantsTokens(
     dbAdapter,
+    matrixUserId,
     rows.map(({ id }) => id),
   );
 }
@@ -292,7 +301,7 @@ export async function revokeUserSessionsAndOAuthGrants(
       `revokeUserSessionsAndOAuthGrants: failed to record revocation for matrix_user_id="${matrixUserId}"`,
     );
   }
-  await deleteRevokedGrantsTokens(dbAdapter, row.ended);
+  await deleteRevokedGrantsTokens(dbAdapter, matrixUserId, row.ended);
   return Number(row.sessions_revoked_at);
 }
 
@@ -300,6 +309,7 @@ export async function revokeUserSessionsAndOAuthGrants(
 // one that ended them, as `endGrant` does.
 async function deleteRevokedGrantsTokens(
   dbAdapter: DBAdapter,
+  matrixUserId: string,
   grantIds: string[],
 ): Promise<number> {
   if (grantIds.length > 0) {
@@ -307,7 +317,16 @@ async function deleteRevokedGrantsTokens(
       `DELETE FROM oauth_provider_tokens WHERE grant_id = ANY($1::varchar[])`,
       { bind: [grantIds] },
     );
-    log.info(`grants ended: sessions-revoked, ${grantIds.length}`);
+    logOAuthEvent(
+      'info',
+      {
+        event: 'grants-ended',
+        reason: 'sessions-revoked',
+        count: grantIds.length,
+        user: await userPseudonym(dbAdapter, matrixUserId),
+      },
+      `grants ended: sessions-revoked, ${grantIds.length}`,
+    );
   }
   return grantIds.length;
 }
