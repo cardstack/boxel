@@ -111,12 +111,13 @@ let captureElement = modifier(
 );
 
 type PanelWidths = {
-  defaultWidth: number | null;
   minWidth: number | null;
 };
 
 const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 46;
 const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 23;
+// The share of the window the assistant opens at before the window is measured.
+const AI_PANEL_UNMEASURED_WIDTH_PERCENT = 30;
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
@@ -141,7 +142,6 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   private aiPanelWidths: PanelWidths = new TrackedObject({
-    defaultWidth: 30,
     minWidth: 25,
   });
   @tracked private mainPanelMinWidth = 0;
@@ -217,13 +217,13 @@ export default class SubmodeLayout extends Component<Signature> {
     this.mainPanelMinWidth = (mainPanelMinWidthInPixels / windowWidth) * 100;
   };
 
-  // The width the assistant opens at: the saved one, or else 371px. The saved
-  // width isn't tracked, so reading whether the assistant is open makes this
-  // recompute each time it opens, with the width saved since the page loaded.
-  private get aiPanelDefaultWidth(): number | null {
+  // The width the assistant opens at: the saved one, or else 371px. The panel
+  // renders only while the assistant is open, so each open creates a new one,
+  // which reads the latest saved width.
+  private get aiPanelDefaultWidth(): number {
     let windowWidth = this.currentWindowWidth;
-    if (!this.aiAssistantPanelService.isOpen || !windowWidth) {
-      return this.aiPanelWidths.defaultWidth;
+    if (!windowWidth) {
+      return AI_PANEL_UNMEASURED_WIDTH_PERCENT;
     }
     let standardWidth = (Math.min(371, windowWidth) / windowWidth) * 100;
     let persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth)
