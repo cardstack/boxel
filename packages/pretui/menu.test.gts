@@ -700,10 +700,10 @@ module('Pretui | command palette | noun, match, trigger', function (hooks) {
   });
 
   test('matchText: words and prefix drop the weak matches fuzzy keeps', function (assert) {
-    assert.ok(matchText('fuzzy', 'restroom', 'Room name'), 'fuzzy keeps it');
-    assert.strictEqual(matchText('words', 'restroom', 'Room name'), null);
-    assert.strictEqual(matchText('prefix', 'room', 'Restroom'), null);
-    assert.ok(matchText('prefix', 'rest', 'Restroom'), 'a prefix hit stays');
+    assert.ok(matchText('fuzzy', 'ar', 'Share'), 'fuzzy keeps it');
+    assert.strictEqual(matchText('words', 'ar', 'Share'), null);
+    assert.strictEqual(matchText('prefix', 'ar', 'Share'), null);
+    assert.ok(matchText('prefix', 'ar', 'Arrival date'), 'a prefix hit stays');
     assert.deepEqual(matchText('words', 'na ro', 'Room name')?.ranges, [
       [0, 2],
       [5, 7],

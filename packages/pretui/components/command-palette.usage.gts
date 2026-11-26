@@ -59,7 +59,7 @@ class CommandPaletteUsage extends MenuState {
           <code>@resultNoun='sign'</code>
           for the announced count (“4 signs”, “No signs”) and
           <code>@match='words'</code>
-          so “restroom” no longer lists “Room name”.</p>
+          so “ar” lists “Arrival date” but no longer “Share”.</p>
         <p class='menu-hint'>Try
           <em>“export”</em>
           — it is two submenus deep and still one keystroke away. Then open

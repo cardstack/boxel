@@ -120,6 +120,7 @@ export function fuzzyMatch(query: string, text: string): FuzzyMatch | null {
 export type PaletteMatch = 'fuzzy' | 'words' | 'prefix';
 
 const WORD = /[^\s\-_/.:·>]+/g;
+const DELIMITERS = /[\s\-_/.:·>]+/;
 
 /** The strict modes of the palette's matcher; 'fuzzy' is `fuzzyMatch`. */
 export function matchText(
@@ -144,7 +145,7 @@ export function matchText(
   let starts = [...haystack.matchAll(WORD)].map((m) => m.index as number);
   let used = new Set<number>();
   let ranges: [number, number][] = [];
-  for (let word of needle.split(/\s+/)) {
+  for (let word of needle.split(DELIMITERS)) {
     let start = starts.find(
       (at) => !used.has(at) && haystack.startsWith(word, at),
     );
@@ -155,7 +156,8 @@ export function matchText(
     ranges.push([start, start + word.length]);
   }
   ranges.sort((a, b) => a[0] - b[0]);
-  return { score: 60 + bonus, ranges };
+  // a label that starts with the query outranks one matching a later word
+  return { score: 60 + bonus + (ranges[0][0] === 0 ? 20 : 0), ranges };
 }
 
 export interface MatchSegment {
@@ -445,8 +447,8 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
       }));
     }
     let scored: { entry: PaletteEntry; match: FuzzyMatch }[] = [];
+    let mode = this.args.match ?? 'fuzzy';
     for (let entry of scoped) {
-      let mode = this.args.match ?? 'fuzzy';
       let onLabel = matchText(mode, query, entry.label);
       if (onLabel) {
         scored.push({ entry, match: onLabel });
@@ -661,8 +663,8 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
         type='button'
         class='pal-trigger'
         aria-haspopup='dialog'
-        data-test-pretui-palette-trigger
         {{on 'click' this.openFromTrigger}}
+        data-test-pretui-palette-trigger
       >
         <SearchIcon
           class='pal-trigger-icon'
@@ -911,6 +913,8 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
         .pal-trigger {
           display: inline-flex;
           align-items: center;
+          inline-size: var(--pretui-palette-trigger-width, auto);
+          max-inline-size: 100%;
           gap: var(--boxel-sp-3xs);
           min-height: var(--boxel-form-control-height-sm);
           padding-inline: var(--boxel-sp-xs);
@@ -919,11 +923,12 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
           border: 1px solid var(--input);
           border-radius: calc(var(--radius) - 0.125rem);
           font-family: inherit;
-          font-size: var(--boxel-font-size-xs);
+          font-size: var(--boxel-font-size-sm);
           text-align: start;
           cursor: pointer;
         }
         .pal-trigger:hover {
+          background: var(--hover);
           border-color: color-mix(in oklch, var(--foreground) 30%, var(--input));
         }
         .pal-trigger:focus-visible {
