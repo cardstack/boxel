@@ -82,6 +82,16 @@ export const REALM_AUTHORITY_RENDER = '';
 // realm's permissions give everyone.
 export const ANONYMOUS_RENDER = '*';
 
+// The `renderedAs` of a capture an OAuth app asked for as `user`. It renders
+// with tab tokens its grant bounds (`oauth-tab-token.ts`), never the user's
+// sessions, so it may draw less than the user's own capture would, and it
+// serves back only to the user's OAuth apps: a reader on the user's own
+// session is never served it, nor an OAuth app the session's capture. A Matrix
+// user id starts with `@`, so no user's own reader key takes this form.
+export function oauthCaptureReader(user: string): string {
+  return `oauth:${user}`;
+}
+
 // One capture: one source instance under one canonical spec at one
 // generation. Which of its ledger rows a reader is served depends on who is
 // reading (see `findMediaCacheEntry`).

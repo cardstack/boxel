@@ -11,6 +11,7 @@ import {
   type HostRouteTypeInfo,
 } from '../host-routes.ts';
 import type { RawHostRoutingRule } from '../realm.ts';
+import { VirtualNetwork } from '../virtual-network.ts';
 import type { ResolvedCodeRef } from '../code-ref.ts';
 import type { Filter } from '../query.ts';
 import type { SharedTests } from '../helpers/index.ts';
@@ -66,6 +67,7 @@ function type(name: string): ResolvedCodeRef {
 function routesFor(rules: RawHostRoutingRule[]): readonly HostRoute[] {
   let { routes, warnings } = validateHostRoutes(rules, {
     realmURL: new URL(REALM),
+    virtualNetwork: new VirtualNetwork(),
     lookupType: (ref) => (ref.module === MODULE ? TYPES[ref.name] : undefined),
   });
   let dropped = warnings.filter((w) => w.dropped);

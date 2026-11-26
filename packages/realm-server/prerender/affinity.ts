@@ -7,10 +7,13 @@ import type { AffinityArgs } from '@cardstack/runtime-common';
 // for one user; a render a user asks for holds that user's ordinary sessions;
 // an anonymous render holds none. Anything else, including auth that cannot
 // be read, is `unreadable`. An automation run holds one run token, for its
-// automation's realm, minted for the run's identity (ADR 026 §1.2).
+// automation's realm, minted for the run's identity (ADR 026 §1.2). A command
+// or capture an OAuth app starts holds tab tokens, all minted for one user and
+// one grant (`oauth-tab-token.ts`), and nothing else.
 export type RenderSession =
   | { kind: 'realm-authority'; user: string }
   | { kind: 'run'; user: string }
+  | { kind: 'oauth-tab'; user: string; grant: string }
   | { kind: 'user'; user: string }
   | { kind: 'anonymous' }
   | { kind: 'unreadable' };
@@ -30,8 +33,10 @@ export function renderSessionOf(auth: string): RenderSession {
     return { kind: 'anonymous' };
   }
   let users = new Set<string>();
+  let grants = new Set<string>();
   let authorities = 0;
   let runs = 0;
+  let tabTokens = 0;
   for (let token of values) {
     if (typeof token !== 'string') {
       return { kind: 'unreadable' };
@@ -40,6 +45,7 @@ export function renderSessionOf(auth: string): RenderSession {
       user?: unknown;
       realmAuthority?: unknown;
       run?: unknown;
+      oauthTab?: { grant?: unknown } | null;
     } | null;
     try {
       claims = JSON.parse(
@@ -61,6 +67,13 @@ export function renderSessionOf(auth: string): RenderSession {
     if (claims.run !== undefined) {
       runs++;
     }
+    if (claims.oauthTab !== undefined) {
+      if (typeof claims.oauthTab?.grant !== 'string') {
+        return { kind: 'unreadable' };
+      }
+      grants.add(claims.oauthTab.grant);
+      tabTokens++;
+    }
   }
   if (users.size !== 1) {
     return { kind: 'unreadable' };
@@ -69,8 +82,18 @@ export function renderSessionOf(auth: string): RenderSession {
   // A run's tab holds its run token and nothing else, so its sessions never
   // mix with another kind's in one affinity.
   if (runs > 0) {
-    return runs === 1 && values.length === 1 && authorities === 0
+    return runs === 1 &&
+      values.length === 1 &&
+      authorities === 0 &&
+      tabTokens === 0
       ? { kind: 'run', user }
+      : { kind: 'unreadable' };
+  }
+  // An OAuth app's tab holds its tab tokens and nothing else, all for one
+  // grant, so they never mix with the user's sessions in one affinity.
+  if (tabTokens > 0) {
+    return tabTokens === values.length && authorities === 0 && grants.size === 1
+      ? { kind: 'oauth-tab', user, grant: [...grants][0] }
       : { kind: 'unreadable' };
   }
   if (authorities === values.length) {
@@ -99,14 +122,25 @@ export function renderSessionOf(auth: string): RenderSession {
 // Callers that build a key for a render pass its `auth`. Without it the key
 // is the bare `realm:<url>` key the prerender manager routes by, which no
 // render runs on and which `isAffinityOfRealm` matches every session of.
+//
+// An OAuth app's tab holds tab tokens for one user and grant, and is keyed
+// `<key>#oauth:<user>:<grant>` on a realm affinity, and `user:<id>#oauth:<grant>`
+// on a user affinity (a command's), so its context never serves a render or
+// command that holds the user's own sessions, or another grant's tokens.
 export function toAffinityKey({
   affinityType,
   affinityValue,
   auth,
 }: AffinityArgs & { auth?: string }): string {
   let key = `${affinityType}:${affinityValue}`;
-  if (auth === undefined || affinityType !== 'realm') {
+  if (auth === undefined) {
     return key;
+  }
+  if (affinityType !== 'realm') {
+    let session = renderSessionOf(auth);
+    return session.kind === 'oauth-tab'
+      ? `${key}${SESSION_SEPARATOR}${OAUTH_TAB_SESSION_PREFIX}${session.grant}`
+      : key;
   }
   let session = renderSessionOf(auth);
   switch (session.kind) {
@@ -114,6 +148,8 @@ export function toAffinityKey({
       return `${key}${SESSION_SEPARATOR}${AUTHORITY_SESSION_PREFIX}${session.user}`;
     case 'run':
       return `${key}${SESSION_SEPARATOR}${RUN_SESSION_PREFIX}${session.user}`;
+    case 'oauth-tab':
+      return `${key}${SESSION_SEPARATOR}${OAUTH_TAB_SESSION_PREFIX}${session.user}:${session.grant}`;
     case 'user':
       return `${key}${SESSION_SEPARATOR}${session.user}`;
     case 'anonymous':
@@ -127,10 +163,12 @@ export function toAffinityKey({
 }
 
 // A realm URL has no fragment, and neither a user id nor the other session
-// names contain `#`, so the first `#` in a realm key starts its session.
+// names contain `#`, so the first `#` in a realm or user key starts its
+// session. An OAuth grant id is base64url, with no `#` either.
 const SESSION_SEPARATOR = '#';
 const AUTHORITY_SESSION_PREFIX = 'authority:';
 const RUN_SESSION_PREFIX = 'run:';
+const OAUTH_TAB_SESSION_PREFIX = 'oauth:';
 
 // Whether an affinity key is an automation run's. The pool holds a run
 // affinity to one tab, and its runs take turns on it: a run can hold its tab
@@ -142,6 +180,21 @@ export function isRunAffinityKey(affinityKey: string): boolean {
   return (
     fromAffinityKey(affinityKey)?.session?.startsWith(RUN_SESSION_PREFIX) ===
     true
+  );
+}
+
+// Whether an affinity key is the tab of a command or capture an OAuth app
+// started, on a realm or a user affinity. Code the app chose runs there, so
+// the pool never moves such a tab, with its page and BrowserContext, to
+// another affinity, nor gives it one of another affinity's (ADR 021 §1.5): a
+// timer the app's code left in the page would read what the next render
+// hands it, and a tab the app's command takes still holds what an earlier
+// render left.
+export function isOAuthTabAffinityKey(affinityKey: string): boolean {
+  return (
+    fromAffinityKey(affinityKey)?.session?.startsWith(
+      OAUTH_TAB_SESSION_PREFIX,
+    ) === true
   );
 }
 
@@ -157,25 +210,24 @@ export function fromAffinityKey(
     return;
   }
   let affinityValue = affinityKey.slice(separator + 1);
-  if (affinityType === 'realm') {
-    let sessionStart = affinityValue.indexOf(SESSION_SEPARATOR);
-    if (sessionStart >= 0) {
-      return {
-        affinityType,
-        affinityValue: affinityValue.slice(0, sessionStart),
-        session: affinityValue.slice(sessionStart + 1),
-      };
-    }
+  let sessionStart = affinityValue.indexOf(SESSION_SEPARATOR);
+  if (sessionStart >= 0) {
+    return {
+      affinityType,
+      affinityValue: affinityValue.slice(0, sessionStart),
+      session: affinityValue.slice(sessionStart + 1),
+    };
   }
   return { affinityType, affinityValue };
 }
 
-// The realm affinity a session affinity belongs to: its key without the
-// session. Every other key is returned as it is. The prerender manager routes
-// by realm, so this is the key a render server reports to it, and the key a
-// render's realm-wide settings (profiling targets) are matched against.
+// The realm or user affinity a session affinity belongs to: its key without
+// the session. Every other key is returned as it is. The prerender manager
+// routes by realm or user, so this is the key a render server reports to it,
+// and the key a render's realm-wide settings (profiling targets) are matched
+// against.
 export function realmAffinityKeyOf(affinityKey: string): string {
-  if (!affinityKey.startsWith('realm:')) {
+  if (!affinityKey.startsWith('realm:') && !affinityKey.startsWith('user:')) {
     return affinityKey;
   }
   let sessionStart = affinityKey.indexOf(SESSION_SEPARATOR);

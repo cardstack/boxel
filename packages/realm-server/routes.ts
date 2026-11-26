@@ -142,6 +142,7 @@ import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver.ts'
 import handleRunCommand from './handlers/handle-run-command.ts';
 import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
+import { buildCreateOAuthTabAuth } from './lib/oauth-tab-token.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import type { HostURLResolver } from './lib/realm-host-urls.ts';
 import type { HostURLDomains } from './lib/realm-host-urls-domains.ts';
@@ -373,6 +374,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     args.realmSecretSeed,
     args.serverURL,
   );
+  let createOAuthTabAuth = buildCreateOAuthTabAuth(args.realmSecretSeed, {
+    realmServerURL: args.serverURL,
+  });
   let router = new Router();
   // One job-scoped search cache per realm-server process, created by the
   // composition root (main.ts) and shared with the JobsFinishedListener so a
@@ -451,6 +455,8 @@ export function createRoutes(args: CreateRoutesArgs) {
       matrixClient: args.matrixClient,
       prerenderer: args.prerenderer,
       createPrerenderAuth,
+      createOAuthTabAuth,
+      boxelApi,
     }),
   );
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));

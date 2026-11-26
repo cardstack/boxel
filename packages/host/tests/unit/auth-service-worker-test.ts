@@ -2,6 +2,11 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
+import {
+  clearInMemorySessions,
+  inMemorySessionsGlobal,
+} from '@cardstack/runtime-common/in-memory-sessions';
+
 import { createTokenRequestHandler } from '@cardstack/host/utils/auth-service-worker-registration';
 import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
@@ -1082,6 +1087,7 @@ module(
     interface PostedMessage {
       realmURL?: string;
       token?: string;
+      forThisRequestOnly?: true;
       type?: 'pending';
     }
 
@@ -1139,6 +1145,72 @@ module(
         { realmURL: 'http://realm/', token: 'tok-from-storage' },
       ]);
       assert.deepEqual(reauthCalls, [], 'reauthenticate not invoked');
+    });
+
+    // A JWT-shaped token with the given payload; only its payload is read.
+    function tokenWithClaims(claims: Record<string, unknown>) {
+      return `header.${btoa(JSON.stringify(claims))}.signature`;
+    }
+
+    function holdSessionsInMemory(sessions: Record<string, string>) {
+      (globalThis as Record<string, unknown>)[inMemorySessionsGlobal] =
+        sessions;
+    }
+
+    test('an OAuth app’s tab answers with a tab token for this request only', async function (assert) {
+      let tabToken = tokenWithClaims({
+        user: '@user:localhost',
+        oauthTab: { grant: 'grant-1', scopes: ['boxel:read'] },
+      });
+      holdSessionsInMemory({ 'http://realm/': tabToken });
+      try {
+        let posted: PostedMessage[] = [];
+        let { deps, reauthCalls } = makeDeps({
+          realmOf: () => 'http://realm/',
+          reauthenticate: async () => 'should-not-be-called',
+        });
+
+        await createTokenRequestHandler(deps)(
+          makeEvent('http://realm/img.png', posted),
+        );
+
+        assert.deepEqual(posted, [
+          {
+            realmURL: 'http://realm/',
+            token: tabToken,
+            forThisRequestOnly: true,
+          },
+        ]);
+        assert.deepEqual(reauthCalls, [], 'reauthenticate not invoked');
+      } finally {
+        clearInMemorySessions();
+      }
+    });
+
+    test('a tab holding a run’s sessions in memory gives the worker none', async function (assert) {
+      holdSessionsInMemory({
+        'http://realm/': tokenWithClaims({ user: '@user:localhost' }),
+      });
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ 'http://realm/': 'tok-from-storage' }),
+      );
+      try {
+        let posted: PostedMessage[] = [];
+        let { deps, reauthCalls } = makeDeps({
+          isLoggedIn: false,
+          realmOf: () => 'http://realm/',
+        });
+
+        await createTokenRequestHandler(deps)(
+          makeEvent('http://realm/img.png', posted),
+        );
+
+        assert.deepEqual(posted, [{}], 'no token, not even from storage');
+        assert.deepEqual(reauthCalls, []);
+      } finally {
+        clearInMemorySessions();
+      }
     });
 
     test('localStorage miss + logged-in + known realm triggers reauthenticate and two-phase posts pending then fresh token', async function (assert) {
@@ -1267,9 +1339,25 @@ module('Unit | auth-service-worker | shipped worker', function () {
 
   async function loadShippedWorker(
     networkResponses: Response[],
+    opts: {
+      // The controlling page's reply when the worker asks it for a token.
+      // With it, the worker runs on real timers, since its ask waits on a
+      // timer it races the page's reply against.
+      answerTokenRequest?: (requestURL: string) => unknown;
+    } = {},
   ): Promise<ShippedWorker> {
     let source = await (await fetch('/auth-service-worker.js')).text();
     let listeners = new Map<string, ((event: unknown) => void)[]>();
+    let { answerTokenRequest } = opts;
+    let page = answerTokenRequest
+      ? {
+          type: 'window',
+          postMessage: (
+            message: { requestURL: string },
+            [port]: MessagePort[],
+          ) => port.postMessage(answerTokenRequest(message.requestURL)),
+        }
+      : undefined;
     let selfStub = {
       addEventListener: (type: string, fn: (event: unknown) => void) => {
         let list = listeners.get(type) ?? [];
@@ -1280,7 +1368,7 @@ module('Unit | auth-service-worker | shipped worker', function () {
       clients: {
         claim: async () => {},
         get: async () => undefined,
-        matchAll: async () => [],
+        matchAll: async () => (page ? [page] : []),
       },
     };
     let fetched: Request[] = [];
@@ -1321,8 +1409,8 @@ module('Unit | auth-service-worker | shipped worker', function () {
     let exported = factory(
       selfStub,
       fetchStub,
-      setTimeoutStub,
-      dateStub,
+      answerTokenRequest ? setTimeout : setTimeoutStub,
+      answerTokenRequest ? Date : dateStub,
     ) as Pick<
       ShippedWorker,
       | 'isCaptureRoute'
@@ -1511,5 +1599,81 @@ module('Unit | auth-service-worker | shipped worker', function () {
       'the 503 reaches the page unabsorbed',
     );
     assert.strictEqual(sw.fetched.length, 1, 'no retry outside _capture/');
+  });
+  test('shipped worker uses a token the page gives for one request only, and keeps none', async function (assert) {
+    let asked: string[] = [];
+    let sw = await loadShippedWorker(
+      [
+        new Response(null, { status: 200 }),
+        new Response(null, { status: 200 }),
+      ],
+      {
+        answerTokenRequest: (requestURL) => {
+          asked.push(requestURL);
+          return {
+            realmURL: 'http://localhost:4201/user/realm/',
+            token: 'tab-token',
+            forThisRequestOnly: true,
+          };
+        },
+      },
+    );
+
+    await sw.dispatchFetch(
+      new Request('http://localhost:4201/user/realm/images/a.png'),
+    );
+    await sw.dispatchFetch(
+      new Request('http://localhost:4201/user/realm/images/b.png'),
+    );
+
+    assert.deepEqual(
+      asked,
+      [
+        'http://localhost:4201/user/realm/images/a.png',
+        'http://localhost:4201/user/realm/images/b.png',
+      ],
+      'the worker asks the page again for the next request',
+    );
+    assert.deepEqual(
+      sw.fetched.map((request) => request.headers.get('Authorization')),
+      ['Bearer tab-token', 'Bearer tab-token'],
+      'each request carries the token the page gave for it',
+    );
+  });
+
+  test('shipped worker keeps a token the page gives without limiting it', async function (assert) {
+    let asked: string[] = [];
+    let sw = await loadShippedWorker(
+      [
+        new Response(null, { status: 200 }),
+        new Response(null, { status: 200 }),
+      ],
+      {
+        answerTokenRequest: (requestURL) => {
+          asked.push(requestURL);
+          return {
+            realmURL: 'http://localhost:4201/user/realm/',
+            token: 'session-token',
+          };
+        },
+      },
+    );
+
+    await sw.dispatchFetch(
+      new Request('http://localhost:4201/user/realm/images/a.png'),
+    );
+    await sw.dispatchFetch(
+      new Request('http://localhost:4201/user/realm/images/b.png'),
+    );
+
+    assert.deepEqual(
+      asked,
+      ['http://localhost:4201/user/realm/images/a.png'],
+      'the second request uses the kept token',
+    );
+    assert.deepEqual(
+      sw.fetched.map((request) => request.headers.get('Authorization')),
+      ['Bearer session-token', 'Bearer session-token'],
+    );
   });
 });
