@@ -23,8 +23,11 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import DanglingRoutingWarning from '@cardstack/host/components/operator-mode/dangling-routing-warning';
 import config from '@cardstack/host/config/environment';
 
+import type HostURLService from '@cardstack/host/services/host-url-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
@@ -32,8 +35,15 @@ import type {
   HomePageCheck,
   HostURL,
   HostURLKind,
-  HostURLList,
 } from '@cardstack/host/services/realm-server';
+import type StoreService from '@cardstack/host/services/store';
+import {
+  findDanglingRoutingRules,
+  type DanglingRoutingRule,
+} from '@cardstack/host/utils/dangling-routing-rules';
+import { hostAndPath } from '@cardstack/host/utils/host-urls';
+
+import type * as CardAPI from '@cardstack/base/card-api';
 
 // Host Mode v2's publish dialog. It lists the addresses a realm is mounted at
 // (its host URLs), mounts it at more, marks one canonical and unmounts them
@@ -64,14 +74,6 @@ function displayURL(url: string): string {
   return url.replace(/^https?:\/\//, '');
 }
 
-// A URL's host and path, which name an address whatever its scheme. The
-// manager builds `https://` URLs, and the realm server gives a host URL the
-// scheme it is served with.
-function hostAndPath(url: string): string {
-  let parsed = new URL(url);
-  return `${parsed.host}${ensureTrailingSlash(parsed.pathname)}`;
-}
-
 const CANONICAL_EXPLANATION =
   'The main address of this realm. Search engines, link previews and the sitemap use it, whichever address a visitor opens.';
 const MAKE_CANONICAL_EXPLANATION =
@@ -90,14 +92,18 @@ interface MountTarget {
 }
 
 // The dialog's content. The modal renders it only while the dialog is open,
-// so each opening loads the host URLs and the home page check again.
+// so each opening loads the host URLs and the home page check again. The
+// host URLs are kept in the host URL service, which the Open Site button
+// also reads, and each change goes through it.
 class HostURLs extends Component<{ Args: ContentArgs }> {
+  @service declare private hostUrlService: HostURLService;
+  @service declare private loaderService: LoaderService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
+  @service declare private store: StoreService;
 
-  @tracked private hostURLs: HostURL[] = [];
-  // The Boxel Space URL the realm can be mounted at, in its owner's Space.
-  @tracked private boxelSpaceURL: string | undefined;
+  // The realm's host routing rules whose target card no longer exists.
+  @tracked private danglingRules: DanglingRoutingRule[] = [];
   @tracked private homePage: HomePageCheck | undefined;
   @tracked private claimedDomain: ClaimedDomain | null = null;
   @tracked private siteName = '';
@@ -125,18 +131,37 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
   private loadTask = restartableTask(async () => {
     this.loadError = undefined;
     try {
-      let [list, homePage, claimedDomain] = await Promise.all([
-        this.realmServer.listHostURLs(this.args.realmURL),
+      let [, homePage, claimedDomain, danglingRules] = await Promise.all([
+        this.hostUrlService.refresh(this.args.realmURL),
         this.realmServer.checkHomePage(this.args.realmURL),
         this.realmServer.fetchBoxelClaimedDomain(this.args.realmURL),
+        this.findDanglingRules(),
       ]);
-      this.setHostURLs(list);
       this.homePage = homePage;
       this.claimedDomain = claimedDomain;
+      this.danglingRules = danglingRules;
     } catch (error) {
       this.loadError = messageOf(error);
     }
   });
+
+  // Read with the host URLs, so the warning is in the section's first render.
+  // A failure here shows no warning, and doesn't stop the dialog.
+  private async findDanglingRules(): Promise<DanglingRoutingRule[]> {
+    try {
+      let api = await this.loaderService.loader.import<typeof CardAPI>(
+        '@cardstack/base/card-api',
+      );
+      return await findDanglingRoutingRules(
+        this.store,
+        api,
+        this.args.realmURL,
+      );
+    } catch (error) {
+      console.error('Failed to check for dangling routing rules', error);
+      return [];
+    }
+  }
 
   private get isLoading() {
     return this.loadTask.isRunning && !this.homePage;
@@ -154,9 +179,13 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
     );
   }
 
-  private setHostURLs({ hostURLs, boxelSpaceURL }: HostURLList) {
-    this.hostURLs = hostURLs;
-    this.boxelSpaceURL = boxelSpaceURL;
+  private get hostURLs(): HostURL[] {
+    return this.hostUrlService.hostURLsFor(this.args.realmURL);
+  }
+
+  // The Boxel Space URL the realm can be mounted at, in its owner's Space.
+  private get boxelSpaceURL(): string | undefined {
+    return this.hostUrlService.stateFor(this.args.realmURL)?.boxelSpaceURL;
   }
 
   private get siteDomain() {
@@ -245,15 +274,14 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
   }
 
   private refreshHostURLs = async () => {
-    this.setHostURLs(await this.realmServer.listHostURLs(this.args.realmURL));
+    await this.hostUrlService.refresh(this.args.realmURL);
   };
 
   private mountTask = task(async (url: string) => {
     this.setError(url, undefined);
     await this.changing(url, async () => {
       try {
-        await this.realmServer.mountHostURL(this.args.realmURL, url);
-        await this.refreshHostURLs();
+        await this.hostUrlService.mount(this.args.realmURL, url);
       } catch (error) {
         this.setError(url, error);
       }
@@ -289,8 +317,7 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
     this.setError(hostURL.url, undefined);
     await this.changing(hostURL.url, async () => {
       try {
-        await this.realmServer.setCanonicalHostURL(hostURL.id);
-        await this.refreshHostURLs();
+        await this.hostUrlService.setCanonical(this.args.realmURL, hostURL.id);
       } catch (error) {
         this.setError(hostURL.url, error);
       }
@@ -382,10 +409,16 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
       await this.changing(hostURL.url, async () => {
         try {
           if (newCanonical) {
-            await this.realmServer.setCanonicalHostURL(newCanonical.id);
+            await this.hostUrlService.setCanonical(
+              this.args.realmURL,
+              newCanonical.id,
+              { refresh: false },
+            );
             movedCanonical = true;
           }
-          await this.realmServer.unmountHostURL(hostURL.id);
+          await this.hostUrlService.unmount(this.args.realmURL, hostURL.id, {
+            refresh: false,
+          });
           unmounted = true;
           this.cancelUnmount();
           await this.afterUnmount(hostURL);
@@ -533,6 +566,7 @@ class HostURLs extends Component<{ Args: ContentArgs }> {
         </:action>
       </Alert>
     {{else}}
+      <DanglingRoutingWarning @rules={{this.danglingRules}} />
       <section class='section' aria-labelledby='host-urls-mounted'>
         <h3 id='host-urls-mounted' class='section-title'>Mounted at</h3>
         {{#if this.hostURLs.length}}

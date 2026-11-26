@@ -5,6 +5,9 @@ import {
   automationInitiatedPriority,
   cancelAutomationRun,
   createAutomationRun,
+  finishAutomationRun,
+  param,
+  startAutomationRunAttempt,
   recordAIBatch,
   getAutomationRun,
   insertPermissions,
@@ -17,8 +20,16 @@ import {
   type QueuePublisher,
 } from '@cardstack/runtime-common';
 import {
+  checkAutomationCaps,
   getAutomation,
+  pauseAfterRepeatedFailures,
+  pauseAutomation,
+  pauseForPayerLostAccess,
+  pauseRealmAutomations,
+  removeAutomation,
+  resumeAutomation,
   switchOnAutomation,
+  waitForKeyApproval,
   type AutomationRow,
 } from '@cardstack/runtime-common/automations';
 import type {
@@ -43,7 +54,11 @@ import {
   automationJobTimeoutSec,
 } from '@cardstack/runtime-common/automation-run-command';
 import { enqueueAutomationRunJob } from '@cardstack/runtime-common/jobs/run-command';
-import { startDueAIBatchFollowUps } from '@cardstack/runtime-common/ai-batch-follow-ups';
+import {
+  startDueAIBatchFollowUps,
+  startResumedAIBatchFollowUps,
+} from '@cardstack/runtime-common/ai-batch-follow-ups';
+import { listUnsettledAIBatches } from '@cardstack/runtime-common/ai-batches';
 import type {
   ChangedAutomation,
   ReportAutomationChange,
@@ -1387,6 +1402,407 @@ module(basename(import.meta.filename), function (hooks) {
         'the follow-up is recorded on the batch',
       );
       assert.deepEqual(await followUps(ONE + 90), [], 'and is not due again');
+    });
+
+    module('a pause holds the follow-up, and a resume starts it', function () {
+      const ADMIN = '@admin:localhost';
+      let options = () => ({ matrixServerName: 'localhost', virtualNetwork });
+
+      async function followUpRun(): Promise<AutomationRun> {
+        let [run] = await followUpRuns();
+        return run;
+      }
+
+      async function batchRow(batchId = 'batch_1') {
+        let [row] = await query(dbAdapter, [
+          'SELECT follow_up_held_at, follow_up_acts_as, follow_up_resumed_at, settled_at FROM ai_batches WHERE batch_id =',
+          param(batchId),
+        ]);
+        return row;
+      }
+
+      async function resume(user: string, now: number) {
+        await insertPermissions(dbAdapter, new URL(REALM_URL), {
+          [user]: ['read', 'write'],
+        });
+        let resumed = await resumeAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            user,
+            declaration: card.ok ? card.declaration : declaration(),
+            admit: async () => undefined,
+          },
+          { ...options(), now },
+        );
+        if (!resumed.ok) {
+          throw new Error(`expected a resume, got ${resumed.reason}`);
+        }
+        return await startResumedAIBatchFollowUps(dbAdapter, AUTOMATION, {
+          queue: publisher,
+          virtualNetwork,
+          now,
+        });
+      }
+
+      function jobsOf(run: AutomationRun) {
+        return queuedRuns().then((jobs) =>
+          jobs.filter((job) => job.input.runId === run.id),
+        );
+      }
+
+      test('a pause keeps a pending follow-up, admission’s hold leaves it pending, and a resume by another direct writer starts it acting as them', async function (assert) {
+        await switchOn();
+        let submitting = await submitBatch();
+        await followUps(ONE + 30);
+        let followUp = await followUpRun();
+
+        let paused = await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options(),
+        );
+        assert.true(paused.ok);
+        let held = await getAutomationRun(dbAdapter, followUp.id);
+        assert.strictEqual(
+          held?.state,
+          'pending',
+          'the pause doesn’t cancel it',
+        );
+        assert.notStrictEqual(
+          (await batchRow()).follow_up_held_at,
+          null,
+          'its batch records the hold',
+        );
+        assert.deepEqual(
+          await followUps(ONE + 120),
+          [],
+          'the tick doesn’t start it while paused',
+        );
+
+        let started = await resume(ADMIN, ONE + 180);
+        assert.deepEqual(
+          started.map((outcome) => [outcome.kind, outcome.batchId]),
+          [['resumed', 'batch_1']],
+        );
+        let resumed = (await getAutomationRun(dbAdapter, followUp.id))!;
+        assert.deepEqual(
+          { state: resumed.state, actsAs: resumed.actsAs },
+          { state: 'pending', actsAs: ADMIN },
+          'the follow-up acts as whoever resumed',
+        );
+        let batch = await batchRow();
+        assert.strictEqual(
+          batch.follow_up_held_at,
+          null,
+          'the hold is cleared',
+        );
+        assert.strictEqual(batch.follow_up_acts_as, ADMIN);
+        let [ownBatch] = await query(dbAdapter, [
+          `SELECT acts_as FROM ai_batches WHERE batch_id = 'batch_1'`,
+        ]);
+        assert.strictEqual(
+          ownBatch.acts_as,
+          submitting.actsAs,
+          'the batch stays billed to the submitting run’s identity',
+        );
+        let jobs = await jobsOf(followUp);
+        assert.strictEqual(
+          jobs[jobs.length - 1].input.triggerKind,
+          'batch',
+          'its job is a follow-up’s',
+        );
+        assert.deepEqual(
+          await followUps(ONE + 240),
+          [],
+          'nothing is left for the tick to start',
+        );
+      });
+
+      test('a follow-up running when the pause came is held, not dropped: what it used stays billed to whom it acted as, and a new run of the batch acts as whoever resumes', async function (assert) {
+        await switchOn();
+        await submitBatch();
+        await followUps(ONE + 30);
+        let followUp = await followUpRun();
+        let start = await startAutomationRunAttempt(dbAdapter, followUp.id, 3);
+        assert.strictEqual(start.kind, 'run');
+        // The script ran for a while before the pause.
+        await query(dbAdapter, [
+          'UPDATE automation_runs SET prerender_tab_ms = 4000, call_api_response_bytes = 2048 WHERE id =',
+          param(followUp.id),
+        ]);
+
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options(),
+        );
+
+        let ended = (await getAutomationRun(dbAdapter, followUp.id))!;
+        assert.deepEqual(
+          {
+            state: ended.state,
+            errorReason: ended.errorReason,
+            actsAs: ended.actsAs,
+            prerenderTabMs: ended.prerenderTabMs,
+            slot: ended.slot,
+          },
+          {
+            state: 'canceled',
+            errorReason: 'follow-up-held',
+            actsAs: OWNER,
+            prerenderTabMs: 4000,
+            slot: `batch_1:held:${followUp.id}`,
+          },
+          'the run that ran ends, keeping what it used for its charge to whom it acted as, and frees the batch’s slot',
+        );
+        assert.strictEqual(
+          await finishAutomationRun(dbAdapter, followUp.id, 3, {
+            state: 'complete',
+          }),
+          undefined,
+          'the attempt that ran it no longer owns it',
+        );
+        let replacement = await followUpRun();
+        assert.notStrictEqual(replacement.id, followUp.id);
+        assert.deepEqual(
+          {
+            slot: replacement.slot,
+            state: replacement.state,
+            prerenderTabMs: replacement.prerenderTabMs,
+            callApiResponseBytes: replacement.callApiResponseBytes,
+          },
+          {
+            slot: 'batch_1',
+            state: 'pending',
+            prerenderTabMs: 0,
+            callApiResponseBytes: 0,
+          },
+          'a new pending run of the batch takes its place, having used nothing',
+        );
+        let [batch] = await query(dbAdapter, [
+          `SELECT follow_up_run_id, follow_up_held_at FROM ai_batches WHERE batch_id = 'batch_1'`,
+        ]);
+        assert.strictEqual(String(batch.follow_up_run_id), replacement.id);
+        assert.notStrictEqual(batch.follow_up_held_at, null);
+        let log = await readRunLog(dbAdapter, replacement.id);
+        assert.true(
+          (log?.lines ?? []).some((line) => line.data?.held === true),
+          'its log says the pause held it',
+        );
+
+        await resume(ADMIN, ONE + 180);
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, replacement.id))?.actsAs,
+          ADMIN,
+          'the new run acts as whoever resumed',
+        );
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, followUp.id))?.actsAs,
+          OWNER,
+          'the run that ran before the pause still acts as, and is billed to, its own identity',
+        );
+        let again = await startAutomationRunAttempt(
+          dbAdapter,
+          replacement.id,
+          9,
+        );
+        assert.strictEqual(again.kind, 'run', 'a new attempt takes it');
+      });
+
+      test('a resume makes whoever resumed the identity of a held follow-up that a job enqueued before the pause took just before the resume', async function (assert) {
+        await switchOn();
+        await submitBatch();
+        await followUps(ONE + 30);
+        let followUp = await followUpRun();
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options(),
+        );
+        // The job enqueued before the pause takes the run, and hasn't reached
+        // admission when the resume lands.
+        let start = await startAutomationRunAttempt(dbAdapter, followUp.id, 4);
+        assert.strictEqual(start.kind, 'run');
+
+        await resume(ADMIN, ONE + 180);
+
+        let [batch] = await query(dbAdapter, [
+          `SELECT follow_up_acts_as FROM ai_batches WHERE batch_id = 'batch_1'`,
+        ]);
+        assert.strictEqual(
+          batch.follow_up_acts_as,
+          ADMIN,
+          'the batch names whoever resumed, so admission holds the run that still acts as the submitter',
+        );
+      });
+
+      test('the platform’s own pauses hold the follow-up too', async function (assert) {
+        for (let pauseIt of [
+          async () =>
+            await checkAutomationCaps(dbAdapter, AUTOMATION, {
+              caps: { ...CAPS, resolveCalls: CAPS.resolveCalls + 1 },
+              batchedAI: false,
+            }),
+          async () => {
+            await query(dbAdapter, [
+              'DELETE FROM realm_user_permissions WHERE username =',
+              param(OWNER),
+            ]);
+            await pauseForPayerLostAccess(dbAdapter, AUTOMATION, OWNER);
+            await insertPermissions(dbAdapter, new URL(REALM_URL), {
+              [OWNER]: ['read', 'write', 'realm-owner'],
+            });
+          },
+          async () => await pauseRealmAutomations(dbAdapter, REALM),
+          async () => {
+            let failed = await createAutomationRun(dbAdapter, {
+              automationId: AUTOMATION,
+              realm: REALM,
+              trigger: 'hourly',
+              slot: NOON_SLOT,
+              actsAs: OWNER,
+            });
+            await query(dbAdapter, [
+              "UPDATE automation_runs SET state = 'error', error_reason = 'script-error', started_at = now(), finished_at = now() WHERE id =",
+              param(failed.id),
+            ]);
+            await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION, {
+              failuresBeforePause: 1,
+            });
+          },
+        ]) {
+          await query(dbAdapter, ['DELETE FROM automation_runs']);
+          await query(dbAdapter, ['DELETE FROM ai_batches']);
+          await query(dbAdapter, ['DELETE FROM automations']);
+          await switchOn();
+          await submitBatch();
+          await followUps(ONE + 30);
+          let followUp = await followUpRun();
+          await pauseIt();
+          let automation = await row();
+          assert.strictEqual(automation.state, 'paused');
+          assert.strictEqual(
+            (await getAutomationRun(dbAdapter, followUp.id))?.state,
+            'pending',
+            `a ${automation.pauseReason} pause holds the follow-up`,
+          );
+          assert.notStrictEqual((await batchRow()).follow_up_held_at, null);
+        }
+      });
+
+      test('a resume starts at once the follow-up of a batch past its deadline or in a final state, and leaves the rest to their deadline', async function (assert) {
+        await switchOn();
+        await submitBatch('batch_due');
+        await submitBatch('batch_completed');
+        await submitBatch('batch_open');
+        await query(dbAdapter, [
+          `UPDATE ai_batches SET deadline = deadline + interval '1 day' WHERE batch_id IN ('batch_completed', 'batch_open')`,
+        ]);
+        await query(dbAdapter, [
+          `UPDATE ai_batches SET state = 'completed' WHERE batch_id = 'batch_completed'`,
+        ]);
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options(),
+        );
+
+        let started = await resume(ADMIN, ONE + 60);
+
+        assert.deepEqual(
+          started.map((outcome) => [outcome.kind, outcome.batchId]).sort(),
+          [
+            ['started', 'batch_completed'],
+            ['started', 'batch_due'],
+          ],
+        );
+        let runs = await followUpRuns();
+        assert.deepEqual(
+          runs.map((run) => [run.slot, run.actsAs]).sort(),
+          [
+            ['batch_completed', ADMIN],
+            ['batch_due', ADMIN],
+          ],
+          'each acts as whoever resumed',
+        );
+        let [open] = await query(dbAdapter, [
+          `SELECT follow_up_acts_as FROM ai_batches WHERE batch_id = 'batch_open'`,
+        ]);
+        assert.strictEqual(
+          open.follow_up_acts_as,
+          ADMIN,
+          'the open batch’s follow-up will act as them too',
+        );
+        let [later] = await followUps(ONE + 24 * 60 * 60 + 30);
+        assert.strictEqual(later.kind, 'started');
+        let openRun = (await followUpRuns()).find(
+          (run) => run.slot === 'batch_open',
+        );
+        assert.strictEqual(
+          openRun?.actsAs,
+          ADMIN,
+          'at its deadline, it starts acting as whoever resumed',
+        );
+      });
+
+      test('a wait for a key approval holds a pending follow-up, and the tick starts it once the automation is active', async function (assert) {
+        await switchOn();
+        await submitBatch();
+        await followUps(ONE + 30);
+        let followUp = await followUpRun();
+
+        await waitForKeyApproval(dbAdapter, AUTOMATION, { payer: OWNER });
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, followUp.id))?.state,
+          'pending',
+        );
+        assert.deepEqual(await followUps(ONE + 60), []);
+
+        await query(dbAdapter, [`UPDATE automations SET state = 'active'`]);
+        let [outcome] = await followUps(ONE + 120);
+        assert.deepEqual(
+          [outcome.kind, (outcome as { runId: string }).runId],
+          ['resumed', followUp.id],
+        );
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, followUp.id))?.actsAs,
+          OWNER,
+          'with no resume, it acts as the submitting run’s identity',
+        );
+      });
+
+      test('remove drops a held follow-up, and its batch is still settled', async function (assert) {
+        await switchOn();
+        await submitBatch();
+        await followUps(ONE + 30);
+        let followUp = await followUpRun();
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options(),
+        );
+
+        await removeAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options(),
+        );
+
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, followUp.id))?.state,
+          'canceled',
+        );
+        assert.strictEqual((await batchRow()).follow_up_held_at, null);
+        assert.deepEqual(await followUps(ONE + 120), []);
+        assert.deepEqual(
+          (await listUnsettledAIBatches(dbAdapter, { limit: 10 })).map(
+            (batch) => batch.batchId,
+          ),
+          ['batch_1'],
+          'the settle job still finds the batch to bill',
+        );
+      });
     });
   });
 });

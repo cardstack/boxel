@@ -9,12 +9,12 @@ import {
   LOCAL_SOURCE_URL_PREFIX,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { ResultAttachment } from './host-base-tool';
 import type LoaderService from '../services/loader-service';
 import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
+import type { ResultAttachment } from './host-base-tool';
 import type { AttachedImageField } from '@cardstack/base/command';
 import type { FileDef } from '@cardstack/base/file-api';
 

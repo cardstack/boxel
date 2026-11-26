@@ -9,11 +9,6 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 import type RealmService from '@cardstack/host/services/realm';
-import type {
-  ClaimedDomain,
-  HomePageCheck,
-  HostURL,
-} from '@cardstack/host/services/realm-server';
 import { HostURLRequestError } from '@cardstack/host/services/realm-server';
 
 import {
@@ -27,16 +22,16 @@ import {
   visitOperatorMode,
   withCachedRealmSetup,
 } from '../helpers';
+import { FakeHostURLs, SPACE_URL, VIEWABLE } from '../helpers/fake-host-urls';
 import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 
 // The UI builds site-name URLs from these domains, which are the same in the
-// test build. The server gives the Boxel Space URL, in the realm owner's Space.
+// test build.
 const spaceDomain = ENV.publishedRealmBoxelSpaceDomain;
 const siteDomain = ENV.publishedRealmBoxelSiteDomain;
-const SPACE_URL = `https://testuser.${spaceDomain}/test/`;
 
 const personCardSource = `
   import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
@@ -50,82 +45,9 @@ const personCardSource = `
   }
 `;
 
-const VIEWABLE: HomePageCheck = {
-  homeCardId: `${testRealmURL}index`,
-  homeCardReadable: true,
-  homeCardStatus: 200,
-  unloadableModules: [],
-  anonymousCanView: true,
-};
-
-// A stand-in for the realm server's `/_host-urls` endpoints, set on the
-// realm-server service's methods. It keeps the realm's host URLs, and records
-// each change in `calls`.
-class FakeHostURLs {
-  hostURLs: HostURL[] = [];
-  boxelSpaceURL: string | undefined = SPACE_URL;
-  homePage: HomePageCheck = VIEWABLE;
-  calls: string[] = [];
-  refusal: string | undefined;
-  claimedDomain: ClaimedDomain | null = null;
-  #nextId = 1;
-  #restore: (() => void)[] = [];
-
-  install() {
-    let realmServer = getService('realm-server') as any;
-    let stub = (name: string, fn: (...args: any[]) => unknown) => {
-      let original = realmServer[name];
-      realmServer[name] = fn;
-      this.#restore.push(() => (realmServer[name] = original));
-    };
-    stub('listHostURLs', async () => ({
-      hostURLs: this.hostURLs.map((h) => ({ ...h })),
-      boxelSpaceURL: this.boxelSpaceURL,
-    }));
-    stub('checkHomePage', async () => this.homePage);
-    stub('fetchBoxelClaimedDomain', async () => this.claimedDomain);
-    stub('mountHostURL', async (_realmURL: string, url: string) => {
-      this.calls.push(`mount ${url}`);
-      if (this.refusal) {
-        throw new HostURLRequestError(422, this.refusal);
-      }
-      let hostURL: HostURL = {
-        id: `host-url-${this.#nextId++}`,
-        url,
-        kind: url.includes(spaceDomain) ? 'boxel-space' : 'custom-domain',
-        isCanonical: this.hostURLs.length === 0,
-      };
-      this.hostURLs.push(hostURL);
-      return hostURL;
-    });
-    stub('setCanonicalHostURL', async (id: string) => {
-      this.calls.push(`canonical ${id}`);
-      for (let hostURL of this.hostURLs) {
-        hostURL.isCanonical = hostURL.id === id;
-      }
-    });
-    stub('unpublishRealm', async (publishedRealmURL: string) => {
-      this.calls.push(`unpublish ${publishedRealmURL}`);
-      return { sourceRealmURL: null, publishedRealmURL, lastPublishedAt: null };
-    });
-    stub('unmountHostURL', async (id: string) => {
-      this.calls.push(`unmount ${id}`);
-      // Unmounting a site name frees its claim.
-      if (this.hostURLs.find((h) => h.id === id)?.kind === 'site-name') {
-        this.claimedDomain = null;
-      }
-      this.hostURLs = this.hostURLs.filter((h) => h.id !== id);
-    });
-  }
-
-  restore() {
-    for (let restore of this.#restore) {
-      restore();
-    }
-  }
-}
-
-module('Acceptance | host URL manager', function (hooks) {
+// Sets up a host URL manager module: the app, a test realm with this realm
+// config, and a fake of the host URL endpoints. Returns the fake.
+function setupHostURLManager(hooks: NestedHooks, realmJSON: string) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -137,7 +59,7 @@ module('Acceptance | host URL manager', function (hooks) {
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
-  let fake: FakeHostURLs;
+  let state = { fake: undefined as unknown as FakeHostURLs };
 
   hooks.beforeEach(async function () {
     await withCachedRealmSetup(async () => {
@@ -146,7 +68,7 @@ module('Acceptance | host URL manager', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.json': new CardsGrid(),
-          'realm.json': realmConfigCardJSON({ name: 'Test Workspace B' }),
+          'realm.json': realmJSON,
           'person.gts': personCardSource,
           'Person/1.json': {
             data: {
@@ -158,23 +80,36 @@ module('Acceptance | host URL manager', function (hooks) {
         },
       });
     });
-    fake = new FakeHostURLs();
-    fake.install();
+    state.fake = new FakeHostURLs();
+    state.fake.install();
   });
 
   hooks.afterEach(function () {
-    fake.restore();
+    state.fake.restore();
   });
 
-  async function openManager() {
-    await visitOperatorMode({
-      submode: 'host',
-      trail: [`${testRealmURL}Person/1.json`],
-    });
-    await click('[data-test-publish-realm-button]');
-    await waitFor('[data-test-host-url-manager]');
-    await waitFor('[data-test-visibility-note]');
-  }
+  return state;
+}
+
+async function openManager() {
+  await visitOperatorMode({
+    submode: 'host',
+    trail: [`${testRealmURL}Person/1.json`],
+  });
+  await click('[data-test-publish-realm-button]');
+  await waitFor('[data-test-host-url-manager]');
+  await waitFor('[data-test-visibility-note]');
+}
+
+module('Acceptance | host URL manager', function (hooks) {
+  let state = setupHostURLManager(
+    hooks,
+    realmConfigCardJSON({ name: 'Test Workspace B' }),
+  );
+  let fake: FakeHostURLs;
+  hooks.beforeEach(function () {
+    fake = state.fake;
+  });
 
   test('the publish dialog is the host URL manager, with no progress or "last published" UI', async function (assert) {
     await openManager();
@@ -432,6 +367,39 @@ module('Acceptance | host URL manager', function (hooks) {
     assert.deepEqual(fake.calls, []);
   });
 
+  test('when the list can’t be read after an unmount, still says the host URL was unmounted', async function (assert) {
+    let shopURL = `https://shop.${siteDomain}/`;
+    fake.hostURLs = [
+      { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
+      { id: 'b', url: shopURL, kind: 'site-name', isCanonical: false },
+    ];
+    let realmServer = getService('realm-server') as any;
+    let fakeUnmount = realmServer.unmountHostURL;
+    let fakeList = realmServer.listHostURLs;
+    realmServer.unmountHostURL = async (id: string) => {
+      await fakeUnmount(id);
+      realmServer.listHostURLs = async () => {
+        throw new HostURLRequestError(503, 'The host URLs could not be read');
+      };
+    };
+    try {
+      await openManager();
+      await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
+      await click('[data-test-confirm-unmount-button]');
+      await waitFor(
+        '[data-test-host-url-toaster] [data-test-pretui-toast-item]',
+      );
+
+      assert.deepEqual(fake.calls, ['canonical b', 'unmount a']);
+      assert
+        .dom('[data-test-host-url-toaster] [data-test-pretui-toast-item]')
+        .containsText('which was unmounted');
+    } finally {
+      realmServer.unmountHostURL = fakeUnmount;
+      realmServer.listHostURLs = fakeList;
+    }
+  });
+
   test('when the unmount is refused after the canonical host URL moved, says both', async function (assert) {
     let shopURL = `https://shop.${siteDomain}/`;
     fake.hostURLs = [
@@ -648,4 +616,85 @@ module('Acceptance | host URL manager', function (hooks) {
       realmServer.claimBoxelDomain = originalClaim;
     }
   });
+
+  test('shows no routing-rule warning when no rule points to a missing card', async function (assert) {
+    await openManager();
+    assert
+      .dom('[data-test-host-url-manager] [data-test-dangling-routing-warning]')
+      .doesNotExist();
+  });
 });
+
+module(
+  'Acceptance | host URL manager | dangling routing rule',
+  function (hooks) {
+    // A `/gone` routing rule, and a `/old` child route under `/docs`, whose
+    // target cards were never created, so their `instance` links dangle. The
+    // `/person` rule's card exists, so it doesn't dangle.
+    setupHostURLManager(
+      hooks,
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: 'Test Workspace B' },
+            hostRoutingRules: [
+              { path: '/gone' },
+              { path: '/docs', routes: [{ path: '/old' }] },
+              { path: '/person' },
+            ],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: './does-not-exist' },
+            },
+            'hostRoutingRules.1.routes.0.instance': {
+              links: { self: './also-missing' },
+            },
+            'hostRoutingRules.2.instance': {
+              links: { self: './Person/1' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '@cardstack/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      }),
+    );
+
+    test('warns that a routing rule points to a missing card, with no host URL mounted', async function (assert) {
+      await openManager();
+      await waitFor(
+        '[data-test-host-url-manager] [data-test-dangling-routing-warning]',
+      );
+      assert
+        .dom('[data-test-host-url-manager] [data-test-no-host-urls]')
+        .exists();
+      assert
+        .dom(
+          '[data-test-host-url-manager] [data-test-dangling-routing-rule="/gone"]',
+        )
+        .containsText('/gone', 'the warning names the rule’s path')
+        .containsText(
+          `${testRealmURL}does-not-exist`,
+          'the warning names the missing card',
+        );
+      assert
+        .dom(
+          '[data-test-host-url-manager] [data-test-dangling-routing-rule="/docs/old"]',
+        )
+        .containsText(
+          `${testRealmURL}also-missing`,
+          'the warning names a child route by its full path',
+        );
+      assert
+        .dom(
+          '[data-test-host-url-manager] [data-test-dangling-routing-rule="/person"]',
+        )
+        .doesNotExist('a rule whose card exists is not listed');
+    });
+  },
+);

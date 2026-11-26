@@ -72,9 +72,7 @@ module.exports = {
     // Type information is only present where the config sets
     // `parserOptions.project`. Without it this rule reports nothing, so a
     // package that enables it must also give it a TypeScript program.
-    const services = context.sourceCode
-      ? context.sourceCode.parserServices || context.parserServices
-      : context.parserServices;
+    const services = context.sourceCode.parserServices;
     if (!services || !services.program || !services.esTreeNodeToTSNodeMap) {
       return {};
     }
@@ -103,10 +101,8 @@ module.exports = {
     // identifier. Only single-definition `const`s are followed; anything
     // reassigned is not reliably the expression seen here.
     function constInitializerOf(node) {
-      const sourceCode = context.sourceCode || context.getSourceCode();
-      let scope = sourceCode.getScope
-        ? sourceCode.getScope(node)
-        : context.getScope();
+      const sourceCode = context.sourceCode;
+      let scope = sourceCode.getScope(node);
       for (; scope; scope = scope.upper) {
         const variable = scope.set && scope.set.get(node.name);
         if (!variable) {

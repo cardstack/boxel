@@ -257,6 +257,16 @@ export function handleShareKey(args: CreateRoutesArgs): Handler {
       opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       ticket,
     });
+    // A key shared into the realm can serve an `{{apiKey}}` slot an
+    // automation there waits on, so every waiting automation of the realm is
+    // checked again: the share's owner is then asked to approve it, and the
+    // realm's direct writers are no longer asked to share a key.
+    let realmURL = new URL(share.realm);
+    await followAutomationKeyApprovals(
+      args,
+      realmURL,
+      await automationsWaitingForKeyApproval(dbAdapter, realmURL, args),
+    );
     await sendJSON(ctxt, 201, { data: serialize(share) });
   });
 }

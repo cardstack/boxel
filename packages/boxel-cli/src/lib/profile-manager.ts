@@ -18,7 +18,11 @@ import {
   type MatrixAuth,
 } from './auth.ts';
 import { withFileLock } from './file-lock.ts';
-import { readWorkspaceListResponse } from './personal-realm.ts';
+import {
+  readReachableRealmsResponse,
+  readWorkspaceListResponse,
+  type ReachableRealm,
+} from './personal-realm.ts';
 import {
   boxelApiResource,
   OAuthConnectionEndedError,
@@ -1402,6 +1406,24 @@ export class ProfileManager implements RealmAuthenticator {
     }
     return this.withMatrixAuthRecovery((auth) =>
       getUserRealmsFromMatrixAccountData(auth),
+    );
+  }
+
+  // The realms on an OAuth profile's workspace list that it can still open,
+  // each marked archived or not, as the realm server finds them. A realm
+  // whose permission was revoked, or that was deleted, isn't among them.
+  async getReachableUserRealms(): Promise<ReachableRealm[]> {
+    let active = this.getActiveProfile();
+    if (!active?.profile.oauth) {
+      throw new Error(
+        'Only a profile signed in with OAuth reads its reachable workspaces from the realm server',
+      );
+    }
+    return readReachableRealmsResponse(
+      await this.authedRealmServerFetch(
+        `${active.profile.realmServerUrl.replace(/\/$/, '')}/_user-realms`,
+        { headers: { Accept: 'application/vnd.api+json' } },
+      ),
     );
   }
 

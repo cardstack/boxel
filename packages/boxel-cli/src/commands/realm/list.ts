@@ -50,6 +50,12 @@ interface ListCliOptions {
  * Default mode shows only non-hidden, non-archived realms;
  * `--all-accessible` shows everything accessible; `--hidden` shows only
  * hidden non-archived ones.
+ *
+ * A profile signed in with OAuth can't call `_realm-auth`, so it lists the
+ * realms on its workspace list that the realm server says it can still open
+ * (`reachableRealms` in `GET /_user-realms`), with the archived ones among
+ * them under `--include-archived`. It refuses `--all-accessible` and
+ * `--hidden`.
  */
 export async function listRealms(
   options: ListRealmsOptions = {},
@@ -76,9 +82,12 @@ export async function listRealms(
     if (options.allAccessible || options.hidden) {
       return { realms: [], error: OAUTH_LISTS_WORKSPACES_ONLY };
     }
-    let userRealms: string[];
+    // The realm server leaves out the realms on the list the profile can no
+    // longer open, and marks the archived ones, which archiving leaves on
+    // the list.
+    let reachable: { url: string; archived: boolean }[];
     try {
-      userRealms = await pm.getUserRealms();
+      reachable = await pm.getReachableUserRealms();
     } catch (err) {
       return {
         realms: [],
@@ -87,18 +96,13 @@ export async function listRealms(
         }`,
       };
     }
-    userRealmsSet = new Set(userRealms.map(ensureTrailingSlash));
-    // Archiving a realm leaves it in the workspace list, so the archived
-    // ones are read too, and listed only as archived.
-    let archived = await fetchArchivedRealms(pm, realmServerUrl);
-    if ('error' in archived) {
-      return { realms: [], error: archived.error };
-    }
-    archivedUrls = archived.urls;
-    let archivedSet = new Set(archivedUrls);
-    summaries = [...userRealmsSet]
-      .filter((url) => !archivedSet.has(url))
-      .map((url) => ({ url, hidden: false, archived: false }));
+    userRealmsSet = new Set(reachable.map(({ url }) => url));
+    archivedUrls = reachable
+      .filter(({ archived }) => archived)
+      .map(({ url }) => url);
+    summaries = reachable
+      .filter(({ archived }) => !archived)
+      .map(({ url }) => ({ url, hidden: false, archived: false }));
   } else {
     let accessible = await listAccessibleRealms(pm, realmServerUrl);
     if ('error' in accessible) {

@@ -142,10 +142,12 @@ import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver.ts'
 import handleRunCommand from './handlers/handle-run-command.ts';
 import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
+import { buildCreateOAuthTabAuth } from './lib/oauth-tab-token.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import type { HostURLResolver } from './lib/realm-host-urls.ts';
 import type { HostURLDomains } from './lib/realm-host-urls-domains.ts';
 import {
+  KEY_APPROVAL_NOTICES_PATH,
   KEY_BINDINGS_PATH,
   KEY_LIMIT_NOTICES_PATH,
   KEY_POLICY_NOTICES_PATH,
@@ -242,6 +244,10 @@ import {
   AUTOMATION_STORAGE_PATH,
   AUTOMATION_SWITCH_ON_PATH,
 } from '@cardstack/runtime-common/automation-routes';
+import {
+  handleListKeyApprovalNotices,
+  handleMarkKeyApprovalNoticesRead,
+} from './handlers/handle-key-approval-notices.ts';
 import {
   handleListKeyLimitNotices,
   handleMarkKeyLimitNoticesRead,
@@ -368,6 +374,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     args.realmSecretSeed,
     args.serverURL,
   );
+  let createOAuthTabAuth = buildCreateOAuthTabAuth(args.realmSecretSeed, {
+    realmServerURL: args.serverURL,
+  });
   let router = new Router();
   // One job-scoped search cache per realm-server process, created by the
   // composition root (main.ts) and shared with the JobsFinishedListener so a
@@ -446,6 +455,8 @@ export function createRoutes(args: CreateRoutesArgs) {
       matrixClient: args.matrixClient,
       prerenderer: args.prerenderer,
       createPrerenderAuth,
+      createOAuthTabAuth,
+      boxelApi,
     }),
   );
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
@@ -682,6 +693,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${KEY_LIMIT_NOTICES_PATH}/read`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleMarkKeyLimitNoticesRead(args),
+  );
+  router.get(
+    KEY_APPROVAL_NOTICES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyApprovalNotices(args),
+  );
+  router.post(
+    `${KEY_APPROVAL_NOTICES_PATH}/read`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMarkKeyApprovalNoticesRead(args),
   );
   router.get(
     `${OAUTH_PATH}/clients`,

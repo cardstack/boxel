@@ -694,7 +694,7 @@ export default class SubmodeLayout extends Component<Signature> {
         position: absolute;
         height: 100%;
         width: 100%;
-        background-color: var(--boxel-800);
+        background-color: var(--host-dashboard-background);
         z-index: var(--host-workspace-chooser-z-index);
       }
       /* Only carries the inert state, so it lays out nothing itself. */

@@ -50,7 +50,6 @@
     "@types/babel__generator": "catalog:",
     "@types/babel__traverse": "catalog:",
     "@types/diff": "catalog:",
-    "@types/eslint": "catalog:",
     "@types/flat": "catalog:",
     "@types/lodash-es": "catalog:",
     "@types/pluralize": "catalog:",

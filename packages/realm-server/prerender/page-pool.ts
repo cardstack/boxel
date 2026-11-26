@@ -6,11 +6,18 @@ import {
 } from '@cardstack/runtime-common';
 import type { CDPSession, ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
-import { isRunAffinityKey, realmAffinityKeyOf } from './affinity.ts';
+import {
+  isOAuthTabAffinityKey,
+  isRunAffinityKey,
+  realmAffinityKeyOf,
+} from './affinity.ts';
 import { raceNodeTimeout } from './node-race.ts';
 import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
-import type { BrowserManager } from './browser-manager.ts';
+import {
+  BROWSER_LAUNCH_TIMEOUT_MS,
+  type BrowserManager,
+} from './browser-manager.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
 import { attachRuntimeExceptionCapture } from './runtime-exception-capture.ts';
@@ -267,6 +274,15 @@ const DEFAULT_AFFINITY_TEARDOWN_WAIT_MS = 10_000;
 // and without the deadline each new affinity on the server would wait on it
 // while other affinities' tabs sit idle.
 const DEFAULT_STANDBY_REFILL_WAIT_MS = 5000;
+// A standby creation that runs normally takes at most two
+// `standbyTimeoutMs` waits: the navigation to the standby page, then the
+// wait for its readiness marker. The first creation after a boot or a
+// browser restart also launches Chrome, which `BROWSER_LAUNCH_TIMEOUT_MS`
+// bounds. The other steps (creating the context, opening the page,
+// attaching observability) are CDP calls with no timeout of their own. A
+// creation still running after the launch, both waits and this margin is
+// held by one of those calls, on a browser that no longer answers.
+const STANDBY_CREATION_MARGIN_MS = 15_000;
 
 // How many visits of a realm must finish in time, one after another, before
 // a file-admission cap that its timeouts lowered goes up by one. See
@@ -297,6 +313,14 @@ const DEFAULT_TAB_HEALTH_PROBE_MS = 3000;
 const MIN_TAB_HEALTH_PROBE_MS = 250;
 
 export class StandbyTargetNotReadyError extends Error {}
+
+// A standby creation passed its deadline. The browser stopped answering a
+// call partway through, so the refill gives up instead of retrying.
+export class StandbyCreationTimeoutError extends Error {}
+
+// `closeAll` abandoned a standby creation in flight. The pool is closing, so
+// the refill ends instead of retrying.
+export class StandbyCreationAbandonedError extends Error {}
 
 // Chrome reconfigures its certificate-verifier service shortly after the
 // browser launches. Asset fetches that are in flight during that window are
@@ -506,6 +530,9 @@ export class PagePool {
   // pass after pass, so "no refill running" may never be observed.
   #refillFailures = 0;
   #creatingStandbys = 0;
+  // One entry per standby creation in flight. `closeAll` calls each to
+  // abandon its creation; see `#createStandby`.
+  #abandonCreations = new Set<() => void>();
   // Tabs an awaited `disposeAffinity` has detached from `#affinityPages`
   // whose close hasn't landed yet. Chrome still holds them, so they stay in
   // the context budget until it lets go.
@@ -628,6 +655,9 @@ export class PagePool {
   // How long a caller waits for a fresh standby before it may steal; see
   // `DEFAULT_STANDBY_REFILL_WAIT_MS`.
   #standbyRefillWaitMs: number;
+  // Bound on one standby creation from start to finish; see
+  // `#createStandby`.
+  #standbyCreationTimeoutMs: number;
 
   constructor(options: {
     maxPages: number;
@@ -658,6 +688,11 @@ export class PagePool {
     // Overrides `DEFAULT_STANDBY_REFILL_WAIT_MS`. Tests use it to drive
     // the steal deadline on millisecond timescales.
     standbyRefillWaitMs?: number;
+    // Overrides the bound on one standby creation, which by default is
+    // `BROWSER_LAUNCH_TIMEOUT_MS`, plus twice `standbyTimeoutMs`, plus
+    // `STANDBY_CREATION_MARGIN_MS`. Tests use
+    // it to drive the bound on millisecond timescales.
+    standbyCreationTimeoutMs?: number;
   }) {
     // Resolve the dynamic-pool envelope. `PRERENDER_PAGE_POOL_MIN` and
     // `_MAX` are the dynamic knobs; when either is unset the pool
@@ -799,6 +834,11 @@ export class PagePool {
       options.affinityTeardownWaitMs ?? DEFAULT_AFFINITY_TEARDOWN_WAIT_MS;
     this.#standbyRefillWaitMs =
       options.standbyRefillWaitMs ?? DEFAULT_STANDBY_REFILL_WAIT_MS;
+    this.#standbyCreationTimeoutMs =
+      options.standbyCreationTimeoutMs ??
+      BROWSER_LAUNCH_TIMEOUT_MS +
+        2 * this.#standbyTimeoutMs +
+        STANDBY_CREATION_MARGIN_MS;
     this.#tabHealthProbeMs =
       options.tabHealthProbeMs ?? parseTabHealthProbeMs();
     // Resolve the per-affinity file-admission cap.
@@ -1587,13 +1627,24 @@ export class PagePool {
     // pool occupancy for the life of the process. Pinned by
     // `tests/page-pool-standby-refill-test.ts`.
     //
-    // Bumping the close generation first is what keeps that wait bounded. The
-    // refill gives up when the generation moves, so this awaits the attempt
-    // already in flight and nothing beyond it. Waiting out the rest costs
-    // `STANDBY_CREATION_RETRIES` standby timeouts plus backoff — long enough
-    // for a caller closing the pool in order to shut down to blow its own
-    // shutdown budget, leaving the process it was tearing down alive.
+    // What this waits for is the refill unwinding, not the creation in
+    // flight. Bumping the close generation stops the refill from starting
+    // another attempt, and the creation in flight is abandoned at once, so
+    // the refill returns without waiting for it. Waiting for either instead
+    // would hold the close too long. The most common reason to close the pool
+    // is to restart a browser that has stopped answering, and a creation on
+    // that browser runs until its full deadline, past the deadline of the
+    // render that asked for the restart; the remaining retries would add
+    // `STANDBY_CREATION_RETRIES` standby timeouts plus backoff, past a
+    // shutdown's budget. An abandoned creation releases its count before the
+    // reset below, and if it finishes later, what it made is closed instead
+    // of joining `#standbys`. See `#createStandby`. A creation abandoned while
+    // it launches Chrome is safe for the same reason: the browser restart
+    // that follows waits for that launch and closes what it started.
     this.#closeGeneration++;
+    for (let abandon of [...this.#abandonCreations]) {
+      abandon();
+    }
     let ensuring = this.#ensuringStandbys;
     this.#ensuringStandbys = null;
     if (ensuring) {
@@ -2004,12 +2055,25 @@ export class PagePool {
         return await this.#createStandby();
       } catch (e) {
         let message = `Standby creation attempt ${attempt} failed (page pool capacity ${this.#totalContextCount()}/${this.#maxPages + 1}):`;
-        if (isExpectedStandbyTargetNotReadyError(e)) {
+        if (
+          isExpectedStandbyTargetNotReadyError(e) ||
+          e instanceof StandbyCreationAbandonedError
+        ) {
           log.debug(message, e);
         } else {
           log.error(message, e);
         }
-        if (attempt >= STANDBY_CREATION_RETRIES) {
+        // A browser that left a call unanswered past the creation deadline
+        // won't answer a retry either, and each retry would hold parked
+        // callers for another full deadline. Failing the refill now lets
+        // them throw, which restarts the browser. An abandoned creation
+        // means the pool is closing, and the backoff before a retry would
+        // only delay the close.
+        if (
+          e instanceof StandbyCreationTimeoutError ||
+          e instanceof StandbyCreationAbandonedError ||
+          attempt >= STANDBY_CREATION_RETRIES
+        ) {
           return undefined;
         }
         await delay(backoffMs);
@@ -2019,8 +2083,79 @@ export class PagePool {
     return undefined;
   }
 
+  // Bounded by `#standbyCreationTimeoutMs`. While a creation runs, the refill
+  // that started it doesn't settle and `#creatingStandbys` counts it, and a
+  // caller that needs a fresh tab parks for as long as that lasts (see
+  // `#shouldAwaitFreedTab`). So one CDP call that never answers would park
+  // every such caller until its own abort, for the life of the process, with
+  // nothing reporting the refill as failed. Past the deadline the creation is
+  // abandoned: the counter is released, the refill fails, and the parked
+  // callers steal or throw. A throw from a render makes the Prerenderer
+  // restart the browser. `closeAll` abandons a creation in flight the same
+  // way. If an abandoned creation finishes later, what it made is closed and
+  // never joins the pool.
   async #createStandby(): Promise<StandbyEntry> {
     this.#creatingStandbys++;
+    let creation = this.#openStandby();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let abandon!: () => void;
+    let outcome = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new StandbyCreationTimeoutError(
+              `Standby creation did not finish in ${this.#standbyCreationTimeoutMs}ms; abandoning it`,
+            ),
+          ),
+        this.#standbyCreationTimeoutMs,
+      );
+      abandon = () =>
+        reject(
+          new StandbyCreationAbandonedError(
+            'Standby creation abandoned because the pool is closing',
+          ),
+        );
+    });
+    this.#abandonCreations.add(abandon);
+    try {
+      let entry = await Promise.race([creation, outcome]);
+      this.#standbys.add(entry);
+      this.#wakeTabWaiters();
+      return entry;
+    } catch (e) {
+      if (
+        e instanceof StandbyCreationTimeoutError ||
+        e instanceof StandbyCreationAbandonedError
+      ) {
+        if (e instanceof StandbyCreationTimeoutError) {
+          log.error(e.message);
+        } else {
+          log.debug(e.message);
+        }
+        creation.then(
+          (late) => {
+            log.warn(
+              `Abandoned standby creation finished later; closing pageId=${late.pageId}`,
+            );
+            return this.#closeEntry(late);
+          },
+          () => {
+            // It failed on its own, and closed its context as it did.
+          },
+        );
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      this.#abandonCreations.delete(abandon);
+      this.#creatingStandbys--;
+    }
+  }
+
+  // The steps of one standby creation, from getting the browser to the
+  // loaded standby page. On failure it closes the context it created. The
+  // caller adds the entry to the pool.
+  async #openStandby(): Promise<StandbyEntry> {
     let context: BrowserContext | undefined;
     try {
       let browser = await this.#browserManager.getBrowser();
@@ -2035,7 +2170,7 @@ export class PagePool {
       let pageId = uuidv4();
       await this.#attachPageObservability(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
-      let entry: StandbyEntry = {
+      return {
         type: 'standby',
         context,
         page,
@@ -2043,9 +2178,6 @@ export class PagePool {
         lastUsedAt: Date.now(),
         queue: new TabQueue(),
       };
-      this.#standbys.add(entry);
-      this.#wakeTabWaiters();
-      return entry;
     } catch (e) {
       if (isExpectedStandbyTargetNotReadyError(e)) {
         log.debug('Standby page target is not ready yet:', e);
@@ -2060,8 +2192,6 @@ export class PagePool {
         }
       }
       throw e;
-    } finally {
-      this.#creatingStandbys--;
     }
   }
 
@@ -3325,9 +3455,16 @@ export class PagePool {
   ): Promise<
     { entry: PoolEntry; reused: boolean; releaseTab: () => void } | undefined
   > {
+    // An OAuth app's tab never changes hands either way: see
+    // `isOAuthTabAffinityKey`. Such a render waits for a fresh standby, whose
+    // BrowserContext is new, or fails as any render with no tab does.
+    if (isOAuthTabAffinityKey(affinityKey)) {
+      return undefined;
+    }
     let crossAffinityEntries: PoolEntry[] = [];
     for (let [assignedAffinity, entries] of this.#affinityPages.entries()) {
       if (assignedAffinity === affinityKey) continue;
+      if (isOAuthTabAffinityKey(assignedAffinity)) continue;
       for (let entry of entries) {
         if (entry.closing || entry.transitioning) continue;
         if (entry.queue.pendingCount > maxDonorPending) continue;
@@ -3491,10 +3628,16 @@ export class PagePool {
     if (opts?.standbyOnly) {
       return undefined;
     }
+    // An OAuth app's tab never changes hands either way: see
+    // `isOAuthTabAffinityKey`.
+    if (isOAuthTabAffinityKey(affinityKey)) {
+      return undefined;
+    }
 
     let idleCandidates: PoolEntry[] = [];
     for (let [assignedAffinity, entries] of this.#affinityPages.entries()) {
       if (assignedAffinity === affinityKey) continue;
+      if (isOAuthTabAffinityKey(assignedAffinity)) continue;
       for (let entry of entries) {
         if (entry.closing) continue;
         if (this.#contextHostsAnotherTab(entry)) continue;

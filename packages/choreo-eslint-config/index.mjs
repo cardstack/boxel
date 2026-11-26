@@ -15,6 +15,7 @@
  *     { files: ['src/legacy/**'], rules: { ... } },
  *   ]);
  */
+import { fixupPluginRules } from '@eslint/compat';
 import js from '@eslint/js';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import prettier from 'eslint-config-prettier';
@@ -79,6 +80,15 @@ export default defineConfig([
     '**/tmp/',
   ]),
   js.configs.recommended,
+  {
+    // ESLint 10 added these to eslint:recommended. They are off until the
+    // code they report is fixed.
+    rules: {
+      'no-unassigned-vars': 'off',
+      'no-useless-assignment': 'off',
+      'preserve-caught-error': 'off',
+    },
+  },
   prettier,
   ember.configs.base,
   ember.configs.gjs,
@@ -108,7 +118,9 @@ export default defineConfig([
   },
   {
     files: ['**/*.{ts,gts}'],
-    plugins: { 'typescript-sort-keys': typescriptSortKeys },
+    // eslint-plugin-typescript-sort-keys calls rule-context methods ESLint 10
+    // removed.
+    plugins: { 'typescript-sort-keys': fixupPluginRules(typescriptSortKeys) },
     rules: {
       'typescript-sort-keys/interface': 'error',
       'typescript-sort-keys/string-enum': 'error',

@@ -84,6 +84,25 @@ else
   ok "$json_count JSON files parse"
 fi
 
+# 2b. A rule file that exists in both alerting-hosted/staging/rules/ and
+#     alerting-hosted/production/rules/ is one rule copied once for each
+#     environment, because each copy routes to its own environment's contact
+#     point. The two copies must stay identical apart from the environment
+#     name, so a change to one that misses the other fails here.
+section "hosted rules copied to both environments"
+pair_count=0
+for staging_rule in provisioning/alerting-hosted/staging/rules/*.json; do
+  [[ -e "$staging_rule" ]] || continue
+  production_rule="provisioning/alerting-hosted/production/rules/$(basename "$staging_rule")"
+  [[ -e "$production_rule" ]] || continue
+  pair_count=$((pair_count + 1))
+  if ! diff -q <(sed 's/staging/production/g' "$staging_rule") "$production_rule" >/dev/null; then
+    err "$staging_rule and $production_rule differ apart from the environment name"
+    diff <(sed 's/staging/production/g' "$staging_rule") "$production_rule" | sed 's/^/    /' >&2 || true
+  fi
+done
+ok "$pair_count rule files match their copy in the other environment"
+
 # 3. Manifest shape — every dashboards/**/*.json and folders/*.json has
 #    apiVersion + kind + metadata.name (App Platform required fields).
 #    Use `find` rather than bash's globstar to keep this working on

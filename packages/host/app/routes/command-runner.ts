@@ -199,8 +199,9 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
   }
 
   // The status is the command's answer: the prerender server reads it from
-  // the page. An automation run's sessions, which the tab holds in memory, go
-  // before it, so nothing of the run is left in the tab once it answers.
+  // the page. Sessions the tab holds in memory (an automation run's token, or
+  // an OAuth app's tab tokens) go before it, so none is left in the tab once
+  // it answers.
   #answer(model: CommandRunState, status: 'success' | 'error') {
     this.realm.dropInMemorySessions();
     model.status = status;

@@ -288,14 +288,18 @@ module(basename(import.meta.filename), function () {
 
   module('HostURLResolver', function () {
     // An adapter that records the host each query asks for, and answers with
-    // one host URL at the root of that host. `hold` makes the next query wait
-    // until the returned function is called.
+    // one host URL at the root of that host. `hold` makes the next host query
+    // wait until the returned function is called. The read of the URLs stored
+    // HTML was rendered against finds none.
     function fakeAdapter() {
       let queriedHosts: string[] = [];
       let held: Promise<void> | undefined;
       let adapter = {
         kind: 'pg',
-        async execute(_sql: string, opts?: { bind?: unknown[] }) {
+        async execute(sql: string, opts?: { bind?: unknown[] }) {
+          if (sql.includes('rendered_against_url')) {
+            return [];
+          }
           let host = String(opts?.bind?.[0]);
           queriedHosts.push(host);
           if (held) {

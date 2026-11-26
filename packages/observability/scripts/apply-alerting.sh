@@ -90,10 +90,12 @@ cd "$(dirname "$0")/.."
 shopt -s nullglob
 # provisioning/alerting/ applies to every environment, and docker-compose
 # mounts it for local Grafana too. provisioning/alerting-hosted/<env>/ holds
-# what exists in one hosted environment only: rules for a service that runs
-# there alone, and contact points whose secrets come from that
-# environment's SSM. Contact points go first, so a rule that routes to one
-# can find it.
+# what is pushed to one hosted environment only: rules for a service that
+# runs there alone, contact points whose secrets come from that
+# environment's SSM, and the copy for this environment of a rule that
+# exists in each environment but routes to this environment's contact
+# point. lint.sh checks that such copies differ only in the environment
+# name. Contact points go first, so a rule that routes to one can find it.
 hosted_dir="provisioning/alerting-hosted/${env_name}"
 contact_point_files=("${hosted_dir}"/contact-points/*.json)
 rule_files=(provisioning/alerting/*.json "${hosted_dir}"/rules/*.json)

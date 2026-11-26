@@ -26,10 +26,10 @@ import {
 } from '../resources/module-contents';
 import { findDeclarationByName } from '../services/module-contents-service';
 
+import type { Ready } from '../resources/file';
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type SessionService from './session';
-import type { Ready } from '../resources/file';
 import type { BaseDef } from '@cardstack/base/card-api';
 
 export default class CodeSemanticsService extends Service {

@@ -1,5 +1,3 @@
-/* eslint-env node */
-
 // Runs Example AI app against a running development stack, for screenshots
 // of a whole flow: its Connect page, Boxel's pages, and its result page.
 //

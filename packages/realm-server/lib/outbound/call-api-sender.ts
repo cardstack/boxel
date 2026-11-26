@@ -21,6 +21,10 @@ import type { PublishedFrom } from '../published-realm.ts';
 import { automationAdmission, fillSlots } from '../key-bindings.ts';
 import { checkAutomationKeyApprovals } from '../automation-key-approvals.ts';
 import {
+  tellKeyApprovalNoticesChanged,
+  writeKeyApprovalNoticesIn,
+} from '../automation-key-approval-notices.ts';
+import {
   clearGrantRejection,
   credentialRejected,
   DEFAULT_PROBE_INTERVAL_MS,
@@ -141,6 +145,8 @@ export function createCallApiSender(
               ...args,
               probeIntervalMs,
             }),
+          writeKeyApprovalNoticesIn,
+          tellKeyApprovalNoticesChanged,
         }),
     send: async (request, credentials, options) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
