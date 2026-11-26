@@ -85,8 +85,16 @@ class ContextMenuUsage extends GlimmerComponent {
         kind: 'submenu',
         label: 'Share',
         items: [
-          { label: 'Copy link', kbd: 'Mod+Shift+C', onSelect: this.ran('Copy link') },
-          { label: 'Email the desk', needsInput: true, onSelect: this.ran('Email the desk') },
+          {
+            label: 'Copy link',
+            kbd: 'Mod+Shift+C',
+            onSelect: this.ran('Copy link'),
+          },
+          {
+            label: 'Email the desk',
+            needsInput: true,
+            onSelect: this.ran('Email the desk'),
+          },
         ],
       },
       '---',
@@ -98,9 +106,17 @@ class ContextMenuUsage extends GlimmerComponent {
     ];
   }
 
+  get usage() {
+    let bits = ['@items={{this.items}}', `@label='Lot actions'`];
+    if (!this.focusable) bits.push('@focusable={{false}}');
+    bits.push(`@platform='${this.platform}'`);
+    return `<ContextMenu ${bits.join(' ')}><:default as |isOpen|>…</:default></ContextMenu>`;
+  }
+
   <template>
     <FreestyleUsage
       @name='ContextMenu'
+      @source={{this.usage}}
       @description='Right-click, on the shared menu engine rather than a second one. The MenuNode taxonomy, the row transform, the panel markup and its whole stylesheet, the shortcut faces, the safe triangle, the roving tabindex and the type-ahead all come from menu.gts — a command object written for Menu renders here unchanged. What is genuinely different is the anchoring and the keyboard: the menu hangs off a zero-size fixed box at the invocation point, measured by the same anchorTo primitive every other Pretui overlay uses, so it flips and shifts near a viewport edge for free. The region takes a tab stop by default, which is what makes Shift+F10 and the Menu key reach it at all, and dismissal returns focus to the region rather than dropping it on the body.'
     >
       <:example>

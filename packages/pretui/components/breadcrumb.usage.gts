@@ -3,6 +3,8 @@ import Component from '@glimmer/component';
 import { FreestyleUsage } from './freestyle-usage';
 import { Breadcrumb } from './breadcrumb';
 
+const SOURCE = '<Breadcrumb @items={{this.items}} />';
+
 const CRUMBS = [
   { label: 'Auctions', href: '#auctions' },
   { label: 'Spring 2026', href: '#spring-2026' },
@@ -12,7 +14,11 @@ const CRUMBS = [
 class BreadcrumbUsage extends Component {
   items = CRUMBS;
   <template>
-    <FreestyleUsage @name='Breadcrumb' @description='A semantic navigation trail whose current location is plain emphasized text and whose ancestors remain links.' @source='<Breadcrumb @items={{this.items}} />'>
+    <FreestyleUsage
+      @name='Breadcrumb'
+      @description='A semantic navigation trail whose current location is plain emphasized text and whose ancestors remain links.'
+      @source={{SOURCE}}
+    >
       <:example><Breadcrumb @items={{this.items}} /></:example>
       <:api as |Args|><Args.Object @name='items' @value={{this.items}} /><Args.Action @name='onSelect' @description='A linked crumb was clicked: its item and the click. The link follows its href unless the handler calls preventDefault().' /></:api>
     </FreestyleUsage>

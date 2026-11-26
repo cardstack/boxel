@@ -19,10 +19,17 @@ class TooltipUsage extends GlimmerComponent {
   get sideVal() {
     return this.side as 'top' | 'bottom' | 'left' | 'right';
   }
+  get usage() {
+    let bits = [`@content='${this.content}'`];
+    if (this.side !== 'top') bits.push(`@side='${this.side}'`);
+    if (this.disabled) bits.push('@disabled={{true}}');
+    return `<Tooltip ${bits.join(' ')}>\n  <Button>…</Button>\n</Tooltip>`;
+  }
   <template>
     <FreestyleUsage
       @name='Tooltip'
       @description='Tooltips provide additional information when hovering over an element. Shown in the top layer; takes no space while hidden.'
+      @source={{this.usage}}
     >
       <:example>
         <Tooltip

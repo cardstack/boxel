@@ -3,11 +3,13 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FreestyleUsage } from './freestyle-usage';
 import { Loader } from './loader';
 
+const SOURCE = '<Loader @size={{20}} />';
+
 const LoaderUsage: TemplateOnlyComponent = <template>
   <FreestyleUsage
     @name='Loader'
     @description='Spinner under the shadcn and Mantine name: an indeterminate ring that takes its colour from the surrounding text. Import it when a port already says Loader; the component and its writeup are Spinner.'
-    @source='<Loader @size={{20}} />'
+    @source={{SOURCE}}
   >
     <:example>
       <Loader @size={{20}} />

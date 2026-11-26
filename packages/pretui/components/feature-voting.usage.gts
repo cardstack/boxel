@@ -61,9 +61,15 @@ class FeatureVotingUsage extends GlimmerComponent {
   };
   reset = () => (this.features = SEED_VOTES);
 
+  get usage() {
+    let sort = this.sort === 'votes' ? '' : ` @sort='${this.sort}'`;
+    return `<FeatureVoting @features={{this.features}}${sort} @onVote={{this.vote}} />`;
+  }
+
   <template>
     <FreestyleUsage
       @name='FeatureVoting'
+      @source={{this.usage}}
       @description='A tally block: what should be built next, and how many people said so. The vote control is a toggle rather than a fire-and-forget button, so it carries aria-pressed and its accessible name states both the subject and the count ("Upvote Bulk export, 42 votes"). Upstream renders the same control as a coloured div — a screen-reader user cannot tell they have voted, and neither can a greyscale reader. Here the pressed state has a filled chevron, a weight change and a ring, and colour is the fourth signal rather than the only one. The share bar is proportional to the LEADING option, not the total, so a ballot with one runaway favourite still shows shape; it is aria-hidden, because the number beside it is the datum. Sorting is deterministic — tally descending, then title — so the same ballot always renders in the same order.'
     >
       <:example>

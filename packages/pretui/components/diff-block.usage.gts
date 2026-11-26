@@ -3,6 +3,9 @@ import Component from '@glimmer/component';
 import { FreestyleUsage } from './freestyle-usage';
 import { DiffBlock } from './diff-block';
 
+const SOURCE =
+  '<DiffBlock @lines={{this.lines}} @receipt="3 fields changed" />';
+
 const DIFF_LINES = [
   { text: 'lot: B-103' },
   { op: 'del' as const, text: 'status: draft' },
@@ -15,9 +18,24 @@ const DIFF_LINES = [
 class DiffBlockUsage extends Component {
   lines = DIFF_LINES;
   <template>
-    <FreestyleUsage @name='DiffBlock' @description='A compact staged diff with textual prefixes, controlled expansion and an immutable receipt line.' @source='<DiffBlock @lines={{this.lines}} @receipt="3 fields changed" />' @viewportMode='wide'>
-      <:example><DiffBlock @lines={{this.lines}} @receipt='3 fields changed · run_8F3C' @maxLines={{3}} /></:example>
-      <:api as |Args|><Args.Object @name='lines' @value={{this.lines}} /><Args.String @name='receipt' @value='3 fields changed · run_8F3C' /><Args.Number @name='maxLines' @value={{3}} /></:api>
+    <FreestyleUsage
+      @name='DiffBlock'
+      @description='A compact staged diff with textual prefixes, controlled expansion and an immutable receipt line.'
+      @source={{SOURCE}}
+      @viewportMode='wide'
+    >
+      <:example><DiffBlock
+          @lines={{this.lines}}
+          @receipt='3 fields changed · run_8F3C'
+          @maxLines={{3}}
+        /></:example>
+      <:api as |Args|><Args.Object
+          @name='lines'
+          @value={{this.lines}}
+        /><Args.String
+          @name='receipt'
+          @value='3 fields changed · run_8F3C'
+        /><Args.Number @name='maxLines' @value={{3}} /></:api>
     </FreestyleUsage>
   </template>
 }
