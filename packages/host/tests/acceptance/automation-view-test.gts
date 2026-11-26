@@ -189,6 +189,9 @@ module('Acceptance | automation view', function (hooks) {
   let answer: Answer;
   let asked: string[];
   let askedKeyApprovals: boolean[];
+  // While set, a status read that asks for key approvals waits on it, as a
+  // slow key check does.
+  let holdKeyedReads: Promise<void> | undefined;
   let realm: Realm;
 
   setupApplicationTest(hooks);
@@ -236,6 +239,7 @@ module('Acceptance | automation view', function (hooks) {
     answer = { status: 200 };
     asked = [];
     askedKeyApprovals = [];
+    holdKeyedReads = undefined;
     getService('network').virtualNetwork.mount(
       async (request: Request) => {
         let url = new URL(request.url);
@@ -243,7 +247,11 @@ module('Acceptance | automation view', function (hooks) {
           return null;
         }
         asked.push(url.searchParams.get('automation') ?? '');
-        askedKeyApprovals.push(url.searchParams.get('keyApprovals') === 'true');
+        let keyed = url.searchParams.get('keyApprovals') === 'true';
+        askedKeyApprovals.push(keyed);
+        if (keyed && holdKeyedReads) {
+          await holdKeyedReads;
+        }
         if (answer.status !== 200) {
           return new Response(JSON.stringify({ errors: [] }), {
             status: answer.status,
@@ -257,7 +265,10 @@ module('Acceptance | automation view', function (hooks) {
                   data: {
                     type: 'automation-status',
                     id: AUTOMATION,
-                    attributes: answer.attributes,
+                    // The route checks key approvals only when asked.
+                    attributes: keyed
+                      ? answer.attributes
+                      : { ...answer.attributes, keyApprovals: undefined },
                   },
                   meta: { directWriter: true },
                 }
@@ -3860,6 +3871,55 @@ module('Acceptance | automation view', function (hooks) {
         .includesText(
           'Boxel suspended the shared key “Team vendor” because the key’s owner is no longer a realm administrator. A realm administrator needs to replace the shared key with another key.',
         );
+    });
+
+    test('a run’s event during the key check still shows the key approvals', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: withApprovals([
+          operationWith('list', [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'waiting',
+              viewerIsKeyOwner: true,
+              keyOwner: ME,
+              fix: 'approve',
+            },
+          ]),
+        ]),
+      };
+      let release!: () => void;
+      holdKeyedReads = new Promise<void>((resolve) => (release = resolve));
+      await openIsolated();
+      await waitUntil(() => askedKeyApprovals.includes(true), {
+        timeout: 10000,
+      });
+      // A run moves while the slow key check is still out.
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(testRealmURL, ME),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'job',
+          runId: 'run-live',
+          automation: AUTOMATION,
+          state: 'running',
+          step: 'script',
+          milestone: null,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+      await waitUntil(() => askedKeyApprovals.length > 1, { timeout: 10000 });
+      assert.true(
+        askedKeyApprovals[askedKeyApprovals.length - 1],
+        'the run’s read makes the key check the read it replaced still owed',
+      );
+      release();
+      await waitFor('[data-test-automation-key-approval-state="waiting"]', {
+        timeout: 10000,
+      });
+      assert.dom('[data-test-automation-key-approvals]').exists();
     });
 
     test('an approval that lands updates the section without a reload', async function (assert) {
