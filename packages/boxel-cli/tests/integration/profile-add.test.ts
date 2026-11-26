@@ -190,6 +190,43 @@ describe('boxel profile add (integration, subprocess)', () => {
     expect(second.matrixDeviceId).not.toBe(first.matrixDeviceId);
     expect(second.password).toBeUndefined();
   });
+
+  // Synapse answers 200 for a token that is signed in, and 401 for one that
+  // has been signed out.
+  const whoamiStatus = async (accessToken: string) =>
+    (
+      await fetch(new URL('_matrix/client/v3/account/whoami', matrixURL), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+    ).status;
+
+  it('signs out the token a re-added profile held before', async () => {
+    await run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl]);
+    const first = readProfiles().profiles[matrixId].matrixAccessToken;
+
+    await run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl]);
+    const second = readProfiles().profiles[matrixId].matrixAccessToken;
+
+    expect(await whoamiStatus(first)).toBe(401);
+    expect(await whoamiStatus(second)).toBe(200);
+  });
+
+  it("signs out a removed profile's token", async () => {
+    await run(['-u', matrixId, '-m', matrixURL.href, '-r', realmServerUrl]);
+    const token = readProfiles().profiles[matrixId].matrixAccessToken;
+    expect(await whoamiStatus(token)).toBe(200);
+
+    const res = await runBoxel(['profile', 'remove', matrixId], {
+      home: tmpHome,
+      input: 'y\n',
+    });
+
+    expect(res.ok, res.stderr).toBe(true);
+    expect(res.stdout).toMatch(/Profile removed/);
+    expect(res.stdout).not.toMatch(/Warning:/);
+    expect(readProfiles().profiles[matrixId]).toBeUndefined();
+    expect(await whoamiStatus(token)).toBe(401);
+  });
 });
 
 // A realm server without a secure origin, as one from before secure sessions

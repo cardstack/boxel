@@ -13,6 +13,10 @@ import {
   type ProfileManagerDeps,
 } from '../../src/lib/profile-manager.js';
 import { MatrixAuthError, type MatrixAuth } from '../../src/lib/auth.js';
+import {
+  removeProfile,
+  type RemoveProfileDeps,
+} from '../../src/commands/profile.js';
 
 // A fake MatrixAuth shaped like what `matrixLogin` would return — used to
 // drive the dependency-injection seam without touching a real Matrix server.
@@ -942,5 +946,128 @@ describe('migrateFromEnv', () => {
 
     expect(result).toEqual({ profileId: '@alice:localhost', created: false });
     expect(manager.getProfile('@alice:localhost')!.displayName).toBe('Alice');
+  });
+});
+
+describe('boxel profile remove', () => {
+  const matrixUrl = 'https://matrix-staging.stack.cards';
+  const realmServerUrl = 'https://realms-staging.stack.cards/';
+  const matrixId = '@user:stack.cards';
+  let tmpDir: string;
+  let manager: ProfileManager;
+  let log: ReturnType<typeof vi.spyOn>;
+
+  // The person at the terminal confirms, and every server answers.
+  function deps() {
+    return {
+      prompt: vi.fn(async () => 'y'),
+      revokeConnection: vi.fn(async () => true),
+      matrixLogout: vi.fn(async () => {}),
+      secureSignOut: vi.fn(async () => {}),
+    } satisfies RemoveProfileDeps;
+  }
+
+  function warnings(): string[] {
+    return log.mock.calls
+      .map((call) => String(call[0]))
+      .filter((line) => line.includes('Warning:'));
+  }
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-remove-'));
+    manager = new ProfileManager(tmpDir);
+    log = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("signs out a Matrix profile's token and ends its secure session", async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      fakeAuth(matrixId, matrixUrl),
+      undefined,
+      realmServerUrl,
+      {
+        token: 'secure-session-token',
+        userId: matrixId,
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      },
+    );
+    let d = deps();
+
+    await removeProfile(manager, matrixId, d);
+
+    expect(manager.getProfile(matrixId)).toBeUndefined();
+    expect(d.matrixLogout).toHaveBeenCalledWith(
+      matrixUrl,
+      `token-for-${matrixId}`,
+    );
+    expect(d.secureSignOut).toHaveBeenCalledWith(
+      realmServerUrl,
+      'secure-session-token',
+    );
+    expect(d.revokeConnection).not.toHaveBeenCalled();
+    expect(warnings()).toEqual([]);
+  });
+
+  it("removes the profile, and warns with its device, when its token can't be signed out", async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      fakeAuth(matrixId, matrixUrl),
+      undefined,
+      realmServerUrl,
+    );
+    let d = deps();
+    d.matrixLogout.mockRejectedValueOnce(new Error('network down'));
+
+    await removeProfile(manager, matrixId, d);
+
+    expect(manager.getProfile(matrixId)).toBeUndefined();
+    let [warning, ...rest] = warnings();
+    expect(rest).toEqual([]);
+    expect(warning).toMatch(/could not sign out its Matrix session/);
+    expect(warning).toContain('DEVICE__user_stack_cards');
+    expect(warning).toMatch(/Element/);
+  });
+
+  it("ends an OAuth profile's connection, and signs nothing out on Matrix", async () => {
+    manager.addOAuthProfile(
+      matrixId,
+      {
+        issuer: 'https://realms-staging.stack.cards',
+        tokenEndpoint:
+          'https://realms-staging.stack.cards/_oauth-provider/token',
+        accessToken: 'access-token-placeholder',
+        accessExpiresAt: '2099-01-01T00:00:00.000Z',
+        connectionEndsAt: '2099-01-01T00:00:00.000Z',
+      },
+      { matrixUrl, realmServerUrl },
+    );
+    let d = deps();
+
+    await removeProfile(manager, matrixId, d);
+
+    expect(manager.getProfile(matrixId)).toBeUndefined();
+    expect(d.revokeConnection).toHaveBeenCalledOnce();
+    expect(d.matrixLogout).not.toHaveBeenCalled();
+    expect(warnings()).toEqual([]);
+  });
+
+  it('leaves the profile and its sign-ins alone when removing it is declined', async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      fakeAuth(matrixId, matrixUrl),
+      undefined,
+      realmServerUrl,
+    );
+    let d = { ...deps(), prompt: vi.fn(async () => '') };
+
+    await removeProfile(manager, matrixId, d);
+
+    expect(manager.getProfile(matrixId)).toBeDefined();
+    expect(d.matrixLogout).not.toHaveBeenCalled();
   });
 });

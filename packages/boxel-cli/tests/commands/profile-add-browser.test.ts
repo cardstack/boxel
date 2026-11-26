@@ -52,6 +52,7 @@ function deps({
       browserLogin: vi.fn(browserLogin),
       secureOriginForProfiles: vi.fn(async () => secureOrigin),
       secureSignOut: vi.fn(async () => {}),
+      matrixLogout: vi.fn(async () => {}),
       ensurePersonalRealm: vi.fn(async () => ({
         outcome: 'has-realms' as const,
       })),
@@ -398,6 +399,80 @@ describe('boxel profile add through the browser', () => {
       await addProfile(manager, environment, true, d);
 
       expect(manager.getProfile(matrixId)!.matrixAccessToken).toBe('old-token');
+      expect(d.matrixLogout).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('for an account that already has a Matrix profile', () => {
+    beforeEach(async () => {
+      await manager.addProfileWithAuth(
+        matrixId,
+        authFor(matrixId, 'old-token'),
+        'Example Name',
+        environment.realmServerUrl,
+      );
+    });
+
+    it('signs out the token the profile held before, and keeps the new one', async () => {
+      let { deps: d } = deps({ tty: false });
+      await addProfile(manager, environment, true, d);
+
+      expect(manager.getProfile(matrixId)!.matrixAccessToken).toBe(
+        'browser-token',
+      );
+      expect(d.matrixLogout).toHaveBeenCalledOnce();
+      expect(d.matrixLogout).toHaveBeenCalledWith(
+        environment.matrixUrl,
+        'old-token',
+      );
+    });
+
+    it('keeps the new profile when signing the old token out fails', async () => {
+      let { deps: d } = deps({ tty: false });
+      d.matrixLogout.mockRejectedValueOnce(new Error('network down'));
+      await addProfile(manager, environment, true, d);
+
+      expect(manager.getProfile(matrixId)!.matrixAccessToken).toBe(
+        'browser-token',
+      );
+      expect(process.exitCode).toBeUndefined();
+    });
+
+    it("doesn't sign out a token the sign-in returned again", async () => {
+      let { deps: d } = deps({
+        tty: false,
+        browserLogin: async () => authFor(matrixId, 'old-token'),
+      });
+      await addProfile(manager, environment, true, d);
+
+      expect(manager.getProfile(matrixId)!.matrixAccessToken).toBe('old-token');
+      expect(d.matrixLogout).not.toHaveBeenCalled();
+    });
+
+    it('signs out the token the profile held before when signing in again with a password', async () => {
+      let passwordManager = new ProfileManager(tmpDir, {
+        matrixLogin: vi.fn(async () => authFor(matrixId, 'password-token')),
+      });
+      let { deps: d } = deps({
+        tty: true,
+        answers: {
+          'Username: ': 'example-user',
+          'Overwrite? [y/N]: ': 'y',
+          'Display name [example-user · stack.cards]: ': '',
+        },
+      });
+      await addProfile(passwordManager, environment, false, {
+        ...d,
+        promptPassword: async () => 'example-password',
+      });
+
+      expect(passwordManager.getProfile(matrixId)!.matrixAccessToken).toBe(
+        'password-token',
+      );
+      expect(d.matrixLogout).toHaveBeenCalledWith(
+        environment.matrixUrl,
+        'old-token',
+      );
     });
   });
 });
