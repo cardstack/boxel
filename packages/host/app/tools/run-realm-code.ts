@@ -46,7 +46,10 @@ import {
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
-import { DEFAULT_BATCH_DEADLINE_MINUTES } from '@cardstack/runtime-common/automation-declaration';
+import {
+  BATCH_RUN_TRIGGER,
+  DEFAULT_BATCH_DEADLINE_MINUTES,
+} from '@cardstack/runtime-common/automation-declaration';
 import { isWrite } from '@cardstack/runtime-common/card-operations';
 import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
 
@@ -202,6 +205,7 @@ import type {
   RunProgressSink,
 } from '../lib/realm-runner/automation';
 import type {
+  AutomationBatchResult,
   AutomationRunContext,
   RealmRunnerCallMethod,
   RealmRunnerSurface,
@@ -412,14 +416,30 @@ interface Research {
     signal: AbortSignal,
   ): Promise<WebReadResult>;
   resolve(request: ResolveRequest, signal: AbortSignal): Promise<ResolveResult>;
-  // `realm.resolve.batch`, on the automation surface only.
-  batch?: {
-    submit: SubmitResolveBatch;
-    // The deadline of a batch whose script sets none: the automation
-    // card's `batchDeadlineMinutes`.
-    defaultDeadlineMinutes: number;
-  };
+  // `realm.resolve.batch`, on the automation surface only. A run that
+  // commits submits the batch (`submit`); a Preview sends its requests at
+  // once, at the normal price, instead (`inline`). `refused` says why the
+  // run may not batch at all.
+  batch?:
+    | ({
+        // The deadline of a batch whose script sets none: the automation
+        // card's `batchDeadlineMinutes`.
+        defaultDeadlineMinutes: number;
+      } & ({ submit: SubmitResolveBatch } | { inline: true }))
+    | { refused: string };
 }
+
+// The answers a Preview's `realm.resolve.batch` got by sending its requests
+// at once, at the normal price, which the Preview's follow-up pass reads as
+// `realm.current.automation.batch`.
+export interface InlineResolveBatch {
+  deadline: string;
+  milestone: string;
+  results: AutomationBatchResult[];
+}
+
+// How many of a Preview's batched requests are in flight at once.
+const INLINE_BATCH_CONCURRENCY = 4;
 
 // One batch of `realm.resolve` requests, as the realm server's batch path
 // takes it: each request's chat completion body under the position it has in
@@ -1475,7 +1495,13 @@ class RealmFsSession {
   // the batch's run milestone and ends the run's part in it. A follow-up run
   // picks up the answers. A run submits one batch: its milestone is where
   // the run stops and the follow-up carries on.
+  //
+  // A Preview submits no batch (ADR 030 §1.1): it sends the requests at
+  // once, at the normal price, each counted as a `realm.resolve` call, and
+  // keeps their answers (`inlineBatch`) for the follow-up pass the Preview
+  // runs once the script finishes, so the person sees the whole flow.
   private batchSubmitted = false;
+  inlineBatch: InlineResolveBatch | undefined;
 
   private async resolveBatch(rawRequests: unknown, rawOptions: unknown) {
     let batch = this.research.batch;
@@ -1483,6 +1509,9 @@ class RealmFsSession {
       throw new Error(
         "realm.resolve.batch needs an automation run's token to submit a batch, and this run holds none",
       );
+    }
+    if ('refused' in batch) {
+      throw new Error(batch.refused);
     }
     if (this.batchSubmitted) {
       throw new Error(
@@ -1502,10 +1531,17 @@ class RealmFsSession {
     this.batchSubmitted = true;
     this.reportProgress('progress.milestone', [milestone]);
     let deadlineSeconds = Math.max(1, Math.floor((deadline - now) / 1000));
+    if ('inline' in batch) {
+      return await this.resolveBatchInline(requests, {
+        deadline: new Date(now + deadlineSeconds * 1000).toISOString(),
+        milestone,
+      });
+    }
+    let { submit } = batch;
     let { id } = await this.withResearchTimeout(
       'realm.resolve.batch',
       (signal) =>
-        batch!.submit(
+        submit(
           {
             model: RESOLVE_LLM,
             deadlineSeconds,
@@ -1522,6 +1558,53 @@ class RealmFsSession {
       `Submitted ${requests.length} AI request${requests.length === 1 ? '' : 's'} as one batch, answered by ${due}`,
     ]);
     return { batchId: id, requests: requests.length, deadline: due, milestone };
+  }
+
+  // A Preview's batch: each request sent as `realm.resolve` sends it, a few at
+  // a time. A request that fails keeps its error in its place, as a batch
+  // answers each request on its own.
+  private async resolveBatchInline(
+    requests: ResolveRequest[],
+    { deadline, milestone }: { deadline: string; milestone: string },
+  ) {
+    let limit = this.surface.limits.resolveCalls;
+    if (this.resolveCalls + requests.length > limit) {
+      throw new Error(
+        `Realm code may call realm.resolve at most ${limit} times per run, and a Preview sends each of the batch's ${requests.length} requests as one`,
+      );
+    }
+    this.resolveCalls += requests.length;
+    let results: AutomationBatchResult[] = new Array(requests.length);
+    let next = 0;
+    let worker = async () => {
+      while (next < requests.length) {
+        let index = next++;
+        try {
+          let result = await this.withResearchTimeout(
+            'realm.resolve.batch',
+            (signal) => this.research.resolve(requests[index], signal),
+          );
+          this.chargeResearch('realm.resolve.batch', result);
+          results[index] = { output: result.output, model: result.model };
+        } catch (error) {
+          results[index] = {
+            error: coerceErrorMessage(error, 'unknown error'),
+          };
+        }
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(INLINE_BATCH_CONCURRENCY, requests.length) },
+        worker,
+      ),
+    );
+    this.inlineBatch = { deadline, milestone, results };
+    let failed = results.filter((result) => 'error' in result).length;
+    this.reportProgress('progress.task', [
+      `Preview sent ${requests.length} batched AI request${requests.length === 1 ? '' : 's'} at once, at the normal price${failed ? `; ${failed} failed` : ''}`,
+    ]);
+    return { batchId: null, requests: requests.length, deadline, milestone };
   }
 
   private takeWebCall(name: string) {
@@ -3469,6 +3552,10 @@ export interface AutomationRunOptions {
   // The deadline of a batch whose script sets none, in minutes: the
   // automation card's `batchDeadlineMinutes`.
   batchDeadlineMinutes?: number;
+  // The automation card's `batchedAI`: whether a Preview's
+  // `realm.resolve.batch` sends its requests, as a run's batch is submitted
+  // only for a card that turns it on.
+  batchedAI?: boolean;
   io: AutomationRealmIO;
   progress: RunProgressSink;
   // Values the run holds that must never reach its progress, such as its
@@ -3495,10 +3582,71 @@ export interface AutomationRunResult {
 // be staged; committing them is the caller's step, once this resolves. The
 // script's result, its error and every progress event are redacted with
 // `secrets` before they leave here.
+//
+// A Preview whose script calls `realm.resolve.batch` sends the batch's
+// requests at once, at the normal price, and once the script finishes runs it
+// again as the batch's follow-up, in the same run and within the same time
+// limit, with the answers in `realm.current.automation.batch`. The
+// follow-up reads what the passes before it staged, as a real follow-up
+// reads what its submitting run committed. A follow-up that sends a batch of
+// its own gets a follow-up pass too, so a chain of batches runs to its end
+// unless the time limit stops it first.
 export async function runAutomationScript(
   options: AutomationRunOptions,
 ): Promise<AutomationRunResult> {
-  let { code, automation, io, progress, signal } = options;
+  let timeoutMs = automationTimeLimitMs(options.secondsCap);
+  let endsAt = Date.now() + timeoutMs;
+  let pass = await runAutomationPass(options, options.automation, timeoutMs);
+  let passes = [pass.result];
+  while (pass.inlineBatch) {
+    let { inlineBatch } = pass;
+    options.progress.record({
+      kind: 'activity',
+      at: Date.now(),
+      line: "Preview runs the batch's follow-up now, with the answers its requests got",
+    });
+    pass = await runAutomationPass(
+      options,
+      {
+        ...options.automation,
+        trigger: { label: BATCH_RUN_TRIGGER, kind: 'batch' },
+        scheduledAt: inlineBatch.deadline,
+        batch: {
+          id: null,
+          deadline: inlineBatch.deadline,
+          milestone: inlineBatch.milestone,
+          late: false,
+          results: inlineBatch.results,
+        },
+      },
+      Math.max(1, endsAt - Date.now()),
+    );
+    passes.push(pass.result);
+  }
+  if (passes.length === 1) {
+    return pass.result;
+  }
+  let written = [...new Set(passes.flatMap((result) => result.written))];
+  return {
+    scriptResult: pass.result.scriptResult,
+    written,
+    unchanged: [
+      ...new Set(passes.flatMap((result) => result.unchanged)),
+    ].filter((url) => !written.includes(url)),
+  };
+}
+
+// One pass of an automation's script, as `automation` describes the run.
+// Answers what a Preview's `realm.resolve.batch` sent at once, when it did.
+async function runAutomationPass(
+  options: AutomationRunOptions,
+  automation: AutomationRunContext,
+  timeoutMs: number,
+): Promise<{
+  result: AutomationRunResult;
+  inlineBatch: InlineResolveBatch | undefined;
+}> {
+  let { code, io, progress, signal } = options;
   // The realm server logs each call it makes for the run as it makes it, so
   // the script's lines recorded before a call are sent first, and the run's
   // log keeps one order.
@@ -3514,8 +3662,9 @@ export async function runAutomationScript(
       return await call(...args);
     };
   let secrets = options.secrets ?? [];
-  let timeoutMs = automationTimeLimitMs(options.secondsCap);
   let realmURL = ensureTrailingSlash(options.realmURL);
+  let defaultDeadlineMinutes =
+    options.batchDeadlineMinutes ?? DEFAULT_BATCH_DEADLINE_MINUTES;
   let paths = new RealmPaths(new URL(realmURL));
   // Whether a reference, in any form the network resolves, names this realm
   // itself (`root`) or anything in it.
@@ -3579,15 +3728,25 @@ export async function runAutomationScript(
       search: refused('realm.web.search'),
       read: refused('realm.web.read'),
       resolve: afterFlush(io.resolve),
-      ...(io.resolveBatch
+      // A Preview sends its batch at once, and only when the card turns on
+      // batched AI, as the batch path admits a run's batch only then.
+      ...(automation.dryRun
         ? {
-            batch: {
-              submit: afterFlush(io.resolveBatch),
-              defaultDeadlineMinutes:
-                options.batchDeadlineMinutes ?? DEFAULT_BATCH_DEADLINE_MINUTES,
-            },
+            batch: options.batchedAI
+              ? { inline: true as const, defaultDeadlineMinutes }
+              : {
+                  refused:
+                    "realm.resolve.batch needs the automation card to turn on batchedAI, and this card doesn't",
+                },
           }
-        : {}),
+        : io.resolveBatch
+          ? {
+              batch: {
+                submit: afterFlush(io.resolveBatch),
+                defaultDeadlineMinutes,
+              },
+            }
+          : {}),
     },
     () => undefined,
     refused('realm.operations.capabilities'),
@@ -3673,9 +3832,12 @@ export async function runAutomationScript(
     throw redactedError(failure, secrets);
   }
   return {
-    scriptResult: redactSecrets(result.scriptResult, secrets),
-    written: [...session.saved],
-    unchanged: [...session.unchanged],
+    result: {
+      scriptResult: redactSecrets(result.scriptResult, secrets),
+      written: [...session.saved],
+      unchanged: [...session.unchanged],
+    },
+    inlineBatch: session.inlineBatch,
   };
 }
 

@@ -959,18 +959,16 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(automation?.pauseReason, 'webhook-owner-lost-access');
     });
 
-    test('an automation switched on before its snapshot recorded webhooks takes a delivery its card names', async function (assert) {
+    test('an automation whose snapshot has no webhookPaths takes no delivery, even to a webhook its card names', async function (assert) {
       await switchOnHooked();
       await dbAdapter.execute(
         `UPDATE automations SET caps_snapshot = caps_snapshot - 'webhookPaths' WHERE automation_id = $1`,
         { bind: [automationId(HOOKED)] },
       );
-      let response = await deliver('delivery-6', { legacy: true });
+      let response = await deliver('delivery-6', { unagreed: true });
       assert.strictEqual(response.status, 200, response.text);
-      assert.strictEqual(response.body.automationRunsStarted, 1);
-      let [run] = await runsOfHooked();
-      assert.strictEqual(run?.slot, 'delivery:delivery-6');
-      await ended(run.id);
+      assert.strictEqual(response.body.automationRunsStarted, 0);
+      assert.deepEqual(await runsOfHooked(), [], 'no run');
     });
 
     test('an automation that is off takes no delivery', async function (assert) {
@@ -1592,6 +1590,23 @@ module(basename(import.meta.filename), function (hooks) {
           },
         });
       assert.strictEqual(mixed.status, 400, mixed.text);
+    });
+
+    test('a share whose key doesn’t fit the slot is no share the slot can use', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      // The shared key becomes an OAuth app's, good only at another host.
+      await dbAdapter.execute(
+        `INSERT INTO oauth_clients (key_id, client_id, grant_type, token_url, token_auth, api_hosts) VALUES ($1, 'elsewhere', 'client_credentials', $2, 'client_secret_post', ARRAY['api.github.com'])`,
+        { bind: [share.keyId!, `${VENDOR}/token`] },
+      );
+      let response = await switchOn(OWNER, SHARED);
+      assert.deepEqual(
+        response.body.meta.keyApprovals.operations[0].missing.map(
+          (m: { canApprove: string }) => m.canApprove,
+        ),
+        ['nobody-yet'],
+        'nobody can approve the slot until a share whose key fits it is shared',
+      );
     });
 
     test('an {{apiKey}} slot with no share in the realm can be approved by nobody yet', async function (assert) {
