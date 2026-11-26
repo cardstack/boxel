@@ -953,10 +953,18 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     } else {
-      this.subscribeToRealm(rri(id));
+      let subscribed = this.subscribeToRealm(rri(id), { warn: false });
       // intentionally not awaiting this. we keep track of the promise in
       // this.newReferencePromises
-      this.wireUpNewReference(id, readType);
+      let wired = this.wireUpNewReference(id, readType);
+      if (!subscribed) {
+        // A realm the user reaches only through its policy is unknown until
+        // the card's first load signs in to it, so subscribe once that's done.
+        void wired.then(
+          () => this.subscribeToRealm(rri(id)),
+          () => undefined,
+        );
+      }
     }
   }
 
@@ -5593,17 +5601,23 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
-  private subscribeToRealm(url: RealmResourceIdentifier | URL) {
+  // Answers whether the realm is known, so a caller can try again once it is.
+  private subscribeToRealm(
+    url: RealmResourceIdentifier | URL,
+    { warn = true }: { warn?: boolean } = {},
+  ): boolean {
     if (this.hostModeService.isActive) {
-      return;
+      return true;
     }
 
     let realmURL = this.realm.realmOf(url);
     if (!realmURL) {
-      console.warn(
-        `could not determine realm for card ${url instanceof URL ? url.href : url} when trying to subscribe to realm`,
-      );
-      return;
+      if (warn) {
+        console.warn(
+          `could not determine realm for card ${url instanceof URL ? url.href : url} when trying to subscribe to realm`,
+        );
+      }
+      return false;
     }
     let subscription = this.subscriptions.get(realmURL);
     if (!subscription) {
@@ -5613,6 +5627,7 @@ export default class StoreService extends Service implements StoreInterface {
         ),
       });
     }
+    return true;
   }
 
   private async loadPatchedInstances(
