@@ -69,6 +69,9 @@ export class LeaseManager {
   #timer: ReturnType<typeof setInterval> | undefined;
   #deadline: ReturnType<typeof setTimeout> | undefined;
   #ticking: Promise<void> | undefined;
+  // When the tick in progress started, so that a missed deadline can say how
+  // long its renewal had been pending.
+  #tickInFlightSince: number | undefined;
   // Set once the manager stops renewing, after a stop, an abandon or a loss.
   #stopped = false;
   #onLost: ((error: LeaseLostError) => void) | undefined;
@@ -147,6 +150,17 @@ export class LeaseManager {
   // `LeaseLostError` when a held shard's renewal returns no row.
   async tick(): Promise<void> {
     let startedAt = performance.now();
+    this.#tickInFlightSince = startedAt;
+    try {
+      await this.#tick(startedAt);
+    } finally {
+      if (this.#tickInFlightSince === startedAt) {
+        this.#tickInFlightSince = undefined;
+      }
+    }
+  }
+
+  async #tick(startedAt: number): Promise<void> {
     if (this.#claimed.size > 0) {
       await this.#renew();
     }
@@ -262,17 +276,20 @@ export class LeaseManager {
   #armDeadline(tickStartedAt: number): void {
     let { renewMs, expiryMs } = this.#options;
     let windowMs = (renewMs + expiryMs) / 2;
+    let due = tickStartedAt + windowMs;
     clearTimeout(this.#deadline);
     this.#deadline = setTimeout(
-      () =>
+      () => {
+        let now = performance.now();
         this.#lost(
           new LeaseLostError(this.held, {
             cause: new Error(
-              `no renewal finished within ${windowMs}ms of the last`,
+              `no renewal finished within ${windowMs}ms of the last (${missedDeadlineTiming(now, tickStartedAt, due, this.#tickInFlightSince)})`,
             ),
           }),
-        ),
-      Math.max(0, tickStartedAt + windowMs - performance.now()),
+        );
+      },
+      Math.max(0, due - performance.now()),
     );
   }
 
@@ -300,6 +317,24 @@ export class LeaseManager {
       this.#timer = undefined;
     }
   }
+}
+
+// How a missed deadline came about. A renewal that started on schedule,
+// `renewMs` after the last, and was still in flight at a deadline timer that
+// fired on time points at the database. A renewal that started late, none in
+// flight at all, or a deadline timer that fired well past its due time points
+// at a stalled process (a blocked event loop or a starved CPU).
+function missedDeadlineTiming(
+  now: number,
+  lastTickStartedAt: number,
+  due: number,
+  tickInFlightSince: number | undefined,
+): string {
+  let renewal =
+    tickInFlightSince === undefined
+      ? 'no renewal in flight'
+      : `renewal started ${Math.round(tickInFlightSince - lastTickStartedAt)}ms after the last and in flight for ${Math.round(now - tickInFlightSince)}ms`;
+  return `${renewal}; deadline timer fired ${Math.round(now - due)}ms late`;
 }
 
 function sorted(shards: Iterable<number>): number[] {
