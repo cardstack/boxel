@@ -8,6 +8,7 @@ import { dirSync } from 'tmp';
 import fsExtra from 'fs-extra';
 const { copySync, ensureDirSync } = fsExtra;
 import {
+  addAutomationRunTabTime,
   createAutomationRun,
   dropFinishedAIBatchRequests,
   getAIBatch,
@@ -24,6 +25,7 @@ import {
   VirtualNetwork,
   type AutomationRun,
 } from '@cardstack/runtime-common';
+import { HIT_A_CAP_REASON } from '@cardstack/runtime-common/automation-runs';
 import {
   pauseAutomation,
   resumeAutomation,
@@ -140,6 +142,8 @@ module(basename(import.meta.filename), function () {
     let fetchStub: sinon.SinonStub;
     let submitAnswer: { status: number; body: unknown } | 'network-error';
     let statusAnswer: { status: number; body: unknown };
+    // Answers for the next status reads, in order, before `statusAnswer`.
+    let statusQueue: { status: number; body: unknown }[];
     // `AI_BATCH_SUBMITS_ENABLED` as the test found it.
     let submitsEnabled: string | undefined;
 
@@ -220,6 +224,7 @@ module(basename(import.meta.filename), function () {
         );
 
         sent = [];
+        statusQueue = [];
         submitAnswer = {
           status: 202,
           body: {
@@ -274,7 +279,10 @@ module(basename(import.meta.filename), function () {
                 body,
                 auth: headers.get('authorization') ?? '',
               });
-              let answer = method === 'POST' ? submitAnswer : statusAnswer;
+              let answer =
+                method === 'POST'
+                  ? submitAnswer
+                  : (statusQueue.shift() ?? statusAnswer);
               if (answer === 'network-error') {
                 throw new TypeError('fetch failed');
               }
@@ -1487,6 +1495,101 @@ module(basename(import.meta.filename), function () {
       assert.ok(gone.body.requests[0].body);
     });
 
+    test('a read OpenRouter fails is tried again, and a batch that then answers gives its results', async function (assert) {
+      await submitPlanned();
+      await deadlinePassed();
+      let { token } = await followUpRun();
+      let unavailable = { status: 502, body: { error: 'bad gateway' } };
+      statusQueue = [unavailable, unavailable];
+      statusAnswer = completedWith([
+        { custom_id: 'ticket-1', response: chatAnswer('{"label":"bug"}') },
+        { custom_id: 'ticket-2', response: chatAnswer('{"label":"idea"}') },
+      ]);
+      let readsBefore = sent.length;
+
+      let response = await readFollowUp(token);
+
+      assert.strictEqual(response.status, 200, response.text);
+      assert.false(response.body.late, 'the third read gives the results');
+      assert.strictEqual(sent.length - readsBefore, 3, 'it read three times');
+    });
+
+    test('a batch that can’t be read falls back, and stays late once it can be, though its row said completed', async function (assert) {
+      await submitPlanned();
+      await deadlinePassed();
+      await dbAdapter.execute(
+        `UPDATE ai_batches SET state = 'completed' WHERE batch_id = 'batch_123'`,
+      );
+      let { token } = await followUpRun();
+      statusAnswer = { status: 503, body: { error: 'unavailable' } };
+
+      let unread = await readFollowUp(token);
+
+      assert.strictEqual(unread.status, 200, unread.text);
+      assert.true(unread.body.late);
+      assert.strictEqual(unread.body.state, 'unread');
+      assert.ok(
+        (await getAIBatch(dbAdapter, 'batch_123'))?.deadlineMissedAt,
+        'the fallback is recorded on the batch, final status or not',
+      );
+
+      statusAnswer = completedWith([
+        { custom_id: 'ticket-1', response: chatAnswer('{"label":"bug"}') },
+        { custom_id: 'ticket-2', response: chatAnswer('{"label":"idea"}') },
+      ]);
+      let again = await readFollowUp(token);
+      assert.true(
+        again.body.late,
+        'a later attempt never switches to the results once its requests went at the normal price',
+      );
+    });
+
+    test('a late follow-up’s requests sent at the normal price count against the run’s resolve cap, past which the run ends', async function (assert) {
+      await switchOn(AUTOMATION, true, 100, 2);
+      let submitting = await runningRun();
+      await submit(submitting.token, twoRequests());
+      await deadlinePassed();
+      let { run, token } = await followUpRun();
+      let read = await readFollowUp(token);
+      assert.true(read.body.late);
+      submitAnswer = {
+        status: 200,
+        body: {
+          id: 'gen-1',
+          model: MODEL,
+          choices: [{ message: { content: '{}' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 20, cost: 0.0001 },
+        },
+      };
+      let send = (body: unknown) =>
+        request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            method: 'POST',
+            requestBody: JSON.stringify(body),
+          });
+
+      for (let { body } of read.body.requests) {
+        let response = await send(body);
+        assert.strictEqual(response.status, 200, response.text);
+      }
+      let past = await send(read.body.requests[0].body);
+
+      assert.strictEqual(past.status, 403, past.text);
+      let row = await getAutomationRun(dbAdapter, run.id);
+      assert.strictEqual(row?.state, 'error');
+      assert.strictEqual(row?.errorReason, HIT_A_CAP_REASON);
+      assert.strictEqual(
+        row?.resolveCalls,
+        2,
+        'each request sent at the normal price counted once',
+      );
+    });
+
     test('only the batch’s own follow-up reads it for its results', async function (assert) {
       await submitPlanned();
       let { token } = await runningRun(AUTOMATION, '2026-11-12T11:30:00.000Z');
@@ -1512,11 +1615,39 @@ module(basename(import.meta.filename), function () {
         'a running follow-up may still send them',
       );
 
-      await finishAutomationRun(dbAdapter, run.id, 1, { state: 'complete' });
+      // A pause holds the running follow-up that used tab time: it ends in
+      // favor of a new pending run of the batch, which may still send them.
+      await addAutomationRunTabTime(dbAdapter, run.id, 250);
+      let paused = await pauseAutomation(
+        dbAdapter,
+        { automationId: AUTOMATION, user: PAYER },
+        { matrixServerName: 'localhost', virtualNetwork: new VirtualNetwork() },
+      );
+      assert.true(paused.ok);
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, run.id))?.state,
+        'canceled',
+      );
+      await dropFinishedAIBatchRequests(dbAdapter);
+      assert.ok(
+        await getAIBatchRequests(dbAdapter, 'batch_123'),
+        'a held follow-up’s replacement may still send them',
+      );
+
+      let replacement = (await getAIBatch(dbAdapter, 'batch_123'))!;
+      let [row] = await dbAdapter.execute(
+        `SELECT follow_up_run_id FROM ai_batches WHERE batch_id = 'batch_123'`,
+      );
+      assert.notStrictEqual(row.follow_up_run_id, run.id);
+      let next = await started(String(row.follow_up_run_id));
+      await finishAutomationRun(dbAdapter, next.run.id, 1, {
+        state: 'complete',
+      });
       await dropFinishedAIBatchRequests(dbAdapter);
       assert.strictEqual(
-        await getAIBatchRequests(dbAdapter, 'batch_123'),
+        await getAIBatchRequests(dbAdapter, replacement.batchId),
         undefined,
+        'the follow-up that ends for good drops them',
       );
     });
 

@@ -170,6 +170,11 @@ export default class RunAutomationTool extends HostBaseTool<
     // anyway.
     await flushBefore(progress, endsAt - FINAL_FLUSH_MARGIN_MS);
 
+    // The worker holds a follow-up whose tab doesn't say it ran the batch's
+    // follow-up, so it never commits without the batch's answers.
+    if (typeof scriptInput.followUpBatchId === 'string') {
+      outcome.followUpBatchId = scriptInput.followUpBatchId;
+    }
     let commandModule = await this.loadToolModule();
     return new commandModule.JsonCard({ json: outcome });
   }

@@ -69,8 +69,9 @@ export interface AIBatch {
   // the batch is open.
   finalizedAt: string | null;
   // When a run first read the batch, at or after its deadline, and found it
-  // still open. That run falls back to the normal price, so the batch is
-  // late from then on. Null while no run has.
+  // still open, or its follow-up first sent its requests at the normal price,
+  // whatever the batch's status. The batch is late from then on, and its
+  // results are never used. Null while neither has happened.
   deadlineMissedAt: string | null;
   // When the settle job last tried to read the batch.
   settleReadAt: string | null;
@@ -461,10 +462,10 @@ export async function dropFinishedAIBatchRequests(
   ]);
 }
 
-// Records that a batch's follow-up found the batch still open and sends its
-// requests at the normal price, whether or not its deadline has passed: the
-// batch is late from then on, and its results, once it ends, are never used.
-// A batch already in a final status is left as it is.
+// Records that a batch's follow-up sends the batch's requests at the normal
+// price, whatever the batch's status: the batch is late from then on, so no
+// later attempt of the follow-up switches to its results after its requests
+// were paid for again.
 export async function recordAIBatchFallback(
   dbAdapter: DBAdapter,
   batchId: string,
@@ -472,9 +473,6 @@ export async function recordAIBatchFallback(
   await query(dbAdapter, [
     'UPDATE ai_batches SET deadline_missed_at = COALESCE(deadline_missed_at, now()) WHERE batch_id =',
     param(batchId),
-    'AND state NOT IN (',
-    ...finalStatesList(),
-    ')',
   ]);
 }
 

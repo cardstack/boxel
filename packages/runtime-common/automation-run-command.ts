@@ -223,6 +223,11 @@ export type AutomationScriptOutcome = (
   // the tab's clock, for the run's telemetry. Absent when the script never
   // started.
   timing?: AutomationScriptTiming;
+  // The batch whose follow-up the tab ran, echoing the input's
+  // `followUpBatchId`: a tab that leaves it out never read the batch, so its
+  // script ran without the batch's answers (`run-automation.ts` holds such a
+  // follow-up for another attempt).
+  followUpBatchId?: string;
 };
 
 export interface AutomationScriptTiming extends JSONTypes.Object {

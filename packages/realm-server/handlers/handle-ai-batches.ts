@@ -5,7 +5,6 @@ import {
   runActsAsDirectWriter,
   getAIBatch,
   getAIBatchRequests,
-  isFinalAIBatchState,
   isLateAIBatch,
   recordAIBatchFallback,
   listAIBatchesForRun,
@@ -428,15 +427,16 @@ export function handleAIBatchStatus(args: AIBatchHandlerArgs) {
 // trigger is `batch` and whose slot is the batch's id. It answers an
 // `AIBatchFollowUpRead`:
 //
-// - A batch OpenRouter reports completed, with its results, that no run has
-//   found still open past its deadline: each request gets its result, by
-//   its `customId`, as OpenRouter's chat completion for it or the error it
-//   got.
+// - A batch OpenRouter reports completed, with its results, that isn't late:
+//   each request gets its result, by its `customId`, as OpenRouter's chat
+//   completion for it or the error it got.
 // - Any other batch is late: it was still open, or failed, expired or was
 //   canceled, or OpenRouter no longer holds it (`410`, 30 days after submit),
-//   or couldn't be read. Each request carries the body the submit recorded,
-//   which the follow-up sends at the normal price. A batch read still open is
-//   recorded as late, so its results are never used, even once it ends.
+//   or it couldn't be read after a few tries, or an earlier read already fell
+//   back. Each request carries the body the submit recorded, which the
+//   follow-up sends at the normal price. Every fallback is recorded on the
+//   batch (`recordAIBatchFallback`), so its results are never used once its
+//   requests have gone at the normal price.
 //
 // Each request also carries its body when the batch completed: the follow-up
 // reads each result against the request's output schema, as `realm.resolve`
@@ -473,9 +473,9 @@ export function handleAIBatchFollowUp(args: AIBatchHandlerArgs) {
     ]);
     let current = (await getAIBatch(dbAdapter, batch.batchId)) ?? batch;
     let late = !read.results || isLateAIBatch(current);
-    if (late && !isFinalAIBatchState(current.state)) {
-      // Its results, once it ends, are never used: these requests are sent
-      // at the normal price instead.
+    if (late) {
+      // No later attempt switches to the batch's results once its requests
+      // have gone at the normal price.
       await recordAIBatchFallback(dbAdapter, batch.batchId);
     }
     let milestone = batch.milestone ?? DEFAULT_BATCH_MILESTONE;
@@ -524,13 +524,41 @@ export function handleAIBatchFollowUp(args: AIBatchHandlerArgs) {
 // `lib/realm-runner/research.ts`).
 const DEFAULT_BATCH_MILESTONE = 'batched AI';
 
+// How long the follow-up's read waits before each retry of a batch OpenRouter
+// couldn't answer for. A read that still fails falls back to the normal
+// price: the follow-up is the batch's one chance to reach the workspace, so
+// it pays twice rather than lose the answers.
+const FOLLOW_UP_READ_RETRY_MS = [500, 2000];
+
 // The batch's status as OpenRouter reports it now, recorded on its row, and
 // its results when it completed with them. `gone` when OpenRouter no longer
-// holds the batch; `unread` when it couldn't be read.
+// holds the batch; `unread` when it couldn't be read, after the retries.
 async function readBatchResults(
   dbAdapter: DBAdapter,
   batch: AIBatch,
 ): Promise<{ state: string; results?: unknown[] }> {
+  for (let retry = 0; ; retry++) {
+    let { final, ...read } = await readBatchOnce(dbAdapter, batch);
+    if (
+      read.state !== 'unread' ||
+      final ||
+      retry >= FOLLOW_UP_READ_RETRY_MS.length
+    ) {
+      return read;
+    }
+    await new Promise((wake) =>
+      setTimeout(wake, FOLLOW_UP_READ_RETRY_MS[retry]),
+    );
+  }
+}
+
+// One read of the batch. `final` marks an `unread` a retry can't change: no
+// OpenRouter key, a call the outbound guard refused before sending it, or a
+// 4xx other than a rate limit.
+async function readBatchOnce(
+  dbAdapter: DBAdapter,
+  batch: AIBatch,
+): Promise<{ state: string; results?: unknown[]; final?: boolean }> {
   let answer = await callOpenRouterBatchAPI(dbAdapter, {
     url: openRouterBatchURL(batch.batchId),
     method: 'GET',
@@ -539,7 +567,10 @@ async function readBatchResults(
     log.warn(
       `could not read batch ${batch.batchId} for its follow-up: ${answer.kind === 'no-key' ? 'no OpenRouter key for batches' : String((answer.error as Error)?.message ?? answer.error)}`,
     );
-    return { state: 'unread' };
+    return {
+      state: 'unread',
+      final: answer.kind === 'no-key' || !answer.sent,
+    };
   }
   let { status, json } = answer;
   if (status === 404 || status === 410) {
@@ -551,7 +582,10 @@ async function readBatchResults(
     log.warn(
       `could not read batch ${batch.batchId} for its follow-up: OpenRouter answered ${status}`,
     );
-    return { state: 'unread' };
+    return {
+      state: 'unread',
+      final: status >= 400 && status < 500 && status !== 429,
+    };
   }
   await recordAIBatchState(dbAdapter, batch.batchId, {
     state: read.status,
@@ -622,7 +656,7 @@ function describeLate(state: string, batch: AIBatch): string {
       return "it couldn't be read from OpenRouter";
     case 'completed':
       return batch.deadlineMissedAt
-        ? `a run found it still open past its deadline, at ${batch.deadlineMissedAt}`
+        ? `its requests were already sent at the normal price, at ${batch.deadlineMissedAt}`
         : 'OpenRouter gave no results for it';
     case 'failed':
     case 'expired':
