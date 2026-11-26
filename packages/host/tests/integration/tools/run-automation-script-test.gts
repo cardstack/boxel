@@ -36,6 +36,7 @@ import {
 import type { AutomationRunContext } from '@cardstack/host/lib/realm-runner/types';
 import { watchedScriptOutcome } from '@cardstack/host/tools/run-automation';
 import RunRealmCodeTool, {
+  BatchNotReadableYet,
   clickRequiredCallsIn,
   runAutomationScript,
   type AutomationRunOptions,
@@ -1330,6 +1331,67 @@ return 'done';`);
         "task: Batch failed: sent the batch's 2 AI requests at the normal price",
       ),
     );
+  });
+
+  test('a follow-up asks again for a completed batch it couldn’t read yet, and gets its results once it can', async function (assert) {
+    let tries = 0;
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let body = resolveChatBody(
+      resolveRequest({ ...CLASSIFY, input: { ticket: 'one' } }),
+    );
+    let { done } = run(FOLLOW_UP_SCRIPT, {
+      automation: { ...CONTEXT, trigger: { label: 'batch', kind: 'batch' } },
+      followUpBatchId: 'batch_1',
+      secondsCap: 30,
+      io: {
+        ...tool.automationRealmIO(testRealmURL),
+        readBatchFollowUp: async (batchId) => {
+          tries++;
+          if (tries < 3) {
+            throw new BatchNotReadableYet('not yet');
+          }
+          return {
+            id: batchId,
+            deadline: '2026-11-13T12:30:00.000Z',
+            milestone: 'classify tickets',
+            plan: [],
+            late: false,
+            state: 'completed',
+            requests: [{ body, answer: chatAnswer('{"label":"bug"}') }],
+          };
+        },
+      },
+    });
+    let result = JSON.parse((await done).scriptResult);
+
+    assert.strictEqual(tries, 3);
+    assert.false(result.late);
+    assert.deepEqual(result.results, ['bug']);
+  });
+
+  test('a follow-up that can’t read its completed batch within its share of the time limit fails with that, for the worker to hold it', async function (assert) {
+    let tries = 0;
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let { done } = run(FOLLOW_UP_SCRIPT, {
+      automation: { ...CONTEXT, trigger: { label: 'batch', kind: 'batch' } },
+      followUpBatchId: 'batch_1',
+      secondsCap: 30,
+      io: {
+        ...tool.automationRealmIO(testRealmURL),
+        readBatchFollowUp: async () => {
+          tries++;
+          throw new BatchNotReadableYet(
+            "The follow-up couldn't read batch batch_1 yet",
+          );
+        },
+        resolveChat: async () => {
+          throw new Error('nothing is sent at the normal price');
+        },
+      },
+    });
+
+    await assert.rejects(done, /couldn't read batch batch_1 yet/);
+    assert.strictEqual(tries, 3, 'it asked within a third of its time left');
   });
 
   test('a follow-up whose batch can’t be read fails its run before the script runs', async function (assert) {

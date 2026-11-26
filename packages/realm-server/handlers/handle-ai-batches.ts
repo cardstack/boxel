@@ -433,10 +433,9 @@ export function handleAIBatchStatus(args: AIBatchHandlerArgs) {
 // - Any other batch is late: it was still open, or failed, expired or was
 //   canceled, or OpenRouter no longer holds it (`410`, 30 days after submit),
 //   or it couldn't be read after a few tries, or an earlier read already fell
-//   back. Each request carries the body the submit recorded, which the
-//   follow-up sends at the normal price. Every fallback is recorded on the
-//   batch (`recordAIBatchFallback`), so its results are never used once its
-//   requests have gone at the normal price.
+//   back. A batch whose row says it completed, and that can't be read, is
+//   answered 503 instead: its results must be used, so the tab asks again,
+//   and holds the follow-up when none of its tries reads the batch.
 //
 // Each request also carries its body when the batch completed: the follow-up
 // reads each result against the request's output schema, as `realm.resolve`
@@ -472,6 +471,23 @@ export function handleAIBatchFollowUp(args: AIBatchHandlerArgs) {
       readRunMilestones(dbAdapter, batch.runId),
     ]);
     let current = (await getAIBatch(dbAdapter, batch.batchId)) ?? batch;
+    if (
+      read.state === 'unread' &&
+      current.state === 'completed' &&
+      !isLateAIBatch(current)
+    ) {
+      // The batch completed and OpenRouter still holds its results, which
+      // the follow-up must use (ADR 030 §1.5): the tab asks again, and holds
+      // the follow-up for the tick to start again when none of its tries
+      // reads the batch, rather than paying for its requests twice.
+      await sendResponseForError(
+        ctxt,
+        503,
+        'Service Unavailable',
+        `Batch ${batch.batchId} completed, and OpenRouter couldn't be read for its results; ask again`,
+      );
+      return;
+    }
     let late = !read.results || isLateAIBatch(current);
     if (late) {
       // No later attempt switches to the batch's results once its requests
@@ -525,9 +541,8 @@ export function handleAIBatchFollowUp(args: AIBatchHandlerArgs) {
 const DEFAULT_BATCH_MILESTONE = 'batched AI';
 
 // How long the follow-up's read waits before each retry of a batch OpenRouter
-// couldn't answer for. A read that still fails falls back to the normal
-// price: the follow-up is the batch's one chance to reach the workspace, so
-// it pays twice rather than lose the answers.
+// couldn't answer for. A batch whose row says it completed is answered 503
+// when the read still fails; any other falls back to the normal price.
 const FOLLOW_UP_READ_RETRY_MS = [500, 2000];
 
 // The batch's status as OpenRouter reports it now, recorded on its row, and

@@ -86,6 +86,9 @@ export const RUN_READ_REALMS = ['@cardstack/base/', '@cardstack/catalog/'];
 // Why a batch's follow-up was held after its tab answered without reading the
 // batch.
 export const FOLLOW_UP_TAB_TOO_OLD_REASON = 'follow-up-tab-too-old';
+// Why a batch's follow-up was held after its tab found the batch completed but
+// couldn't read its results.
+export const FOLLOW_UP_BATCH_UNREADABLE_REASON = 'follow-up-batch-unreadable';
 
 // How many times a commit is sent again when a write was staged while it
 // started (`overlay-changed`).
@@ -639,6 +642,21 @@ async function attemptRun(
   emitAutomationRunEvent(() =>
     scriptEvent(ids, tabStartedAt, tabMs, answered, answer),
   );
+  if (
+    kind === 'batch' &&
+    result?.status === 'ready' &&
+    outcome.followUpBatchId === run.slot &&
+    outcome.followUpBatchUnreadable
+  ) {
+    // The batch completed, and OpenRouter couldn't be read for its results,
+    // which the follow-up must use while OpenRouter holds them. Nothing the
+    // script staged lands; the tick starts the follow-up again.
+    return await hold(
+      FOLLOW_UP_BATCH_UNREADABLE_REASON,
+      "the batch completed, and its results couldn't be read from OpenRouter",
+      { atAdmission: false },
+    );
+  }
   if (
     kind === 'batch' &&
     result?.status === 'ready' &&

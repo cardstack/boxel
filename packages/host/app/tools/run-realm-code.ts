@@ -3663,6 +3663,8 @@ export interface AutomationRealmIO {
   resolveBatch?: SubmitResolveBatch;
   // A batch's follow-up reads its batch with the run's token, before its
   // script runs (`AIBatchFollowUpRead`).
+  // It throws `BatchNotReadableYet` for a completed batch whose results
+  // couldn't be read yet.
   readBatchFollowUp?: (
     batchId: string,
     signal: AbortSignal,
@@ -3932,7 +3934,7 @@ async function runAutomationPass(
       automation = {
         ...automation,
         batch: await withinTimeLimit(
-          readFollowUpBatch(session, io, followUpBatchId, signal),
+          readFollowUpBatch(session, io, followUpBatchId, signal, endsAt),
           endsAt,
           signal,
         ),
@@ -4005,18 +4007,53 @@ async function readFollowUpBatch(
   io: AutomationRealmIO,
   batchId: string,
   signal: AbortSignal | undefined,
+  endsAt: number,
 ): Promise<AutomationBatch> {
   if (!io.readBatchFollowUp) {
     throw new Error(
       `This run is the follow-up of batch ${batchId}, and its tab has no way to read the batch`,
     );
   }
-  let read = await io.readBatchFollowUp(
-    batchId,
-    signal ?? new AbortController().signal,
-  );
+  let readBatch = io.readBatchFollowUp;
+  let stop = signal ?? new AbortController().signal;
+  // A completed batch whose results can't be read yet is asked for again,
+  // for at most a third of the run's time left and a minute. A read that
+  // never succeeds throws `BatchNotReadableYet`, and the run's tool tells the
+  // worker, which holds the follow-up for the tick to start again: the
+  // batch's results must be used while OpenRouter holds them.
+  let retryUntil =
+    Date.now() +
+    Math.min(FOLLOW_UP_READ_RETRY_LIMIT_MS, (endsAt - Date.now()) / 3);
+  let read: AIBatchFollowUpRead | undefined;
+  for (let retry = 0; !read; retry++) {
+    let wait =
+      FOLLOW_UP_READ_BACKOFF_MS[
+        Math.min(retry, FOLLOW_UP_READ_BACKOFF_MS.length - 1)
+      ];
+    try {
+      read = await readBatch(batchId, stop);
+    } catch (error) {
+      if (
+        !(error instanceof BatchNotReadableYet) ||
+        Date.now() + wait > retryUntil
+      ) {
+        throw error;
+      }
+      await new Promise((wake) => setTimeout(wake, wait));
+    }
+  }
   return await session.followUpBatch(read);
 }
+
+// How long a follow-up waits before each retry of a completed batch it
+// couldn't read yet, and the most it spends retrying.
+const FOLLOW_UP_READ_BACKOFF_MS = [2_000, 5_000, 10_000, 20_000];
+const FOLLOW_UP_READ_RETRY_LIMIT_MS = 60_000;
+
+// The batch path's answer for a completed batch whose results it couldn't
+// read from OpenRouter: the follow-up asks again, and is held when no try
+// reads it.
+export class BatchNotReadableYet extends Error {}
 
 // Settles as `work` does, or rejects once the run's time limit passes or
 // `signal` aborts, whichever comes first.

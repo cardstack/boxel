@@ -26,6 +26,7 @@ import { RealmCallFailure, RealmScriptError } from '../lib/realm-runner/runner';
 import { claimsFromRawToken } from '../services/realm';
 
 import RunRealmCodeTool, {
+  BatchNotReadableYet,
   runAutomationScript,
   type AutomationRealmIO,
   type SubmitResolveBatch,
@@ -105,12 +106,25 @@ export default class RunAutomationTool extends HostBaseTool<
     });
     let runner = new RunRealmCodeTool(this.toolContext);
     let send = this.runTokenSend(runToken);
+    let readBatchFollowUp = this.runTokenBatchFollowUp(runToken);
+    // Whether the follow-up's last read of its batch found it completed but
+    // unreadable, so the worker holds the follow-up rather than ending it.
+    let batchUnreadable = false;
     let io: AutomationRealmIO = {
       ...runner.automationRealmIO(realmURL),
       resolve: (request, signal) => resolveJSON(request, send, signal),
       resolveChat: (body, signal) => resolveChat(body, send, signal),
       resolveBatch: this.runTokenBatchSubmit(runToken),
-      readBatchFollowUp: this.runTokenBatchFollowUp(runToken),
+      readBatchFollowUp: async (batchId, signal) => {
+        try {
+          let read = await readBatchFollowUp(batchId, signal);
+          batchUnreadable = false;
+          return read;
+        } catch (error) {
+          batchUnreadable = error instanceof BatchNotReadableYet;
+          throw error;
+        }
+      },
     };
 
     // The run's time limit counts from its start, so the time it waited for
@@ -174,6 +188,9 @@ export default class RunAutomationTool extends HostBaseTool<
     // follow-up, so it never commits without the batch's answers.
     if (typeof scriptInput.followUpBatchId === 'string') {
       outcome.followUpBatchId = scriptInput.followUpBatchId;
+      if (batchUnreadable) {
+        outcome.followUpBatchUnreadable = true;
+      }
     }
     let commandModule = await this.loadToolModule();
     return new commandModule.JsonCard({ json: outcome });
@@ -259,7 +276,7 @@ export default class RunAutomationTool extends HostBaseTool<
   // the batch's results, or its requests to send at the normal price.
   private runTokenBatchFollowUp(
     runToken: string,
-  ): (batchId: string, signal: AbortSignal) => Promise<AIBatchFollowUpRead> {
+  ): NonNullable<AutomationRealmIO['readBatchFollowUp']> {
     let batchesURL = `${realmServerOf(runToken)}_ai-batches`;
     return async (batchId, signal) => {
       let response = await this.network.fetch(
@@ -273,6 +290,11 @@ export default class RunAutomationTool extends HostBaseTool<
         },
       );
       let text = await response.text();
+      if (response.status === 503) {
+        throw new BatchNotReadableYet(
+          `The follow-up couldn't read batch ${batchId} yet: ${batchRefusal(text)}`,
+        );
+      }
       if (!response.ok) {
         throw new Error(
           `The follow-up couldn't read batch ${batchId}: ${response.status} - ${batchRefusal(text)}`,

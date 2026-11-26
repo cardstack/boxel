@@ -1513,7 +1513,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(sent.length - readsBefore, 3, 'it read three times');
     });
 
-    test('a batch that can’t be read falls back, and stays late once it can be, though its row said completed', async function (assert) {
+    test('a completed batch that can’t be read is answered 503 for the tab to ask again, and gives its results once it can be read', async function (assert) {
       await submitPlanned();
       await deadlinePassed();
       await dbAdapter.execute(
@@ -1522,25 +1522,34 @@ module(basename(import.meta.filename), function () {
       let { token } = await followUpRun();
       statusAnswer = { status: 503, body: { error: 'unavailable' } };
 
-      let unread = await readFollowUp(token);
-
-      assert.strictEqual(unread.status, 200, unread.text);
-      assert.true(unread.body.late);
-      assert.strictEqual(unread.body.state, 'unread');
-      assert.ok(
+      let again = await readFollowUp(token);
+      assert.strictEqual(again.status, 503, again.text);
+      assert.strictEqual(
         (await getAIBatch(dbAdapter, 'batch_123'))?.deadlineMissedAt,
-        'the fallback is recorded on the batch, final status or not',
+        null,
+        'nothing falls back: the batch’s results must be used',
       );
 
       statusAnswer = completedWith([
         { custom_id: 'ticket-1', response: chatAnswer('{"label":"bug"}') },
         { custom_id: 'ticket-2', response: chatAnswer('{"label":"idea"}') },
       ]);
-      let again = await readFollowUp(token);
-      assert.true(
-        again.body.late,
-        'a later attempt never switches to the results once its requests went at the normal price',
-      );
+      let after = await readFollowUp(token);
+      assert.strictEqual(after.status, 200, after.text);
+      assert.false(after.body.late, 'the results are used once read');
+    });
+
+    test('an open batch that can’t be read falls back at once', async function (assert) {
+      await submitPlanned();
+      await deadlinePassed();
+      let { token } = await followUpRun();
+      statusAnswer = { status: 503, body: { error: 'unavailable' } };
+
+      let response = await readFollowUp(token);
+
+      assert.strictEqual(response.status, 200, response.text);
+      assert.true(response.body.late);
+      assert.strictEqual(response.body.state, 'unread');
     });
 
     test('only the batch’s own follow-up reads it for its results', async function (assert) {

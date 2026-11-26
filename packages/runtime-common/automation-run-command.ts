@@ -228,6 +228,10 @@ export type AutomationScriptOutcome = (
   // script ran without the batch's answers (`run-automation.ts` holds such a
   // follow-up for another attempt).
   followUpBatchId?: string;
+  // Set when the follow-up's batch completed and its results couldn't be read
+  // from OpenRouter within the run. The worker holds the follow-up for the
+  // tick to start again, since the batch's results must be used.
+  followUpBatchUnreadable?: boolean;
 };
 
 export interface AutomationScriptTiming extends JSONTypes.Object {
