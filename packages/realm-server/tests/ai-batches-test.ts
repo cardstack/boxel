@@ -9,7 +9,9 @@ import fsExtra from 'fs-extra';
 const { copySync, ensureDirSync } = fsExtra;
 import {
   createAutomationRun,
+  dropFinishedAIBatchRequests,
   getAIBatch,
+  getAIBatchRequests,
   getAutomationRun,
   insertPermissions,
   listAIBatchesForRun,
@@ -22,7 +24,12 @@ import {
   VirtualNetwork,
   type AutomationRun,
 } from '@cardstack/runtime-common';
-import { switchOnAutomation } from '@cardstack/runtime-common/automations';
+import {
+  pauseAutomation,
+  resumeAutomation,
+  switchOnAutomation,
+} from '@cardstack/runtime-common/automations';
+import { startResumedAIBatchFollowUps } from '@cardstack/runtime-common/ai-batch-follow-ups';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   getUserByMatrixUserId,
@@ -641,7 +648,21 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
     });
 
-    test('a realm server that has not turned on batch submits refuses a submit, and still answers a status read', async function (assert) {
+    test('batch submits are on unless the realm server turns them off', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+      delete process.env.AI_BATCH_SUBMITS_ENABLED;
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(response.status, 202, response.text);
+      assert.ok(
+        await getAIBatch(dbAdapter, 'batch_123'),
+        'the batch is recorded',
+      );
+    });
+
+    test('a realm server that turns batch submits off refuses a submit, and still answers a status read', async function (assert) {
       await switchOn();
       let { run, token } = await runningRun();
       process.env.AI_BATCH_SUBMITS_ENABLED = 'false';
@@ -1159,6 +1180,343 @@ module(basename(import.meta.filename), function () {
         sent.length,
         callsBefore,
         'nothing went to OpenRouter',
+      );
+    });
+
+    // The follow-up run of `batch_123`, started by an attempt, and its token.
+    async function followUpRun(): Promise<{
+      run: AutomationRun;
+      token: string;
+    }> {
+      let pending = await createAutomationRun(dbAdapter, {
+        automationId: AUTOMATION,
+        realm: REALM,
+        trigger: 'batch',
+        slot: 'batch_123',
+        actsAs: PAYER,
+      });
+      return await started(pending.id);
+    }
+
+    async function started(
+      runId: string,
+    ): Promise<{ run: AutomationRun; token: string }> {
+      let attempt = await startAutomationRunAttempt(dbAdapter, runId, 1);
+      if (attempt.kind !== 'run') {
+        throw new Error(`expected the attempt to run, got ${attempt.kind}`);
+      }
+      let token = mintRunToken({
+        realmSecretSeed,
+        run: attempt.run,
+        realmURL: REALM_URL,
+        readRealms: [],
+        writesCap: 10,
+        realmServerURL: SERVER_URL,
+        timeLimitSeconds: 600,
+      });
+      return { run: attempt.run, token };
+    }
+
+    function readFollowUp(token: string) {
+      return request
+        .get('/_ai-batches/batch_123/follow-up')
+        .set('Accept', 'application/json')
+        .set('Authorization', `Bearer ${token}`);
+    }
+
+    // A submitting run whose script planned three milestones, and the batch
+    // it submitted in the second.
+    async function submitPlanned() {
+      await switchOn();
+      let { run, token } = await runningRun();
+      await dbAdapter.execute(
+        `UPDATE automation_runs SET milestone_plan = ARRAY['fetch tickets', 'classify tickets', 'save labels'] WHERE id = $1`,
+        { bind: [run.id] },
+      );
+      let response = await submit(token, {
+        ...twoRequests(),
+        milestone: 'classify tickets',
+      });
+      if (response.status !== 202) {
+        throw new Error(`expected a submit, got ${response.status}`);
+      }
+      return run;
+    }
+
+    function completedWith(results: unknown[]) {
+      return {
+        status: 200,
+        body: {
+          id: 'batch_123',
+          status: 'completed',
+          finalized_at: Math.floor(Date.now() / 1000),
+          request_counts: { total: 2, completed: 2, failed: 0 },
+          results,
+        },
+      };
+    }
+
+    function chatAnswer(content: string) {
+      return {
+        status_code: 200,
+        body: {
+          model: MODEL,
+          choices: [{ message: { content }, finish_reason: 'stop' }],
+        },
+      };
+    }
+
+    test('a submit keeps the batch’s requests and its milestone for its follow-up', async function (assert) {
+      await submitPlanned();
+
+      let batch = await getAIBatch(dbAdapter, 'batch_123');
+      assert.strictEqual(batch?.milestone, 'classify tickets');
+      assert.deepEqual(
+        await getAIBatchRequests(dbAdapter, 'batch_123'),
+        twoRequests().requests.map(({ customId, body }) => ({
+          customId,
+          body: { ...body, model: MODEL },
+        })),
+        'each request is kept as it was sent, in its order',
+      );
+    });
+
+    test('a milestone past the longest name a run milestone may have is refused', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+
+      let response = await submit(token, {
+        ...twoRequests(),
+        milestone: 'm'.repeat(81),
+      });
+
+      assert.strictEqual(response.status, 400);
+      assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
+    });
+
+    test('the follow-up of a completed batch gets each request’s result by its customId, and carries on the submitting run’s milestones', async function (assert) {
+      await submitPlanned();
+      await deadlinePassed();
+      let { run, token } = await followUpRun();
+      statusAnswer = completedWith([
+        {
+          custom_id: 'ticket-2',
+          response: null,
+          error: { message: 'max_tokens is greater than the model limit' },
+        },
+        { custom_id: 'ticket-1', response: chatAnswer('{"label":"bug"}') },
+      ]);
+
+      let response = await readFollowUp(token);
+
+      assert.strictEqual(response.status, 200, response.text);
+      let read = response.body;
+      assert.false(read.late, 'the batch’s results are used');
+      assert.strictEqual(read.state, 'completed');
+      assert.strictEqual(read.id, 'batch_123');
+      assert.strictEqual(read.milestone, 'classify tickets');
+      assert.deepEqual(
+        read.plan,
+        ['classify tickets', 'save labels'],
+        'the plan from the batch’s milestone on',
+      );
+      assert.deepEqual(
+        read.requests[0].answer,
+        chatAnswer('{"label":"bug"}').body,
+        'the first request gets its result, though it came second',
+      );
+      assert.deepEqual(read.requests[0].body, {
+        ...chatBody('Classify ticket one'),
+        model: MODEL,
+      });
+      assert.true(
+        /max_tokens is greater than the model limit/.test(
+          read.requests[1].error,
+        ),
+        'a request the batch failed keeps its error',
+      );
+      assert.strictEqual(
+        (await getAIBatch(dbAdapter, 'batch_123'))?.deadlineMissedAt,
+        null,
+        'the batch is not late',
+      );
+      let lines = await dbAdapter.execute(
+        `SELECT message FROM automation_run_log WHERE run_id = $1`,
+        { bind: [run.id] },
+      );
+      assert.true(
+        lines.some((line: { message: string }) =>
+          /completed, and this run picks up its 2 results/.test(line.message),
+        ),
+        'the run’s log says the batch completed',
+      );
+    });
+
+    test('the follow-up of a batch still open past its deadline gets its requests to send at the normal price, and the batch is late from then on', async function (assert) {
+      await submitPlanned();
+      await deadlinePassed();
+      let { token } = await followUpRun();
+
+      let response = await readFollowUp(token);
+
+      assert.strictEqual(response.status, 200, response.text);
+      assert.true(response.body.late, 'the answers are late');
+      assert.strictEqual(response.body.state, 'in_progress');
+      assert.deepEqual(
+        response.body.requests,
+        twoRequests().requests.map(({ body }) => ({
+          body: { ...body, model: MODEL },
+        })),
+        'each request carries its body and no answer',
+      );
+      assert.ok(
+        (await getAIBatch(dbAdapter, 'batch_123'))?.deadlineMissedAt,
+        'the batch is late, so its results are never used',
+      );
+
+      statusAnswer = completedWith([
+        { custom_id: 'ticket-1', response: chatAnswer('{"label":"bug"}') },
+      ]);
+      let again = await readFollowUp(token);
+      assert.true(
+        again.body.late,
+        'a batch that ends after it was found late still gives no results',
+      );
+      assert.strictEqual(again.body.requests[0].answer, undefined);
+    });
+
+    test('the follow-up of a batch that failed or expired gets its requests to send at the normal price', async function (assert) {
+      await submitPlanned();
+      let { token } = await followUpRun();
+      for (let status of ['failed', 'expired']) {
+        statusAnswer = {
+          status: 200,
+          body: { id: 'batch_123', status, results: null },
+        };
+
+        let response = await readFollowUp(token);
+
+        assert.strictEqual(response.status, 200, response.text);
+        assert.true(response.body.late, `a batch that ${status} is late`);
+        assert.strictEqual(response.body.state, status);
+        assert.strictEqual(response.body.requests.length, 2);
+        assert.ok(response.body.requests[1].body);
+      }
+    });
+
+    test('a follow-up a pause held and a resume started past its deadline uses the batch’s results while OpenRouter holds them, and otherwise falls back', async function (assert) {
+      let submitting = await submitPlanned();
+      await finishAutomationRun(dbAdapter, submitting.id, 1, {
+        state: 'complete',
+      });
+      let options = {
+        matrixServerName: 'localhost',
+        virtualNetwork: new VirtualNetwork(),
+      };
+      let paused = await pauseAutomation(
+        dbAdapter,
+        { automationId: AUTOMATION, user: PAYER },
+        options,
+      );
+      assert.true(paused.ok);
+      await deadlinePassed();
+      let resumed = await resumeAutomation(
+        dbAdapter,
+        {
+          automationId: AUTOMATION,
+          user: PAYER,
+          declaration: declaration(),
+          admit: async () => undefined,
+        },
+        options,
+      );
+      assert.true(resumed.ok);
+      let recordingQueue = {
+        publish: async () => ({ id: 1, done: new Promise(() => {}) }) as any,
+        destroy: async () => {},
+      };
+      let [outcome] = await startResumedAIBatchFollowUps(
+        dbAdapter,
+        AUTOMATION,
+        {
+          // A queue that records the follow-up's job rather than running it,
+          // so this test's attempt owns the run.
+          queue: recordingQueue,
+          virtualNetwork,
+        },
+      );
+      if (outcome?.kind !== 'started') {
+        throw new Error(
+          `expected the follow-up to start, got ${outcome?.kind}`,
+        );
+      }
+      let { token } = await started(outcome.runId);
+
+      statusAnswer = completedWith([
+        { custom_id: 'ticket-1', response: chatAnswer('{"label":"bug"}') },
+        { custom_id: 'ticket-2', response: chatAnswer('{"label":"idea"}') },
+      ]);
+      let completed = await readFollowUp(token);
+      assert.strictEqual(completed.status, 200, completed.text);
+      assert.false(
+        completed.body.late,
+        'the completed batch’s results are used',
+      );
+      assert.deepEqual(
+        completed.body.requests.map(
+          (entry: {
+            answer: { choices: { message: { content: string } }[] };
+          }) => entry.answer.choices[0].message.content,
+        ),
+        ['{"label":"bug"}', '{"label":"idea"}'],
+      );
+
+      statusAnswer = {
+        status: 410,
+        body: {
+          error: { code: 410, message: 'Batch results have expired' },
+        },
+      };
+      let gone = await readFollowUp(token);
+      assert.strictEqual(gone.status, 200, gone.text);
+      assert.true(
+        gone.body.late,
+        'once OpenRouter no longer holds the batch, its requests are sent at the normal price',
+      );
+      assert.strictEqual(gone.body.state, 'gone');
+      assert.ok(gone.body.requests[0].body);
+    });
+
+    test('only the batch’s own follow-up reads it for its results', async function (assert) {
+      await submitPlanned();
+      let { token } = await runningRun(AUTOMATION, '2026-11-12T11:30:00.000Z');
+      let callsBefore = sent.length;
+
+      let response = await readFollowUp(token);
+
+      assert.strictEqual(response.status, 403);
+      assert.strictEqual(
+        sent.length,
+        callsBefore,
+        'nothing went to OpenRouter',
+      );
+    });
+
+    test('a batch’s requests are dropped once its follow-up has ended, and kept while it hasn’t', async function (assert) {
+      await submitPlanned();
+      let { run } = await followUpRun();
+
+      await dropFinishedAIBatchRequests(dbAdapter);
+      assert.ok(
+        await getAIBatchRequests(dbAdapter, 'batch_123'),
+        'a running follow-up may still send them',
+      );
+
+      await finishAutomationRun(dbAdapter, run.id, 1, { state: 'complete' });
+      await dropFinishedAIBatchRequests(dbAdapter);
+      assert.strictEqual(
+        await getAIBatchRequests(dbAdapter, 'batch_123'),
+        undefined,
       );
     });
 

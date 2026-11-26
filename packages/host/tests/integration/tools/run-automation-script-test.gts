@@ -2,6 +2,8 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import type { AIBatchFollowUpRead } from '@cardstack/runtime-common';
+
 import type {
   FlushableRunProgressSink,
   RunProgressEvent,
@@ -1143,6 +1145,209 @@ return 'done';`);
 
     await assert.rejects(done, /turn on batchedAI/);
     assert.strictEqual(submitted.length, 0);
+  });
+
+  // A batch's follow-up run of a batch of two CLASSIFY requests, whose read
+  // of its batch answers `read` (with the batch's requests' bodies filled
+  // in), and whose requests sent at the normal price are answered by
+  // `resolveChat`.
+  function followUp(
+    code: string,
+    read: Partial<AIBatchFollowUpRead> & {
+      answers?: (unknown | { error: string })[];
+    },
+    resolveChat: (body: Record<string, unknown>) => Promise<{
+      output: Record<string, unknown>;
+      model: string;
+    }> = async () => {
+      throw new Error('nothing is sent at the normal price');
+    },
+  ) {
+    let bodies = ['one', 'two'].map((ticket) =>
+      resolveChatBody(resolveRequest({ ...CLASSIFY, input: { ticket } })),
+    );
+    let sent: Record<string, unknown>[] = [];
+    let { answers, ...rest } = read;
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let { events, done } = run(code, {
+      automation: {
+        ...CONTEXT,
+        trigger: { label: 'batch', kind: 'batch' },
+        scheduledAt: '2026-11-13T12:30:00.000Z',
+      },
+      followUpBatchId: 'batch_1',
+      io: {
+        ...tool.automationRealmIO(testRealmURL),
+        readBatchFollowUp: async (batchId) => ({
+          id: batchId,
+          deadline: '2026-11-13T12:30:00.000Z',
+          milestone: 'classify tickets',
+          plan: ['classify tickets', 'save labels'],
+          late: false,
+          state: 'completed',
+          requests: bodies.map((body, index) => {
+            let answer = answers?.[index];
+            return answer &&
+              typeof answer === 'object' &&
+              'error' in (answer as object)
+              ? { body, error: (answer as { error: string }).error }
+              : answer === undefined
+                ? { body }
+                : { body, answer };
+          }),
+          ...rest,
+        }),
+        resolveChat: async (body) => {
+          sent.push(body);
+          return await resolveChat(body);
+        },
+      },
+    });
+    return { bodies, sent, events, done };
+  }
+
+  function chatAnswer(content: string) {
+    return {
+      model: 'openai/gpt-4.1-mini-batch',
+      choices: [{ message: { content }, finish_reason: 'stop' }],
+    };
+  }
+
+  const FOLLOW_UP_SCRIPT = `
+    realm.progress.task('read the answers');
+    realm.progress.milestone('save labels');
+    const { batch } = realm.current.automation;
+    return {
+      id: batch.id,
+      late: batch.late,
+      milestone: batch.milestone,
+      deadline: batch.deadline,
+      results: batch.results.map((r) => r.output ? r.output.label : 'failed: ' + r.error),
+      models: batch.results.map((r) => r.model ?? null),
+    };
+  `;
+
+  // The run's plan, milestone and task events, in order.
+  function milestoneEvents(events: RunProgressEvent[]) {
+    return events.flatMap((event) =>
+      event.kind === 'plan'
+        ? [`plan: ${event.milestones.join(', ')}`]
+        : event.kind === 'milestone'
+          ? [`milestone: ${event.name}`]
+          : event.kind === 'task'
+            ? [`task: ${event.text}`]
+            : [],
+    );
+  }
+
+  test("a batch's follow-up gets the completed batch's results, each read as realm.resolve reads its answer, and carries on the batch's milestones", async function (assert) {
+    let { sent, events, done } = followUp(FOLLOW_UP_SCRIPT, {
+      answers: [
+        chatAnswer('{"label":"bug"}'),
+        chatAnswer('{"category":"bug"}'),
+      ],
+    });
+    let result = JSON.parse((await done).scriptResult);
+
+    assert.deepEqual(
+      {
+        id: result.id,
+        late: result.late,
+        milestone: result.milestone,
+        deadline: result.deadline,
+      },
+      {
+        id: 'batch_1',
+        late: false,
+        milestone: 'classify tickets',
+        deadline: '2026-11-13T12:30:00.000Z',
+      },
+    );
+    assert.strictEqual(result.results[0], 'bug');
+    assert.strictEqual(result.models[0], 'openai/gpt-4.1-mini-batch');
+    assert.true(
+      /does not match outputSchema/.test(result.results[1]),
+      `an answer that doesn't match the request's schema is that request's error: ${result.results[1]}`,
+    );
+    assert.strictEqual(sent.length, 0, 'nothing is sent at the normal price');
+    assert.deepEqual(
+      milestoneEvents(events),
+      [
+        'plan: classify tickets, save labels',
+        'milestone: classify tickets',
+        'task: Batch completed: picked up the answers to its 2 AI requests; 1 failed',
+        'task: read the answers',
+        'milestone: save labels',
+      ],
+      "the follow-up enters the batch's milestone, ends it as completed, and the script carries on",
+    );
+  });
+
+  test("a late batch's follow-up sends its requests at the normal price, and the script gets those answers marked late", async function (assert) {
+    let { bodies, sent, events, done } = followUp(
+      FOLLOW_UP_SCRIPT,
+      { late: true, state: 'in_progress' },
+      async (body) => {
+        let content = JSON.parse(
+          ((body.messages as { content: string }[])[1] as { content: string })
+            .content,
+        );
+        if (content.input.ticket === 'two') {
+          throw new Error('realm.resolve: the model refused');
+        }
+        return { output: { label: 'urgent' }, model: 'openai/gpt-4.1-mini' };
+      },
+    );
+    let result = JSON.parse((await done).scriptResult);
+
+    assert.true(result.late, 'the answers are marked late');
+    assert.deepEqual(sent, bodies, 'each request is sent as it was batched');
+    assert.strictEqual(result.results[0], 'urgent');
+    assert.true(
+      /the model refused/.test(result.results[1]),
+      'a request that fails keeps its error in its place',
+    );
+    assert.deepEqual(milestoneEvents(events).slice(0, 3), [
+      'plan: classify tickets, save labels',
+      'milestone: classify tickets',
+      "task: Deadline reached: sent the batch's 2 AI requests at the normal price; 1 failed",
+    ]);
+  });
+
+  test("a failed batch's follow-up says the batch failed, and sends its requests at the normal price", async function (assert) {
+    let { sent, events, done } = followUp(
+      FOLLOW_UP_SCRIPT,
+      { late: true, state: 'failed' },
+      async () => ({ output: { label: 'idea' }, model: 'openai/gpt-4.1-mini' }),
+    );
+    let result = JSON.parse((await done).scriptResult);
+
+    assert.true(result.late);
+    assert.deepEqual(result.results, ['idea', 'idea']);
+    assert.strictEqual(sent.length, 2);
+    assert.true(
+      milestoneEvents(events).includes(
+        "task: Batch failed: sent the batch's 2 AI requests at the normal price",
+      ),
+    );
+  });
+
+  test('a follow-up whose batch can’t be read fails its run before the script runs', async function (assert) {
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let { done } = run(`await realm.fs.writeText('ran.txt', 'yes');`, {
+      automation: { ...CONTEXT, trigger: { label: 'batch', kind: 'batch' } },
+      followUpBatchId: 'batch_1',
+      io: {
+        ...tool.automationRealmIO(testRealmURL),
+        readBatchFollowUp: async () => {
+          throw new Error(
+            "The follow-up couldn't read batch batch_1: 403 - Only the follow-up run of batch batch_1 reads it for its results",
+          );
+        },
+      },
+    });
+
+    await assert.rejects(done, /couldn't read batch batch_1/);
   });
 
   test("the progress sink is flushed before each call the realm server logs, so the run's log keeps one order", async function (assert) {
