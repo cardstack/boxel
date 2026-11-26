@@ -104,16 +104,32 @@ module('openrouter forwarder', function (hooks) {
     assert.strictEqual(calls, 0, 'nothing reaches the realm server');
   });
 
-  test('tells opencode why a forward failed', async function (assert) {
-    forwarder = await startOpenRouterForwarder(async () => {
-      throw new Error(
-        "This profile can't spend AI credits. Sign in again with `boxel profile add --oauth --allow-ai-credits`.",
-      );
-    });
+  test('tells opencode why a forward failed, with the status chosen for the error', async function (assert) {
+    class SignInAgain extends Error {}
+    let fail: Error = new SignInAgain(
+      "This profile can't spend AI credits. Sign in again with `boxel profile add --oauth --allow-ai-credits`.",
+    );
+    forwarder = await startOpenRouterForwarder(
+      async () => {
+        throw fail;
+      },
+      { statusFor: (error) => (error instanceof SignInAgain ? 403 : 502) },
+    );
     let response = await chat(forwarder);
-    assert.strictEqual(response.status, 502);
+    assert.strictEqual(
+      response.status,
+      403,
+      'an error no retry can fix is answered with a 4xx, which opencode does not retry',
+    );
     let body = (await response.json()) as { error: { message: string } };
     assert.true(body.error.message.includes('--allow-ai-credits'));
+
+    fail = new Error('the realm server is unreachable');
+    assert.strictEqual(
+      (await chat(forwarder)).status,
+      502,
+      'any other failure is a 502',
+    );
   });
 
   test('a bearer is made for each forwarder', async function (assert) {

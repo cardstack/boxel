@@ -518,21 +518,6 @@ export class BoxelCLIClient {
   }
 
   /**
-   * Mint a long-lived realm-server JWT. Use only when you need to hand the bare
-   * token to a downstream client that can't go through `authedServerFetch`
-   * (e.g. opencode's static-Authorization provider config): such a client
-   * cannot notice a 401 and re-mint, so it gets a lifetime long enough to
-   * outlast a working session rather than the shorter one interactive callers
-   * take.
-   *
-   * Prefer `authedServerFetch` for server endpoints called from JS — it handles
-   * the per-request 401 retries this getter cannot, and so keeps the shorter
-   * lifetime.
-   *
-   * Throws on a profile signed in with OAuth, which has no realm-server JWT
-   * to give: its token can't spend AI credits.
-   */
-  /**
    * Whether the active profile may spend AI credits: a profile signed in with
    * Matrix always may, and one signed in with OAuth when it was signed in
    * with `--allow-ai-credits`. Undefined when an OAuth connection's scopes
@@ -549,6 +534,22 @@ export class BoxelCLIClient {
     return Boolean(this.pm.getActiveProfile()?.profile.oauth);
   }
 
+  /**
+   * Mint a long-lived realm-server JWT. Use only when you need to hand the bare
+   * token to a downstream client that can't go through `authedServerFetch`
+   * (e.g. opencode's static-Authorization provider config): such a client
+   * cannot notice a 401 and re-mint, so it gets a lifetime long enough to
+   * outlast a working session rather than the shorter one interactive callers
+   * take.
+   *
+   * Prefer `authedServerFetch` for server endpoints called from JS — it handles
+   * the per-request 401 retries this getter cannot, and so keeps the shorter
+   * lifetime.
+   *
+   * Throws on a profile signed in with OAuth, which has no realm-server JWT
+   * to give. Such a profile reaches the realm server's routes, the ones that
+   * spend AI credits included, only through `authedServerFetch`.
+   */
   async getServerToken(): Promise<string> {
     if (this.pm.getActiveProfile()?.profile.oauth) {
       throw new Error(OAUTH_REFUSALS.serverToken);

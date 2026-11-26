@@ -12,6 +12,8 @@ export interface TestProfileOptions {
   matrixUrl: string;
   realmServerUrl: string;
   password: string;
+  // Sign the profile in with OAuth instead, its connection granted `scope`.
+  oauth?: { scope: string };
 }
 
 /**
@@ -28,11 +30,31 @@ export function installTestProfile(options: TestProfileOptions): () => void {
   let profileId = `@${options.username}:localhost`;
   let config = {
     profiles: {
-      [profileId]: {
-        matrixUrl: options.matrixUrl,
-        realmServerUrl: options.realmServerUrl,
-        password: options.password,
-      },
+      [profileId]: options.oauth
+        ? {
+            matrixUrl: options.matrixUrl,
+            realmServerUrl: options.realmServerUrl,
+            matrixUserId: profileId,
+            displayName: options.username,
+            oauth: {
+              issuer: new URL(options.realmServerUrl).origin,
+              tokenEndpoint: new URL(
+                '_oauth-provider/token',
+                options.realmServerUrl,
+              ).href,
+              accessToken: 'access-token-placeholder',
+              accessExpiresAt: new Date(Date.now() + 600_000).toISOString(),
+              connectionEndsAt: new Date(
+                Date.now() + 30 * 24 * 3600_000,
+              ).toISOString(),
+              scope: options.oauth.scope,
+            },
+          }
+        : {
+            matrixUrl: options.matrixUrl,
+            realmServerUrl: options.realmServerUrl,
+            password: options.password,
+          },
     },
     activeProfile: profileId,
   };

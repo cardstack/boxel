@@ -27,7 +27,10 @@ import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 
-import { AiCreditsNotAllowedError } from '@cardstack/boxel-cli/api';
+import {
+  AiCreditsNotAllowedError,
+  OAuthConnectionEndedError,
+} from '@cardstack/boxel-cli/api';
 
 import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -274,13 +277,23 @@ export class OpencodeFactoryAgent implements LoopAgent {
         this.config.realmServerUrl,
       ).href;
       let client = this.config.client;
-      this.forwarder = await startOpenRouterForwarder((body, signal) =>
-        client.authedServerFetch(passthroughUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-          signal,
-        }),
+      this.forwarder = await startOpenRouterForwarder(
+        (body, signal) =>
+          client.authedServerFetch(passthroughUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            signal,
+          }),
+        {
+          // Neither is fixed by trying again: the user has to sign in again.
+          statusFor: (error) =>
+            error instanceof AiCreditsNotAllowedError
+              ? 403
+              : error instanceof OAuthConnectionEndedError
+                ? 401
+                : 502,
+        },
       );
       providerConfig = buildProviderConfig(
         this.config.model,

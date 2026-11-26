@@ -31,6 +31,8 @@ export {
   OAUTH_REFUSALS,
 } from './src/lib/oauth-refusals.ts';
 
+export { OAuthConnectionEndedError } from './src/lib/oauth-login.ts';
+
 export {
   runRealmQunit,
   runTestsForRealm,

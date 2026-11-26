@@ -45,11 +45,16 @@ export async function startOpenRouterForwarder(
   {
     describeError = (error: unknown) =>
       error instanceof Error ? error.message : String(error),
+    statusFor = () => 502,
   }: {
     // How a failed forward is told to opencode. An error that says what the
     // user can do, such as signing in again, reaches the model's transcript
     // and the factory's log this way.
     describeError?: (error: unknown) => string;
+    // The status a failed forward is answered with. opencode retries any
+    // 5xx without end, so an error no retry can fix, such as a connection
+    // that has ended, must be answered with a 4xx or the factory looks hung.
+    statusFor?: (error: unknown) => number;
   } = {},
 ): Promise<OpenRouterForwarder> {
   let bearer = Buffer.from(
@@ -95,7 +100,7 @@ export async function startOpenRouterForwarder(
       if (abort.signal.aborted) {
         return;
       }
-      res.writeHead(502, { 'content-type': 'application/json' });
+      res.writeHead(statusFor(error), { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: describeError(error) } }));
       return;
     }
