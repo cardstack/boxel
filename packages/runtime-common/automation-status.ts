@@ -52,6 +52,11 @@ import {
   shareARealmGrant,
 } from './db-queries/realm-permission-queries.ts';
 import type { IndexedInstanceSource } from './index-query-engine.ts';
+import type { AutomationKeyApprovals } from './automation-key-approval.ts';
+import {
+  keyApprovalStatus,
+  type AutomationKeyApprovalStatus,
+} from './automation-key-approval-status.ts';
 import { RealmPaths } from './paths.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -60,6 +65,10 @@ export { automationRef } from './automation-declaration.ts';
 export const AUTOMATION_STATUS_PATH = '_automation-status';
 // The query parameter naming the automation card, by its URL.
 export const AUTOMATION_STATUS_PARAM = 'automation';
+// The query parameter that asks for the automation's key approvals
+// (`keyApprovals=true`). Checking them looks up each declared operation's
+// definition, so only a view that shows them asks.
+export const AUTOMATION_STATUS_KEY_APPROVALS_PARAM = 'keyApprovals';
 export const AUTOMATION_STATUS_TYPE = 'automation-status';
 
 export interface AutomationTriggerStatus {
@@ -146,6 +155,11 @@ export type AutomationStatusAttributes =
       dailyCredits: number | null;
       spentToday: number;
       triggers: AutomationTriggerStatus[];
+      // Each declared operation's key approvals with the payer as payer,
+      // and who acts on each one missing. Absent when the realm can't check
+      // them (its card doesn't read as an automation, or its script can't
+      // be read).
+      keyApprovals?: AutomationKeyApprovalStatus;
       // What tells the realm's direct writers the automation stopped doing
       // its job, and what fixes it (`automation-notices.ts`), or null.
       notice: AutomationNotice | null;
@@ -200,6 +214,7 @@ export async function answerAutomationStatus({
   viewer,
   automation,
   readInstance,
+  checkKeyApprovals,
   credentialNotices,
   now = Math.floor(clockNow() / 1000),
 }: {
@@ -214,6 +229,15 @@ export async function answerAutomationStatus({
   // The `automation` query parameter.
   automation: string | null;
   readInstance: (url: URL) => Promise<IndexedInstanceSource | undefined>;
+  // Checks the automation's key approvals with `payer` as its payer, against
+  // its card read as `declaration` and its script as the realm holds it;
+  // undefined when the realm can't check them. A realm that can't check
+  // leaves it out, and the answer carries no key approvals.
+  checkKeyApprovals?: (args: {
+    automationId: string;
+    declaration: AutomationDeclaration;
+    payer: string;
+  }) => Promise<AutomationKeyApprovals | undefined>;
   // Reads who a rejected credential's notice is for; absent where no realm
   // server can (`automation-notices.ts`).
   credentialNotices?: CredentialNotices;
@@ -252,6 +276,7 @@ export async function answerAutomationStatus({
   let currentRun =
     (await readCurrentRunMilestones(dbAdapter, automationId)) ?? null;
   let declaration: AutomationDeclaration | undefined;
+  let keyApprovals: AutomationKeyApprovalStatus | undefined;
   let payerShown = false;
   let failures: AutomationFailures | undefined;
   let notice: AutomationNotice | null = null;
@@ -280,6 +305,21 @@ export async function answerAutomationStatus({
       ? readAutomationDeclaration(entry, { automationTypeKey, virtualNetwork })
       : undefined;
     declaration = read?.ok ? read.declaration : undefined;
+    let approvals =
+      declaration && checkKeyApprovals
+        ? await checkKeyApprovals({
+            automationId,
+            declaration,
+            payer: row.payer,
+          })
+        : undefined;
+    keyApprovals = approvals
+      ? await keyApprovalStatus(dbAdapter, {
+          viewer,
+          realmURL: realmURL.href,
+          approvals,
+        })
+      : undefined;
     payerShown =
       row.payer === viewer ||
       (await shareARealmGrant(dbAdapter, viewer, row.payer));
@@ -306,6 +346,7 @@ export async function answerAutomationStatus({
       spentThisMonth,
       spentToday,
       lastRunUsage,
+      keyApprovals,
       notice,
     }),
   };
@@ -331,6 +372,7 @@ export function automationStatusDocument({
   spentThisMonth = 0,
   spentToday = 0,
   lastRunUsage = null,
+  keyApprovals,
   notice = null,
 }: {
   url: string;
@@ -347,6 +389,8 @@ export function automationStatusDocument({
   spentThisMonth?: number;
   spentToday?: number;
   lastRunUsage?: AutomationRunUsage | null;
+  // Read only for a switched-on automation, so absent when `row` is.
+  keyApprovals?: AutomationKeyApprovalStatus;
   // Read only for a switched-on automation.
   notice?: AutomationNotice | null;
 }): AutomationStatusDocument {
@@ -381,6 +425,7 @@ export function automationStatusDocument({
             lastRun,
             currentRun,
             lastRunUsage,
+            ...(keyApprovals ? { keyApprovals } : {}),
             notice,
           }
         : {

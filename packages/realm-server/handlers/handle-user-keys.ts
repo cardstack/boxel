@@ -26,7 +26,11 @@ import {
 } from '../lib/user-key-grants.ts';
 import { listOwnSharedRealms, type SharedRealm } from '../lib/key-shares.ts';
 import { registrableDomain } from '../lib/secure-window.ts';
-import { followEndedKeyApprovals } from '../lib/automation-key-approvals.ts';
+import {
+  followEndedKeyApprovals,
+  realmsBoundToKey,
+  reportKeyApprovalChanges,
+} from '../lib/automation-key-approvals.ts';
 import {
   addOAuthClient,
   describeOAuthKeys,
@@ -441,7 +445,8 @@ export function handleAddUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
   });
 }
 
-export function handleReplaceUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
+export function handleReplaceUserKey(args: CreateRoutesArgs): Handler {
+  let { dbAdapter } = args;
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let body = await readBody(ctxt);
@@ -454,6 +459,11 @@ export function handleReplaceUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
       scopes: attributes.scopes,
       ticket: ticketOf(body),
     });
+    // A replaced key clears a rejection the automations sending it show.
+    await reportKeyApprovalChanges(
+      args,
+      await realmsBoundToKey(dbAdapter, key.id),
+    );
     await sendJSON(ctxt, 200, { data: serialize(key) });
   });
 }
