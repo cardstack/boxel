@@ -78,12 +78,17 @@ export async function startOAuthProviderServer(
     tokenLimit,
     testResources,
     documentOrigins,
+    trustedProxyHops = 0,
   }: {
     tokenLimit?: TokenLimit;
     testResources?: OAuthResourceDefinition[];
     // Client ID metadata documents served from a stub: each `https://` origin
     // maps to the stub's plain HTTP origin on loopback.
     documentOrigins?: ReadonlyMap<string, string>;
+    // 1 reads each caller's address from the last `X-Forwarded-For` entry,
+    // as behind the load balancer, so a test can send requests from
+    // addresses of its choosing; 0 reads the socket's.
+    trustedProxyHops?: number;
   } = {},
 ): Promise<Server> {
   let realmsRootPath = join(dirSync().name, name);
@@ -100,7 +105,7 @@ export async function startOAuthProviderServer(
     runner,
     matrixURL,
     secureOriginURL: testOAuthSecureOriginURL,
-    clientAddress: { trustedProxyHops: 0, infraAddresses: [] },
+    clientAddress: { trustedProxyHops, infraAddresses: [] },
     oauthProvider: testOAuthProviderConfig(),
     oauthNewClientLimit: ROOMY_LIMIT,
     oauthAuthorizationLimit: ROOMY_LIMIT,

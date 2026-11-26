@@ -277,6 +277,13 @@ route's interaction and a single-use ticket returned by the decision all name
 the same interaction. A ticket MUST be spent on its first presentation,
 whether or not the flow finishes.
 
+When a flow of a pre-registered app on the user's computer finishes with
+Allow, the provider MUST record the network of the browser that finished it,
+grouped as the provider's rate limits group a caller, and the exchange of its
+code MUST compare its own network with that record. The record MUST NOT
+outlast the time the code can be exchanged in. The provider MUST NOT log
+either network or send it to error reporting: it logs only how they compared.
+
 In the device authorization grant, the user MUST enter the user code on the
 secure origin's device page, under a secure session, and see the same consent.
 
@@ -418,7 +425,13 @@ loopback address their browser lands on, code included. Consent that names
 Boxel's own app makes that more convincing, not less. The confirmation code
 gives the user something concrete to check: a user who never started signing
 in has nothing that shows it. It is friction, not proof, since whoever starts
-the flow picks the code.
+the flow picks the code. The attacker exchanges the code from their own
+network, though, not the one whose browser finished the flow, so comparing
+the two is the one check that fails the attack itself. A browser and an app
+on one computer can still leave by different routes (IPv6 for one and IPv4
+for the other, a VPN that covers only the browser, a proxy), and a user
+refused that way can't fix it by retrying. So the comparison is logged, not
+enforced, until its outcomes show how often a real sign-in differs.
 
 The library binds a flow to its browser only through its own cookie, which
 the secure origin's pages never send, so Boxel adds the ticket check itself.

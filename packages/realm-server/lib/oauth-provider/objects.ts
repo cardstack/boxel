@@ -1,12 +1,15 @@
 // The provider's short-lived objects, in `oauth_provider_objects`: the
 // library's interactions, sessions and authorization codes, the error
-// references Boxel's error page reads (ADR 021 §1.8), and each flow's consent
-// decision and the ticket that finishes it (§1.7).
+// references Boxel's error page reads (ADR 021 §1.8), each flow's consent
+// decision and the ticket that finishes it (§1.7), and the network of the
+// browser that finished a flow of a pre-registered app on the user's
+// computer, kept for its code exchange (`network-binding.ts`).
 //
 // Each object's value is a bearer secret: an interaction's ID is in the
 // browser's URL, a session's ID is its cookie, and an authorization code, an
 // error reference and a ticket are values a browser carries too. A decision is
-// stored under its flow's interaction ID. A row is stored and found only
+// stored under its flow's interaction ID, and a finish's network under the
+// ID of the grant the flow created. A row is stored and found only
 // by the SHA-256 of that value, and never holds the value itself (ADR 021
 // §1.2). The library copies each object's value into its payload as `jti`,
 // and an interaction's ID a second time in `returnTo`, the URL the flow
@@ -23,6 +26,7 @@ import { createHash, randomBytes } from 'crypto';
 import { errors, type Adapter, type AdapterPayload } from 'oidc-provider';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import { endGrant } from './grants.ts';
+import type { CallerNetwork } from './network-binding.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -697,4 +701,46 @@ export async function endUndecidedFlow(
     },
   );
   return rows.length > 0 ? reference : undefined;
+}
+
+const FINISH_NETWORK_KIND = 'FinishNetwork';
+
+// How long the network of the browser that finished a flow is kept: long
+// enough for the browser to follow the library's resume and for the app to
+// exchange the code it got there, which lasts 60 seconds.
+export const FINISH_NETWORK_TTL_SECONDS = 2 * 60;
+
+// Records the network of the browser that finished a flow, under the grant
+// the flow created, for the code exchange to compare its own with
+// (`network-binding.ts`). Stored, as every object here is, by the SHA-256 of
+// the value it is found by.
+export async function recordFinishNetwork(
+  dbAdapter: DBAdapter,
+  grantId: string,
+  network: CallerNetwork,
+): Promise<void> {
+  await storeObject(
+    dbAdapter,
+    FINISH_NETWORK_KIND,
+    grantId,
+    { family: network.family, network: network.network },
+    FINISH_NETWORK_TTL_SECONDS,
+  );
+}
+
+// Takes the network the flow that created a grant finished from, so the one
+// exchange of the grant's code reads it and it is gone after.
+export async function takeFinishNetwork(
+  dbAdapter: DBAdapter,
+  grantId: string,
+): Promise<CallerNetwork | undefined> {
+  let payload = await takeObject(dbAdapter, FINISH_NETWORK_KIND, grantId);
+  if (
+    !payload ||
+    (payload.family !== 4 && payload.family !== 6) ||
+    typeof payload.network !== 'string'
+  ) {
+    return undefined;
+  }
+  return { family: payload.family, network: payload.network };
 }

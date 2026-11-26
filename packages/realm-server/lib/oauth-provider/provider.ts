@@ -35,6 +35,7 @@ import {
 } from './consent.ts';
 import type { OAuthProviderConfig } from './config.ts';
 import { finishHandler, resumeHandler, userExists } from './finish.ts';
+import { networkMatchOf } from './network-binding.ts';
 import {
   NON_RENEWING_GRANT_TTL_SECONDS,
   readGrantTerms,
@@ -310,6 +311,7 @@ export function startOAuthProvider({
       rateLimitStore,
       limit: tokenLimit,
       alert: tokenFailureAlert,
+      preRegistered,
     }),
     handleRevocation: revocationHandler({
       provider,
@@ -319,7 +321,12 @@ export function startOAuthProvider({
       alert: tokenFailureAlert,
     }),
     handleInteraction: interactionHandler({ secureOriginURL }),
-    handleFinish: finishHandler({ provider, dbAdapter, secureOriginURL }),
+    handleFinish: finishHandler({
+      provider,
+      dbAdapter,
+      secureOriginURL,
+      preRegistered,
+    }),
     handleResume: resumeHandler({ provider }),
     handleErrorDetails: errorDetailsHandler({
       provider,
@@ -729,11 +736,17 @@ export function createOAuthProvider({
   });
 
   // The token endpoint's outcomes, by fixed labels: never a code, token or
-  // verifier. A refused request is named by its OAuth error code alone.
+  // verifier. A refused request is named by its OAuth error code alone. A
+  // code exchange by a pre-registered app on the user's computer adds how its
+  // network compares with the one that finished the flow
+  // (`network-binding.ts`), never either network.
   provider.on('grant.success', (ctx: KoaContextWithOIDC) => {
     let refresh = ctx.oidc.params?.grant_type === 'refresh_token';
+    let network = refresh ? undefined : networkMatchOf(ctx.req);
     log.info(
-      `token ${refresh ? 'refreshed' : 'issued'}: client ${ctx.oidc.client?.clientId}`,
+      `token ${refresh ? 'refreshed' : 'issued'}: client ${ctx.oidc.client?.clientId}${
+        network ? `, network ${network}` : ''
+      }`,
     );
   });
   provider.on(

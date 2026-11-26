@@ -41,6 +41,11 @@
 // that, so a grant whose limit is kept spent can't put off the reuse that
 // ends it. Either does so only from the client it was issued to, and a code
 // only with its verifier and its redirect URI, as in the library.
+//
+// An admitted exchange of a code issued to a pre-registered app on the user's
+// computer also compares the caller's network with the one whose browser
+// finished the flow (`network-binding.ts`), for the library's `token issued`
+// line to report. Nothing is refused by it.
 
 import { createHash, timingSafeEqual } from 'crypto';
 import { parse as parseQuery } from 'node:querystring';
@@ -65,7 +70,17 @@ import {
 } from './caller-limit.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { endGrant } from './grants.ts';
-import { sha256Hex } from './objects.ts';
+import {
+  callerNetwork,
+  compareNetworks,
+  noteNetworkMatch,
+  type NetworkMatch,
+} from './network-binding.ts';
+import { sha256Hex, takeFinishNetwork } from './objects.ts';
+import {
+  PRE_REGISTERED_CLIENTS,
+  type PreRegisteredClients,
+} from './pre-registered-clients.ts';
 import { presentedRefreshToken } from './tokens.ts';
 
 const log = logger('boxel:oauth-provider');
@@ -165,12 +180,14 @@ export function tokenHandler({
   rateLimitStore,
   limit,
   alert = failureAlert(limit),
+  preRegistered = PRE_REGISTERED_CLIENTS,
 }: {
   provider: Provider;
   dbAdapter: DBAdapter;
   rateLimitStore: RateLimitStore;
   limit: TokenLimit;
   alert?: CallerLimitAlert;
+  preRegistered?: PreRegisteredClients;
 }): Koa.Middleware {
   let perGrant = tokenBucket(limit.perGrant);
 
@@ -218,6 +235,16 @@ export function tokenHandler({
             : { reason: 'limited', retryAfterSeconds: taken.retryAfterSeconds },
           'grant',
           'token',
+        );
+      }
+      if (
+        exchange.what === 'code' &&
+        !exchange.reused &&
+        preRegistered.get(param('client_id')!)?.place === 'this-computer'
+      ) {
+        noteNetworkMatch(
+          ctxt.req,
+          await exchangeNetworkMatch(dbAdapter, exchange.grantId, ctxt),
         );
       }
     } else if (!(await charge(answer))) {
@@ -323,6 +350,31 @@ async function grantOfExchange(
       : undefined;
   }
   return undefined;
+}
+
+// How the network of a code exchange compares with the network whose browser
+// finished the flow. The finish's record is taken, so it is read once. Only
+// the exchange's log line reads the outcome, so a failure to read the record
+// is logged and the exchange goes on, as `unknown`.
+async function exchangeNetworkMatch(
+  dbAdapter: DBAdapter,
+  grantId: string,
+  ctxt: Koa.Context,
+): Promise<NetworkMatch> {
+  let finished;
+  try {
+    finished = await takeFinishNetwork(dbAdapter, grantId);
+  } catch (error) {
+    log.error(
+      `failed to read a flow's network: ${
+        error instanceof Error ? error.message : 'unknown error'
+      }`,
+    );
+  }
+  return compareNetworks(
+    finished,
+    callerNetwork(ctxt.req.headers[CLIENT_IP_HEADER]),
+  );
 }
 
 // The library's PKCE check (`helpers/pkce.js`), as a test rather than a
