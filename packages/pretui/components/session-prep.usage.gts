@@ -10,11 +10,6 @@ import type { SessionPrepStep } from './session-prep';
 // ── SessionPrep ──────────────────────────────────────────────────────────
 const PREP_VARIANTS = ['steps', 'track'];
 
-const USAGE = `<SessionPrep
-  @steps={{this.steps}}
-  @note='Nothing is sent until this finishes.'
-  @onSkip={{this.skip}}
-/>`;
 
 class SessionPrepUsage extends GlimmerComponent {
   @tracked stage = 1;
@@ -28,6 +23,16 @@ class SessionPrepUsage extends GlimmerComponent {
     this.skipped = false;
     this.stage = 1;
   };
+
+  get usage() {
+    let variant =
+      this.variantValue === 'steps' ? '' : `\n  @variant='${this.variantValue}'`;
+    return `<SessionPrep
+  @steps={{this.steps}}
+  @note='Nothing is sent until this finishes.'${variant}
+  @onSkip={{this.skip}}
+/>`;
+  }
 
   get variantValue(): 'steps' | 'track' {
     return this.variant === 'track' ? 'track' : 'steps';
@@ -50,7 +55,7 @@ class SessionPrepUsage extends GlimmerComponent {
     <FreestyleUsage
       @name='SessionPrep'
       @description='Everything an agent does before your first message — summarising the last session, reading the file history, assembling context — happens whether or not it is shown. The law the spec states is that it must be shown, with a way out. The rail is StepList, unmodified: it already owns the numbered markers, the connector lines, the four-state palette, the per-step state text for assistive tech, and the derived "2 of 3 complete" summary wired with aria-describedby. Re-implementing that here would have produced a second, worse copy — so SessionPrep is the frame, the note, and the escape hatch, and a walkthrough (Onboarding) and a preparation read as one system because they share a rail.'
-      @source={{USAGE}}
+      @source={{this.usage}}
     >
       <:example>
         {{#if this.skipped}}

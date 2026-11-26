@@ -47,8 +47,16 @@ function registries() {
   ].sort();
   let out = [];
   for (let file of sources) {
-    if (reaches(file)) continue;
     let text = readFileSync(join(root, file), 'utf8');
+    // Glimmer interpolates {{…}} inside a quoted argument, so the strip would show the value, not the code
+    for (let [, , body] of text.matchAll(/@source=(['"])([\s\S]*?)\1/g)) {
+      if (body.includes('{{')) {
+        throw new Error(
+          `${file}: a quoted @source interpolates {{…}}; move the snippet to a module constant`,
+        );
+      }
+    }
+    if (reaches(file)) continue;
     for (let [, name] of text.matchAll(/^export const (DEMOS_\w+)/gm)) {
       out.push({ name, module: `./${file.replace(/\.gts$/, '')}` });
     }

@@ -109,6 +109,7 @@ class ContextMenuUsage extends GlimmerComponent {
   get usage() {
     let bits = ['@items={{this.items}}', `@label='Lot actions'`];
     if (!this.focusable) bits.push('@focusable={{false}}');
+    bits.push(`@platform='${this.platform}'`);
     return `<ContextMenu ${bits.join(' ')}><:default as |isOpen|>…</:default></ContextMenu>`;
   }
 

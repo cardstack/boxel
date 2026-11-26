@@ -17,8 +17,6 @@ import type { RowKey, SelectionMode, SortState } from '../data-component';
 import { GRADES, LOTS, MODES, SIZES, lotLabel } from '../examples-listing';
 import type { Lot } from '../examples-listing';
 
-const SOURCE =
-  '<DataTable @columns={{this.columns}} @rows={{this.rows}} @key={{this.rowKey}} @caption="Lots booked this season" @selectionMode="multi" @pageSize={{6}} @onSortChange={{this.onSortChange}} />';
 
 const GRADE_OPTIONS = GRADES.map((g) => ({ value: g, label: g }));
 const PLACE_OPTIONS = Array.from(new Set(LOTS.map((l) => l.place))).map(
@@ -66,6 +64,23 @@ class DataTableUsage extends Component {
   @tracked lastSelection = '—';
   @tracked lastActivated = '—';
   @tracked lastFilters = '—';
+
+  get usage() {
+    let bits = [
+      '@columns={{this.columns}}',
+      '@rows={{this.rows}}',
+      '@key={{this.rowKey}}',
+      '@caption="Lots booked this season"',
+    ];
+    if (this.size !== 'default') bits.push(`@size="${this.size}"`);
+    if (this.selectionMode !== 'none')
+      bits.push(`@selectionMode="${this.selectionMode}"`);
+    if (!this.striped) bits.push('@striped={{false}}');
+    if (this.flush) bits.push('@flush={{true}}');
+    if (this.pageSize) bits.push(`@pageSize={{${this.pageSize}}}`);
+    bits.push('@onSortChange={{this.onSortChange}}');
+    return `<DataTable ${bits.join(' ')} />`;
+  }
 
   setSelectionMode = (v: string) => (this.selectionMode = v as SelectionMode);
   setSize = (v: string) => (this.size = v as ListingSizeArg);
@@ -127,7 +142,7 @@ class DataTableUsage extends Component {
   <template>
     <FreestyleUsage
       @name='DataTable'
-      @source={{SOURCE}}
+      @source={{this.usage}}
       @slug='data-table'
       @description='The record listing: sortable headers with real aria-sort, per-column filters in the toolbar, a column switcher, row selection, expandable detail rows, pinned columns and density. It is NOT the spreadsheet — that is Sheet — and it is not the markup primitive Table.'
     >

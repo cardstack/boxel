@@ -12,7 +12,7 @@ const ALIGN_OPTIONS = ['start', 'end'];
 class MenuUsage extends MenuState {
   get usage() {
     let align = this.align === 'start' ? '' : ` @align="${this.align}"`;
-    return `<Menu @items={{this.items}} @label="Lot actions"${align}>\n  <:trigger as |open toggle|>\n    <Button {{on "click" toggle}}>Lot actions</Button>\n  </:trigger>\n</Menu>`;
+    return `<Menu @items={{this.items}} @label="Lot actions"${align} @platform="${this.platform}">\n  <:trigger as |open toggle|>\n    <Button {{on "click" toggle}}>Lot actions</Button>\n  </:trigger>\n</Menu>`;
   }
 
   <template>
