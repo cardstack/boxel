@@ -54,7 +54,8 @@ const MESSAGES: Record<string, string> = {
     'That code isn’t right. Check it against your terminal and try again.',
   expired:
     'That code has expired. Start signing in again in your terminal for a new one.',
-  decided: 'That code has already been used.',
+  decided:
+    'That code has already been used. Start signing in again in your terminal for a new one.',
   'rate-limited': 'Too many tries. Wait a few minutes, then try again.',
 };
 

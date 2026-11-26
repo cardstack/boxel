@@ -27,7 +27,6 @@ import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
 import Check from '@cardstack/boxel-icons/check';
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 import { Alert } from '@cardstack/pretui/components/alert';
-import { Button } from '@cardstack/pretui/components/button';
 import { Checkbox } from '@cardstack/pretui/components/checkbox';
 import { StatusChip } from '@cardstack/pretui/components/status-chip';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
@@ -41,6 +40,7 @@ import type {
   ConsentScope,
 } from '../../security/oauth-provider.ts';
 
+import AccountLine from './account-line.gts';
 import { CONNECTED_APPS_LINE, appNameShown, renewalLine } from './copy.ts';
 
 // How long Allow waits, once the page is in view and its window focused,
@@ -61,7 +61,8 @@ interface Signature {
     onDeny: () => void;
     onSignOut: () => void;
     // Consent for a code typed into the device page (`device-page.gts`),
-    // rather than for a flow a browser started: the warning names the code.
+    // rather than for a flow a browser started: the code shown is the one
+    // the user typed, and the warning names the code.
     device?: boolean;
   };
 }
@@ -132,17 +133,11 @@ export default class Consent extends Component<Signature> {
               </span>
             {{/if}}
           </div>
-          <p class='account'>
-            <span data-test-authorize-account>{{this.account}}</span>
-            <Button
-              type='button'
-              class='sign-out'
-              @variant='link'
-              @disabled={{this.waiting}}
-              {{on 'click' @onSignOut}}
-              data-test-authorize-sign-out
-            >Not you? Sign out</Button>
-          </p>
+          <AccountLine
+            @account={{this.account}}
+            @disabled={{this.waiting}}
+            @onSignOut={{@onSignOut}}
+          />
         </div>
 
         <h1
@@ -166,10 +161,10 @@ export default class Consent extends Component<Signature> {
           <p class='note' data-test-authorize-own-app>Boxel’s own app.</p>
         {{/if}}
 
-        {{#if this.onThisComputer}}
+        {{#if this.asksToConfirm}}
           <section class='confirm' data-test-authorize-confirmation>
             {{#if @details.confirmationCode}}
-              <p class='lead'>Check that {{this.name}} shows this code:</p>
+              <p class='lead'>{{this.confirmationLead}}</p>
               <p
                 class='code'
                 data-test-authorize-confirmation-code
@@ -299,28 +294,6 @@ export default class Consent extends Component<Signature> {
         width: 1rem;
         height: 1rem;
         color: var(--muted-foreground);
-      }
-      .account {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: var(--boxel-sp-3xs);
-        margin: 0;
-        color: var(--muted-foreground);
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        overflow-wrap: anywhere;
-      }
-      .sign-out {
-        --pretui-button-fg: var(
-          --boxel-button-link-primary-foreground,
-          var(--primary)
-        );
-        min-height: 0;
-        padding-block: 0;
-        border: 0;
-        font-size: inherit;
-        line-height: inherit;
       }
       .title {
         margin: 0;
@@ -464,9 +437,22 @@ export default class Consent extends Component<Signature> {
     return this.ownApp && this.args.details.app.place === 'this-computer';
   }
 
+  // Whether the page asks the user to check that they started this sign-in:
+  // for an app on their own computer, and for every code typed into the
+  // device page.
+  private get asksToConfirm(): boolean {
+    return this.onThisComputer || Boolean(this.args.device);
+  }
+
+  private get confirmationLead(): string {
+    return this.args.device
+      ? 'Check that your terminal shows this code:'
+      : `Check that ${this.name} shows this code:`;
+  }
+
   private get confirmationWarning(): string {
     if (this.args.device) {
-      return `Only allow this if you typed a code shown in your own terminal, where you just started signing in to ${this.name}. If someone sent you this code, choose Deny.`;
+      return `Only allow this if you typed this code from your own terminal, where you just started signing in to ${this.name}. If someone sent you this code, choose Deny.`;
     }
     let matches = this.args.details.confirmationCode
       ? ' and it shows this code'

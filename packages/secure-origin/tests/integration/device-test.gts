@@ -62,6 +62,7 @@ const DETAILS = {
   resources: [BOXEL_API],
   account: { email: EMAIL },
   renewalOffered: true,
+  confirmationCode: USER_CODE,
 };
 
 module('Integration | device', function (hooks) {
@@ -189,8 +190,16 @@ module('Integration | device', function (hooks) {
       .includesText(
         'Only enter a code shown in your own terminal. If someone sent you this code, close this page.',
       );
-    assert.dom('[data-test-device-account]').hasText(SESSION.user);
+    assert.dom('[data-test-authorize-account]').hasText(SESSION.user);
     assert.dom('[data-test-device-code]').hasValue('').isFocused();
+    assert
+      .dom('[data-test-device-code]')
+      .hasAttribute(
+        'aria-describedby',
+        /device-code-warning/,
+        'the field is described by the warning, so it is read with it',
+      );
+    assert.dom('#device-code-warning').exists();
   });
 
   test("ignores a code in the page's address", async function (assert) {
@@ -229,7 +238,11 @@ module('Integration | device', function (hooks) {
         'expired',
         'That code has expired. Start signing in again in your terminal for a new one.',
       ],
-      [409, 'decided', 'That code has already been used.'],
+      [
+        409,
+        'decided',
+        'That code has already been used. Start signing in again in your terminal for a new one.',
+      ],
       [
         429,
         'rate-limited',
@@ -245,7 +258,7 @@ module('Integration | device', function (hooks) {
     }
   });
 
-  test('a code shows consent for Boxel CLI, warning about codes someone sent', async function (assert) {
+  test('a code shows consent for Boxel CLI, with the code to check and a warning about codes someone sent', async function (assert) {
     signedIn();
     servers.realmServer(LOOKUP, () => DETAILS);
     await open();
@@ -261,11 +274,12 @@ module('Integration | device', function (hooks) {
     assert
       .dom('[data-test-authorize-confirmation-warning]')
       .includesText(
-        'Only allow this if you typed a code shown in your own terminal, where you just started signing in to Boxel CLI. If someone sent you this code, choose Deny.',
+        'Only allow this if you typed this code from your own terminal, where you just started signing in to Boxel CLI. If someone sent you this code, choose Deny.',
       );
     assert
-      .dom('[data-test-authorize-confirmation-code]')
-      .doesNotExist('there is no second code to check');
+      .dom('[data-test-authorize-confirmation]')
+      .includesText('Check that your terminal shows this code:');
+    assert.dom('[data-test-authorize-confirmation-code]').hasText(USER_CODE);
   });
 
   test('Allow signs the app in and sends the browser nowhere', async function (assert) {
@@ -342,6 +356,37 @@ module('Integration | device', function (hooks) {
       .includesText(
         'That code has expired. Start signing in again in your terminal for a new one.',
       );
+  });
+
+  test('an answer over the limit says to wait, and keeps consent open', async function (assert) {
+    signedIn();
+    servers.realmServer(LOOKUP, () => DETAILS);
+    servers.realmServer(DECISION, () => ({
+      status: 429,
+      body: { error: 'rate-limited' },
+    }));
+    await open();
+    await enter(USER_CODE);
+    await waitFor(ALLOW_READY);
+    await click('[data-test-authorize-allow]');
+    await settled();
+    assert
+      .dom('[data-test-authorize-error]')
+      .includesText('Too many tries. Wait a few minutes, then try again.');
+    assert.dom('[data-test-authorize-allow]').exists('consent stays open');
+  });
+
+  test('the warning shows for a device sign-in from any app', async function (assert) {
+    signedIn();
+    servers.realmServer(LOOKUP, () => ({
+      ...DETAILS,
+      app: { kind: 'pre-registered', shown: 'Boxel CLI', verified: true },
+    }));
+    await open();
+    await enter(USER_CODE);
+    assert
+      .dom('[data-test-authorize-confirmation-warning]')
+      .includesText('If someone sent you this code, choose Deny.');
   });
 
   test('a session that ended asks for a sign-in again', async function (assert) {

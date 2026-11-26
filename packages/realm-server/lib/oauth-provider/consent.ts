@@ -77,7 +77,8 @@ export interface ConsentDetails {
   renewalOffered: boolean;
   // The code the app showed where the user started signing in, which the
   // page asks them to check. Only a pre-registered app on the user's
-  // computer sends one (the secure origin's `security/confirmation-code.js`).
+  // computer sends one (the secure origin's `security/confirmation-code.js`);
+  // for device sign-in it is the user code the user typed (`device.ts`).
   confirmationCode?: string;
 }
 

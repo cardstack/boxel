@@ -63,6 +63,7 @@ import { createGrant, deleteGrant } from './grants.ts';
 import {
   decideDeviceCode,
   findDeviceCodeByUserCode,
+  normalizeUserCode,
   type DeviceCodeLookup,
 } from './objects.ts';
 import {
@@ -459,6 +460,9 @@ export function deviceHandlers(deps: DeviceDeps): {
           client: flow.client,
           resources: [{ resource: flow.resource, scopes: flow.scopes }],
           account,
+          // The code the user typed, in the form their terminal shows it,
+          // for them to check once more before they answer.
+          confirmationCode: shownUserCode(userCode),
         }),
       );
     },
@@ -528,6 +532,12 @@ export function deviceHandlers(deps: DeviceDeps): {
       respond(ctxt, 200, { decision: 'allow' });
     },
   };
+}
+
+// A user code as the CLI shows it, `XXXX-XXXX` (the provider's mask).
+function shownUserCode(typed: string): string {
+  let code = normalizeUserCode(typed);
+  return `${code.slice(0, 4)}-${code.slice(4)}`;
 }
 
 // Longer than any user code, with room for spaces and a dash typed into it.

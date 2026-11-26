@@ -20,6 +20,7 @@ import {
   OAUTH_TEST_SERVER_URL,
   ROOMY_DEVICE_CODE_LIMIT,
   ROOMY_LIMIT,
+  ROOMY_TOKEN_LIMIT,
   registerOAuthClient,
   startOAuthProviderServer,
   tokenRequest,
@@ -34,6 +35,7 @@ import { registerUser } from '../synapse.ts';
 import { devicePageURL } from '../lib/oauth-provider/authorization.ts';
 import type { CallerLimit } from '../lib/oauth-provider/caller-limit.ts';
 import type { DeviceCodeLimit } from '../lib/oauth-provider/device.ts';
+import type { TokenLimit } from '../lib/oauth-provider/token-limit.ts';
 import {
   BOXEL_CLI_CLIENT_ID,
   DEVICE_CODE_GRANT_TYPE,
@@ -76,6 +78,7 @@ module(basename(import.meta.filename), function (hooks) {
     limits: {
       authorizationLimit?: CallerLimit;
       deviceCodeLimit?: DeviceCodeLimit;
+      tokenLimit?: TokenLimit;
     } = {},
   ): Promise<Server> {
     return startOAuthProviderServer(args, 'realm_server_oauth_device', limits);
@@ -106,10 +109,39 @@ module(basename(import.meta.filename), function (hooks) {
   async function restartWith(limits: {
     authorizationLimit?: CallerLimit;
     deviceCodeLimit?: DeviceCodeLimit;
+    tokenLimit?: TokenLimit;
   }) {
     await closeServer(server!);
     server = undefined;
     server = await start({ dbAdapter: db, ...queue }, limits);
+  }
+
+  // Restarts the server on a database where every device code is denied the
+  // moment a grant is stored: as when another decision wins the race while
+  // an Allow is under way.
+  async function restartLosingDecisionsOnGrant() {
+    await closeServer(server!);
+    server = undefined;
+    let losing = new Proxy(db, {
+      get(target, property) {
+        if (property === 'execute') {
+          return async (...args: Parameters<PgAdapter['execute']>) => {
+            let result = await target.execute(...args);
+            if (/\bINSERT INTO oauth_provider_grants\b/.test(args[0])) {
+              await target.execute(
+                `UPDATE oauth_provider_objects
+                    SET payload = payload || '{"error":"access_denied"}'::jsonb
+                  WHERE kind = 'DeviceCode'`,
+              );
+            }
+            return result;
+          };
+        }
+        let value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    server = await start({ dbAdapter: losing, ...queue });
   }
 
   interface TestUser {
@@ -379,8 +411,8 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(
         response.body.confirmationCode,
-        undefined,
-        'the user typed the code, so there is none to check',
+        user_code,
+        'shows the code typed, as the terminal shows it, to check once more',
       );
     });
 
@@ -575,6 +607,17 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('polling faster than the interval is told to slow down, and counts as no failure', async function (assert) {
+      // One failed token request allowed per address: a poll that counted
+      // as one would leave none for the request below.
+      await restartWith({
+        tokenLimit: {
+          ...ROOMY_TOKEN_LIMIT,
+          failures: {
+            ...ROOMY_TOKEN_LIMIT.failures,
+            perAddress: { requests: 1, windowSeconds: 600 },
+          },
+        },
+      });
       let device = await startDeviceSignIn();
       let answers: string[] = [];
       for (let i = 0; i < 3; i++) {
@@ -585,6 +628,30 @@ module(basename(import.meta.filename), function (hooks) {
         'authorization_pending',
         'slow_down',
       ]);
+      let unknown = await poll('no-such-device-code');
+      assert.strictEqual(
+        unknown.status,
+        400,
+        'the address still has its one failure left',
+      );
+      assert.strictEqual(unknown.body.error, 'invalid_grant');
+      let limited = await poll('no-such-device-code');
+      assert.strictEqual(limited.status, 429, 'and has now spent it');
+    });
+
+    test('an Allow that loses to another decision stores no grant', async function (assert) {
+      await restartLosingDecisionsOnGrant();
+      let { session } = await user();
+      let device = await startDeviceSignIn();
+      let decided = await decide(device.user_code, session);
+      assert.strictEqual(decided.status, 409);
+      assert.strictEqual(decided.body.error, 'decided');
+      let [{ count }] = (await db.execute(
+        `SELECT count(*)::int AS count FROM oauth_provider_grants`,
+      )) as { count: number }[];
+      assert.strictEqual(count, 0, 'the grant it made is deleted');
+      let polled = await poll(device.device_code);
+      assert.strictEqual(polled.body.error, 'access_denied');
     });
 
     test('a device code exchanged again ends its grant', async function (assert) {

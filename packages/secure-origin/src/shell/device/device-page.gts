@@ -15,7 +15,6 @@ import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
 import { Alert } from '@cardstack/pretui/components/alert';
-import { Button } from '@cardstack/pretui/components/button';
 import { Input } from '@cardstack/pretui/components/input';
 import { focusWhen } from '@cardstack/pretui/focus';
 
@@ -37,11 +36,16 @@ import {
   storeSession,
   type Session,
 } from '../../security/session.js';
+import AccountLine from '../authorize/account-line.gts';
 import Consent from '../authorize/consent.gts';
 import { appNameShown } from '../authorize/copy.ts';
 import MessagePage from '../sign-in/message-page.gts';
 import SignInForm from '../sign-in/sign-in-form.gts';
 import { pageAwaitsData } from '../telemetry.ts';
+
+// The warning the code field is described by, so a screen reader reads it
+// with the field, which takes focus as the step appears.
+const WARNING_ID = 'device-code-warning';
 
 interface ConsentState {
   name: 'consent';
@@ -105,20 +109,15 @@ export default class DevicePage extends Component {
           {{on 'submit' this.submitCode}}
           data-test-device-code-form
         >
-          <p class='account'>
-            <span data-test-device-account>{{this.code.session.user}}</span>
-            <Button
-              type='button'
-              class='sign-out'
-              @variant='link'
-              @disabled={{this.code.checking}}
-              {{on 'click' this.notYou}}
-              data-test-device-sign-out
-            >Not you? Sign out</Button>
-          </p>
+          <AccountLine
+            class='account'
+            @account={{this.code.session.user}}
+            @disabled={{this.code.checking}}
+            @onSignOut={{this.notYou}}
+          />
           <AuthHeading class='title' data-test-device-heading>Enter the code
             shown in your terminal</AuthHeading>
-          <Alert @tone='warning' data-test-device-warning>
+          <Alert @tone='warning' id={{WARNING_ID}} data-test-device-warning>
             Only enter a code shown in your own terminal. If someone sent you
             this code, close this page.
           </Alert>
@@ -129,6 +128,7 @@ export default class DevicePage extends Component {
               @placeholder='XXXX-XXXX'
               @value={{this.code.typed}}
               @onInput={{this.type}}
+              @describedBy={{WARNING_ID}}
               name='user_code'
               autocomplete='off'
               autocapitalize='characters'
@@ -210,27 +210,7 @@ export default class DevicePage extends Component {
         margin: 0;
       }
       .account {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
         justify-content: flex-end;
-        gap: var(--boxel-sp-3xs);
-        margin: 0;
-        color: var(--muted-foreground);
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        overflow-wrap: anywhere;
-      }
-      .sign-out {
-        --pretui-button-fg: var(
-          --boxel-button-link-primary-foreground,
-          var(--primary)
-        );
-        min-height: 0;
-        padding-block: 0;
-        border: 0;
-        font-size: inherit;
-        line-height: inherit;
       }
       .title {
         margin: 0;
@@ -239,8 +219,6 @@ export default class DevicePage extends Component {
         line-height: var(--boxel-line-height-md);
       }
       .code-input {
-        font-family: var(--boxel-monospace-font-family);
-        letter-spacing: var(--boxel-lsp-lg);
         text-transform: uppercase;
       }
       .actions {
@@ -452,7 +430,10 @@ export default class DevicePage extends Component {
       this.page.state = {
         ...consent,
         deciding: undefined,
-        error: 'Boxel couldn’t confirm your answer. Try again.',
+        error:
+          e.code === 'rate-limited'
+            ? e.message
+            : 'Boxel couldn’t confirm your answer. Try again.',
       };
       return;
     }
