@@ -740,7 +740,10 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries.ts';
-import { fetchLiveRealmEventWatchers } from './db-queries/realm-event-watcher-queries.ts';
+import {
+  fetchLiveRealmEventWatchers,
+  hasLiveRealmEventWatchers,
+} from './db-queries/realm-event-watcher-queries.ts';
 import {
   ownRequestIds,
   watcherCompletionOf,
@@ -1785,6 +1788,8 @@ const WATCHER_GATE_CHUNK = 250;
 // larger pass goes to watchers realm-wide: the realm's later events wait
 // behind this work at the head of its line.
 const MAX_WATCHER_GATED_INVALIDATIONS = 1_000;
+// The most gate decisions one completion makes across all its watchers.
+const MAX_WATCHER_GATE_DECISIONS = 5_000;
 // How many watchers' copies of one completion are decided at once.
 const WATCHERS_IN_FLIGHT = 4;
 
@@ -2862,6 +2867,12 @@ export interface WriteOptions {
   // config names a dedicated account for that reason, not a person who edits
   // the realm.
   initiatingUser?: string | null;
+  // The signed-in user whose request this write is, where that differs from
+  // `initiatingUser`: null for a caller who isn't signed in, whose write is
+  // initiated by an acting user. A policy watcher is told a write's request id
+  // only when the write is theirs by this, so an acting account never hears
+  // the ids of anonymous callers' writes. Absent, it is `initiatingUser`.
+  requestActor?: string | null;
   // How this write was made, recorded on its change event beside the author:
   // its channel and, where they apply, the AI agent and room, the correlation
   // id, the push it belongs to and an intent that names its own revision. A
@@ -3695,6 +3706,9 @@ export class Realm {
   // what says a parse has been memoized: this one is undefined both before a
   // parse and for a realm with no policy.
   #cachedRealmPolicy: RealmPolicyReference | undefined;
+  // The checks ahead of queueing each completion's copy for policy watchers,
+  // chained so the copies are queued in order (see `#broadcastToWatchers`).
+  #watcherCopies: Promise<void> = Promise.resolve();
   // The limit a policy grant that sets none counts callers who aren't signed
   // in against.
   #platformAnonymousRateLimit: AnonymousRateLimit;
@@ -4988,6 +5002,8 @@ export class Realm {
     opts?: {
       clientRequestId?: string | null;
       initiatedBy?: string | null;
+      // See `WriteOptions.requestActor`.
+      requestActor?: string | null;
       // Ask the pass not to enqueue its own prerender_html job; the returned
       // `deferredPrerenderHtml` then carries the set it would have rendered.
       deferPrerenderHtml?: boolean;
@@ -5046,6 +5062,9 @@ export class Realm {
         opts?.announcesPass !== false && opts?.broadcastRealmEvents !== false,
       realmEvents: opts?.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
+      ...(opts?.requestActor !== undefined
+        ? { requestActor: opts.requestActor }
+        : {}),
       ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
@@ -5124,6 +5143,8 @@ export class Realm {
       // nor broadcasts the failure of one.
       broadcastRealmEvents?: boolean;
       initiatedBy?: string | null;
+      // See `WriteOptions.requestActor`.
+      requestActor?: string | null;
       // Invalidation sets earlier passes of this same write deferred, folded
       // into the prerender_html job this pass spawns.
       carriedPrerenderHtmlChanges?: IncrementalChange[];
@@ -5155,6 +5176,9 @@ export class Realm {
       announcesPass: opts.broadcastRealmEvents !== false,
       realmEvents: opts.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
+      ...(opts?.requestActor !== undefined
+        ? { requestActor: opts.requestActor }
+        : {}),
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
         : {}),
@@ -5196,7 +5220,10 @@ export class Realm {
           {
             clientRequestId: opts?.clientRequestId ?? null,
             broadcastRealmEvents: opts.broadcastRealmEvents,
-            initiatedBy: opts.initiatedBy ?? null,
+            initiatedBy:
+              opts.requestActor !== undefined
+                ? opts.requestActor
+                : (opts.initiatedBy ?? null),
           },
         );
       },
@@ -6668,6 +6695,10 @@ export class Realm {
     // nothing — so the two stay distinguishable all the way to the event.
     let clientAuthored: string[] | undefined = options?.clientAuthored;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
+    let requestActor: string | null =
+      options?.requestActor !== undefined
+        ? options.requestActor
+        : initiatingUser;
     let broadcastRealmEvents = options?.broadcastRealmEvents !== false;
     // One initiation for the whole commit, sent as the first file actually
     // changes, however many files the batch writes, appends to or removes. A
@@ -6720,6 +6751,7 @@ export class Realm {
         announcesPass: !opts?.deferPrerenderHtml,
         broadcastRealmEvents,
         initiatedBy: initiatingUser,
+        requestActor,
         // The write answers from the index once this lands, so it cannot be
         // settled by a pass that read the file before these bytes did.
         readsOwnWrite: true,
@@ -7300,7 +7332,7 @@ export class Realm {
             passes,
             ownChanges,
             broadcastRealmEvents,
-            initiatedBy: initiatingUser,
+            initiatedBy: requestActor,
           });
           // Announcing what the pass invalidated is the last of the
           // invalidation, so it accumulates into the same stage as the hooks
@@ -7367,6 +7399,7 @@ export class Realm {
             ...(clientAuthored ? { clientAuthored } : {}),
             broadcastRealmEvents,
             initiatedBy: initiatingUser,
+            requestActor,
             ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
             modulesWithoutSchemaChange: [...modulesWithoutSchemaChange],
             runIndexing: carriedRunIndexing,
@@ -7396,7 +7429,7 @@ export class Realm {
                   passes: [...priorPasses, meta.sharedPass],
                   ownChanges,
                   broadcastRealmEvents,
-                  initiatedBy: initiatingUser,
+                  initiatedBy: requestActor,
                 },
               );
             },
@@ -7462,7 +7495,7 @@ export class Realm {
           passes,
           ownChanges,
           broadcastRealmEvents,
-          initiatedBy: initiatingUser,
+          initiatedBy: requestActor,
           ...(!passOwed && initiatingUser
             ? { recipients: [initiatingUser] }
             : {}),
@@ -24120,13 +24153,31 @@ export class Realm {
       return;
     }
     let recipients = delivery?.recipients;
-    send(this.url, this.#matrixClient, this.#dbAdapter, () =>
-      this.#watcherEvents(completion, recipients),
-    ).catch((e: unknown) => {
-      this.#log.error(
-        `Unable to send ${this.url}'s index event to its watchers`,
-        e,
-      );
+    // Queued only once someone is found watching, which costs a read per
+    // completion but no place on the realm's line otherwise. The reads are
+    // chained so the copies keep the order of their completions; a watch
+    // registered between the read and the head of the line misses this one.
+    this.#watcherCopies = this.#watcherCopies.then(async () => {
+      try {
+        if (
+          this.#dbAdapter.isClosed ||
+          !(await hasLiveRealmEventWatchers(this.#dbAdapter, this.url))
+        ) {
+          return;
+        }
+      } catch (e: unknown) {
+        this.#log.warn(
+          `Unable to tell whether ${this.url} has watchers; queueing their copy anyway: ${String(e)}`,
+        );
+      }
+      send(this.url, this.#matrixClient, this.#dbAdapter, () =>
+        this.#watcherEvents(completion, recipients),
+      ).catch((e: unknown) => {
+        this.#log.error(
+          `Unable to send ${this.url}'s index event to its watchers`,
+          e,
+        );
+      });
     });
   }
 
@@ -24161,7 +24212,11 @@ export class Realm {
       this.#matrixClient.serverName,
     );
     // A few at a time: each watcher costs gate decisions, and the realm's
-    // later events wait at the head of its line behind them.
+    // later events wait at the head of its line behind them. They share one
+    // budget of decisions, so how many watchers there are can't multiply
+    // what one completion costs; a watcher it doesn't stretch to hears the
+    // completion realm-wide.
+    let budget = { left: MAX_WATCHER_GATE_DECISIONS };
     let outcomes = await settledWithin(
       WATCHERS_IN_FLIGHT,
       watchers,
@@ -24171,7 +24226,7 @@ export class Realm {
         if (await checker.can(user, 'read')) {
           return undefined;
         }
-        let event = await this.#watcherEvent(user, completion);
+        let event = await this.#watcherEvent(user, completion, budget);
         return event ? { user, event } : undefined;
       },
     );
@@ -24205,11 +24260,15 @@ export class Realm {
   // card's types again. Absent, a host re-runs its live queries of the realm.
   //
   // A completion that names no cards, or a pass too large to put through the
-  // gate card by card, goes out realm-wide, and only to a watcher the policy
-  // could admit at all (see `policyMayAdmit`).
+  // gate card by card within this watcher's limit or what is left of the
+  // completion's budget, goes out realm-wide, and only to a watcher a
+  // read-lane grant could admit (see `policyMayAdmit`). Such a watcher may
+  // hold cards the pass changed, so it isn't kept to copies carrying their
+  // own request id.
   async #watcherEvent(
     user: string,
     completion: WatcherCompletion,
+    budget: { left: number },
   ): Promise<RealmEventContent | undefined> {
     if (completion.kind === 'unnamed') {
       if (!(await this.policyMayAdmit(user))) {
@@ -24225,18 +24284,20 @@ export class Realm {
           };
     }
     let { invalidations } = completion;
-    if (invalidations.length > MAX_WATCHER_GATED_INVALIDATIONS) {
+    if (
+      invalidations.length > MAX_WATCHER_GATED_INVALIDATIONS ||
+      invalidations.length > budget.left
+    ) {
       if (!(await this.policyMayAdmit(user))) {
         return undefined;
       }
+      // Every list emptied, so their host re-reads every card it holds.
       let { members } = ownRequestIds(completion, user, []);
       return {
         eventName: 'index',
         indexType: 'incremental',
         realmWide: true,
-        ...(members.clientRequestId !== undefined
-          ? { clientRequestId: members.clientRequestId }
-          : {}),
+        ...members,
         ...(members.coalescedWrites
           ? {
               coalescedWrites: members.coalescedWrites.map(
@@ -24247,6 +24308,7 @@ export class Realm {
         realmURL: this.url,
       };
     }
+    budget.left -= invalidations.length;
     let readable: string[] = [];
     for (
       let start = 0;
@@ -24285,15 +24347,17 @@ export class Realm {
     return event;
   }
 
-  // Whether this realm's policy could admit `user` to anything: whether it
-  // holds a grant whose condition, as far as it depends on who is asking,
-  // holds for them. A grant with no condition, or one that never reads the
-  // caller, could admit anyone signed in. One that reads only the caller is
-  // settled for them. One that reads both the caller and the card could admit
-  // anyone the cards it judges name, which is only known card by card, so it
-  // counts as one that could admit them. One that can never hold for a
-  // signed-in caller admits nobody here, and a policy that didn't compile
-  // admits nobody at all.
+  // Whether this realm's policy could let `user` read anything: whether it
+  // holds a read-lane grant (a `read`, a `readSource`, or a query grant that
+  // compiled a search filter for a signed-in caller) whose condition could
+  // hold for them. A grant with no condition could admit anyone signed in. A
+  // condition that reads nothing of the card is settled for them. One that
+  // reads the card could admit anyone the cards it judges name, which is only
+  // known card by card, so it counts as one that could admit them. One that
+  // can never hold for a signed-in caller admits nobody here, and a policy
+  // that didn't compile admits nobody at all. A grant that only lets a caller
+  // write doesn't count: such a caller holds none of the realm's cards to keep
+  // current.
   //
   // This decides who may watch the realm, and who hears its completions that
   // name no card. It is never a reason to send a card: those are decided by
@@ -24305,6 +24369,14 @@ export class Realm {
     }
     for (let rule of policy.rules) {
       for (let grant of rule.grants) {
+        let readLane =
+          grant.operation === 'read' ||
+          grant.operation === 'readSource' ||
+          grant.filter !== undefined ||
+          grant.settledFilter !== undefined;
+        if (!readLane) {
+          continue;
+        }
         let { where } = grant;
         if (!where) {
           return true;
@@ -24313,7 +24385,7 @@ export class Realm {
         if (reach?.neverSignedIn) {
           continue;
         }
-        if (!where.readsActor || !reach?.cardIndependent) {
+        if (!reach?.cardIndependent) {
           return true;
         }
         if (

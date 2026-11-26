@@ -91,23 +91,54 @@ export async function upsertRealmEventWatcher(
 }
 
 /**
- * The users whose watch of `realmURL` has not lapsed.
+ * The users whose watch of `realmURL` has not lapsed. A watch registered or
+ * last renewed before the user's sessions were revoked is left out: it was
+ * made with a session that no longer counts. A renewal after the revocation
+ * needed a fresh session, so it counts again.
  */
 export async function fetchLiveRealmEventWatchers(
   dbAdapter: DBAdapter,
   realmURL: string,
   now = Date.now(),
+  ttlMs = REALM_EVENT_WATCH_TTL_MS,
 ): Promise<string[]> {
   let rows = await query(dbAdapter, [
-    'SELECT user_id FROM realm_event_watchers',
-    'WHERE realm_url =',
+    'SELECT w.user_id FROM realm_event_watchers w',
+    'WHERE w.realm_url =',
+    param(realmURL),
+    'AND w.expires_at > CAST(',
+    param(now),
+    'AS BIGINT)',
+    'AND NOT EXISTS (',
+    '  SELECT 1 FROM users u WHERE u.matrix_user_id = w.user_id',
+    '  AND u.sessions_revoked_at IS NOT NULL',
+    '  AND u.sessions_revoked_at * 1000 > w.expires_at - CAST(',
+    param(ttlMs),
+    '  AS BIGINT)',
+    ')',
+    'ORDER BY w.user_id',
+  ]);
+  return rows.map((row) => row.user_id as string);
+}
+
+/**
+ * Whether anyone's watch of `realmURL` has not lapsed, read without deciding
+ * who.
+ */
+export async function hasLiveRealmEventWatchers(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  now = Date.now(),
+): Promise<boolean> {
+  let rows = await query(dbAdapter, [
+    'SELECT 1 AS live FROM realm_event_watchers WHERE realm_url =',
     param(realmURL),
     'AND expires_at > CAST(',
     param(now),
     'AS BIGINT)',
-    'ORDER BY user_id',
+    'LIMIT 1',
   ]);
-  return rows.map((row) => row.user_id as string);
+  return rows.length > 0;
 }
 
 /**
