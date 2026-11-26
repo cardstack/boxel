@@ -539,27 +539,3 @@ export async function realmsBoundToKey(
   ]);
   return rows.map((row) => String(row.realm_url));
 }
-
-// The realm's shares the approval batch offers for one slot: active, holding
-// a key a call can send (`sendableKeySql`; a share of a sign-in app is never
-// one), whose key fits the slot where its request sends (`keyOfferedForSlot`:
-// a kind the slot takes, good at the request's host). Ordered by label.
-async function sharesFittingSlot(
-  dbAdapter: DBAdapter,
-  realmURL: string,
-  send: SlotSend,
-): Promise<ShareRow[]> {
-  let rows = (await query(dbAdapter, [
-    `SELECT s.id, s.label, s.owner, s.state, k.kind AS key_kind, ${apiHostsOfKeySql('s.key_id')} AS api_hosts FROM key_shares s JOIN user_keys k ON k.id = s.key_id WHERE s.realm_url = `,
-    param(realmURL),
-    ` AND s.state = 'active' AND ${sendableKeySql('s.key_id')} ORDER BY s.label, s.id`,
-  ])) as unknown as (ShareRow & { key_kind: string; api_hosts: unknown })[];
-  return rows
-    .filter((row) =>
-      keyOfferedForSlot(
-        { kind: row.key_kind, apiHosts: apiHostList(row.api_hosts) },
-        [send],
-      ),
-    )
-    .map(({ id, label, owner, state }) => ({ id, label, owner, state }));
-}
