@@ -57,39 +57,16 @@ describe('commands an OAuth profile refuses', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('refuses boxel run-command', async () => {
-    let result = await runCommand('example-command', REALM_URL, {
+  it('refuses boxel capture --url-only', async () => {
+    let result = await capture(`${REALM_URL}Card/1`, {
       profileManager: pm,
+      urlOnly: true,
     });
-
-    expect(result).toEqual({
-      status: 'error',
-      error: OAUTH_REFUSALS.runCommand,
-    });
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("refuses the library's runCommand", async () => {
-    let result = await new BoxelCLIClient(pm).runCommand(
-      REALM_SERVER_URL,
-      REALM_URL,
-      'example-command',
-    );
-
-    expect(result).toEqual({
-      status: 'error',
-      error: OAUTH_REFUSALS.runCommand,
-    });
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it('refuses boxel capture', async () => {
-    let result = await capture(`${REALM_URL}Card/1`, { profileManager: pm });
 
     expect(result).toEqual({
       ok: false,
       captures: [],
-      error: OAUTH_REFUSALS.capture,
+      error: OAUTH_REFUSALS.captureUrlOnly,
     });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -117,14 +94,198 @@ describe('commands an OAuth profile refuses', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('suggests a Matrix profile in each refusal of a command', () => {
-    for (let refusal of [
-      OAUTH_REFUSALS.runCommand,
-      OAUTH_REFUSALS.capture,
-      OAUTH_REFUSALS.browse,
-    ]) {
-      expect(refusal).toContain('`boxel profile add` without --oauth');
-    }
+  it('suggests a Matrix profile when browse refuses', () => {
+    expect(OAUTH_REFUSALS.browse).toContain(
+      '`boxel profile add` without --oauth',
+    );
+  });
+});
+
+// The bearer challenge a realm server sends with a `403` when the OAuth
+// connection doesn't hold a scope the route needs.
+function insufficientScope(scope: string): Response {
+  return new Response(JSON.stringify({ error: 'insufficient_scope' }), {
+    status: 403,
+    headers: {
+      'Content-Type': 'application/json',
+      'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${scope}"`,
+    },
+  });
+}
+
+describe('commands an OAuth profile runs with its access token', () => {
+  let dir: string;
+  let pm: ProfileManager;
+  let requests: { url: string; authorization: string | null; body: unknown }[];
+  let respond: (url: string) => Response;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-oauth-commands-'));
+    pm = new ProfileManager(dir);
+    pm.addOAuthProfile(
+      USER_ID,
+      {
+        issuer: REALM_SERVER_URL.replace(/\/$/, ''),
+        tokenEndpoint: `${REALM_SERVER_URL}_oauth-provider/token`,
+        accessToken: 'access-token-placeholder',
+        refreshToken: 'refresh-token-placeholder',
+        accessExpiresAt: new Date(Date.now() + 600_000).toISOString(),
+        connectionEndsAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+      {
+        matrixUrl: 'https://matrix.example.test/',
+        realmServerUrl: REALM_SERVER_URL,
+      },
+    );
+    requests = [];
+    respond = () => new Response('unexpected request', { status: 500 });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        let url = input instanceof Request ? input.url : String(input);
+        let headers = new Headers(init?.headers);
+        requests.push({
+          url,
+          authorization: headers.get('Authorization'),
+          body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        });
+        return respond(url);
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  function commandResult(): Response {
+    return new Response(
+      JSON.stringify({
+        data: {
+          type: 'run-command-result',
+          attributes: { status: 'ready', cardResultString: '{"ok":true}' },
+        },
+      }),
+      { status: 201, headers: { 'Content-Type': 'application/vnd.api+json' } },
+    );
+  }
+
+  it('sends boxel run-command with the access token', async () => {
+    respond = commandResult;
+
+    let result = await runCommand('example-command', REALM_URL, {
+      profileManager: pm,
+    });
+
+    expect(result).toEqual({
+      status: 'ready',
+      result: '{"ok":true}',
+      error: null,
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      url: `${REALM_SERVER_URL}_run-command`,
+      authorization: 'Bearer access-token-placeholder',
+    });
+  });
+
+  it("sends the library's runCommand with the access token", async () => {
+    respond = commandResult;
+
+    let result = await new BoxelCLIClient(pm).runCommand(
+      REALM_SERVER_URL,
+      REALM_URL,
+      'example-command',
+    );
+
+    expect(result.status).toBe('ready');
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      url: `${REALM_SERVER_URL}_run-command`,
+      authorization: 'Bearer access-token-placeholder',
+    });
+  });
+
+  it('says which access a command needs when the connection only reads', async () => {
+    respond = () => insufficientScope('boxel:write');
+    let expected =
+      "Running a command needs a connection that allows boxel:write, and this profile's OAuth connection doesn't. " +
+      'Run `boxel profile add --oauth` again and allow it.';
+
+    expect(
+      await runCommand('example-command', REALM_URL, { profileManager: pm }),
+    ).toEqual({ status: 'error', error: expected });
+    expect(
+      await new BoxelCLIClient(pm).runCommand(
+        REALM_SERVER_URL,
+        REALM_URL,
+        'example-command',
+      ),
+    ).toEqual({ status: 'error', error: expected });
+  });
+
+  it('captures a card with the access token and saves the bytes it answers with', async () => {
+    let bytes = Buffer.from('capture bytes');
+    respond = () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            type: 'capture-result',
+            attributes: {
+              status: 'ready',
+              contentType: 'image/png',
+              captures: [
+                {
+                  name: null,
+                  url: null,
+                  width: 800,
+                  height: 600,
+                  deviceScaleFactor: 1,
+                  base64: bytes.toString('base64'),
+                },
+              ],
+            },
+          },
+        }),
+        {
+          status: 201,
+          headers: { 'Content-Type': 'application/vnd.api+json' },
+        },
+      );
+    let out = path.join(dir, 'captures');
+
+    let result = await capture(`${REALM_URL}Card/1`, {
+      profileManager: pm,
+      realm: REALM_URL,
+      out,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.captures).toHaveLength(1);
+    expect(result.captures[0]).toMatchObject({ status: 'ok', url: null });
+    expect(fs.readFileSync(result.captures[0].file!)).toEqual(bytes);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      url: `${REALM_SERVER_URL}_capture`,
+      authorization: 'Bearer access-token-placeholder',
+    });
+  });
+
+  it('says which access a capture needs when the connection lacks it', async () => {
+    respond = () => insufficientScope('boxel:read');
+
+    let result = await capture(`${REALM_URL}Card/1`, {
+      profileManager: pm,
+      realm: REALM_URL,
+      out: path.join(dir, 'captures'),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.captures[0].error).toBe(
+      "Capturing a card needs a connection that allows boxel:read, and this profile's OAuth connection doesn't. " +
+        'Run `boxel profile add --oauth` again and allow it.',
+    );
   });
 });
 
@@ -199,7 +360,7 @@ describe("a realm's refusal of an OAuth write to its policy", () => {
   });
 });
 
-describe('the help of a command an OAuth profile refuses', () => {
+describe('the help of a command whose use an OAuth profile limits', () => {
   function helpOf(name: string): string {
     let program = new Command();
     registerRunCommand(program);
@@ -212,12 +373,12 @@ describe('the help of a command an OAuth profile refuses', () => {
     return out;
   }
 
-  it('says, before anyone runs it, that it needs a profile signed in with Matrix', () => {
+  it('says, before anyone runs it, what a profile signed in with OAuth needs or lacks', () => {
     expect(helpOf('run-command')).toContain(
-      "Needs a profile signed in with Matrix: the realm server doesn't let an OAuth token run commands yet.",
+      'On a profile signed in with OAuth, running a command needs the connection to allow writing (boxel:write).',
     );
     expect(helpOf('capture')).toContain(
-      "Needs a profile signed in with Matrix: the realm server doesn't let an OAuth token capture cards yet.",
+      "--url-only doesn't work on a profile signed in with OAuth",
     );
     expect(helpOf('browse')).toContain(
       'Signing a browser in needs a profile signed in with Matrix',

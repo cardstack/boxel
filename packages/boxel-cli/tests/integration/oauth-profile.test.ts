@@ -3,7 +3,11 @@ import * as fs from 'fs';
 import { join } from 'path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 // The workspace list and display name are read through Synapse's admin API.
-import { ensureMatrixAdminUser } from '#realm-server/tests/helpers/index';
+import {
+  ensureMatrixAdminUser,
+  getTestPrerenderer,
+  stopTestPrerenderServer,
+} from '#realm-server/tests/helpers/index';
 import { testOAuthProviderConfig } from '#realm-server/tests/helpers/oauth-provider';
 import {
   createTestHome,
@@ -264,15 +268,166 @@ describe('a profile signed in with OAuth (integration)', () => {
     });
     expect(third.ok).toBe(true);
   });
+});
 
-  it('refuses boxel run-command before making a request', async () => {
+// A realm-defined command that saves a Note card in the realm its input names
+// and answers with the saved card's id, or with why the save threw.
+const SAVE_NOTE_COMMAND = `
+  import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+  import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
+  import { Command } from '@cardstack/runtime-common';
+
+  export class Note extends CardDef {
+    static displayName = 'Note';
+    @field body = contains(StringField);
+  }
+
+  export class SaveNoteInput extends CardDef {
+    @field body = contains(StringField);
+    @field realm = contains(StringField);
+  }
+
+  export class SaveNoteResult extends CardDef {
+    @field savedId = contains(StringField);
+    @field failure = contains(StringField);
+  }
+
+  export class SaveNoteCommand extends Command<
+    typeof SaveNoteInput,
+    typeof SaveNoteResult
+  > {
+    static actionVerb = 'Save';
+
+    async getInputType() {
+      return SaveNoteInput;
+    }
+
+    protected async run(input) {
+      let note = new Note({ body: input.body });
+      try {
+        await new SaveCardCommand(this.commandContext).execute({
+          card: note,
+          realm: input.realm,
+        });
+        return new SaveNoteResult({ savedId: note.id });
+      } catch (e) {
+        return new SaveNoteResult({ failure: e?.message ?? String(e) });
+      }
+    }
+  }
+`;
+
+const CAPTURE_TARGET = JSON.stringify({
+  data: {
+    type: 'card',
+    attributes: { title: 'Captured with OAuth' },
+    meta: {
+      adoptsFrom: { module: '@cardstack/base/card-api', name: 'CardDef' },
+    },
+  },
+});
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+
+// run-command and capture render in a prerender tab on the realm server, so
+// this suite renders for real. The realm admits only the test user, so a
+// command that writes to it, or a capture of a card in it, succeeds only as
+// that user.
+describe('commands a profile signed in with OAuth runs on the realm server (integration)', () => {
+  let home: ReturnType<typeof createTestHome>;
+
+  beforeAll(async () => {
+    await ensureMatrixAdminUser();
+    await startTestRealmServer({
+      secureOriginURL,
+      oauthProvider: testOAuthProviderConfig(),
+      prerenderer: await getTestPrerenderer(),
+      realms: [
+        {
+          realmURL: new URL(PRIVATE_REALM),
+          fileSystem: {
+            'save-note-command.gts': SAVE_NOTE_COMMAND,
+            'capture-target.json': CAPTURE_TARGET,
+          },
+          permissions: {
+            [matrixId]: ['read', 'write', 'realm-owner'],
+          },
+        },
+      ],
+    });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    home = createTestHome();
+    await signInWithOAuth(home);
+  }, 600_000);
+
+  afterAll(async () => {
+    vi.restoreAllMocks();
+    home?.cleanup();
+    try {
+      await stopTestRealmServer();
+    } finally {
+      // The prerender server's port is process-wide, so the next suite's
+      // getTestPrerenderer() needs it closed even when the teardown throws.
+      await stopTestPrerenderServer();
+    }
+  }, 600_000);
+
+  it('runs a command that writes a card, as the user', async () => {
     let run = await runBoxel(
-      ['run-command', 'example-command', '--realm', PRIVATE_REALM],
+      [
+        'run-command',
+        `${PRIVATE_REALM}save-note-command/SaveNoteCommand`,
+        '--realm',
+        PRIVATE_REALM,
+        '--input',
+        JSON.stringify({ body: 'saved with OAuth', realm: PRIVATE_REALM }),
+        '--json',
+      ],
+      { home: home.home },
+    );
+    expect(run.ok, run.stderr).toBe(true);
+    let result = run.json<{ status: string; result: string }>();
+    expect(result.status).toBe('ready');
+    let saved = JSON.parse(result.result).data.attributes;
+    expect(saved.failure ?? undefined).toBeUndefined();
+    expect(saved.savedId).toMatch(new RegExp(`^${PRIVATE_REALM}`));
+
+    let pm = reloadProfile(home.home);
+    let source = await pm.authedRealmFetch(`${saved.savedId}.json`, {
+      headers: { Accept: 'application/vnd.card+source' },
+    });
+    expect(source.status).toBe(200);
+    expect(JSON.parse(await source.text()).data.attributes.body).toBe(
+      'saved with OAuth',
+    );
+  });
+
+  it('captures a card and saves the image the server answers with', async () => {
+    let out = fs.mkdtempSync(join(home.home, 'captures-'));
+    let run = await runBoxel(
+      ['capture', `${PRIVATE_REALM}capture-target`, '--out', out, '--json'],
+      { home: home.home },
+    );
+    expect(run.ok, run.stderr).toBe(true);
+    let result = run.json<{
+      ok: boolean;
+      captures: { status: string; file?: string; url: string | null }[];
+    }>();
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(result.captures).toHaveLength(1);
+    expect(result.captures[0]).toMatchObject({ status: 'ok', url: null });
+    let bytes = fs.readFileSync(result.captures[0].file!);
+    expect(bytes.subarray(0, 4)).toEqual(PNG_SIGNATURE);
+  });
+
+  it('refuses capture --url-only before making a request', async () => {
+    let run = await runBoxel(
+      ['capture', `${PRIVATE_REALM}capture-target`, '--url-only'],
       { home: home.home },
     );
     expect(run.ok).toBe(false);
     expect(`${run.stdout}${run.stderr}`).toContain(
-      "Running a command doesn't work on a profile signed in with OAuth yet",
+      "`boxel capture --url-only` doesn't work on a profile signed in with OAuth",
     );
   });
 });

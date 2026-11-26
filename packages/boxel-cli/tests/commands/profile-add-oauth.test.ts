@@ -207,7 +207,7 @@ describe('boxel profile add --oauth', () => {
     await addOAuthProfile(manager, environment, d);
 
     expect(log.mock.calls.flat().join('\n')).toMatch(
-      /This replaces a profile signed in with Matrix\. A profile signed in with OAuth can't yet run `boxel run-command`/,
+      /This replaces a profile signed in with Matrix\. A profile signed in with OAuth can't yet print capture URLs with `boxel capture --url-only`/,
     );
   });
 

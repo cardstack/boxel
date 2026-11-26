@@ -5,7 +5,10 @@ import {
 } from '../lib/profile-manager.ts';
 import { FG_GREEN, FG_RED, FG_CYAN, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
-import { OAUTH_HELP_NOTES, OAUTH_REFUSALS } from '../lib/oauth-refusals.ts';
+import {
+  OAUTH_HELP_NOTES,
+  describeInsufficientScope,
+} from '../lib/oauth-refusals.ts';
 import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
 import { describeFetchError } from '../lib/describe-fetch-error.ts';
 
@@ -38,9 +41,6 @@ export async function runCommand(
     throw new Error(
       'No active profile. Run `boxel profile add` to create one.',
     );
-  }
-  if (active.profile.oauth) {
-    return { status: 'error', error: OAUTH_REFUSALS.runCommand };
   }
 
   let resolvedRealm = await resolveRealmIdentifier(realmUrl, {
@@ -83,6 +83,13 @@ export async function runCommand(
   }
 
   if (!response.ok) {
+    let insufficientScope = describeInsufficientScope(
+      response,
+      'Running a command',
+    );
+    if (insufficientScope) {
+      return { status: 'error', error: insufficientScope };
+    }
     let text = await response.text().catch(() => '(no body)');
     return {
       status: 'error',

@@ -7,7 +7,11 @@ import {
   RealmPaths,
 } from '@cardstack/runtime-common/paths';
 import { resolveRealmAuthenticator } from '../lib/auth-resolver.ts';
-import { OAUTH_HELP_NOTES, OAUTH_REFUSALS } from '../lib/oauth-refusals.ts';
+import {
+  OAUTH_HELP_NOTES,
+  OAUTH_REFUSALS,
+  describeInsufficientScope,
+} from '../lib/oauth-refusals.ts';
 import { cliLog } from '../lib/cli-log.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../lib/colors.ts';
 import { describeFetchError } from '../lib/describe-fetch-error.ts';
@@ -38,7 +42,9 @@ import {
  * skips bytes entirely and prints the served URLs; note a served URL is
  * only durable for captures the server persists (canonical captures) — a
  * capture returned inline-only has `url: null` and is reported as an error
- * in that mode.
+ * in that mode. The server answers a capture made with an OAuth token with
+ * its bytes and no URL, so a profile signed in with OAuth refuses
+ * `--url-only` before making a request.
  */
 
 const DEFAULT_MAX_WAIT_SECONDS = 120;
@@ -160,13 +166,14 @@ export async function capture(
   options: CaptureOptions = {},
 ): Promise<CaptureResult> {
   if (
+    options.urlOnly &&
     !options.realmSecretSeed &&
     !options.authenticator &&
     !options.serverFetch &&
     (options.profileManager ?? getProfileManager()).getActiveProfile()?.profile
       .oauth
   ) {
-    return topLevelError(OAUTH_REFUSALS.capture);
+    return topLevelError(OAUTH_REFUSALS.captureUrlOnly);
   }
 
   // Assemble the jobs: one server request (one settle) per card.
@@ -411,6 +418,13 @@ async function runJob(
     }
     let body = await response.text().catch(() => '');
     if (!response.ok) {
+      let insufficientScope = describeInsufficientScope(
+        response,
+        'Reading the card',
+      );
+      if (insufficientScope) {
+        return fail(insufficientScope);
+      }
       return fail(
         `Could not load card (HTTP ${response.status}): ${body.slice(0, 200)}`,
       );
@@ -491,6 +505,13 @@ async function runJob(
 
   let text = await response.text().catch(() => '');
   if (!response.ok) {
+    let insufficientScope = describeInsufficientScope(
+      response,
+      'Capturing a card',
+    );
+    if (insufficientScope) {
+      return fail(insufficientScope);
+    }
     return fail(`HTTP ${response.status}: ${text.slice(0, 300)}`);
   }
   let attrs: Record<string, unknown> | undefined;
