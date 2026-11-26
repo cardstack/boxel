@@ -35,6 +35,11 @@ interface Signature {
     removeCardFromStack: (cardId: string) => void;
     openInteractSubmode?: () => void;
     viewCard: ViewCardFn;
+    // Draws the primary card full width, with no realm background and no
+    // border, whatever its type sets for `prefersWideFormat`. The published
+    // site sets it so the page matches its stored HTML, which is the card
+    // alone. Cards opened on top of it keep their own format.
+    forceWidePrimaryCard?: boolean;
   };
 }
 
@@ -102,6 +107,10 @@ export default class HostModeContent extends Component<Signature> {
   }
 
   get isWideCard() {
+    if (this.args.forceWidePrimaryCard) {
+      return true;
+    }
+
     let primaryCard = this.primaryCard;
     if (!primaryCard || !isCardInstance(primaryCard)) {
       return false;
@@ -162,6 +171,7 @@ export default class HostModeContent extends Component<Signature> {
         class='current-card'
         inert={{this.isPrimaryCovered}}
         data-host-mode-primary-card
+        data-test-host-mode-primary-card
       />
       {{#if (gt @stackItemCardIds.length 0)}}
         <HostModeStack
