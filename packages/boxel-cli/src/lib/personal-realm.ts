@@ -108,16 +108,7 @@ export async function fetchWorkspaceList(
 export async function readWorkspaceListResponse(
   response: Response,
 ): Promise<string[]> {
-  if (!response.ok) {
-    let body = await response.text().catch(() => '');
-    throw new Error(
-      `The realm server couldn't read your workspace list: ${response.status}${body ? ` ${body.slice(0, 200)}` : ''}`,
-    );
-  }
-  let json = (await response.json()) as {
-    data?: { attributes?: { realms?: unknown } };
-  };
-  let realms = json?.data?.attributes?.realms;
+  let realms = (await workspaceListAttributes(response)).realms;
   if (
     !Array.isArray(realms) ||
     !realms.every((realm) => typeof realm === 'string')
@@ -127,6 +118,53 @@ export async function readWorkspaceListResponse(
     );
   }
   return realms;
+}
+
+// A realm on the workspace list that the account can still open.
+export interface ReachableRealm {
+  url: string;
+  archived: boolean;
+}
+
+// Reads the realms a `GET /_user-realms` response says the account can still
+// open (`reachableRealms`), throwing on anything but a list of them. A realm
+// server that predates `reachableRealms` answers without it.
+export async function readReachableRealmsResponse(
+  response: Response,
+): Promise<ReachableRealm[]> {
+  let reachable = (await workspaceListAttributes(response)).reachableRealms;
+  if (reachable === undefined) {
+    throw new Error(
+      "The realm server didn't say which of your workspaces you can still open. It is probably older than this version of boxel-cli.",
+    );
+  }
+  if (
+    !Array.isArray(reachable) ||
+    !reachable.every(
+      (realm) =>
+        typeof realm?.url === 'string' && typeof realm?.archived === 'boolean',
+    )
+  ) {
+    throw new Error(
+      "The realm server's workspace list response did not say which realms you can open",
+    );
+  }
+  return reachable.map(({ url, archived }) => ({ url, archived }));
+}
+
+async function workspaceListAttributes(
+  response: Response,
+): Promise<{ realms?: unknown; reachableRealms?: unknown }> {
+  if (!response.ok) {
+    let body = await response.text().catch(() => '');
+    throw new Error(
+      `The realm server couldn't read your workspace list: ${response.status}${body ? ` ${body.slice(0, 200)}` : ''}`,
+    );
+  }
+  let json = (await response.json()) as {
+    data?: { attributes?: { realms?: unknown; reachableRealms?: unknown } };
+  };
+  return json?.data?.attributes ?? {};
 }
 
 interface PersonalRealmAccess {

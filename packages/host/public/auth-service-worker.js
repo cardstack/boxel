@@ -8,7 +8,9 @@
 // a known realm host but no token has been synced yet (SW activation race,
 // localStorage write happening just before the SW message round-trip lands,
 // etc.), the SW asks the controlling page for a token via MessageChannel and
-// retries once before falling through.
+// retries once before falling through. A page that syncs no tokens, because
+// it holds them in memory, can answer that ask with a token for that request
+// only, which the SW doesn't keep.
 //
 // The SW also absorbs 503 + Retry-After answers from the realm's
 // `_capture/` route, re-fetching at the server's suggested pace within a
@@ -248,7 +250,12 @@ async function requestTokenFromClient(requestURL, initiatingClientId) {
         settled = true;
         clearTimeout(timer);
         if (reply && reply.realmURL && reply.token) {
-          realmTokens.set(reply.realmURL, reply.token);
+          // A tab that holds its sessions in memory (an OAuth app's
+          // prerender tab) gives a token for this request only: it is used
+          // and not kept, so the page asks again for the next one.
+          if (!reply.forThisRequestOnly) {
+            realmTokens.set(reply.realmURL, reply.token);
+          }
           recordRealmHost(reply.realmURL);
           resolve(reply.token);
         } else {

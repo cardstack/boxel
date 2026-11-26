@@ -10,6 +10,7 @@ import {
   captureSpecHash,
   insert,
   insertPermissions,
+  oauthCaptureReader,
   param,
   putMedia,
   REALM_AUTHORITY_RENDER,
@@ -187,7 +188,81 @@ module(basename(import.meta.filename), function () {
         // still records the field so the capture's telemetry is explicit
         // about the absence.
         loggingCorrelationId: null,
+        oauth: null,
       });
+    });
+
+    // An OAuth app's capture (ADR 021 §1.5) renders with tab tokens its grant
+    // bounds, so it is published as a job only a worker that mints them
+    // claims, under a reader of its own, and is answered with its bytes: its
+    // served URL is one the app's token can't fetch.
+    test('publishes an OAuth app’s capture under its own job type and reader', async function (assert) {
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+        base64: 'iVBORw0KGgo=',
+        width: 800,
+        height: 600,
+        contentType: 'image/png',
+      } as unknown as PgPrimitive);
+      let args = buildArgs(dbAdapter, queue);
+      let app = new Koa();
+      let router = new Router();
+      router.post(
+        '/_capture',
+        // What the Boxel API's controller leaves for a route it admits.
+        async (ctxt, next) => {
+          ctxt.state.oauthCaller = {
+            user: '@someone:localhost',
+            userId: '1',
+            grantId: 'grant-1',
+            clientId: 'boxel-cli',
+            scopes: ['boxel:read'],
+            grantCreatedAt: 0,
+          };
+          await next();
+        },
+        handleCapture(args),
+      );
+      app.use(router.routes());
+      let realmURL = 'http://example.test/';
+      let cardId = `${realmURL}Person/example-card`;
+
+      let response = await supertest(app.callback())
+        .post('/_capture')
+        .send({
+          data: {
+            type: 'capture',
+            attributes: {
+              realmURL,
+              cardId,
+              format: 'isolated',
+              includeBase64: false,
+            },
+          },
+        })
+        .expect(201);
+
+      assert.strictEqual(published.length, 1, 'published exactly one job');
+      assert.strictEqual(published[0]?.jobType, 'capture-oauth');
+      let jobArgs = published[0]?.args as Record<string, unknown>;
+      assert.strictEqual(
+        jobArgs.runAs,
+        oauthCaptureReader('@someone:localhost'),
+      );
+      assert.deepEqual(jobArgs.oauth, {
+        user: '@someone:localhost',
+        grantId: 'grant-1',
+        scopes: ['boxel:read'],
+      });
+      assert.strictEqual(
+        response.body.data.attributes.base64,
+        'iVBORw0KGgo=',
+        'the bytes are answered even when not asked for',
+      );
+      for (let entry of response.body.data.attributes.captures ?? []) {
+        assert.strictEqual(entry.url, null, 'no served URL is answered');
+      }
     });
 
     test('threads a valid captureSpec into the enqueued job', async function (assert) {

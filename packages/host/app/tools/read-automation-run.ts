@@ -24,7 +24,9 @@ import type * as BaseToolModule from '@cardstack/base/command';
 //   empty `levels` is refused, since the route can't keep no level.
 // - `{ realm, automation, read: 'storage' }` reads `GET /_automation-storage`:
 //   the files the automation's runs created that still exist, their sizes,
-//   and what a day of that storage costs.
+//   what a day of that storage costs, the storage charges so far, and why
+//   and since when Boxel isn't charging for the storage while the automation
+//   isn't active.
 export interface ReadAutomationRunInput {
   realm: string;
   run?: string;
