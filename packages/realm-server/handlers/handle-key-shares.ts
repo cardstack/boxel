@@ -306,10 +306,21 @@ export function handleResumeKeyShare(args: CreateRoutesArgs): Handler {
       ticket: ticketOf(body),
     });
     let realmURL = new URL(share.realm);
-    await followAutomationKeyApprovals(
+    let followed = await followAutomationKeyApprovals(
       args,
       realmURL,
       await automationsWaitingForKeyApproval(dbAdapter, realmURL, args),
+    );
+    // An automation the suspension left active shows the share suspended
+    // until its realm's direct writers are told the share is back.
+    await reportKeyApprovalChanges(
+      args,
+      [share.realm],
+      new Set(
+        [...followed]
+          .filter(([, { kind }]) => kind !== 'unchanged')
+          .map(([id]) => id),
+      ),
     );
     await sendJSON(ctxt, 200, { data: serialize(share) });
   });

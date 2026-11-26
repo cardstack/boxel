@@ -32,7 +32,8 @@ import {
 } from './key-bindings.ts';
 import { lookupGrantOperation } from './user-key-grants.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
-import { sendableKeySql } from './oauth.ts';
+import { apiHostList, apiHostsOfKeySql, sendableKeySql } from './oauth.ts';
+import { keyOfferedForSlot, type SlotSend } from './slot-fill.ts';
 
 // Automation approvals (ADR 039 §1.2): a key owner's approval for one
 // automation, named by its card, to use one of their bindings, as the
@@ -151,6 +152,7 @@ export async function checkAutomationKeyApprovals(
       slots.push(
         await slotKeyApproval(dbAdapter, {
           check,
+          send: { slot: check.slot, callApi: request },
           realmURL: realmURL.href,
           approvals,
           version,
@@ -167,6 +169,7 @@ export async function checkAutomationKeyApprovals(
           dbAdapter,
           realmURL.href,
           payer,
+          { slot: check.slot, callApi: request },
         );
         missing.push({
           slot,
@@ -305,12 +308,15 @@ async function slotKeyApproval(
   dbAdapter: DBAdapter,
   {
     check,
+    send,
     realmURL,
     approvals,
     version,
     payer,
   }: {
     check: SlotCheck;
+    // The slot as the operation declares it, and where its request sends.
+    send: SlotSend;
     realmURL: string;
     approvals: Map<string, RecordedApproval>;
     version: AutomationVersionKey;
@@ -325,17 +331,17 @@ async function slotKeyApproval(
     if (kind === 'userKey') {
       return { slot, kind, state: 'waiting', keyOwner: payer };
     }
-    // The owner of a share's key approves the slot with that share, as
-    // `shareApprover` counts shares: an active one whose key a call can send
-    // (`sendableKeySql`; a share of a sign-in app is never one). When every
-    // such share holds one person's key, that person is the one who acts.
-    let owners = (
-      await query(dbAdapter, [
-        'SELECT DISTINCT owner FROM key_shares WHERE realm_url = ',
-        param(realmURL),
-        ` AND state = 'active' AND key_id IS NOT NULL AND ${sendableKeySql('key_id')}`,
-      ])
-    ).map((row) => String(row.owner));
+    // The owner of a share's key approves the slot with that share, and
+    // only a share the approve page offers for the slot counts
+    // (`sharesFittingSlot`). When every such share holds one person's key,
+    // that person is the one who acts.
+    let owners = [
+      ...new Set(
+        (await sharesFittingSlot(dbAdapter, realmURL, send)).map(
+          ({ owner }) => owner,
+        ),
+      ),
+    ];
     if (owners.length === 0) {
       return { slot, kind, state: 'no-share', keyOwner: null };
     }
@@ -418,14 +424,9 @@ async function shareApprover(
   dbAdapter: DBAdapter,
   realmURL: string,
   payer: string,
+  send: SlotSend,
 ): Promise<{ canApprove: KeyApprover; shares: MissingShare[] }> {
-  // The shares a call can send, as the approval batch offers them
-  // (`sendableKeySql`): a share of a sign-in app is never one.
-  let rows = (await query(dbAdapter, [
-    'SELECT id, label, owner, state FROM key_shares WHERE realm_url = ',
-    param(realmURL),
-    ` AND state = 'active' AND key_id IS NOT NULL AND ${sendableKeySql('key_id')} ORDER BY label, id`,
-  ])) as unknown as ShareRow[];
+  let rows = await sharesFittingSlot(dbAdapter, realmURL, send);
   let own = rows.filter((row) => row.owner === payer);
   if (own.length) {
     return { canApprove: 'payer', shares: own.map(shareOf) };
@@ -513,4 +514,28 @@ export async function realmsBoundToKey(
     param(keyId),
   ]);
   return rows.map((row) => String(row.realm_url));
+}
+
+// The realm's shares the approval batch offers for one slot: active, holding
+// a key a call can send (`sendableKeySql`; a share of a sign-in app is never
+// one), whose key fits the slot where its request sends (`keyOfferedForSlot`:
+// a kind the slot takes, good at the request's host). Ordered by label.
+async function sharesFittingSlot(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  send: SlotSend,
+): Promise<ShareRow[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT s.id, s.label, s.owner, s.state, k.kind AS key_kind, ${apiHostsOfKeySql('s.key_id')} AS api_hosts FROM key_shares s JOIN user_keys k ON k.id = s.key_id WHERE s.realm_url = `,
+    param(realmURL),
+    ` AND s.state = 'active' AND ${sendableKeySql('s.key_id')} ORDER BY s.label, s.id`,
+  ])) as unknown as (ShareRow & { key_kind: string; api_hosts: unknown })[];
+  return rows
+    .filter((row) =>
+      keyOfferedForSlot(
+        { kind: row.key_kind, apiHosts: apiHostList(row.api_hosts) },
+        [send],
+      ),
+    )
+    .map(({ id, label, owner, state }) => ({ id, label, owner, state }));
 }

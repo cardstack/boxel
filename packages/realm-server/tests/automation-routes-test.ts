@@ -426,7 +426,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function keyWriteTicket(
     user: string,
-    action: 'add' | 'share' | 'delete',
+    action: 'add' | 'share' | 'delete' | 'replace',
     { keyId = null }: { keyId?: string | null } = {},
   ) {
     return (
@@ -3125,6 +3125,98 @@ module(basename(import.meta.filename), function (hooks) {
         [slots[0].state, slots[0].fix],
         ['no-share', 'share-key'],
         'the app’s owner is offered no approval the approve page has nothing for',
+      );
+    });
+
+    test('a share whose key doesn’t fit the slot is no share the slot can use', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      // The share's key is good only at another API host than the one the
+      // operation calls, so the approve page offers the share for nothing.
+      await dbAdapter.execute(
+        `INSERT INTO oauth_clients (key_id, client_id, grant_type, token_url, token_auth, api_hosts) VALUES ($1, 'elsewhere', 'client_credentials', $2, 'client_secret_post', ARRAY['api.github.com'])`,
+        { bind: [share.keyId!, `${VENDOR}/token`] },
+      );
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      assert.deepEqual(
+        shown.operations.map(
+          ({ missing }: { missing: { canApprove: string }[] }) =>
+            missing.map(({ canApprove }) => canApprove),
+        ),
+        [['nobody-yet']],
+        'the switch-on screen finds nobody who can approve the slot',
+      );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, WRITER));
+      assert.deepEqual(
+        [slots[0].state, slots[0].fix],
+        ['no-share', 'share-key'],
+        'the section offers the share’s owner no approval the approve page can’t give',
+      );
+    });
+
+    test('resuming a suspended share tells the realm’s direct writers of an automation the suspension left active', async function (assert) {
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      let share = await approveSharedFor(SHARED, shown.version);
+      await reachesState(SHARED, 'active');
+      let suspended = await request
+        .post(`/_key-shares/${share.id}/suspend`)
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(suspended.status, 200, suspended.text);
+      let ticket = (
+        await mintKeyWriteTicket(dbAdapter, OWNER, {
+          action: 'resume',
+          keyId: null,
+          realmURL: null,
+          shareId: share.id,
+        })
+      ).ticket;
+      let sent = await automationEventsDuring(async () => {
+        let resumed = await request
+          .post(`/_key-shares/${share.id}/resume`)
+          .set('Authorization', auth(OWNER))
+          .set('Content-Type', 'application/json')
+          .send({ meta: { ticket } });
+        assert.strictEqual(resumed.status, 200, resumed.text);
+      });
+      assert.deepEqual(
+        sent.filter((id) => id === automationId(SHARED)),
+        [automationId(SHARED)],
+        'resuming the share tells the realm’s direct writers once',
+      );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED));
+      assert.strictEqual(slots[0].state, 'approved');
+    });
+
+    test('replacing a key tells the direct writers of each realm whose bindings use the key', async function (assert) {
+      let shown = (await switchOn(OWNER, KEYED)).body.meta.keyApprovals;
+      let key = await addKey(OWNER);
+      let approved = await approveOperation(
+        OWNER,
+        'list',
+        { keyId: key.id },
+        { id: cardURL(KEYED), version: shown.version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      let sent = await automationEventsDuring(async () => {
+        let replaced = await request
+          .patch(`/_user-keys/${key.id}`)
+          .set('Authorization', auth(OWNER))
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'user-key',
+              id: key.id,
+              attributes: { value: 'sk-replaced-routes-key' },
+            },
+            meta: {
+              ticket: await keyWriteTicket(OWNER, 'replace', { keyId: key.id }),
+            },
+          });
+        assert.strictEqual(replaced.status, 200, replaced.text);
+      });
+      assert.deepEqual(
+        sent.filter((id) => id === automationId(KEYED)),
+        [automationId(KEYED)],
+        'replacing the key tells the realm’s direct writers once',
       );
     });
 
