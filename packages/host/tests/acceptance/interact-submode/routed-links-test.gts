@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import {
   validateHostRoutes,
+  VirtualNetwork,
   type HostRoute,
   type RawHostRoutingRule,
 } from '@cardstack/runtime-common';
@@ -36,6 +37,7 @@ function routesServingAuthorsAt(path: string): readonly HostRoute[] {
   ];
   let { routes, warnings } = validateHostRoutes(rules, {
     realmURL: new URL(testRealmURL),
+    virtualNetwork: new VirtualNetwork(),
     lookupType: () => undefined,
   });
   if (warnings.some((w) => w.dropped)) {
