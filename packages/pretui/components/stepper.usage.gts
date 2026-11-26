@@ -21,6 +21,7 @@ class StepperUsage extends Component {
   setDisabled = (v: boolean) => (this.disabled = v);
   get usage() {
     let bits = [
+      "@controlId='quantity-input'",
       "@label='Quantity'",
       `@value={{${this.value}}}`,
       `@min={{${this.min}}}`,
@@ -29,7 +30,7 @@ class StepperUsage extends Component {
     if (this.step !== 1) bits.push(`@step={{${this.step}}}`);
     if (this.disabled) bits.push('@disabled={{true}}');
     bits.push('@onValueChange={{this.setValue}}');
-    return `<Stepper ${bits.join(' ')} />`;
+    return `<label for='quantity-input'>Quantity</label>\n<Stepper ${bits.join(' ')} />`;
   }
   <template>
     <FreestyleUsage
@@ -38,7 +39,9 @@ class StepperUsage extends Component {
       @source={{this.usage}}
     >
       <:example>
+        <label for='stepper-usage-input'>Quantity</label>
         <Stepper
+          @controlId='stepper-usage-input'
           @label='Quantity'
           @value={{this.value}}
           @min={{this.min}}

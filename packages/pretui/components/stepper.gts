@@ -116,6 +116,7 @@ export class Stepper extends Component<StepperSignature> {
         class='pretui-stepper-btn'
         aria-label={{this.decLabel}}
         tabindex='-1'
+        data-test-pretui-stepper-decrement
         disabled={{this.decDisabled}}
         {{on 'click' this.decrement}}
       >
@@ -143,6 +144,7 @@ export class Stepper extends Component<StepperSignature> {
         class='pretui-stepper-btn'
         aria-label={{this.incLabel}}
         tabindex='-1'
+        data-test-pretui-stepper-increment
         disabled={{this.incDisabled}}
         {{on 'click' this.increment}}
       >

@@ -276,24 +276,26 @@ module('Pretui | React-dialect aliases — controls', function (hooks) {
     let [qty, seats] = [
       ...document.querySelectorAll('[data-test-pretui-stepper]'),
     ] as HTMLElement[];
+    let buttons = (el: HTMLElement) => [
+      el.querySelector('[data-test-pretui-stepper-decrement]') as HTMLElement,
+      el.querySelector('[data-test-pretui-stepper-increment]') as HTMLElement,
+    ];
     let names = (el: HTMLElement) =>
-      [...el.querySelectorAll('button')].map((b) =>
-        b.getAttribute('aria-label'),
-      );
+      buttons(el).map((b) => b.getAttribute('aria-label'));
     assert.deepEqual(names(qty!), ['Decrease Quantity', 'Increase Quantity']);
     assert.deepEqual(
       names(seats!),
       ['Decrease Seats', 'Add a seat'],
       'a caller can override a name',
     );
-    for (let b of qty!.querySelectorAll('button')) {
+    for (let b of buttons(qty!)) {
       assert.strictEqual(
         b.getAttribute('tabindex'),
         '-1',
         'the buttons are not Tab stops',
       );
     }
-    await click(qty!.querySelectorAll('button')[1] as HTMLElement);
+    await click(buttons(qty!)[1]!);
     assert.dom('input', qty).hasValue('3', 'the buttons still click');
   });
 
