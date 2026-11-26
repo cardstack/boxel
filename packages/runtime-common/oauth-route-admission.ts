@@ -157,11 +157,6 @@ export type OAuthLookupResult =
   | { ok: true; caller: OAuthCaller }
   | { ok: false; reason: string };
 
-// What the realm server hands a realm so the realm can be one of a
-// resource's controllers (§1.3, §1.5): the resource's identifier, its scopes
-// with only their realm routes, the `WWW-Authenticate` challenge to answer a
-// refusal with, and the shared lookup, which the realm calls at most once per
-// request.
 // Why a verified caller was refused at a route: no scope maps the route, its
 // scopes don't reach it (or don't reach the permission it requires), or it
 // asked to act as another user.
@@ -170,6 +165,11 @@ export type OAuthCallerRefusal =
   | 'insufficient-scope'
   | 'assume-user';
 
+// What the realm server hands a realm so the realm can be one of a
+// resource's controllers (§1.3, §1.5): the resource's identifier, its scopes
+// with only their realm routes, the `WWW-Authenticate` challenge to answer a
+// refusal with, and the shared lookup, which the realm calls at most once per
+// request.
 export interface RealmOAuthResource {
   resource: string;
   scopes: readonly OAuthScope[];
@@ -182,12 +182,14 @@ export interface RealmOAuthResource {
   // (`oauth-tab-token.ts`): the same grant checks the lookup makes, by the
   // grant the token names. Called at most once per request, in place of
   // `resolve`.
-  // Records a verified caller the realm refused, for the provider's
-  // telemetry. The realm logs its own line with the route as well.
-  refused?(caller: OAuthCaller, reason: OAuthCallerRefusal): void;
   resolveGrant(tabToken: {
     grantId: string;
     user: string;
     scopes: readonly string[];
   }): Promise<OAuthLookupResult>;
+  // Records a verified caller the realm refused, for the provider's
+  // telemetry. The realm logs its own line with the route as well. A hook
+  // that throws doesn't change the refusal: the realm logs the error and
+  // answers as it would without the hook.
+  refused?(caller: OAuthCaller, reason: OAuthCallerRefusal): void;
 }

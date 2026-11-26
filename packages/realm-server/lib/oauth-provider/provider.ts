@@ -59,7 +59,12 @@ import {
   PRE_REGISTERED_CLIENTS,
   type PreRegisteredClients,
 } from './pre-registered-clients.ts';
-import { logOAuthEvent, networkOf, pseudonym } from './events.ts';
+import {
+  logOAuthEvent,
+  networkOf,
+  pseudonym,
+  setNetworkPseudonymKey,
+} from './events.ts';
 import { boxelHosts } from './redirect-uris.ts';
 import { revocationHandler } from './revocation.ts';
 import { browserOriginAllowed } from './client-cors.ts';
@@ -207,6 +212,7 @@ export function startOAuthProvider({
   serverURL,
   config,
   dbAdapter,
+  realmSecretSeed,
   secureOriginURL,
   appOrigins = [],
   publishedDomains = [],
@@ -221,6 +227,8 @@ export function startOAuthProvider({
   serverURL: URL;
   config: OAuthProviderConfig;
   dbAdapter: DBAdapter;
+  // Keys the pseudonyms that name networks in events (`events.ts`).
+  realmSecretSeed: string;
   secureOriginURL: URL | undefined;
   appOrigins?: readonly string[];
   publishedDomains?: readonly string[];
@@ -253,6 +261,7 @@ export function startOAuthProvider({
   if (capWarning) {
     log.warn(capWarning);
   }
+  setNetworkPseudonymKey(realmSecretSeed);
   let issuer = oauthIssuer(serverURL);
   let registry = buildRegistry(issuer, testOnlyResources);
   let hosts = boxelHosts({

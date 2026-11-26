@@ -12,6 +12,7 @@ import {
   createVirtualNetwork,
   fixtureDir,
   matrixURL,
+  realmSecretSeed,
   runTestRealmServer,
   setupDB,
   setupTestDatabaseTemplate,
@@ -310,6 +311,7 @@ module(basename(import.meta.filename), function () {
             serverURL: new URL('https://realms.example.test/'),
             config: testOAuthProviderConfig(),
             dbAdapter: unusedDBAdapter,
+            realmSecretSeed,
             secureOriginURL: undefined,
           }),
         (error: unknown) =>
@@ -325,6 +327,7 @@ module(basename(import.meta.filename), function () {
             serverURL: new URL('https://realms.example.test/boxel/'),
             config: testOAuthProviderConfig(),
             dbAdapter: unusedDBAdapter,
+            realmSecretSeed,
             secureOriginURL: testOAuthSecureOriginURL,
           }),
         (error: unknown) =>
@@ -338,6 +341,7 @@ module(basename(import.meta.filename), function () {
         serverURL: new URL('https://realms.example.test/'),
         config: testOAuthProviderConfig(),
         dbAdapter: unusedDBAdapter,
+        realmSecretSeed,
         secureOriginURL: testOAuthSecureOriginURL,
       });
       assert.strictEqual(provider.issuer, 'https://realms.example.test');
@@ -351,6 +355,7 @@ module(basename(import.meta.filename), function () {
         serverURL: new URL('https://realms.example.test/'),
         config: testOAuthProviderConfig(),
         dbAdapter: unusedDBAdapter,
+        realmSecretSeed,
         secureOriginURL: testOAuthSecureOriginURL,
       });
       assert.true(

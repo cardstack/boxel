@@ -1006,6 +1006,7 @@ export class RealmServer {
         serverURL,
         config: oauthProvider,
         dbAdapter,
+        realmSecretSeed: this.realmSecretSeed,
         secureOriginURL: this.secureOrigin ? secureOriginURL : undefined,
         appOrigins: secureOriginAppOrigins,
         publishedDomains: [

@@ -10,7 +10,7 @@ import { randomBytes } from 'crypto';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { clientIdForLogs } from './client-metadata-document.ts';
 import { isDynamicClientId } from './dynamic-client-id.ts';
-import { logOAuthEvent, pseudonym, userPseudonym } from './events.ts';
+import { logOAuthEvent, pseudonym } from './events.ts';
 
 // How long a grant lasts from its consent: 30 days when the user chose to
 // keep the connection, 60 minutes when not (ADR 021 §1.9).
@@ -248,14 +248,14 @@ export async function revokeUserOAuthGrants(
         WHERE g.user_id = revoked.id
           AND g.ended_at IS NULL
           AND g.created_at <= revoked.oauth_grants_revoked_at
-        RETURNING g.id
+        RETURNING g.id, g.user_id
      )
-     SELECT id FROM ended`,
+     SELECT id, user_id FROM ended`,
     { bind: [matrixUserId, cutoff ? cutoff.toISOString() : null] },
-  )) as { id: string }[];
+  )) as { id: string; user_id: string }[];
   return await deleteRevokedGrantsTokens(
     dbAdapter,
-    matrixUserId,
+    rows[0]?.user_id,
     rows.map(({ id }) => id),
   );
 }
@@ -291,25 +291,32 @@ export async function revokeUserSessionsAndOAuthGrants(
           AND g.created_at <= revoked.oauth_grants_revoked_at
         RETURNING g.id
      )
-     SELECT revoked.sessions_revoked_at,
+     SELECT revoked.id AS user_id,
+            revoked.sessions_revoked_at,
             ARRAY(SELECT id FROM ended) AS ended
        FROM revoked`,
     { bind: [matrixUserId] },
-  )) as { sessions_revoked_at: string | number; ended: string[] }[];
+  )) as {
+    user_id: string;
+    sessions_revoked_at: string | number;
+    ended: string[];
+  }[];
   if (row?.sessions_revoked_at == null) {
     throw new Error(
       `revokeUserSessionsAndOAuthGrants: failed to record revocation for matrix_user_id="${matrixUserId}"`,
     );
   }
-  await deleteRevokedGrantsTokens(dbAdapter, matrixUserId, row.ended);
+  await deleteRevokedGrantsTokens(dbAdapter, row.user_id, row.ended);
   return Number(row.sessions_revoked_at);
 }
 
 // Deletes the tokens of grants a revocation ended, in a statement after the
-// one that ended them, as `endGrant` does.
+// one that ended them, as `endGrant` does. `userId` is the user's
+// `users.id`, as the revocation read it: undefined only when it ended no
+// grant.
 async function deleteRevokedGrantsTokens(
   dbAdapter: DBAdapter,
-  matrixUserId: string,
+  userId: string | undefined,
   grantIds: string[],
 ): Promise<number> {
   if (grantIds.length > 0) {
@@ -317,13 +324,15 @@ async function deleteRevokedGrantsTokens(
       `DELETE FROM oauth_provider_tokens WHERE grant_id = ANY($1::varchar[])`,
       { bind: [grantIds] },
     );
+  }
+  if (userId && grantIds.length > 0) {
     logOAuthEvent(
       'info',
       {
         event: 'grants-ended',
         reason: 'sessions-revoked',
         count: grantIds.length,
-        user: await userPseudonym(dbAdapter, matrixUserId),
+        user: pseudonym(userId),
       },
       `grants ended: sessions-revoked, ${grantIds.length}`,
     );

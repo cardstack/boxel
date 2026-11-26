@@ -12,6 +12,7 @@ import {
   createVirtualNetwork,
   fixtureDir,
   matrixURL,
+  realmSecretSeed,
   runTestRealmServer,
   setupDB,
   setupTestDatabaseTemplate,
@@ -59,6 +60,7 @@ import {
   OAuthProviderConfigError,
   readAuthorizationLimit,
 } from '../lib/oauth-provider/config.ts';
+import { pseudonym } from '../lib/oauth-provider/events.ts';
 import { startOAuthProvider } from '../lib/oauth-provider/provider.ts';
 import type {
   OAuthResourceDefinition,
@@ -774,6 +776,7 @@ module(basename(import.meta.filename), function () {
         serverURL,
         config: testOAuthProviderConfig(),
         dbAdapter: server.db(),
+        realmSecretSeed,
         secureOriginURL: testOAuthSecureOriginURL,
       });
       let callback = provider.callback();
@@ -1477,6 +1480,11 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(second, first, 'one /24 is one network');
       assert.notStrictEqual(third, first, 'another /24 is another');
+      assert.notStrictEqual(
+        first,
+        pseudonym('198.51.100.0/24'),
+        'the network is a keyed hash, not one anyone can recompute',
+      );
       let logged = lines.map(({ message }) => message).join('\n');
       assert.false(logged.includes('198.51.100'), 'no address is logged');
     });

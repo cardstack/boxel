@@ -756,6 +756,8 @@ import {
   isOAuthAccessTokenShaped,
   realmPermissionCeiling,
   type OAuthLookupResult,
+  type OAuthCaller,
+  type OAuthCallerRefusal,
   type RealmOAuthResource,
 } from './oauth-route-admission.ts';
 import {
@@ -14240,7 +14242,7 @@ export class Realm {
         this.#log.info(
           `OAuth token refused for ${described}: route not mapped`,
         );
-        oauth.refused?.(caller, 'route-not-mapped');
+        this.#oauthRefused(oauth, caller, 'route-not-mapped');
         return refuse(
           401,
           'invalid_token',
@@ -14250,7 +14252,7 @@ export class Realm {
       this.#log.info(
         `OAuth token refused for ${described}: insufficient scope`,
       );
-      oauth.refused?.(caller, 'insufficient-scope');
+      this.#oauthRefused(oauth, caller, 'insufficient-scope');
       return refuse(
         403,
         'insufficient_scope',
@@ -14277,7 +14279,7 @@ export class Realm {
       this.#log.info(
         `OAuth token refused for ${described}: requires ${requiredPermission}, scopes allow ${permissionCeiling ?? 'nothing'}`,
       );
-      oauth.refused?.(caller, 'insufficient-scope');
+      this.#oauthRefused(oauth, caller, 'insufficient-scope');
       return refuse(
         403,
         'insufficient_scope',
@@ -14300,7 +14302,7 @@ export class Realm {
       this.#log.info(
         `OAuth token refused for ${described}: it can't assume another user`,
       );
-      oauth.refused?.(caller, 'assume-user');
+      this.#oauthRefused(oauth, caller, 'assume-user');
       return refuse(
         401,
         'invalid_token',
@@ -14316,6 +14318,20 @@ export class Realm {
     };
     request.headers.delete('Authorization');
     return undefined;
+  }
+
+  // Tells the realm server a verified caller was refused. The refusal stands
+  // whatever the hook does.
+  #oauthRefused(
+    oauth: RealmOAuthResource,
+    caller: OAuthCaller,
+    reason: OAuthCallerRefusal,
+  ): void {
+    try {
+      oauth.refused?.(caller, reason);
+    } catch (e: unknown) {
+      this.#log.error(`OAuth refusal hook failed (${reason})`, e);
+    }
   }
 
   // What a tab token presented to this realm says, when it verifies under the

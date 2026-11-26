@@ -289,7 +289,7 @@ the table above gives each one's `message`.
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | `authorization-refused`            | `authorization refused: …`                                                                                                           | `reason`, `error`, `client`, `network`                                    |
 | `consent`                          | `consent allowed` / `consent denied`                                                                                                 | `outcome`, `client`, `user`, `network`, `renew`                           |
-| `token-issued` / `token-refreshed` | `token issued` / `token refreshed`                                                                                                   | `client`, `grant`, and `networkMatch` on a boxel-cli exchange             |
+| `token-issued` / `token-refreshed` | `token issued` / `token refreshed`                                                                                                   | `client`, `grant`, `networkMatch` (below)                                 |
 | `token-refused`                    | `token refused: <error>, client …` (the token endpoint)                                                                              | `error`, `client`, `network`                                              |
 | `reuse`                            | `authorization code reused`, `refresh token reused`                                                                                  | `what`, `grant`, `network` when known                                     |
 | `grant-ended`                      | `grant ended: …`                                                                                                                     | `reason`, `client`, `grant`, `user`                                       |
@@ -303,10 +303,16 @@ the table above gives each one's `message`.
 `RealmOAuthResource.refused`, so they appear here with `resource` `Boxel
 API`, beside the realm's own `OAuth token refused for …` line with the URL.
 
-`user`, `grant` and `network` are pseudonyms: the first 16 hex characters of
-the SHA-256 of `users.id`, the grant ID, or the network the rate limits group
-a caller by (IPv4 /24, IPv6 /48). They count and group without naming
-anyone. To find the row behind one, in a read-only session:
+`networkMatch` is how a boxel-cli code exchange's network compares with the
+network of the browser that consented: `same`, `other`, `other-family` or
+`unknown`. The event type has the field, but no code sets it yet: until the
+token endpoint checks the exchange's network, the network-mismatch alert
+below sees no data.
+
+`user`, `grant` and `network` are pseudonyms of 16 hex characters. They
+count and group without naming anyone. A `user` or `grant` is the start of
+the SHA-256 of `users.id` or the grant ID, which are random, so nothing
+works back from it. To find the row behind one, in a read-only session:
 
 ```sql
 SELECT id, matrix_user_id FROM users
@@ -316,10 +322,11 @@ SELECT id, client_id, created_at, ended_at, ended_reason FROM oauth_provider_gra
 ```
 
 Both scan the table; that is fine for an investigation, not for a
-dashboard. A network can't be looked up: compare it with the pseudonyms of
-other events, or hash a candidate on your own machine
-(`printf %s 203.0.113.0/24 | sha256sum`, in the form `networkRateLimitKey`
-writes).
+dashboard. A `network` is an HMAC of the network the rate limits group a
+caller by (IPv4 /24, IPv6 /48), keyed from the realm server's secret seed
+(`networkPseudonym`): there are few enough /24s to hash every one, so a
+plain hash would name the network. Compare a network with the pseudonyms of
+other events; only code holding the seed can name one.
 
 ## Alerts
 
@@ -334,7 +341,8 @@ alert's description says what to do; in short:
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | OAuth code or refresh token reused                    | any `reuse` in 5 minutes                                                                         | The grant is already ended. One app reusing for many users is its bug; one user's grant is a copied token          |
 | OAuth flows refused for their confirmation code       | 5 `authorization-refused` `confirmation-code` from one network in 15 minutes                     | An outdated boxel-cli, or flows scripted to impersonate it                                                         |
-| OAuth consents denied in a burst                      | 5 denied consents by one user, or from one network, in 15 minutes                                | A user sent consent links they didn't ask for                                                                      |
+| OAuth consents denied in a burst by one user          | 5 denied consents by one user in 15 minutes                                                      | A user sent consent links they didn't ask for                                                                      |
+| OAuth consents denied in a burst from one network     | 5 denied consents from one network in 15 minutes                                                 | Consent links sent to many people on one network                                                                   |
 | boxel-cli codes exchanged from another network        | 3 `token-issued` with `networkMatch` `other` in 30 minutes                                       | Grants of different users, each once, is the paste attack; one user's is their own setup (dev container, SSH, VPN) |
 | One OAuth connection probing routes                   | 20 `route-not-mapped`, `insufficient-scope` or `assume-user` refusals of one grant in 15 minutes | An app exploring the API, or a stolen token; end the grant                                                         |
 | One user gaining many OAuth grants                    | 10 allowed consents by one user in 30 minutes                                                    | A script driving their browser, or a user talked through consent repeatedly                                        |
