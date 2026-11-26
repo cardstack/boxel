@@ -26,7 +26,7 @@ import {
   safeEdgeFor,
   typeaheadIndex,
 } from './focus';
-import { CommandPalette, fuzzyMatch, matchSegments } from './components/command-palette';
+import { CommandPalette, fuzzyMatch, matchSegments, matchText } from './components/command-palette';
 import { Menu } from './components/menu';
 import { ariaKeyShortcuts, formatShortcut, parseShortcut } from './internal/menu';
 import type { MenuEntry } from './internal/menu';
@@ -690,5 +690,73 @@ module('Pretui | command palette | render', function (hooks) {
     await triggerKeyEvent(input, 'keydown', 'Enter');
     assert.strictEqual(state.lastRun, 'copy-link', 'Enter ran the active command');
     assert.strictEqual(closed, 1, 'and the palette closed once');
+  });
+});
+
+module('Pretui | command palette | noun, match, trigger', function (hooks) {
+  setupCardTest(hooks);
+  hooks.beforeEach(function (assert) {
+    assert.timeout(8000);
+  });
+
+  test('matchText: words and prefix drop the weak matches fuzzy keeps', function (assert) {
+    assert.ok(matchText('fuzzy', 'restroom', 'Room name'), 'fuzzy keeps it');
+    assert.strictEqual(matchText('words', 'restroom', 'Room name'), null);
+    assert.strictEqual(matchText('prefix', 'room', 'Restroom'), null);
+    assert.ok(matchText('prefix', 'rest', 'Restroom'), 'a prefix hit stays');
+    assert.deepEqual(matchText('words', 'na ro', 'Room name')?.ranges, [
+      [0, 2],
+      [5, 7],
+    ]);
+  });
+
+  test('@resultNoun words the announced count and the empty message', async function (assert) {
+    let items = [
+      { label: 'Restroom sign', onSelect: () => {} },
+      { label: 'Room name', onSelect: () => {} },
+    ];
+    let noop = () => {};
+    await render(
+      <template>
+        <CommandPalette
+          @items={{items}}
+          @open={{true}}
+          @onClose={{noop}}
+          @resultNoun='sign'
+          @match='words'
+        />
+      </template>,
+    );
+    let input = root().querySelector(
+      '[data-test-pretui-palette-input]',
+    ) as HTMLInputElement;
+    let status = () => norm(root().querySelector('[role="status"]') as HTMLElement);
+    await fillIn(input, 'rest');
+    assert.strictEqual(status(), '1 sign');
+    await fillIn(input, 'zzzz');
+    assert.strictEqual(status(), 'No signs');
+    assert.strictEqual(
+      norm(root().querySelector('.pal-empty') as HTMLElement),
+      'No matching signs',
+    );
+  });
+
+  test('@triggerLabel renders a button that opens the palette', async function (assert) {
+    let opened = 0;
+    let none: never[] = [];
+    let open = () => opened++;
+    let noop = () => {};
+    await render(
+      <template>
+        <CommandPalette
+          @items={{none}}
+          @onOpen={{open}}
+          @onClose={{noop}}
+          @triggerLabel='Search signs…'
+        />
+      </template>,
+    );
+    await click('[data-test-pretui-palette-trigger]');
+    assert.strictEqual(opened, 1);
   });
 });

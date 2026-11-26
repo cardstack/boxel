@@ -1,4 +1,5 @@
 // Pretui — CommandPalette usage page.
+import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { FreestyleUsage } from './freestyle-usage';
 import { Button } from './button';
@@ -8,6 +9,10 @@ import { MenuState } from '../demo-menu';
 
 // ── CommandPalette ───────────────────────────────────────────────────────
 class CommandPaletteUsage extends MenuState {
+  @tracked signsOpen = false;
+  openSigns = () => (this.signsOpen = true);
+  closeSigns = () => (this.signsOpen = false);
+
   <template>
     <FreestyleUsage
       @name='CommandPalette'
@@ -33,6 +38,28 @@ class CommandPaletteUsage extends MenuState {
           @label='Sourcing desk commands'
           @placeholder='Search lot commands…'
         />
+        <div class='pal-row'>
+          <CommandPalette
+            @items={{this.items}}
+            @open={{this.signsOpen}}
+            @onOpen={{this.openSigns}}
+            @onClose={{this.closeSigns}}
+            @platform={{this.platformValue}}
+            @label='Search signs'
+            @placeholder='Search signs…'
+            @triggerLabel='Search signs…'
+            @hotkey='Mod+Shift+K'
+            @resultNoun='sign'
+            @match='words'
+          />
+        </div>
+        <p class='menu-hint'>The second palette uses
+          <code>@triggerLabel</code>
+          for a field-look trigger,
+          <code>@resultNoun='sign'</code>
+          for the announced count (“4 signs”, “No signs”) and
+          <code>@match='words'</code>
+          so “restroom” no longer lists “Room name”.</p>
         <p class='menu-hint'>Try
           <em>“export”</em>
           — it is two submenus deep and still one keystroke away. Then open
@@ -56,6 +83,23 @@ class CommandPaletteUsage extends MenuState {
           @description='Global shortcut that opens the palette (default Mod+K); needs @onOpen. The listener is owned by an ember-modifier and removed on teardown.'
           @value='Mod+K'
           @defaultValue='Mod+K'
+        />
+        <Args.String
+          @name='resultNoun / resultNounPlural'
+          @description='Singular noun for what the palette lists (default command); the polite status reads “4 signs”, “1 sign”, “No signs”, and the empty message follows it. Give @resultNounPlural when the plural is not the noun plus s.'
+          @value='sign'
+          @defaultValue='command'
+        />
+        <Args.String
+          @name='match'
+          @description='How strict matching is: fuzzy (default) any in-order subsequence; words every query word starts a word of the text; prefix the text starts with the query. Stricter modes drop weak matches from the list and the announced count.'
+          @value='fuzzy'
+          @defaultValue='fuzzy'
+        />
+        <Args.String
+          @name='triggerLabel'
+          @description='Renders a button that looks like a search field and opens the palette through @onOpen. Its text is its accessible name.'
+          @value='Search signs…'
         />
         <Args.Base
           @name='placeholder / label / emptyMessage / platform'

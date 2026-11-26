@@ -28,7 +28,7 @@ The command palette in editors and the `cmdk` family.
 
 Where Pretui is better: sharing the menu tree. Most palettes take their own flat command list, which means a product maintains two definitions of what its commands are and they disagree within a release.
 
-Where it is thinner: no fuzzy-match scoring controls, no command groups or scoping beyond the tree's own structure, no recent commands, and no nested palette modes ("type > to run a command").
+Where it is thinner: no fuzzy score tuning (`@match` picks fuzzy, words or prefix), no command groups or scoping beyond the tree's own structure, no recent commands, and no nested palette modes ("type > to run a command").
 
 ## Accessibility
 
