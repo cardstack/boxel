@@ -4,6 +4,8 @@ import {
   fetchRealmEventRoom,
   fetchRealmNamedGrantees,
   logger,
+  param,
+  query,
   SupportedMimeType,
   upsertRealmEventWatcher,
 } from '@cardstack/runtime-common';
@@ -59,8 +61,10 @@ const MAX_WATCHERS_PER_REALM = 100;
 // the realm for one without a room.
 //
 // Body: `{ realms: string[] }`. Answer: `{ rooms: { [realm]: roomId } }`,
-// with `watched: string[]` beside it when the user watches any of them, each
-// realm as the request spelled it.
+// with `watched: string[]` beside it when the user watches any of them, and
+// `capped: string[]` naming those a watch was refused for because the user or
+// the realm already had as many as it may, each realm as the request spelled
+// it.
 export default function handleRealmEventRooms({
   dbAdapter,
   reconciler,
@@ -100,16 +104,28 @@ export default function handleRealmEventRooms({
     let watched: string[] = [];
     let failed = false;
     let sweptLapsedWatches = false;
+    let capped: string[] = [];
     let watch = async (realm: string, realmURL: string) => {
-      // A pointer that can't be read without mounting is taken as no policy,
-      // so a user the realm doesn't name still can't make this server mount
-      // it.
       let pointer = await realmPolicyPointer(realmURL, {
         reconciler,
         realmsRootPath,
         virtualNetwork,
       });
-      if (!pointer) {
+      if (pointer === undefined) {
+        return;
+      }
+      // A pointer that can't be read without mounting doesn't mount the realm
+      // for a user it doesn't name. A registered realm whose pointer couldn't
+      // be read, its file unreadable or this process not knowing it yet,
+      // fails the request, so the host asks again; a realm no registry row
+      // names has nothing to watch.
+      if (pointer === null) {
+        if (
+          reconciler.mounted.has(realmURL) ||
+          (await isRegisteredRealm(realmURL))
+        ) {
+          throw new Error(`the policy pointer of ${realmURL} can't be read`);
+        }
         return;
       }
       let mounted = await reconciler.lookupOrMount(realmURL);
@@ -127,8 +143,17 @@ export default function handleRealmEventRooms({
         })
       ) {
         watched.push(realm);
+      } else {
+        capped.push(realm);
       }
     };
+    let isRegisteredRealm = async (realmURL: string) =>
+      (
+        await query(dbAdapter, [
+          'SELECT 1 AS registered FROM realm_registry WHERE url =',
+          param(realmURL),
+        ])
+      ).length > 0;
     let lookUp = async (realm: string) => {
       let identifier = virtualNetwork.isRegisteredPrefix(realm)
         ? virtualNetwork.toURL(realm).href
@@ -185,7 +210,11 @@ export default function handleRealmEventRooms({
     await setContextResponse(
       ctxt,
       new Response(
-        JSON.stringify(watched.length > 0 ? { rooms, watched } : { rooms }),
+        JSON.stringify({
+          rooms,
+          ...(watched.length > 0 ? { watched } : {}),
+          ...(capped.length > 0 ? { capped } : {}),
+        }),
         {
           status: failed ? 503 : 200,
           headers: { 'content-type': SupportedMimeType.JSON },
