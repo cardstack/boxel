@@ -1,5 +1,5 @@
 // The showcase: moving between home and the docs inside one card, the docs
-// sidebar's category groups, and the hero's theme cycle.
+// sidebar's category groups, search, and the hero's theme cycle.
 import { module, test } from 'qunit';
 import { render, click, triggerEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -7,6 +7,7 @@ import { PretUIHome } from './pretui-home';
 import { PretUIOverview } from './pretui-overview';
 import { ThemeStage } from './showcase-stage';
 import { CATEGORIES } from './showcase-data';
+import { SpecCatalog } from './showcase-chrome';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Home = PretUIHome.isolated as any;
@@ -135,5 +136,34 @@ module('Pretui | showcase', function (hooks) {
     assert.dom('[data-test-theme-tick]').exists('play resumes it');
     await click('[aria-label="Previous theme"]');
     assert.dom('[data-test-theme-name]').hasText('Beta');
+  });
+  test('search matches split names and each word, best match first', function (assert) {
+    let specs = new SpecCatalog(
+      [
+        { id: 'a', componentName: 'List', brief: 'Rows with selection' },
+        { id: 'b', componentName: 'DatePicker', brief: 'Pick a day' },
+        {
+          id: 'c',
+          componentName: 'LayoutControl',
+          brief: 'Toolbar row that fits its controls',
+        },
+        { id: 'd', componentName: 'EmptyState', brief: 'Nothing-here surface' },
+      ],
+      false,
+    );
+    let ids = (text: string) => specs.search(text).map((spec) => spec.id);
+    assert.deepEqual(
+      ids('date picker'),
+      ['b'],
+      'a spaced name finds the joined one',
+    );
+    assert.deepEqual(ids('toolbar'), ['c'], 'the brief says what it is for');
+    assert.deepEqual(
+      ids('empty list'),
+      ['a', 'd'],
+      'each word finds its own component',
+    );
+    assert.deepEqual(ids('picker date'), ['b'], 'word order does not matter');
+    assert.deepEqual(ids('  '), [], 'a blank search lists nothing');
   });
 });

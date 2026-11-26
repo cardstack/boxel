@@ -107,14 +107,34 @@ export class SpecCatalog {
   count = (name: string): number | undefined =>
     this.loading && !this.all.length ? undefined : this.inCategory(name).length;
   search = (text: string): SpecLike[] => {
-    let term = text.trim().toLowerCase();
-    if (!term) return [];
-    return this.all.filter((spec) =>
-      [specName(spec), spec.cardTitle, spec.brief].some((value) =>
-        value?.toLowerCase().includes(term),
-      ),
-    );
+    let terms = words(text);
+    if (!terms.length) return [];
+    let phrase = terms.join(' ');
+    let scored: { spec: SpecLike; score: number }[] = [];
+    for (let spec of this.all) {
+      let name = words(specName(spec));
+      let prose = [spec.cardTitle, spec.brief]
+        .map((value) => value?.toLowerCase() ?? '')
+        .join(' ');
+      let score = name.join(' ').includes(phrase) ? terms.length * 2 : 0;
+      for (let term of terms) {
+        if (name.some((word) => word.startsWith(term))) score += 2;
+        else if (prose.includes(term)) score += 1;
+      }
+      if (score) scored.push({ spec, score });
+    }
+    // stable: equal scores keep the index order
+    return scored.sort((a, b) => b.score - a.score).map(({ spec }) => spec);
   };
+}
+
+// "DatePicker" and "date picker" both become ["date", "picker"]
+function words(text: string): string[] {
+  return text
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
 }
 
 export const EMPTY_CATALOG = new SpecCatalog([], false);
