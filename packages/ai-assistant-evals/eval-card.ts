@@ -48,6 +48,8 @@ export interface Evaluation {
   secondsPerPrompt?: number;
   // Operations approved for automations only before the first prompt.
   automationApprovals: AutomationApproval[];
+  // The runner clicks Confirm on each automation gate.
+  confirmAutomations: boolean;
   // A conversation-only evaluation: the run passes when every prompt was sent
   // and nothing was written, with no card to render.
   expectsNoWrites: boolean;
@@ -204,6 +206,7 @@ export async function loadEvaluation(
         ? attributes.secondsPerPrompt
         : undefined,
     automationApprovals,
+    confirmAutomations: attributes.confirmAutomations === true,
     expectsNoWrites: attributes.expectsNoWrites === true,
     seedScript,
     expectedReads,

@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 143300,
+      "bytes": 144514,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -2010,11 +2010,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/82392b8177.css"
+          "module": "src/shell/keys/7fba6dd497.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/8b33a854de.css"
+          "module": "src/shell/keys/82392b8177.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2039,6 +2039,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/cff92bc523.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/d3b59e55ad.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2099,7 +2103,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 625987,
+      "bytes": 637026,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2542,7 +2546,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/keys.ts",
-          "size": 9132
+          "size": 9508
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2642,7 +2646,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approval-batch.ts",
-          "size": 9500
+          "size": 9733
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2652,7 +2656,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 45662
+          "size": 49672
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2696,8 +2700,13 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/key-approval-notices.gts",
+          "size": 5577
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-audience.gts",
-          "size": 4648
+          "size": 6033
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2722,7 +2731,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 26642
+          "size": 27881
         },
         {
           "package": "@cardstack/secure-origin",
@@ -3002,7 +3011,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/telemetry/labels.ts",
-          "size": 2852
+          "size": 2909
         },
         {
           "package": "@cardstack/secure-origin",

@@ -165,8 +165,10 @@ type State =
       ownKey: boolean;
       shareCount: number;
       shares: string;
-      // Whether the approval was for an automation.
+      // Whether the approval was for an automation, and the card types its
+      // approved calls are on, as one phrase ("a PR Inbox or Issues card").
       automation?: boolean;
+      cardTypes?: string;
     };
 type ChoosingState = Extract<State, { name: 'choosing' }>;
 
@@ -188,6 +190,13 @@ function slotLabel(choice: SlotChoice): string {
 // "A", "A and B", "A, B and C".
 const listPhrase = (items: string[]) =>
   new Intl.ListFormat('en', { type: 'conjunction' }).format(items);
+
+// The card types an automation's calls are on, as a person opens one: "a PR
+// Inbox card", "a PR Inbox or Issues card".
+const cardTypesPhrase = (types: string[] | undefined) =>
+  types?.length
+    ? `a ${new Intl.ListFormat('en', { type: 'disjunction' }).format(types)} card`
+    : 'a card of the kind';
 
 // A slot's keys and shares as tiles to choose between, and the one a tile
 // stands for.
@@ -231,9 +240,81 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   data-test-approve-done-shares
                 >{{this.done.shares}}</strong>
               {{/if}}
-              on every scheduled run, without asking you again. Boxel asks again
-              if someone changes the automation’s script, triggers, params or
-              operations.
+              on every scheduled run, without asking you again.
+              {{#if this.done.interactive}}
+                <span data-test-approve-done-open-cards>
+                  {{#if this.done.shares}}
+                    {{#if this.done.anonymous}}
+                      Anyone who opens
+                      {{this.done.cardTypes}}
+                      in
+                      <strong>{{this.done.realm}}</strong>,
+                      <strong data-test-approve-done-anonymous>including people
+                        who aren’t signed in</strong>, can also make these
+                      calls.
+                    {{else}}
+                      Everyone who opens
+                      {{this.done.cardTypes}}
+                      in
+                      <strong>{{this.done.realm}}</strong>
+                      can also make these calls.
+                    {{/if}}
+                  {{else}}
+                    You can also make these calls whenever you open
+                    {{this.done.cardTypes}}.
+                  {{/if}}
+                </span>
+              {{/if}}
+              Boxel asks again if someone changes the automation’s script,
+              triggers, params or operations.
+              {{#if this.done.ownKey}}
+                <span
+                  class='done-audience'
+                  data-test-approve-done-audience='userKey'
+                >
+                  {{#if this.done.interactive}}
+                    Your own key is sent on the automation’s scheduled runs and
+                    whenever you open
+                    {{this.done.cardTypes}}. Everyone else who opens
+                    {{this.done.cardTypes}}
+                    chooses a key of their own.
+                  {{else}}
+                    Only the automation’s scheduled runs send your own key.
+                    Opening
+                    {{this.done.cardTypes}}
+                    doesn’t use your own key.
+                  {{/if}}
+                </span>
+              {{/if}}
+              {{#if this.done.shares}}
+                <span
+                  class='done-audience'
+                  data-test-approve-done-audience='apiKey'
+                >
+                  {{#if this.done.interactive}}
+                    Everyone who opens
+                    {{this.done.cardTypes}}
+                    in
+                    <strong>{{this.done.realm}}</strong>
+                    makes the calls that send
+                    {{if (gt this.done.shareCount 1) 'the keys' 'the key'}}
+                    you share, and the calls count against
+                    {{if
+                      (gt this.done.shareCount 1)
+                      'each share’s'
+                      'the share’s'
+                    }}
+                    limits.
+                  {{else}}
+                    Only the automation’s scheduled runs send
+                    {{if (gt this.done.shareCount 1) 'the keys' 'the key'}}
+                    you share. Opening
+                    {{this.done.cardTypes}}
+                    doesn’t use
+                    {{if (gt this.done.shareCount 1) 'the keys' 'the key'}}.
+                  {{/if}}
+                </span>
+              {{/if}}
             {{/if}}
           </span>
         {{else if (eq this.done.count 0)}}
@@ -376,6 +457,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                 @anonymous={{this.servesVisitors choice}}
                 @workspace={{this.batch.realm.name}}
                 @label={{slotLabel choice}}
+                @automationCard={{choice.card}}
                 @headingId='approve-slot-{{choice.slot}}'
                 data-test-approve-slot={{choice.slot}}
                 data-test-approve-slot-kind={{choice.kind}}
@@ -798,11 +880,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         padding-top: var(--boxel-sp-xs);
       }
       .tick {
+        flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
         align-items: baseline;
       }
       .label {
-        flex: 1;
+        flex: 1 1 12em;
         min-width: 0;
         font-weight: 600;
       }
@@ -1083,13 +1166,28 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       : [];
   }
 
+  // For an automation's approval: the display names of the card types the
+  // ticked operations are on.
+  private get automationCardTypes(): string[] | undefined {
+    if (!this.batch?.automation) {
+      return undefined;
+    }
+    return [
+      ...new Set(
+        this.tickedOperations.flatMap((o) => (o.card ? [o.card.name] : [])),
+      ),
+    ];
+  }
+
   private get confirmations(): string[] {
     let anyone = this.visitors.anyone;
     return [
       ...confirmationsFor(this.tickedOperations).map(
         (kind) => INTERACTIVE_CONFIRMATION[kind],
       ),
-      ...(anyone.length > 0 ? [anonymousConfirmation(anyone)] : []),
+      ...(anyone.length > 0
+        ? [anonymousConfirmation(anyone, this.automationCardTypes)]
+        : []),
     ];
   }
 
@@ -1595,6 +1693,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         shareCount: shares.length,
         shares: listPhrase(shares),
         automation: Boolean(state.batch.automation),
+        cardTypes: cardTypesPhrase(this.automationCardTypes),
       };
       if (!this.args.api.tellCliDone() && !this.fromKeyPage) {
         this.args.api.close();

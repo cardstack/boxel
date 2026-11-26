@@ -625,6 +625,178 @@ module('Integration | approve pages', function (hooks) {
       .includesText('on every scheduled run, without asking you again');
   });
 
+  test('an automation approved for open cards says so on the done page', async function (assert) {
+    const AUTOMATION = `${REALM}Automation/nightly`;
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: withFillers(
+              batch({
+                automation: { id: AUTOMATION, version: 'v1.40' },
+                groups: [
+                  {
+                    destination: {
+                      href: GRAPHQL,
+                      host: 'api.github.com',
+                      path: '/graphql/',
+                      registrableDomain: 'github.com',
+                    },
+                    operations: [
+                      operation('listPRs', 'List your open pull requests', {
+                        card: {
+                          name: 'PR Inbox',
+                          module: MODULE,
+                          exportName: 'Inbox',
+                        },
+                        key: `${MODULE}#Inbox/listPRs`,
+                        status: 'automation',
+                        slots: [
+                          {
+                            slot: '1.userKey',
+                            token: 'userKey',
+                            card: 'PR Inbox',
+                            key: 'userKey',
+                            status: 'automation',
+                            snapshot: snapshot('{"query":"listPRs"}'),
+                            fingerprint: 'fp-listPRs',
+                            approved: {
+                              snapshot: snapshot('{"query":"listPRs"}'),
+                              keyId: 'key-gh',
+                              shareId: null,
+                              interactive: true,
+                            },
+                          },
+                        ],
+                      }),
+                    ],
+                  },
+                ],
+              }),
+            ),
+          },
+        }),
+    });
+    visitShell(`approve#${new URLSearchParams({ automation: AUTOMATION })}`);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-pretui-radio-option="interactive"] input')
+      .isChecked('a slot last approved for open cards starts on open cards');
+    await click('[data-test-approve-save]');
+    await settled();
+    assert.true(approvals()[0].interactive, 'approved for open cards');
+    assert
+      .dom('[data-test-approve-done-automation]')
+      .includesText('on every scheduled run, without asking you again.');
+    assert
+      .dom('[data-test-approve-done-open-cards]')
+      .hasText(
+        'You can also make these calls whenever you open a PR Inbox card.',
+        'the user’s own key serves the cards the user opens',
+      );
+    assert
+      .dom('[data-test-approve-done-audience="userKey"]')
+      .includesText(
+        'Your own key is sent on the automation’s scheduled runs and whenever you open a PR Inbox card. Everyone else who opens a PR Inbox card chooses a key of their own.',
+      );
+  });
+
+  test('an automation’s shared key approved for open cards, where the realm opens the call to people who aren’t signed in, says so before and after approving', async function (assert) {
+    const AUTOMATION = `${REALM}Automation/nightly`;
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: withFillers(
+              batch({
+                automation: { id: AUTOMATION, version: 'v1.40' },
+                groups: [
+                  {
+                    destination: {
+                      href: GRAPHQL,
+                      host: 'api.github.com',
+                      path: '/graphql/',
+                      registrableDomain: 'github.com',
+                    },
+                    operations: [
+                      operation(
+                        'listTeamPRs',
+                        'List the team’s pull requests',
+                        {
+                          card: {
+                            name: 'PR Inbox',
+                            module: MODULE,
+                            exportName: 'Inbox',
+                          },
+                          key: `${MODULE}#Inbox/listTeamPRs`,
+                          openToAnonymous: true,
+                          slots: [
+                            {
+                              slot: '1.apiKey',
+                              token: 'apiKey',
+                              card: 'PR Inbox',
+                              key: 'apiKey',
+                              status: 'new',
+                              snapshot: snapshot('{"query":"listTeamPRs"}'),
+                              fingerprint: 'fp-listTeamPRs',
+                            },
+                          ],
+                        },
+                      ),
+                    ],
+                  },
+                ],
+                keys: [],
+                shares: [
+                  {
+                    id: 'share-team',
+                    label: 'Team GitHub',
+                    keyId: 'key-gh',
+                    keyName: 'GitHub token',
+                    covers: [GRAPHQL],
+                    interactive: true,
+                    dailyBudget: 2400,
+                    anonymous: true,
+                    anonymousDailyCap: null,
+                    anonymousMonthlyCap: null,
+                  },
+                ],
+              }),
+            ),
+          },
+        }),
+    });
+    visitShell(`approve#${new URLSearchParams({ automation: AUTOMATION })}`);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-pretui-radio-option="interactive"] input');
+    await settled();
+    assert
+      .dom('[data-test-approve-slot="1.apiKey"]')
+      .includesText(
+        'Boxel uses this key for the automation’s scheduled calls and whenever anyone uses a PR Inbox card in this workspace, including people who aren’t signed in',
+      );
+    assert
+      .dom('[data-test-approve-form]')
+      .includesText(
+        'Anyone on the internet who opens a PR Inbox card, including people who aren’t signed in, can make these calls with this key',
+      );
+    await click('[data-test-approve-save]');
+    await settled();
+    assert
+      .dom('[data-test-approve-done-open-cards]')
+      .includesText('Anyone who opens a PR Inbox card in Team Workspace')
+      .includesText('including people who aren’t signed in');
+    assert
+      .dom('[data-test-approve-done-audience="apiKey"]')
+      .includesText(
+        'Everyone who opens a PR Inbox card in Team Workspace makes the calls that send the key you share',
+      );
+  });
+
   test('an unticked operation is left out, and a group with none ticked asks for no grant', async function (assert) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);

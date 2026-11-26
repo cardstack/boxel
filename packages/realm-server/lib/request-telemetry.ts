@@ -65,6 +65,7 @@ export const KEY_SHARES_PATH = '/_key-shares';
 export const KEY_SHARE_NOTICES_PATH = '/_key-share-notices';
 export const KEY_POLICY_NOTICES_PATH = '/_key-policy-notices';
 export const KEY_LIMIT_NOTICES_PATH = '/_key-limit-notices';
+export const KEY_APPROVAL_NOTICES_PATH = '/_key-approval-notices';
 export const SECURE_SESSION_PATH = '/_secure-session';
 export const SECURE_SESSIONS_PATH = '/_secure-sessions';
 export const SECURE_WINDOW_PATH = '/_secure-window';
@@ -84,6 +85,7 @@ const keyRoutePaths = [
   KEY_SHARE_NOTICES_PATH,
   KEY_POLICY_NOTICES_PATH,
   KEY_LIMIT_NOTICES_PATH,
+  KEY_APPROVAL_NOTICES_PATH,
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
   SECURE_WINDOW_PATH,

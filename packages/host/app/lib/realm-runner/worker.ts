@@ -263,6 +263,15 @@ const BOOTSTRAP = `
             create: (options) => call('workspaces.create', [options ?? {}]),
             delete: (url) => call('workspaces.delete', [url]),
           },
+          automations: {
+            estimate: (path) => call('automations.estimate', [path]),
+            preview: (path) => call('automations.preview', [path]),
+            runNow: (path) => call('automations.runNow', [path]),
+            switchOn: (path) => call('automations.switchOn', [path]),
+            readRun: (run) => call('automations.readRun', [run]),
+            readPreviewFile: (run, path) =>
+              call('automations.readPreviewFile', [run, path]),
+          },
           ui: {
             switchSubmode: (submode) => call('ui.switchSubmode', [submode]),
             openFile: (path) => call('ui.openFile', [path]),

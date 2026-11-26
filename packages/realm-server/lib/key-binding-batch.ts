@@ -461,6 +461,9 @@ async function automationApprovalBatch(
   let ownShares = await sharesIn(dbAdapter, realmURL.href, user);
   let collected = collectedBatch();
   let rowsOf = new Map<string, Awaited<ReturnType<typeof bindingRows>>>();
+  // Each card type's operations the realm's policy opens to people who
+  // aren't signed in, as a card's batch reads them.
+  let openOf = new Map<string, Set<string>>();
   let typeNumbers = new Map<string, number>();
   for (let missing of approvals.operations) {
     if (missing.state !== 'missing') {
@@ -520,6 +523,13 @@ async function automationApprovalBatch(
     if (!rows) {
       rows = await bindingRows(dbAdapter, realmURL.href, type, user);
       rowsOf.set(typeKey, rows);
+    }
+    let open = openOf.get(typeKey);
+    if (!open) {
+      open = new Set(
+        await realm.sharedKeyOperationsOpenToAnonymous(resolvedType),
+      );
+      openOf.set(typeKey, open);
     }
     let request = operation.callApi;
     let slots: BatchSlot[] = [];
@@ -596,9 +606,11 @@ async function automationApprovalBatch(
       instance: null,
       status: operationStatus(slots),
       slots,
-      // An automation runs as its payer, never as someone who isn't signed
-      // in.
-      openToAnonymous: false,
+      // An automation runs as its payer, but an approval for open cards
+      // writes the type's binding, which serves everyone who reads the card
+      // type, people who aren't signed in included where the realm's policy
+      // opens the operation to them.
+      openToAnonymous: open.has(missing.operation),
     });
   }
   return completeBatch(dbAdapter, user, collected, {
