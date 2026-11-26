@@ -17,6 +17,7 @@ import {
 import { prompt, promptPassword } from '../lib/prompt.ts';
 import { SsoTimeoutError, browserLogin } from '../lib/sso-login.ts';
 import {
+  oauthDeviceLogin,
   oauthLogin,
   revokeConnection,
   type OAuthLoginOptions,
@@ -44,7 +45,8 @@ export interface ProfileCommandOptions {
   matrixUrl?: string;
   realmServerUrl?: string;
   // Commander sets this to false for `--no-browser`. Undefined means the
-  // default: sign in through the browser.
+  // default: sign in through the browser. With `--oauth`, it signs in with a
+  // code on another device instead.
   browser?: boolean;
   // `--oauth`: sign in with OAuth instead of Matrix.
   oauth?: boolean;
@@ -272,9 +274,9 @@ export function resolveEnvironment(
 
 // The `profile add` flags that choose a Matrix sign-in. `BOXEL_PASSWORD` isn't
 // one: it lingers in a shell, and only a password passed with `-u` uses it.
+// `--no-browser` isn't either: with `--oauth` it signs in with a code.
 function oauthConflicts(options: ProfileCommandOptions): string[] {
   return [
-    options.browser === false ? '--no-browser' : undefined,
     options.user ? '-u/--user' : undefined,
     options.password ? '-p/--password' : undefined,
     options.hostUrl ? '--host-url' : undefined,
@@ -320,7 +322,14 @@ export async function profileCommand(
         );
       }
       if (options?.oauth) {
-        await addOAuthProfile(manager, environment);
+        await addOAuthProfile(
+          manager,
+          environment,
+          {},
+          {
+            browser: options.browser,
+          },
+        );
       } else if (options?.user && password) {
         // A -u Matrix ID whose domain we don't recognize, with nothing else
         // naming an environment, is a mistake rather than a request for
@@ -523,6 +532,10 @@ export interface AddProfileDeps {
   // answered.
   isTty?: () => boolean;
   oauthLogin?: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
+  oauthDeviceLogin?: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
+  // Whether the CLI runs in a terminal reached over SSH, where a browser it
+  // opens, if any, isn't the user's.
+  isRemoteTerminal?: () => boolean;
   revokeConnection?: typeof revokeConnection;
   matrixLogout?: typeof matrixLogout;
   ensurePersonalRealmWithOAuth?: typeof ensurePersonalRealmWithOAuth;
@@ -537,6 +550,8 @@ interface AddProfileContext {
   promptPassword: (question: string) => Promise<string>;
   interactive: boolean;
   oauthLogin: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
+  oauthDeviceLogin: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
+  remoteTerminal: boolean;
   revokeConnection: typeof revokeConnection;
   matrixLogout: typeof matrixLogout;
   ensurePersonalRealmWithOAuth: typeof ensurePersonalRealmWithOAuth;
@@ -553,6 +568,8 @@ function addProfileContext(deps: AddProfileDeps): AddProfileContext {
     promptPassword: deps.promptPassword ?? promptPassword,
     interactive: (deps.isTty ?? (() => Boolean(process.stdin.isTTY)))(),
     oauthLogin: deps.oauthLogin ?? oauthLogin,
+    oauthDeviceLogin: deps.oauthDeviceLogin ?? oauthDeviceLogin,
+    remoteTerminal: (deps.isRemoteTerminal ?? isRemoteTerminal)(),
     revokeConnection: deps.revokeConnection ?? revokeConnection,
     matrixLogout: deps.matrixLogout ?? matrixLogout,
     ensurePersonalRealmWithOAuth:
@@ -964,19 +981,31 @@ export async function addProfile(
   await announceAdded(manager, outcome.matrixId, ctx);
 }
 
-// `boxel profile add --oauth`: the OAuth sign-in through the browser. It
-// never falls back to a Matrix sign-in: the user asked for OAuth.
+// Whether this terminal was reached over SSH: a browser opened here, if one
+// opens at all, is on the remote computer, not in front of the user.
+function isRemoteTerminal(): boolean {
+  return Boolean(process.env.SSH_CONNECTION || process.env.SSH_TTY);
+}
+
+// `boxel profile add --oauth`: the OAuth sign-in. Through the browser on this
+// computer, or with a code entered on any device (`oauthDeviceLogin`) with
+// `--no-browser`, over SSH, or when no browser opens here. It never falls
+// back to a Matrix sign-in: the user asked for OAuth.
 export async function addOAuthProfile(
   manager: ProfileManager,
   environment: EnvironmentDefaults,
   deps: AddProfileDeps = {},
+  { browser }: { browser?: boolean } = {},
 ): Promise<void> {
   const ctx = addProfileContext(deps);
   console.log(`\n${BOLD}Add New Profile${RESET} ${DIM}(OAuth)${RESET}\n`);
   console.log(
     `${DIM}Environment: ${new URL(environment.realmServerUrl).host}${RESET}`,
   );
-  const outcome = await addProfileViaOAuth(manager, environment, ctx);
+  const withCode = browser === false || ctx.remoteTerminal;
+  const outcome = await addProfileViaOAuth(manager, environment, ctx, {
+    withCode,
+  });
   if (outcome.status !== 'added') {
     return;
   }
@@ -987,11 +1016,14 @@ async function addProfileViaOAuth(
   manager: ProfileManager,
   environment: EnvironmentDefaults,
   ctx: AddProfileContext,
+  { withCode }: { withCode: boolean },
 ): Promise<AddProfileOutcome> {
   const { realmServerUrl, matrixUrl } = environment;
   let result;
   try {
-    result = await ctx.oauthLogin({ realmServerUrl });
+    result = withCode
+      ? await ctx.oauthDeviceLogin({ realmServerUrl })
+      : await ctx.oauthLogin({ realmServerUrl, deviceFallback: true });
   } catch (err) {
     console.error(
       `\n${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
