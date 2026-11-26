@@ -1861,7 +1861,8 @@ export interface RealmCards {
 // TODO should we use the secure form once we start letting lid's drive the id
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
-import type { LocalPath } from './paths.ts';
+import { realmConfigHrefFor, type LocalPath } from './paths.ts';
+import { realmConfigCardURL } from './host-routes.ts';
 import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
 import { Loader } from './loader.ts';
 export * from './frontmatter-parse.ts';
@@ -2520,6 +2521,29 @@ export function passInvalidatesExecutables(urls: Iterable<string>): boolean {
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {
     if (path.endsWith(extension) && !path.endsWith('.d.ts')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Whether an incremental index that invalidated `invalidations` may change
+// the routes a realm serves. The stored route tree changes only when the
+// index changes realm.json, under its file URL or its card URL, or a module,
+// since a module change may change a route type's fields (ADR 036 §1.5).
+// The index validates the routes again on this answer, and the app reads
+// them again on it, so the two agree on which indexes leave the tree as it
+// was.
+export function invalidationsMayChangeHostRoutes(
+  realmURL: URL,
+  invalidations: Iterable<string>,
+): boolean {
+  let realmConfigHrefs = new Set([
+    realmConfigHrefFor(realmURL),
+    realmConfigCardURL(realmURL).href,
+  ]);
+  for (let href of invalidations) {
+    if (realmConfigHrefs.has(href) || hasExecutableExtension(href)) {
       return true;
     }
   }

@@ -14,6 +14,7 @@ import {
 import {
   followableLinkURL,
   isPlainClick,
+  pathNamesFile,
 } from '@cardstack/host/lib/link-clicks';
 
 import type HostModeService from './host-mode-service';
@@ -210,7 +211,9 @@ export default class HostLinkNavigationService extends Service {
     }
     let link = { href: url.href, path };
     if (
-      namesFile(path) &&
+      // A routed address whose path has a file extension is told from a
+      // file by the link the `hrefTo` helper made for it on this page.
+      pathNamesFile(path) &&
       !this.hostRouteLinks.linkedCard(link.href) &&
       !this.hostModeService.fixedRoutingRule(path || '/')
     ) {
@@ -350,14 +353,6 @@ function pageOf(
   }
   let path = (route.params as { path?: unknown } | undefined)?.path;
   return `${route.name}:${typeof path === 'string' ? path : ''}`;
-}
-
-// Whether a path's last segment has a file extension. A card's own path has
-// none, and a routed address that has one is told from a file by the link
-// the `hrefTo` helper made for it on this page.
-function namesFile(path: string): boolean {
-  let last = path.replace(/\/+$/, '').split('/').pop() ?? '';
-  return last.includes('.');
 }
 
 declare module '@ember/service' {

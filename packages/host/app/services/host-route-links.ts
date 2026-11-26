@@ -7,7 +7,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   ensureTrailingSlash,
-  hasExecutableExtension,
+  invalidationsMayChangeHostRoutes,
   hostRouteLink,
   isCardInstance,
   logger,
@@ -28,7 +28,10 @@ import { scopedRenderContext } from '@cardstack/runtime-common/render-context';
 
 import { currentRenderScope } from '@cardstack/host/lib/gc-card-store';
 import { visitorHostRouteLookups } from '@cardstack/host/lib/host-route-lookups';
-import { plainLinkClickURL } from '@cardstack/host/lib/link-clicks';
+import {
+  pathNamesFile,
+  plainLinkClickURL,
+} from '@cardstack/host/lib/link-clicks';
 import { duringPrerenderHeaders } from '@cardstack/host/lib/prerender-fetch-headers';
 
 import type HostModeService from './host-mode-service';
@@ -224,9 +227,10 @@ export default class HostRouteLinksService
   //
   // A redirect inside the realm is followed in the app. A lookup that fails
   // keeps the app where it is, and opens the card whose load failed when
-  // there is one, which shows the failure. A redirect out of the realm and
-  // an address no route serves go to the view's `load`. Any other click
-  // keeps the browser's default: see `lib/link-clicks`.
+  // there is one, which shows the failure. An address no route serves
+  // opens its card when it is a card's own URL. A redirect out of the realm,
+  // and any other address no route serves, go to the view's `load`. Any
+  // other click keeps the browser's default: see `lib/link-clicks`.
   //
   // A click is dropped when another click follows it before its card is
   // known, when another realm was opened meanwhile, and when the view no
@@ -620,8 +624,9 @@ export default class HostRouteLinksService
   // A redirect inside the realm is resolved here too, at most
   // `MAX_REDIRECT_HOPS` times, so that a realm with no host URL, whose
   // server doesn't resolve routes, never gets the address. A redirect out
-  // of the realm is the browser's to load, and so is an address no route
-  // serves.
+  // of the realm is the browser's to load. An address no route serves
+  // opens its card when it is a card's own URL, and is the browser's to
+  // load otherwise.
   async followAddress(url: URL): Promise<RoutedAddressFollow | undefined> {
     let routes = this.heldRoutesFor(url);
     if (!routes) {
@@ -645,7 +650,9 @@ export default class HostRouteLinksService
         case 'alias':
           return { kind: 'card', cardHref: resolution.cardHref };
         case 'nothing':
-          return { kind: 'load', href: address.href };
+          return (await this.isCardURL(address))
+            ? { kind: 'card', cardHref: address.href }
+            : { kind: 'load', href: address.href };
         case 'error':
           log.warn(
             `host route lookup for ${address.href} failed: ${String(
@@ -674,6 +681,22 @@ export default class HostRouteLinksService
       `host route redirects from ${url.href} go on past ${MAX_REDIRECT_HOPS} hops`,
     );
     return { kind: 'failed', cardHref: undefined };
+  }
+
+  // Whether an address no route serves is a card's own URL, which the app
+  // opens as host mode does (`HostLinkNavigationService.findDestination`).
+  // An address whose path names a file, and one whose card can't be
+  // loaded, are the browser's to load.
+  private async isCardURL(address: URL): Promise<boolean> {
+    if (pathNamesFile(address.pathname)) {
+      return false;
+    }
+    try {
+      return isCardInstance(await this.appStore.get(address.href));
+    } catch (e) {
+      log.debug(`could not load ${address.href} as a card: ${String(e)}`);
+      return false;
+    }
   }
 
   // Whether a URL is in the realm open in the app, whose routes the
@@ -847,11 +870,9 @@ function routesMayHaveChanged(
   if ('realmWide' in event) {
     return true;
   }
-  return event.invalidations.some(
-    (url) =>
-      url === `${realmURL}realm` ||
-      url === `${realmURL}realm.json` ||
-      hasExecutableExtension(url),
+  return invalidationsMayChangeHostRoutes(
+    new URL(realmURL),
+    event.invalidations,
   );
 }
 

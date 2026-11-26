@@ -159,6 +159,9 @@ module('Acceptance | interact submode | routed links', function (hooks) {
             data-test-link='broken'
             href='{{this.realm}}people/broken'
           >Broken</a>
+          <a data-test-link='own' href='{{this.realm}}Author/joe'>Joe</a>
+          <a data-test-link='file' href='{{this.realm}}Author/joe.json'>Joe's
+            file</a>
         </template>
       };
     }
@@ -258,6 +261,30 @@ module('Acceptance | interact submode | routed links', function (hooks) {
       'the browser was sent to the address',
     );
     assert.dom(author).doesNotExist();
+  });
+
+  test("a link to a card's own URL, which no route serves, opens the card in the stack", async function (assert) {
+    await openPost();
+    let pageURL = window.location.href;
+
+    await click(link('own'));
+
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Author/joe"]`,
+      )
+      .exists();
+    assert.deepEqual(leftToBrowser, [], 'the app took the click');
+    assert.strictEqual(window.location.href, pageURL, 'no page load');
+  });
+
+  test("a link to a card's file is loaded by the browser", async function (assert) {
+    await openPost();
+    let href = (document.querySelector(link('file')) as HTMLAnchorElement).href;
+
+    await click(link('file'));
+
+    assert.strictEqual(window.location.href, href);
   });
 
   test('a change to the routes reaches the app after the realm is indexed', async function (assert) {
@@ -399,6 +426,19 @@ module('Acceptance | interact submode | routed links', function (hooks) {
       assert
         .dom('[data-test-card-url-bar-input]')
         .hasValue(`${testRealmURL}Author/jane.json`);
+      assert.deepEqual(leftToBrowser, [], 'the app took the click');
+      assert.strictEqual(window.location.href, pageURL, 'no page load');
+    });
+
+    test("a link to a card's own URL opens the card's file", async function (assert) {
+      await openPostFile();
+      let pageURL = window.location.href;
+
+      await click(link('own'));
+
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}Author/joe.json`);
       assert.deepEqual(leftToBrowser, [], 'the app took the click');
       assert.strictEqual(window.location.href, pageURL, 'no page load');
     });

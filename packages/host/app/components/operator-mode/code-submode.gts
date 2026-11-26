@@ -47,6 +47,7 @@ import {
   type LocalPath,
   CardContextName,
   hasExecutableExtension,
+  hasExtension,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -889,7 +890,7 @@ export default class CodeSubmode extends Component<Signature> {
     this.hostRouteLinks.followRoutedLinks(element.ownerDocument, {
       opener: () => (cardHref) => {
         void this.operatorModeStateService.updateCodePath(
-          rri(cardHref.endsWith('.json') ? cardHref : `${cardHref}.json`),
+          rri(hasExtension(cardHref) ? cardHref : `${cardHref}.json`),
         );
       },
       load: (href) => {
@@ -1016,8 +1017,8 @@ export default class CodeSubmode extends Component<Signature> {
       <:default as |search|>
         <div
           class='code-mode'
-          data-test-code-mode
           {{this.followRoutedLinks}}
+          data-test-code-mode
           data-test-save-idle={{not this.isSaving}}
         >
           <ResizablePanelGroup
