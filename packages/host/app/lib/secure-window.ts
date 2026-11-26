@@ -79,6 +79,9 @@ export type SecureWindowRequest =
       realm?: string;
       reason?: string;
     }
+  // Signs one of the user's connections in again, by its key id: the connect
+  // page offers only that connection's own app.
+  | { mode: 'connect'; reconnect: string; reason?: string }
   | {
       mode: 'approve' | 'review-changes';
       target: SecureWindowTarget;
@@ -121,6 +124,8 @@ export function secureWindowURL(request: SecureWindowRequest): string {
     fragment.share = request.share;
   } else if ('automation' in request) {
     fragment.automation = request.automation;
+  } else if ('reconnect' in request) {
+    fragment.reconnect = request.reconnect;
   } else {
     let target = 'target' in request ? request.target : undefined;
     if (target?.kind === 'instance') {

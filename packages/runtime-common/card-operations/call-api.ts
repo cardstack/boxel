@@ -30,6 +30,7 @@ import {
   type AwaitedKeyApproval,
   type CheckAutomationKeyApprovals,
 } from '../automation-key-approval.ts';
+import type { CredentialNotices } from '../automation-notices.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
@@ -1112,6 +1113,12 @@ export interface CallApiUse {
 // as its card and script read now (`automation-key-approval.ts`). A sender
 // that can't tell leaves it out, and the automation is taken to need none.
 //
+// `automationCredentialNotices` says who is told about an automation run
+// that ended on a refused credential, and what each of them fixes, read from
+// the key, its OAuth client and its share as they are now
+// (`automation-notices.ts`). A sender that can't tell leaves it out, and a
+// refused credential raises no notice.
+//
 // `writeKeyApprovalNoticesIn` brings the key approval notices of an
 // automation in step with whom its approvals wait on (`awaiting`, as
 // `checkAutomationKeyApprovals` answered it, or undefined when it couldn't
@@ -1142,6 +1149,7 @@ export interface CallApiSender {
       realmURL: URL;
     },
   ): ReturnType<CheckAutomationKeyApprovals>;
+  automationCredentialNotices?: CredentialNotices;
   writeKeyApprovalNoticesIn?(
     txQuery: Querier,
     args: {

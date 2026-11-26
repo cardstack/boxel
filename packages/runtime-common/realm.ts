@@ -22343,6 +22343,7 @@ export class Realm {
       viewer: await this.#statusViewer(requestContext),
       listInstances: (typeKey) =>
         this.#realmIndexQueryEngine.instanceSourcesOfType(typeKey),
+      credentialNotices: this.#callApi?.automationCredentialNotices,
     });
     return createResponse({
       body: JSON.stringify(answer.document),
@@ -22442,6 +22443,7 @@ export class Realm {
             }) => this.checkAutomationKeyApprovals(args),
           }
         : {}),
+      credentialNotices: this.#callApi?.automationCredentialNotices,
     });
     if (answer.status !== 200) {
       return createResponse({

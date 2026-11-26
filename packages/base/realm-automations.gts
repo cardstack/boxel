@@ -13,7 +13,8 @@ import type {
   AutomationListDocument,
   AutomationSummaryResource,
 } from '@cardstack/runtime-common/automation-list';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import type { AutomationNotice } from '@cardstack/runtime-common/automation-notices';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { Alert } from '@cardstack/pretui/components/alert';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
@@ -25,6 +26,7 @@ import { Spinner } from '@cardstack/pretui/components/spinner';
 import PlusIcon from '@cardstack/boxel-icons/plus';
 import AuthedFetchTool from '@cardstack/boxel-host/tools/authed-fetch';
 import ShowCardTool from '@cardstack/boxel-host/tools/show-card';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { schedule } from '@ember/runloop';
 import type Owner from '@ember/owner';
@@ -175,7 +177,7 @@ const PAUSED_BECAUSE: Record<string, string> = {
   'webhook-owner-lost-access':
     'Boxel paused the automation because the person who made a trigger’s incoming webhook is no longer a realm administrator.',
   'payer-lost-access':
-    'Boxel paused the automation because the payer is no longer a realm administrator.',
+    'Boxel paused the automation because the payer’s account can no longer pay for runs.',
   'realm-archived':
     'Boxel paused the automation because someone archived this workspace.',
   'repeated-failures':
@@ -184,12 +186,168 @@ const PAUSED_BECAUSE: Record<string, string> = {
     'Boxel paused the automation because the automation’s settings have problems.',
 };
 
+// Why Boxel paused the automation, in a few words for a line under the
+// automation's name, such as the console's row for it.
+const PAUSED_SHORT: Record<string, string> = {
+  requested: 'Paused by a realm administrator',
+  'caps-raised': 'Paused: a limit went above what the payer agreed to',
+  'batched-ai-enabled':
+    'Paused: batched AI is on, which the payer didn’t agree to',
+  'webhook-changed':
+    'Paused: a trigger names a webhook the payer didn’t agree to',
+  'webhook-owner-lost-access':
+    'Paused: the maker of a trigger’s webhook is no longer a realm administrator',
+  'payer-lost-access': 'Paused: the payer’s account can no longer pay for runs',
+  'realm-archived': 'Paused: someone archived this workspace',
+  'repeated-failures': 'Paused: the runs failed several times in a row',
+  'invalid-declaration': 'Paused: the automation’s settings have problems',
+};
+
+export function automationPausedReason(reason: string | null): string {
+  return (reason && PAUSED_SHORT[reason]) ?? PAUSED_SHORT.requested!;
+}
+
 export function pausedBecause(automation: Automation): string {
   let reason = automation.attributes.pauseReason;
   return (
     (reason && PAUSED_BECAUSE[reason]) ??
     'A person who edits this workspace paused the automation.'
   );
+}
+
+// What an automation notice says: what happened, in a sentence naming the
+// automation, and who fixes it and how. `name` is the automation's name.
+// The console lists the first sentence; the automation's own card shows both
+// with the fix itself. The audience comes from the server, which decides who
+// each notice is for (`automation-notices.ts` in runtime-common).
+export interface AutomationNoticeText {
+  happened: string;
+  fix: string;
+}
+
+export function automationNoticeText(
+  notice: AutomationNotice,
+  name: string,
+): AutomationNoticeText {
+  // A pause reads as the console's own sentence for it, naming the
+  // automation.
+  let paused = (reason: string) =>
+    PAUSED_BECAUSE[reason]!.replace(
+      'Boxel paused the automation',
+      `Boxel paused ${name}`,
+    );
+  let operation = notice.operation
+    ? `the operation “${notice.operation.name}”`
+    : undefined;
+  switch (notice.reason) {
+    case 'repeated-failures':
+      return {
+        happened: paused(notice.reason),
+        fix: notice.credential
+          ? credentialFix(notice)
+          : 'The payer should fix what the runs fail on, check the fix with a Preview, and then resume the automation.',
+      };
+    case 'payer-lost-access':
+      return {
+        happened: paused(notice.reason),
+        fix: 'A realm administrator should resume the automation and become the new payer.',
+      };
+    case 'caps-raised':
+      return {
+        happened: paused(notice.reason),
+        fix: 'The payer should resume the automation to agree to the new limits.',
+      };
+    case 'batched-ai-enabled':
+      return {
+        happened: paused(notice.reason),
+        fix: 'The payer should resume the automation to agree to batched AI.',
+      };
+    case 'webhook-changed':
+      return {
+        happened: paused(notice.reason),
+        fix: 'The payer should resume the automation to agree to the new webhook.',
+      };
+    case 'webhook-owner-lost-access':
+      return {
+        happened: paused(notice.reason),
+        fix: 'A realm administrator should point the trigger at another webhook of the workspace, and then resume the automation.',
+      };
+    case 'invalid-declaration':
+      return {
+        happened: paused(notice.reason),
+        fix: 'The payer should fix each problem on the automation, and then Boxel resumes the automation.',
+      };
+    case 'waiting-for-key-approval':
+      return {
+        happened: `Boxel has paused every run of ${name} until each key’s owner approves the automation.`,
+        fix: 'Each key’s owner should approve the automation, and then Boxel runs the automation once the last approval lands.',
+      };
+    case 'binding-not-approved':
+      return {
+        happened: operation
+          ? `Boxel didn’t start a run of ${name} because nobody approved ${operation} for the automation.`
+          : `Boxel didn’t start a run of ${name} because nobody approved one of the automation’s operations for the automation.`,
+        fix: 'The payer should approve the automation, and then Boxel runs the automation once the approval lands.',
+      };
+    case 'binding-needs-reapproval':
+      return {
+        happened: operation
+          ? `Boxel didn’t start a run of ${name} because ${operation} now sends a different request than the one the payer approved.`
+          : `Boxel didn’t start a run of ${name} because one of the automation’s operations now sends a different request than the one the payer approved.`,
+        fix: 'The payer should review the change, and then approve the automation again.',
+      };
+    case 'share-suspended':
+      return {
+        happened: operation
+          ? `Boxel didn’t start a run of ${name} because Boxel suspended the workspace’s shared key that ${operation} uses.`
+          : `Boxel didn’t start a run of ${name} because Boxel suspended a shared key of the workspace that the automation uses.`,
+        fix: 'A realm administrator should resume the share, or the key’s owner should swap another key into the share.',
+      };
+    case 'key-approval-ended':
+      return {
+        happened: operation
+          ? `Boxel didn’t start a run of ${name} because the approval of a key that ${operation} needs has ended.`
+          : `Boxel didn’t start a run of ${name} because the approval of a key that the automation needs has ended.`,
+        fix: 'The key’s owner should approve the automation again.',
+      };
+    case 'waiting-for-credits':
+      return {
+        happened: `Boxel has paused every run of ${name} because the payer has no credits left.`,
+        fix: 'The payer should add credits, and then Boxel runs the automation at the next scheduled time.',
+      };
+    case 'credential-rejected':
+      return {
+        happened: credentialHappened(notice, name),
+        fix: credentialFix(notice),
+      };
+  }
+}
+
+function credentialHappened(notice: AutomationNotice, name: string): string {
+  switch (notice.credential?.kind) {
+    case 'connect-again':
+      return `A run of ${name} ended because the app that the payer’s connection signed in through no longer exists.`;
+    case 'fix-client':
+      return `A run of ${name} ended because the app that the connection signs in through is broken.`;
+    case 'fix-share':
+      return `A run of ${name} ended because the service refused the workspace’s shared key.`;
+    default:
+      return `A run of ${name} ended because the service refused the payer’s connection.`;
+  }
+}
+
+// Who fixes a rejected credential, and how.
+function credentialFix(notice: AutomationNotice): string {
+  switch (notice.credential?.kind) {
+    case 'connect-again':
+      return 'The payer should connect the account again through an app that exists.';
+    case 'fix-client':
+      return 'The app’s owner should replace the app’s secret.';
+    case 'fix-share':
+      return 'A realm administrator should resume the share, or swap a working key into the share.';
+    default:
+      return 'The payer should reconnect the account.';
+  }
 }
 
 // Where a run in progress is: the milestone the script last reported, with
@@ -221,9 +379,9 @@ function glanceText(automation: Automation): string | undefined {
     case 'paused':
       return pausedBecause(automation);
     case 'waiting-for-credits':
-      return 'The payer has no credits left, so Boxel holds every run';
+      return 'The payer has no credits left, so Boxel has paused every run';
     case 'waiting-for-key-approval':
-      return 'Boxel holds every run until someone approves the automation’s use of each key';
+      return 'Boxel has paused every run until someone approves the automation’s use of each key';
     case 'done':
       return 'No runs left on any trigger';
     default:
@@ -258,9 +416,11 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
   // The automation an automation card opened the console on, which the
   // console marks until someone opens another automation from the list.
   @tracked private focused: string | undefined;
-  // The same automation, until the console has listed the automation and
-  // scrolled the automation's row into view.
-  private toReveal: string | undefined;
+  // The automation to scroll into view, until the console has listed the
+  // automation and scrolled the automation's row into view: the one an
+  // automation card opened the console on, or the one a notice's Show asked
+  // for.
+  @tracked private toReveal: string | undefined;
 
   constructor(owner: Owner, args: RealmAutomationsSignature['Args']) {
     super(owner, args);
@@ -377,31 +537,53 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
   private isFocused = (automation: Automation) =>
     this.focused === automation.id;
 
+  // The listed automations with a notice for the viewer, in the list's order.
+  private get noticed(): Automation[] {
+    return this.automations.filter(
+      (automation) => automation.attributes.notice?.forViewer,
+    );
+  }
+
+  private noticeHappened = (automation: Automation) => {
+    let notice = automation.attributes.notice;
+    return notice
+      ? automationNoticeText(notice, automationTitle(automation)).happened
+      : undefined;
+  };
+
+  // A notice's Show: scrolls the automation's row into view, moves the list's
+  // focus to the row, and marks the row.
+  private showNoticed = (automation: Automation) => {
+    this.toReveal = automation.id;
+  };
+
   // When this console opened for one of the listed automations, scrolls that
   // automation's row into view, moves the list's focus to the row, and marks
   // the row, once.
-  private reveal = modifier((element: HTMLElement, [id]: [string]) => {
-    if (this.toReveal !== id) {
-      return;
-    }
-    // After the render that installed the modifier, so marking the row never
-    // updates state that render read.
-    let removed = false;
-    schedule('afterRender', () => {
-      if (removed || this.toReveal !== id) {
+  private reveal = modifier(
+    (element: HTMLElement, [id, toReveal]: [string, string | undefined]) => {
+      if (toReveal !== id) {
         return;
       }
-      this.toReveal = undefined;
-      this.focused = id;
-      element.scrollIntoView({ block: 'center' });
-      (element.closest('li') as HTMLElement | null)?.focus({
-        preventScroll: true,
+      // After the render that installed the modifier, so marking the row never
+      // updates state that render read.
+      let removed = false;
+      schedule('afterRender', () => {
+        if (removed || this.toReveal !== id) {
+          return;
+        }
+        this.toReveal = undefined;
+        this.focused = id;
+        element.scrollIntoView({ block: 'center' });
+        (element.closest('li') as HTMLElement | null)?.focus({
+          preventScroll: true,
+        });
       });
-    });
-    return () => {
-      removed = true;
-    };
-  });
+      return () => {
+        removed = true;
+      };
+    },
+  );
 
   private openCard = task(async (cardId: string) => {
     let toolContext = this.toolContext;
@@ -455,6 +637,37 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
             </:action>
           </Alert>
         {{/if}}
+        {{#if this.noticed.length}}
+          <Alert
+            @tone='warning'
+            @title={{if
+              (eq this.noticed.length 1)
+              'An automation needs attention'
+              (concat this.noticed.length ' automations need attention')
+            }}
+            data-test-realm-automations-notices
+          >
+            <ul class='notices'>
+              {{#each this.noticed as |automation|}}
+                <li
+                  class='notice'
+                  data-test-realm-automations-notice={{automation.id}}
+                >
+                  <span>{{this.noticeHappened automation}}</span>
+                  <Button
+                    @size='s'
+                    @appearance='link'
+                    {{on 'click' (fn this.showNoticed automation)}}
+                    data-test-realm-automations-notice-show={{automation.id}}
+                  >
+                    Show
+                    {{automationTitle automation}}
+                  </Button>
+                </li>
+              {{/each}}
+            </ul>
+          </Alert>
+        {{/if}}
         {{#if this.loadFailed}}
           <Alert
             @tone='danger'
@@ -487,7 +700,7 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
                 @automation={{automation}}
                 @context={{@context}}
                 @focused={{this.isFocused automation}}
-                {{this.reveal automation.id}}
+                {{this.reveal automation.id this.toReveal}}
               />
             </:item>
           </List>
@@ -522,6 +735,163 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
         font-weight: 600;
         font-size: var(--boxel-font-size);
         margin: 0;
+      }
+      .notices {
+        display: grid;
+        gap: var(--boxel-sp-4xs);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .notice {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+}
+
+interface RealmAutomationNoticesSignature {
+  Args: {
+    // The realm's URL.
+    realm: string | undefined;
+    context: CardContext | undefined;
+  };
+}
+
+// The realm's automation notices for the viewer, on a view of the realm
+// config that has no Automations console (the edit view, which the
+// dashboard's Realm Settings opens): a call to action listing each automation
+// that needs the viewer, with Show, which opens the realm config on its
+// Automations console with that automation in view and marked. Renders
+// nothing while no automation needs the viewer. It reads the same route the
+// console reads, again on each realm event that can change a notice.
+export class RealmAutomationNotices extends GlimmerComponent<RealmAutomationNoticesSignature> {
+  @tracked private noticed: Automation[] = [];
+
+  private follow = modifier((element, [realm]: [string | undefined]) => {
+    if (!realm || !isLiveRender(element)) {
+      return;
+    }
+    this.load.perform(realm);
+    let unsubscribe = subscribeToRealm(realm, (event) => {
+      // A notice changes only when an automation's row changes, or one of
+      // its runs ends.
+      if (
+        event.eventName === 'automation' ||
+        (event.eventName === 'job' &&
+          (event.state === 'complete' || event.state === 'error'))
+      ) {
+        this.load.perform(realm, { settle: true });
+      }
+    });
+    return () => unsubscribe();
+  });
+
+  private load = restartableTask(
+    async (realm: string, { settle = false }: { settle?: boolean } = {}) => {
+      let toolContext = this.args.context?.toolContext;
+      if (!toolContext) {
+        return;
+      }
+      if (settle) {
+        await timeout(250);
+      }
+      try {
+        let result = await new AuthedFetchTool(toolContext).execute({
+          url: `${realm}${AUTOMATION_LIST_PATH}`,
+          acceptHeader: 'application/json',
+        });
+        let document = result.ok
+          ? (result.body as AutomationListDocument)
+          : undefined;
+        this.noticed =
+          document?.meta?.directWriter === true
+            ? (document.data ?? []).filter(
+                (automation) => automation.attributes.notice?.forViewer,
+              )
+            : [];
+      } catch {
+        // The notices are a pointer to the console: a failed read leaves the
+        // last ones shown, and the console says when it can't read the list.
+      }
+    },
+  );
+
+  private happened = (automation: Automation) => {
+    let notice = automation.attributes.notice;
+    return notice
+      ? automationNoticeText(notice, automationTitle(automation)).happened
+      : undefined;
+  };
+
+  private show = task(async (automation: Automation) => {
+    let realm = this.args.realm;
+    let toolContext = this.args.context?.toolContext;
+    if (!realm || !toolContext) {
+      return;
+    }
+    await showAutomationInConsole(toolContext, realm, automation.id);
+  });
+
+  private showAutomation = (automation: Automation) => {
+    this.show.perform(automation);
+  };
+
+  <template>
+    <div {{this.follow @realm}}>
+      {{#if this.noticed.length}}
+        <Alert
+          class='realm-automation-notices'
+          @tone='warning'
+          @title={{if
+            (eq this.noticed.length 1)
+            'An automation needs attention'
+            (concat this.noticed.length ' automations need attention')
+          }}
+          data-test-realm-config-automation-notices
+        >
+          <ul class='notices'>
+            {{#each this.noticed as |automation|}}
+              <li
+                class='notice'
+                data-test-realm-config-automation-notice={{automation.id}}
+              >
+                <span>{{this.happened automation}}</span>
+                <Button
+                  @size='s'
+                  @appearance='link'
+                  {{on 'click' (fn this.showAutomation automation)}}
+                  data-test-realm-config-automation-notice-show={{automation.id}}
+                >
+                  Show
+                  {{automationTitle automation}}
+                  in Automations
+                </Button>
+              </li>
+            {{/each}}
+          </ul>
+        </Alert>
+      {{/if}}
+    </div>
+    <style scoped>
+      .realm-automation-notices {
+        margin: var(--boxel-sp) var(--boxel-sp-lg) 0;
+      }
+      .notices {
+        display: grid;
+        gap: var(--boxel-sp-4xs);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .notice {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: var(--boxel-sp-xs);
       }
     </style>
   </template>
@@ -571,6 +941,11 @@ class AutomationGlance extends GlimmerComponent<AutomationGlanceSignature> {
         {{/if}}
       </:description>
       <:trailing>
+        {{#if @automation.attributes.notice.forViewer}}
+          <Chip @tone='attention' data-test-realm-automation-needs-attention>
+            Needs attention
+          </Chip>
+        {{/if}}
         <Chip
           @tone={{this.look.tone}}
           @dot={{this.look.dot}}

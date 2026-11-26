@@ -33,6 +33,7 @@ import {
   formatUpdatedTime,
 } from '@cardstack/host/lib/workspace-actions';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
+import type AutomationNoticesService from '@cardstack/host/services/automation-notices';
 import type NetworkService from '@cardstack/host/services/network';
 
 import {
@@ -41,6 +42,7 @@ import {
   DuplicateWorkspaceModal,
 } from '../dashboard-modals/workspace-modals';
 
+import { WorkspaceIconCount } from './automation-notice-count';
 import HostedPill from './hosted-pill';
 import ItemContainer from './item-container';
 import PinnedCards from './pinned-cards';
@@ -132,6 +134,14 @@ export default class Workspace extends Component<Signature> {
         }}
         ...attributes
       >
+        {{#if this.automationNoticeCount}}
+          <span
+            id={{this.automationNoticeDescriptionId}}
+            class='boxel-sr-only'
+            data-test-workspace-automation-notices-spoken
+          >{{this.automationNoticeCount}}
+            {{this.automationNoticeLabel}}</span>
+        {{/if}}
         {{#if this.workspace.reindexError}}
           <div class='reindex-error' role='alert' data-test-reindex-error>
             <span
@@ -188,12 +198,22 @@ export default class Workspace extends Component<Signature> {
                   {{focusWhenSelected @isSelected scrollOnOpen='never'}}
                   data-test-workspace-button={{this.workspace.name}}
                 >
-                  {{! The name beside it labels the button. }}
-                  <RealmIcon
-                    class='desk-pill-icon'
-                    @realmInfo={{this.workspace.realmInfo}}
-                    aria-hidden='true'
-                  />
+                  {{! The name beside it labels the button. While an
+                      automation in the workspace needs the user, the icon
+                      carries the count. }}
+                  <WorkspaceIconCount
+                    @count={{this.automationNoticeCount}}
+                    data-test-workspace-automation-notices={{if
+                      this.automationNoticeCount
+                      this.automationNoticeCount
+                    }}
+                  >
+                    <RealmIcon
+                      class='desk-pill-icon'
+                      @realmInfo={{this.workspace.realmInfo}}
+                      aria-hidden='true'
+                    />
+                  </WorkspaceIconCount>
                   <span
                     class='desk-pill-name'
                     data-test-workspace-name
@@ -299,12 +319,20 @@ export default class Workspace extends Component<Signature> {
               @realmURL={{@realmIdentifier}}
               {{on 'click' this.workspace.openWorkspace}}
             >
-              <span class='realm-icon-wrapper'>
-                <RealmIcon
-                  class='workspace-realm-icon'
-                  @realmInfo={{this.workspace.realmInfo}}
-                />
-              </span>
+              <WorkspaceIconCount
+                @count={{this.automationNoticeCount}}
+                data-test-workspace-automation-notices={{if
+                  this.automationNoticeCount
+                  this.automationNoticeCount
+                }}
+              >
+                <span class='realm-icon-wrapper'>
+                  <RealmIcon
+                    class='workspace-realm-icon'
+                    @realmInfo={{this.workspace.realmInfo}}
+                  />
+                </span>
+              </WorkspaceIconCount>
             </RealmURLTooltip>
           </span>
         {{else}}
@@ -318,13 +346,21 @@ export default class Workspace extends Component<Signature> {
           >
             <span class='wallpaper'>
               <RealmURLTooltip @realmURL={{@realmIdentifier}}>
-                <span class='realm-icon-wrapper'>
-                  <RealmIcon
-                    class='workspace-realm-icon'
-                    @realmInfo={{this.workspace.realmInfo}}
-                    @canAnimate={{true}}
-                  />
-                </span>
+                <WorkspaceIconCount
+                  @count={{this.automationNoticeCount}}
+                  data-test-workspace-automation-notices={{if
+                    this.automationNoticeCount
+                    this.automationNoticeCount
+                  }}
+                >
+                  <span class='realm-icon-wrapper'>
+                    <RealmIcon
+                      class='workspace-realm-icon'
+                      @realmInfo={{this.workspace.realmInfo}}
+                      @canAnimate={{true}}
+                    />
+                  </span>
+                </WorkspaceIconCount>
               </RealmURLTooltip>
             </span>
           </ItemContainer>
@@ -1229,6 +1265,19 @@ export default class Workspace extends Component<Signature> {
   </template>
 
   @service declare private network: NetworkService;
+  @service declare private automationNotices: AutomationNoticesService;
+
+  // How many of the user's automation notices are about automations in this
+  // workspace.
+  private get automationNoticeCount() {
+    return this.automationNotices.countFor(this.args.realmIdentifier);
+  }
+
+  private get automationNoticeLabel() {
+    return this.automationNoticeCount === 1
+      ? 'automation needs attention'
+      : 'automations need attention';
+  }
 
   @tracked private isHostDropdownOpen = false;
 
@@ -1252,6 +1301,10 @@ export default class Workspace extends Component<Signature> {
     return `${guidFor(this)}-visibility`;
   }
 
+  private get automationNoticeDescriptionId() {
+    return `${guidFor(this)}-automation-notices`;
+  }
+
   private get updatedDescriptionId() {
     return `${guidFor(this)}-updated`;
   }
@@ -1268,6 +1321,9 @@ export default class Workspace extends Component<Signature> {
       ids.push(this.updatedDescriptionId);
     }
     ids.push(this.workspace.realmURLDescriptionId);
+    if (this.automationNoticeCount) {
+      ids.push(this.automationNoticeDescriptionId);
+    }
     return ids.join(' ');
   }
 

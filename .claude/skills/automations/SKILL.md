@@ -117,7 +117,12 @@ description: >-
   and the realm's `_automation-runs` route (`automation-run-list.ts`) it
   reads a page at a time: each run's trigger, state and step, what a waiting
   run waits for, milestones, error reason and script line, who canceled it,
-  and the slots that joined it.
+  and the slots that joined it. Also covers automation notices
+  (`automation-notices.ts`): what tells a payer or the realm's other direct
+  writers that an automation stopped doing its job and what fixes it, who
+  gets each one, what ends it, where it shows (the Automation card's notice,
+  the console's call to action, the dashboard's and the workspace menu's
+  badges) and the `/_automation-notices` route the badges read.
 ---
 
 # Automations
@@ -1820,6 +1825,46 @@ The section renders only once the route answers, and only when it answers that t
 | `currentRun`                         | the run in progress, leaving out a Preview: `runId`, `startedAt`, `milestone` (the run milestone the script last reported, or null before the first) and `task` (the last task the script reported inside that milestone, or null); null when nothing runs |
 
 Host tests mount a virtual-network handler that answers the route (`tests/acceptance/realm-automations-test.gts`), since an in-browser test realm has no `automations` table.
+
+## Automation notices
+
+A notice tells the people who can fix it that an automation stopped doing its job, and what fixes it. `automationNotices` in `packages/runtime-common/automation-notices.ts` reads it from what the automation's row and runs already record; nothing stores a notice. So a notice stands once per problem, however many runs the problem refuses, and ends the moment its problem is fixed. They are the payer's side and the realm's: the key owners other than the payer whom a waiting automation asks to approve or share a key hear through _Key approval notices_ (stored, on the API Keys badge) instead. Each automation has at most one, the first of these that applies:
+
+| The automation                                                                                                                             | `reason`                                                                                                   | Who it is for (`audience`)                                                                | What ends it                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Paused with `repeated-failures` (with the last failed run, and the credential's fix when that run ended on a rejected credential)          | `repeated-failures`                                                                                        | the payer                                                                                 | a resume                                                           |
+| Paused with `payer-lost-access` (the payer lost direct write, the payer's sessions were revoked, or the account can't sign in)             | `payer-lost-access`                                                                                        | every direct writer, the payer included while the payer still writes the realm directly   | a resume, which makes the resumer the payer                        |
+| Paused with `caps-raised`, `batched-ai-enabled`, `webhook-changed` or `invalid-declaration`                                                | the pause reason                                                                                           | the payer                                                                                 | a resume, or the index hook lifting an `invalid-declaration` pause |
+| Paused with `webhook-owner-lost-access`                                                                                                    | `webhook-owner-lost-access`                                                                                | every direct writer                                                                       | a resume                                                           |
+| Waiting for key approval, put there by its latest run of its own, refused for a key approval (the operation from the run's admission line) | `binding-not-approved`, `binding-needs-reapproval`, `share-suspended` or `key-approval-ended`              | the payer; every direct writer for `share-suspended`                                      | the last approval landing, which makes the automation active again |
+| Waiting for key approval from its switch-on or an edit                                                                                     | `waiting-for-key-approval`                                                                                 | the payer                                                                                 | the same                                                           |
+| Waiting for credits                                                                                                                        | `waiting-for-credits`                                                                                      | the payer                                                                                 | a run admitted, which makes the automation active again            |
+| Its latest run of its own ended `credential-rejected` and the credential is still broken                                                   | `credential-rejected`, with `credential` the fix (`reconnect`, `connect-again`, `fix-client`, `fix-share`) | the payer; the OAuth client's owner for `fix-client`; every direct writer for `fix-share` | the credential fixed, or a later run of its own that gets past it  |
+
+A pause a direct writer asked for (`requested`) or the realm's archiving raises none: the person who did it knows. "Its latest run of its own" is its latest run that ended complete or as an error since its switch-on or last resume (`scheduled_since`), leaving out Previews, Run nows and canceled runs (`readLatestOwnRuns`), so a run from before a remove and a later switch-on never raises one. A key refusal names its operation only when it finished after the row last changed (`updated_at`): admission moves the row into the wait before the run ends, so a refusal from an earlier wait, whose operation may be approved by now, falls back to the generic `waiting-for-key-approval`. The operation comes from the run's `admission` log line, whose `data` carries `operation`, `targetModule` and `targetName` when the realm refused a declared operation. Whether a rejected credential is still broken is the realm server's to say: `CallApiSender.automationCredentialNotices`, which `lib/automation-credential-notices.ts` implements from the key, its OAuth client and its share as they are now. A sender without it (a published realm) raises no credential notice.
+
+**Who sees one.** Only the realm's direct writers, and only about automations in realms they write directly. Every notice carries `forViewer`, whether the viewer is someone it is for; the console's call to action, the card's notice and the badges show only those. A client owner who doesn't write the realm directly is told nothing here.
+
+**Where it shows.**
+
+- `_automations` and `_automation-status` carry each automation's `notice` (or null) for the viewer.
+- The console (`realm-automations.gts`) lists every notice for the viewer in a call to action above the automations, each with a Show button that scrolls the automation's row into view and marks it, and a Needs attention chip on a row whose card doesn't load. The copy is `automationNoticeText`, which builds a pause's sentence from the console's own `PAUSED_BECAUSE`; the catalog card imports it too.
+- The Automation card's isolated view shows the notice above Status with the fix, through the host's `open-secure-window` tool: a key approval opens `approve` on the automation itself (`automation`), which is what ends the wait; a connection the vendor no longer accepts opens `connect` with `reconnect` (the key id), which signs that connection in again; a connection whose app was deleted opens `connect` on the realm; a broken share opens `swap-key`. A notice about a run has Show the run, which opens the Runs section on that run and moves focus to it. A failure to open the window says so in the notice. The card's fitted and embedded views mark the icon with a Pret UI `Indicator`.
+- `GET /_automation-notices` (a realm-server route, the session's own user) lists the user's notices with `forViewer` across every realm they write directly, from their own permission rows, a few realms at a time. The host's `automation-notices` service reads it when a session starts, on every `automation` realm event and every `job` event for a run that ended (a direct writer's session room carries them for every realm they write directly; `MessageService.onEveryRealmEvent`), and when the user comes back from the secure window. The dashboard shows the count on the workspace's icon (seen only; the workspace's button is described by the count), and under the menu's Realm Settings item.
+
+To see why a notice stands, read the row (`state`, `pause_reason`, `scheduled_since`, `updated_at`) and the latest run of its own:
+
+```sql
+SELECT r.id, r.state, r.error_reason, r.error_message, r.finished_at, l.data
+  FROM automation_runs r
+  JOIN automations a ON a.automation_id = r.automation_id
+  LEFT JOIN automation_run_log l ON l.run_id = r.id AND l.kind = 'admission'
+ WHERE r.automation_id = '<automation card id>'
+   AND r.finished_at IS NOT NULL AND r.state IN ('complete', 'error')
+   AND NOT r.dry_run AND r.trigger <> 'manual'
+   AND r.created_at >= a.scheduled_since
+ ORDER BY r.finished_at DESC LIMIT 1;
+```
 
 ## The run list
 

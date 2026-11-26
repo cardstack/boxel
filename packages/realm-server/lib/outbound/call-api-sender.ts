@@ -20,6 +20,7 @@ import {
 import type { PublishedFrom } from '../published-realm.ts';
 import { automationAdmission, fillSlots } from '../key-bindings.ts';
 import { checkAutomationKeyApprovals } from '../automation-key-approvals.ts';
+import { automationCredentialNotices } from '../automation-credential-notices.ts';
 import {
   tellKeyApprovalNoticesChanged,
   writeKeyApprovalNoticesIn,
@@ -145,6 +146,8 @@ export function createCallApiSender(
               ...args,
               probeIntervalMs,
             }),
+          automationCredentialNotices: (run) =>
+            automationCredentialNotices(dbAdapter, run),
           writeKeyApprovalNoticesIn,
           tellKeyApprovalNoticesChanged,
         }),
