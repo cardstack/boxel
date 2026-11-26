@@ -710,6 +710,38 @@ module('Pretui | command palette | noun, match, trigger', function (hooks) {
     ]);
   });
 
+  test('matchText: words ignores surrounding punctuation', function (assert) {
+    assert.ok(matchText('words', 'advanced', 'Open (advanced)'));
+    assert.deepEqual(matchText('words', 'advanced', 'Open (advanced)')?.ranges, [[6, 14]]);
+    assert.ok(matchText('words', 'rock', 'Rock & roll'));
+  });
+
+  test('@match prefix still finds a keyword or description by its own start', async function (assert) {
+    let items = [
+      { label: 'Copy link', keywords: 'url permalink', onSelect: () => {} },
+      { label: 'Delete', onSelect: () => {} },
+    ];
+    let noop = () => {};
+    await render(
+      <template>
+        <CommandPalette
+          @items={{items}}
+          @open={{true}}
+          @onClose={{noop}}
+          @match='prefix'
+        />
+      </template>,
+    );
+    let input = root().querySelector(
+      '[data-test-pretui-palette-input]',
+    ) as HTMLInputElement;
+    await fillIn(input, 'url');
+    assert.strictEqual(paletteRows().length, 1);
+    assert.true(norm(paletteRows()[0]).includes('Copy link'));
+    await fillIn(input, 'link');
+    assert.strictEqual(paletteRows().length, 0, 'a label match is not mid-text');
+  });
+
   test('@resultNoun words the announced count and the empty message', async function (assert) {
     let items = [
       { label: 'Restroom sign', onSelect: () => {} },
@@ -736,7 +768,7 @@ module('Pretui | command palette | noun, match, trigger', function (hooks) {
     await fillIn(input, 'zzzz');
     assert.strictEqual(status(), 'No signs');
     assert.strictEqual(
-      norm(root().querySelector('.pal-empty') as HTMLElement),
+      norm(root().querySelector('[data-test-pretui-palette-empty]') as HTMLElement),
       'No matching signs',
     );
   });

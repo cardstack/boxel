@@ -119,8 +119,10 @@ export function fuzzyMatch(query: string, text: string): FuzzyMatch | null {
  * with the query. */
 export type PaletteMatch = 'fuzzy' | 'words' | 'prefix';
 
-const WORD = /[^\s\-_/.:·>]+/g;
-const DELIMITERS = /[\s\-_/.:·>]+/;
+// a word is a run of letters or digits, so punctuation around it, as in
+// "Open (advanced)", never hides where it starts
+const WORD = /[\p{L}\p{N}]+/gu;
+const DELIMITERS = /[^\p{L}\p{N}]+/u;
 
 /** The strict modes of the palette's matcher; 'fuzzy' is `fuzzyMatch`. */
 export function matchText(
@@ -205,6 +207,8 @@ interface PaletteEntry {
   checked?: string;
   description?: string;
   haystack: string;
+  /** description, keywords and path, matched one by one in the strict modes */
+  fields: string[];
 }
 
 interface PaletteRow extends PaletteEntry {
@@ -357,6 +361,9 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
       haystack: [label, node.description, node.keywords, ...path]
         .filter(Boolean)
         .join(' '),
+      fields: [node.description, node.keywords, ...path].filter(
+        (field): field is string => !!field,
+      ),
     };
   }
 
@@ -456,8 +463,18 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
       }
       // a keyword/description/path hit still counts, but ranks below every
       // label hit and highlights nothing (the match is not in the label)
-      let wider = matchText(mode, query, entry.haystack);
-      if (wider) {
+      // the strict modes anchor at the start of the text, so each field is
+      // matched on its own; joined, only the label's own start would count
+      let wider =
+        mode === 'fuzzy'
+          ? matchText(mode, query, entry.haystack)
+          : entry.fields
+              .map((field) => matchText(mode, query, field))
+              .reduce<FuzzyMatch | null>(
+                (best, match) =>
+                  match && (!best || match.score > best.score) ? match : best,
+                null,
+              );      if (wider) {
         scored.push({ entry, match: { score: wider.score - 40, ranges: [] } });
       }
     }
@@ -786,7 +803,7 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
             {{/each}}
           </menu>
         {{else}}
-          <div class='pal-empty'>{{this.emptyMessage}}</div>
+          <div class='pal-empty' data-test-pretui-palette-empty>{{this.emptyMessage}}</div>
         {{/if}}
 
         {{! one polite announcement of the result count — never per keystroke
