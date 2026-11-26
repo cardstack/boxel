@@ -203,11 +203,12 @@ const UNCOUNTED_FAILURE_REASONS: readonly string[] = [
 
 // The caps the payer agreed to pay for when they switched the automation on
 // or resumed it, whether it used batched AI then, and the incoming webhooks
-// its triggers named (`declaredWebhookPaths`). A snapshot taken before the
-// webhooks were recorded has no `webhookPaths`, and limits no webhook.
+// its triggers named (`declaredWebhookPaths`). The payer agreed to those
+// webhooks and no others: a stored snapshot without `webhookPaths` reads as
+// agreeing to none (`capsSnapshotFromJSON`).
 export type AutomationCapsSnapshot = AutomationCaps & {
   batchedAI: boolean;
-  webhookPaths?: string[];
+  webhookPaths: string[];
 };
 
 // A trigger's run state as the row keeps it: what the schedule reads, plus
@@ -800,17 +801,11 @@ export function capsRaisedAbove(
 
 // Whether the card names an incoming webhook the snapshot doesn't, and so
 // pauses with `webhook-changed`. Removing a webhook trigger asks for nothing
-// more. A snapshot without `webhookPaths` predates the record, and limits no
-// webhook. Such an automation's webhooks were never checked against the
-// ownership rule at switch-on, so each delivery checks the webhook's owner
-// itself (`takeWebhookDelivery`) rather than trusting the snapshot.
+// more.
 export function webhooksChangedFrom(
   snapshot: AutomationCapsSnapshot,
   card: Pick<AutomationDeclaration, 'triggers'>,
 ): boolean {
-  if (!snapshot.webhookPaths) {
-    return false;
-  }
   let agreed = new Set(snapshot.webhookPaths);
   return declaredWebhookPaths(card).some((path) => !agreed.has(path));
 }
@@ -2119,6 +2114,16 @@ async function webhookProblems(
   );
 }
 
+// A stored caps snapshot. One without `webhookPaths` agreed to no webhook, so
+// any webhook its card names pauses the automation with `webhook-changed`,
+// and no delivery starts its run (`startWebhookAutomationRuns`).
+function capsSnapshotFromJSON(value: PgPrimitive): AutomationCapsSnapshot {
+  let snapshot = json(value) as Omit<AutomationCapsSnapshot, 'webhookPaths'> & {
+    webhookPaths?: string[];
+  };
+  return { ...snapshot, webhookPaths: snapshot.webhookPaths ?? [] };
+}
+
 export function automationFromRow(
   row: Record<string, PgPrimitive>,
 ): AutomationRow {
@@ -2133,7 +2138,7 @@ export function automationFromRow(
       row.pause_reason === 'invalid-declaration' && row.pause_problems != null
         ? (json(row.pause_problems) as AutomationProblem[])
         : null,
-    capsSnapshot: json(row.caps_snapshot) as AutomationCapsSnapshot,
+    capsSnapshot: capsSnapshotFromJSON(row.caps_snapshot),
     triggerRuns: json(row.trigger_runs) as Record<
       string,
       AutomationTriggerRuns
