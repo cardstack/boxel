@@ -69,9 +69,9 @@ export class LeaseManager {
   #timer: ReturnType<typeof setInterval> | undefined;
   #deadline: ReturnType<typeof setTimeout> | undefined;
   #ticking: Promise<void> | undefined;
-  // When the tick in progress started, so that a missed deadline can say how
-  // long its renewal had been pending.
-  #tickInFlightSince: number | undefined;
+  // The tick in progress: when it started and which query it is waiting on,
+  // so that a missed deadline can say what was pending.
+  #tickInFlight: TickInFlight | undefined;
   // Set once the manager stops renewing, after a stop, an abandon or a loss.
   #stopped = false;
   #onLost: ((error: LeaseLostError) => void) | undefined;
@@ -149,18 +149,21 @@ export class LeaseManager {
   // Renews every held shard, then claims free shards up to the share. Throws
   // `LeaseLostError` when a held shard's renewal returns no row.
   async tick(): Promise<void> {
-    let startedAt = performance.now();
-    this.#tickInFlightSince = startedAt;
+    let inFlight: TickInFlight = {
+      startedAt: performance.now(),
+      phase: 'renewal',
+    };
+    this.#tickInFlight = inFlight;
     try {
-      await this.#tick(startedAt);
+      await this.#tick(inFlight);
     } finally {
-      if (this.#tickInFlightSince === startedAt) {
-        this.#tickInFlightSince = undefined;
+      if (this.#tickInFlight === inFlight) {
+        this.#tickInFlight = undefined;
       }
     }
   }
 
-  async #tick(startedAt: number): Promise<void> {
+  async #tick(inFlight: TickInFlight): Promise<void> {
     if (this.#claimed.size > 0) {
       await this.#renew();
     }
@@ -171,6 +174,7 @@ export class LeaseManager {
     if (this.#claimed.size < this.share) {
       // Shards claimed as the manager stops are kept, so that a stop releases
       // them.
+      inFlight.phase = 'claim';
       gained = await this.#claim(this.share - this.#claimed.size);
       for (let shard of gained) {
         this.#claimed.add(shard);
@@ -181,7 +185,7 @@ export class LeaseManager {
       }
     }
     if (this.#claimed.size > 0) {
-      this.#armDeadline(startedAt);
+      this.#armDeadline(inFlight.startedAt);
     }
     if (gained.length > 0) {
       this.#onGain?.();
@@ -270,21 +274,30 @@ export class LeaseManager {
   }
 
   // The lease of every held shard runs at least `expiryMs` from the start of
-  // the tick that renewed or claimed it. The next tick starts `renewMs` in;
-  // if it hasn't finished halfway from there to the expiry, the task gives up
-  // the shards rather than record while another task may take them.
+  // the tick that renewed or claimed it. The next tick starts `renewMs` in,
+  // or at the first interval slot after this tick finished when this tick
+  // took longer than that; if it hasn't finished halfway from `renewMs` to
+  // the expiry, the task gives up the shards rather than record while another
+  // task may take them.
   #armDeadline(tickStartedAt: number): void {
     let { renewMs, expiryMs } = this.#options;
     let windowMs = (renewMs + expiryMs) / 2;
     let due = tickStartedAt + windowMs;
+    let armingTickMs = performance.now() - tickStartedAt;
     clearTimeout(this.#deadline);
     this.#deadline = setTimeout(
       () => {
-        let now = performance.now();
+        let timing = missedDeadlineTiming({
+          now: performance.now(),
+          lastTickStartedAt: tickStartedAt,
+          lastTickMs: armingTickMs,
+          due,
+          inFlight: this.#tickInFlight,
+        });
         this.#lost(
           new LeaseLostError(this.held, {
             cause: new Error(
-              `no renewal finished within ${windowMs}ms of the last (${missedDeadlineTiming(now, tickStartedAt, due, this.#tickInFlightSince)})`,
+              `no renewal finished within ${windowMs}ms of the last (${timing})`,
             ),
           }),
         );
@@ -319,22 +332,39 @@ export class LeaseManager {
   }
 }
 
-// How a missed deadline came about. A renewal that started on schedule,
-// `renewMs` after the last, and was still in flight at a deadline timer that
-// fired on time points at the database. A renewal that started late, none in
-// flight at all, or a deadline timer that fired well past its due time points
-// at a stalled process (a blocked event loop or a starved CPU).
-function missedDeadlineTiming(
-  now: number,
-  lastTickStartedAt: number,
-  due: number,
-  tickInFlightSince: number | undefined,
-): string {
-  let renewal =
-    tickInFlightSince === undefined
-      ? 'no renewal in flight'
-      : `renewal started ${Math.round(tickInFlightSince - lastTickStartedAt)}ms after the last and in flight for ${Math.round(now - tickInFlightSince)}ms`;
-  return `${renewal}; deadline timer fired ${Math.round(now - due)}ms late`;
+interface TickInFlight {
+  startedAt: number;
+  // The query the tick is waiting on: the renewal of the held shards, then
+  // the claim of free ones up to the share.
+  phase: 'renewal' | 'claim';
+}
+
+// How a missed deadline came about. A last tick that took longer than
+// `renewMs` made the interval skip a slot, so the next tick starting late is
+// the database's doing as well. A tick waiting on its renewal or claim for
+// most of the window, with a deadline timer that fired on time, points at the
+// database. A tick that started late after a quick last tick, no tick in
+// flight, or a deadline timer that fired well past its due time points at a
+// stalled process (a blocked event loop or a starved CPU).
+function missedDeadlineTiming({
+  now,
+  lastTickStartedAt,
+  lastTickMs,
+  due,
+  inFlight,
+}: {
+  now: number;
+  lastTickStartedAt: number;
+  lastTickMs: number;
+  due: number;
+  inFlight: TickInFlight | undefined;
+}): string {
+  let pending = inFlight
+    ? `tick started ${Math.round(inFlight.startedAt - lastTickStartedAt)}ms after the last, ${Math.round(now - inFlight.startedAt)}ms in and waiting on its ${inFlight.phase}`
+    : 'no tick in flight';
+  // Timers can fire a millisecond early.
+  let late = Math.max(0, Math.round(now - due));
+  return `${pending}; the last tick took ${Math.round(lastTickMs)}ms; deadline timer fired ${late}ms late`;
 }
 
 function sorted(shards: Iterable<number>): number[] {
