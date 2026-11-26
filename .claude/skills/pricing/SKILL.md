@@ -944,9 +944,9 @@ reported resolves on the next pass, so neither needs an operator.
 
 ## The daily storage charge
 
-An automation's payer pays, every day the automation is switched on, for the
-files its runs created and for their rows in the index. Each day is priced at
-what existed that day:
+An automation's payer pays, every day the automation is active, for the
+files the automation's runs created and for the files' rows in the index.
+Boxel prices each day at what existed that day:
 
 ```
 file GB-months     = Σ over the days charged of that day's file bytes  / BYTES_PER_GB / (1461/48)
@@ -984,14 +984,42 @@ and `AUTOMATION_STORAGE_CHARGE_CRON_TZ` override the schedule. The job names
 the UTC day that just ended and runs at the system tier. A backlog only
 delays it, since the day is in its arguments. Its task
 (`packages/runtime-common/automation-storage-charge.ts`) handles every
-automation switched on before that day ended, whatever its state. A paused
-automation still exists, so it is still charged. Removing an automation
-deletes its `automations` row, so it is no longer measured or charged.
+automation switched on before that day ended, and charges only the days the
+automation was active.
+
+**When the charge stops.** The job charges a day only when the automation was
+`active` at some point in the day. A day the automation spends wholly paused
+(for any pause reason), waiting for credits, waiting for key approval or done
+is neither measured nor charged, and the job counts the automation as
+`stopped` for that day. A day with both states counts as active: an
+automation paused at 20:00 is charged for that day, and the charge stops from
+the next day. The files stay in the realm, and readers keep the files; only
+the charge stops. Resuming, the last key approval landing, the next run
+admitted once the payer's balance covers the run (a top-up alone changes no
+state), or a new trigger on a done automation makes the automation active
+again, and the charge starts again from that day. Removing an automation deletes the
+automation's `automations` row, so the job no longer measures or charges the
+automation, and deleting a file stops that file counting.
+
+**The state history.** `automation_state_changes` holds one row each time an
+automation is switched on, and one each time the automation's `state` or
+`pause_reason` changes, with `changed_at`. A trigger on `automations` writes
+the rows, so every writer of the state is recorded alike, and removing the
+automation removes the history. The job reads the state in effect when the
+day began, and every change during the day, to decide whether the automation
+was active. The storage route (`GET /_automation-storage`) answers
+`chargeStopped` from the same history: null while the automation is active,
+otherwise the current state, the pause reason and `since`, the time the
+automation last left `active`, or the switch-on time for an automation that
+was never active (`storageChargeStopped`). The charge stops from the first day
+the automation spends wholly stopped: the day after `since` when the
+automation was active earlier that day, otherwise `since`'s own day.
 
 **A day is measured once.** For each automation, the job first records the
 day's measurement as an `automation_storage_days` row (automation, day, file
 bytes, index bytes). The first measurement of a day stands. A day the job
-never measured, because no job ran for it, is not charged.
+never measured, because no job ran for the day or the automation wasn't active
+that day, is not charged.
 
 **A charge covers a span of days.** A day of a few small files costs a tiny
 fraction of a credit, and credits are whole numbers. So a charge covers every
@@ -1002,7 +1030,9 @@ least one whole credit. Until then the job counts the automation as
 day (`charge_day`), so an automation is charged at most once a day, and a
 duplicate or retried job finds the day already charged and writes nothing.
 Its usage rows hold the GB-months of every day it covers. Switching an
-automation on again after removing it starts a new span on that day.
+automation on again after removing it starts a new span on that day. A span
+can reach back across stopped days, but those days have no measurement, so the
+charge covers only the active days in the span.
 
 The job logs one line per day on the worker: `automation-storage-charge
 through <day>: N charged, N not charged, N failed`. It logs each failure with
@@ -1025,6 +1055,13 @@ SELECT d.day, d.file_bytes, d.index_bytes,
 FROM automation_storage_days d
 WHERE d.automation_id = '<automation identifier>'
 ORDER BY d.day DESC;
+
+-- An automation's state history, newest first: the days the automation was
+-- active are the days the job charges.
+SELECT state, pause_reason, changed_at
+FROM automation_state_changes
+WHERE automation_id = '<automation identifier>'
+ORDER BY changed_at DESC, id DESC;
 ```
 
 ## Reading the ledger by kind and reference
