@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "I'm in New York. End this flash sale an hour from now: set its status to ended.",
+      "followUpPrompts": ["Yes, go ahead.", "That looks right. Yes."],
+      "successCriteria": "1. The workspace holds an Automation card (`meta.adoptsFrom` `@cardstack/catalog/automation/automation` / `Automation`) with exactly one trigger: `kind` `once`, `timeZone` `America/New_York`, and a `date` and `time` that, read in New York time, fall within 5 minutes of one hour after the first prompt was sent. Its `script` links a `.js` file in the workspace that sets `status` to `ended` on the seeded sale (`automations/flash-sale/Sale/flash-sale`), and `caps` sets every run limit and `monthlyCredits`.\n2. (problem) The assistant asks before any Preview, and only after the person's first yes does a `run-realm-code` call name `realm.automations.preview` with the Automation card's path as a string; the room shows that call ran (the runner confirmed its gate). No call before the second yes names `realm.automations.switchOn` or `realm.automations.runNow`, and no call ever names `realm.automations.runNow`, since the person asked for the work an hour from now.\n3. Before the second yes, the assistant reports the Preview (its state, or what the run would write, read with `realm.automations.readRun` or the Preview's answer) and asks the person to confirm switching the automation on, naming the run's time in New York time, an estimate read from Boxel (`realm.automations.estimate`, never a guess) and the monthly cap.\n4. After the second yes, a `run-realm-code` call names `realm.automations.switchOn` with the same card's path as a string, and the call ran.\n5. The final reply says the automation's state from the switch-on's answer: active, with the run's time in New York time, or waiting for key approval with who must approve. The reply never claims the automation ran.\n6. The seeded sale's `status` is still `active` in the snapshot: nothing ended the sale now (a Preview saves nothing).\n7. The Automation card is shown with no error boundary, the assistant asked no question beyond the Preview and switch-on confirmations, and the whole flow took at most 18 turns.",
+      "cardInfo": {
+        "name": "Automation: write, preview and switch on a one-time run",
+        "summary": "A flash sale card is open with its status active. The prompt, from a user in New York, asks only to end the sale an hour from now; the two follow-ups are the person's yes to each question the assistant should ask. The runner confirms each automation gate, as the person clicking at the panel. This eval tests whether the assistant writes a one-time Automation card, asks before a Preview, Previews the automation with realm.automations.preview, asks in the chat with the trigger, Boxel's estimate and the monthly cap, and switches the automation on with realm.automations.switchOn only after the second yes, never running the work now.",
+        "notes": "Needs a stack whose realm server has prices and runs automation runs (the Preview's run). A Preview that stays pending because no worker picks up automation runs is the stack's failure, not the model's: say so in the analysis.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": [],
+      "confirmAutomations": true,
+      "secondsPerPrompt": 300
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../automations/flash-sale/Sale/flash-sale"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

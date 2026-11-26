@@ -258,8 +258,27 @@ export function handleShareKey(args: CreateRoutesArgs): Handler {
       opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       ticket,
     });
-    // A new share can fill an automation's `{{apiKey}}` slot that had none.
-    await reportKeyApprovalChanges(args, [share.realm]);
+    // A key shared into the realm can serve an `{{apiKey}}` slot an
+    // automation there waits on, so every waiting automation of the realm is
+    // checked again: the share's owner is then asked to approve it, and the
+    // realm's direct writers are no longer asked to share a key. A new share
+    // also changes what every automation of the realm shows for such a slot,
+    // so the ones the follow didn't move are reported too.
+    let realmURL = new URL(share.realm);
+    let followed = await followAutomationKeyApprovals(
+      args,
+      realmURL,
+      await automationsWaitingForKeyApproval(dbAdapter, realmURL, args),
+    );
+    await reportKeyApprovalChanges(
+      args,
+      [share.realm],
+      new Set(
+        [...followed]
+          .filter(([, { kind }]) => kind !== 'unchanged')
+          .map(([id]) => id),
+      ),
+    );
     await sendJSON(ctxt, 201, { data: serialize(share) });
   });
 }

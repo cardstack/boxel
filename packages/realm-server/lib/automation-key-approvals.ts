@@ -1,4 +1,5 @@
 import {
+  fetchDirectWriters,
   param,
   query,
   reportAutomationChanges,
@@ -19,6 +20,7 @@ import {
   versionKeyOf,
   type AutomationKeyApprovals,
   type AutomationVersionKey,
+  type AwaitedKeyApproval,
   type KeyApprover,
   type MissingKeyApproval,
   type OperationKeyApproval,
@@ -32,6 +34,7 @@ import {
 } from './key-bindings.ts';
 import { lookupGrantOperation } from './user-key-grants.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
+import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
 import { apiHostList, apiHostsOfKeySql, sendableKeySql } from './oauth.ts';
 import { keyOfferedForSlot, type SlotSend } from './slot-fill.ts';
 
@@ -82,6 +85,7 @@ export async function checkAutomationKeyApprovals(
   );
   let approvals = await approvalsOf(dbAdapter, automationId);
   let operations: OperationKeyApproval[] = [];
+  let awaiting: AwaitedKeyApproval[] = [];
   for (let declared of declaration.operations) {
     let targetType = {
       module: String(declared.targetType.module),
@@ -160,6 +164,19 @@ export async function checkAutomationKeyApprovals(
         }),
       );
       let { binding } = check;
+      let awaits = (recipients: string[], ask: AwaitedKeyApproval['ask']) => {
+        for (let recipient of new Set(recipients)) {
+          if (recipient !== payer) {
+            awaiting.push({
+              recipient,
+              ask,
+              operation: declared.operation,
+              targetType,
+              destination: destinationOf(request.url),
+            });
+          }
+        }
+      };
       if (!binding) {
         if (check.slot.key === 'userKey') {
           missing.push({ slot, canApprove: 'payer' });
@@ -176,6 +193,21 @@ export async function checkAutomationKeyApprovals(
           canApprove,
           ...(shares.length ? { shares } : {}),
         });
+        if (canApprove === 'another-key-owner') {
+          awaits(
+            shares.flatMap(({ owner }) => (owner ? [owner] : [])),
+            'approve',
+          );
+        } else if (canApprove === 'nobody-yet') {
+          awaits(
+            await fetchDirectWriters(
+              dbAdapter,
+              realmURL,
+              matrixServerNameFromEnv(),
+            ),
+            'share-a-key',
+          );
+        }
         continue;
       }
       let owner: KeyApprover =
@@ -189,17 +221,26 @@ export async function checkAutomationKeyApprovals(
             }
           : {}),
       };
+      let approved = approvals.get(binding.id);
+      let approvalMissing = !approved || !approvalMatches(approved, version);
       if (
         check.refused === 'binding-not-approved' ||
         check.refused === 'binding-needs-reapproval' ||
-        check.refused === 'share-suspended'
+        check.refused === 'share-suspended' ||
+        approvalMissing
       ) {
         missing.push(bound);
-        continue;
       }
-      let approved = approvals.get(binding.id);
-      if (!approved || !approvalMatches(approved, version)) {
-        missing.push(bound);
+      // Only an approval can be asked for: a suspended share waits for its
+      // suspension to lift, which no approval does. A share's binding is
+      // approved by the share's owner, who owns its key; a personal key's, by
+      // the key's owner.
+      if (
+        check.refused === 'binding-not-approved' ||
+        check.refused === 'binding-needs-reapproval' ||
+        (approvalMissing && check.refused !== 'share-suspended')
+      ) {
+        awaits([binding.share_owner ?? binding.approved_by], 'approve');
       }
     }
     operations.push({
@@ -214,7 +255,20 @@ export async function checkAutomationKeyApprovals(
     approved: operations.every(({ state }) => state !== 'missing'),
     version,
     operations,
+    awaiting,
   };
+}
+
+// Where a request sends, as a key approval notice names it: the origin and
+// path of its URL, without the query, which can carry a slot's token. A URL
+// that doesn't parse is named as it reads, up to its query.
+function destinationOf(url: string): string {
+  try {
+    let parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url.split('?')[0];
+  }
 }
 
 // Brings each automation's state in step with its key approvals, checked in
