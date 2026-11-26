@@ -7,7 +7,7 @@ import { isTesting } from '@embroider/macros';
 
 import { cached } from '@glimmer/tracking';
 
-import { restartableTask, rawTimeout, task } from 'ember-concurrency';
+import { dropTask, restartableTask, rawTimeout, task } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
@@ -62,6 +62,9 @@ const REALM_EVENT_ROOMS_FIRST_RETRY_MS = 2_000;
 const REALM_EVENT_ROOMS_MAX_RETRY_MS = 60_000;
 // The most realms `/_realm-event-rooms` answers for in one request.
 const REALM_EVENT_ROOMS_PER_REQUEST = 100;
+// How often a watched realm's watch is renewed, well inside the ten minutes
+// the realm server keeps one.
+const REALM_EVENT_WATCH_RENEW_MS = 4 * 60_000;
 
 export interface RealmServerTokenClaims {
   user: string;
@@ -201,6 +204,11 @@ export default class RealmServerService
   // How long to wait before asking again about realms whose rooms could not
   // be provided. Doubles on each failure up to a minute; reset on success.
   private realmEventRoomsRetryMs = REALM_EVENT_ROOMS_FIRST_RETRY_MS;
+  // Realms the user reaches only through their policy, whose events the
+  // realm server sends to the session room while the user watches them. A
+  // watch lapses on the server unless renewed, so these are asked about again
+  // while they stay open (see `renewRealmEventWatchesTask`).
+  private watchedRealms = new Set<string>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -248,6 +256,8 @@ export default class RealmServerService
     // that session's realms back in line for the next one.
     this.joinRealmEventRoomsTask.cancelAll();
     this.retryRealmEventRoomsTask.cancelAll();
+    this.renewRealmEventWatchesTask.cancelAll();
+    this.watchedRealms.clear();
     this.realmEventRoomsPending.clear();
     this.realmEventRoomsRequested.clear();
     this.realmEventRoomsRetryMs = REALM_EVENT_ROOMS_FIRST_RETRY_MS;
@@ -844,15 +854,19 @@ export default class RealmServerService
   // room until a revoked grant removes it, and catches up on what it missed
   // through sync. Realms asked for in the same turn are asked about together.
   private joinRealmEventRoom(realmIdentifier: string) {
-    let realmURL = ensureTrailingSlash(
-      resolvedRealmURLHref(this.network.virtualNetwork, realmIdentifier),
-    );
+    let realmURL = this.realmEventRoomKey(realmIdentifier);
     if (this.realmEventRoomsRequested.has(realmURL)) {
       return;
     }
     this.realmEventRoomsRequested.add(realmURL);
     this.realmEventRoomsPending.add(realmURL);
     void this.joinRealmEventRoomsTask.perform();
+  }
+
+  private realmEventRoomKey(realmIdentifier: string): string {
+    return ensureTrailingSlash(
+      resolvedRealmURLHref(this.network.virtualNetwork, realmIdentifier),
+    );
   }
 
   private reaskRealmEventRooms() {
@@ -901,9 +915,24 @@ export default class RealmServerService
       );
       // A 503 still carries the rooms the server could provide; the rest are
       // asked about again below.
-      let { rooms } = (
+      let { rooms, watched } = (
         response.ok || response.status === 503 ? await response.json() : {}
-      ) as { rooms?: Record<string, string> };
+      ) as { rooms?: Record<string, string>; watched?: string[] };
+      // A watched realm's events arrive in the session room, which the host
+      // has joined already; all that is left is keeping the watch alive.
+      if (response.ok || response.status === 503) {
+        let watchedNow = new Set(watched ?? []);
+        for (let realm of realms) {
+          if (watchedNow.has(realm)) {
+            this.watchedRealms.add(realm);
+          } else {
+            this.watchedRealms.delete(realm);
+          }
+        }
+        if (this.watchedRealms.size > 0) {
+          void this.renewRealmEventWatchesTask.perform();
+        }
+      }
       // Joining a room the user is already in changes nothing, and the SDK
       // answers it locally once sync has the room.
       for (let roomId of new Set(Object.values(rooms ?? {}))) {
@@ -934,6 +963,28 @@ export default class RealmServerService
   private retryRealmEventRoomsTask = restartableTask(async (ms: number) => {
     await rawTimeout(ms);
     void this.joinRealmEventRoomsTask.perform();
+  });
+
+  // Asks about each watched realm again while it has a subscriber, which
+  // renews its watch, and forgets one that no longer does, whose watch then
+  // lapses on the server. Ends once nothing is watched.
+  private renewRealmEventWatchesTask = dropTask(async () => {
+    while (this.watchedRealms.size > 0) {
+      await rawTimeout(REALM_EVENT_WATCH_RENEW_MS);
+      let open = new Set(
+        this.messageService
+          .subscribedRealms()
+          .map((realm) => this.realmEventRoomKey(realm)),
+      );
+      for (let realm of [...this.watchedRealms]) {
+        if (open.has(realm)) {
+          this.realmEventRoomsPending.add(realm);
+        } else {
+          this.watchedRealms.delete(realm);
+        }
+      }
+      void this.joinRealmEventRoomsTask.perform();
+    }
   });
 
   private async ensureJoinedSessionRoom(tokens: {
