@@ -1,14 +1,15 @@
 // What an app connecting to Boxel asks for, and the user's answer: the app,
-// the account, what the app will be able to do at each resource, and whether
-// to keep the connection for 30 days, and where it can be disconnected later.
-// It draws only the details the provider
-// answered (`ConsentDetails`): the app as the provider names it, and what the
-// access means in Boxel's own words from its registry. The one value taken
-// from the client's request is a confirmation code, shown only in the code's
-// own form (`readConsentDetails`).
+// the account, what the app will be able to do at each resource, whether to
+// keep the connection for 30 days, and where it can be disconnected later. It
+// draws only the details the provider answered (`ConsentDetails`): the app as
+// the provider names it, and what the access means in Boxel's own words from
+// its registry. The one value taken from the client's request is a
+// confirmation code, shown only in the code's own form (`readConsentDetails`).
 //
 // Focus starts on the heading each time consent is drawn, never on Allow, so
 // a user who presses Enter or Space as the page appears agrees to nothing.
+// The heading draws no focus ring: it isn't a control, and takes focus only so
+// a screen reader starts reading there.
 // Allow and Deny aren't in a form, so Enter in the checkbox submits nothing.
 //
 // Anyone can start a flow and send a signed-in user's browser here, so a page
@@ -328,10 +329,6 @@ export default class Consent extends Component<Signature> {
       }
       .title:focus {
         outline: none;
-      }
-      .title:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
       }
       .unverified {
         display: flex;
