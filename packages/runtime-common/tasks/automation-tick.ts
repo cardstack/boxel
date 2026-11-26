@@ -148,7 +148,8 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
       }
 
       // Each batch whose deadline has passed gets its follow-up run, which
-      // picks up the batch's results.
+      // picks up the batch's results, and a follow-up a pause or a wait for
+      // a key approval held is enqueued again once its automation is active.
       for (let followUp of await startDueAIBatchFollowUps(dbAdapter, {
         queue: queuePublisher,
         virtualNetwork,
@@ -162,8 +163,9 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
             );
             break;
           case 'resumed':
+            await reportRunChange?.(followUp.runId);
             log.info(
-              `${tag}: batch ${followUp.batchId} of automation ${followUp.automationId} had pending follow-up run ${followUp.runId} from a tick that stopped; its job was enqueued again`,
+              `${tag}: batch ${followUp.batchId} of automation ${followUp.automationId} had pending follow-up run ${followUp.runId}, held or from a tick that stopped; its job was enqueued again`,
             );
             break;
           case 'held':

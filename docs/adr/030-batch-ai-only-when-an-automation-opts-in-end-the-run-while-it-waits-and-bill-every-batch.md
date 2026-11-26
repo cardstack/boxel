@@ -15,6 +15,7 @@ scope:
   - packages/runtime-common/automation-admission.ts
   - packages/runtime-common/automations.ts
   - packages/runtime-common/automation-runs.ts
+  - packages/runtime-common/automation-run-limits.ts
   - packages/runtime-common/automation-reconcile.ts
   - packages/runtime-common/tasks/run-automation.ts
   - packages/host/app/tools/run-realm-code.ts
@@ -44,11 +45,14 @@ sends the requests at the normal price.
 ### 1.2. Submitting ends the run
 
 A run that submits a batch MUST finish and commit as usual. A worker or a tab
-MUST NOT wait on a batch. Each batch MUST get exactly one follow-up run, with
-a `dedupeKey` for the batch. The follow-up MUST start at the deadline the
-script set, at most 24 hours after the submit, or earlier when the batch
-reaches a final state. The follow-up MUST act as, and be billed to, the
-submitting run's identity, except a follow-up a pause held (§1.5).
+MUST NOT wait on a batch. Each batch MUST have one follow-up run at a time,
+each with a `dedupeKey` for the batch, and only one of them MAY commit. When
+a follow-up is held after its script started or after it used anything, that
+run MUST end without committing, and a new run takes its place (§1.5). The
+follow-up MUST start at the deadline the script set, at most 24 hours after
+the submit, or earlier when the batch reaches a final state. The follow-up
+MUST act as, and be billed to, the submitting run's identity, except a
+follow-up a pause held (§1.5).
 
 OpenRouter's completion webhook MUST start the follow-up only after its
 `X-OpenRouter-Signature` checks out, and MUST drop a repeat by its
