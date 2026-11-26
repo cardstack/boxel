@@ -312,6 +312,11 @@ export default class Overlays extends Component<OverlaySignature> {
         // A card inside a link opens here, so the browser must not also
         // follow the link. A link inside the card keeps its default.
         if (renderedCard.element.closest('a[href]')) {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+            // The browser opens the link in a new tab or window, so the card
+            // does not also open here.
+            return;
+          }
           e.preventDefault();
         }
         if (this.shouldSwallowCardClick()) {
