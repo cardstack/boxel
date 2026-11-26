@@ -967,7 +967,8 @@ export default class RealmServerService
 
   // Asks about each watched realm again while it has a subscriber, which
   // renews its watch, and forgets one that no longer does, whose watch then
-  // lapses on the server. Ends once nothing is watched.
+  // lapses on the server, so opening it again asks about it afresh. Ends once
+  // nothing is watched.
   private renewRealmEventWatchesTask = dropTask(async () => {
     while (this.watchedRealms.size > 0) {
       await rawTimeout(REALM_EVENT_WATCH_RENEW_MS);
@@ -981,6 +982,7 @@ export default class RealmServerService
           this.realmEventRoomsPending.add(realm);
         } else {
           this.watchedRealms.delete(realm);
+          this.realmEventRoomsRequested.delete(realm);
         }
       }
       void this.joinRealmEventRoomsTask.perform();
