@@ -79,11 +79,14 @@ const scrollTabs = modifier(
       list.toggleAttribute('data-fade-left', rtl ? end : start);
       list.toggleAttribute('data-fade-right', rtl ? start : end);
     };
-    let active = list.querySelector<HTMLElement>('[aria-selected="true"]');
-    if (active) {
+    // keep the selected tab clear of the edge fade, which masks its outer rem
+    let reveal = () => {
+      let active = list.querySelector<HTMLElement>('[data-state="active"]');
+      if (!active) {
+        return;
+      }
       let a = active.getBoundingClientRect();
       let l = list.getBoundingClientRect();
-      // keep the tab clear of the edge fade, which masks its outer rem
       let fade =
         parseFloat(getComputedStyle(list).scrollPaddingInlineStart) || 0;
       if (a.left < l.left + fade) {
@@ -91,10 +94,16 @@ const scrollTabs = modifier(
       } else if (a.right > l.right - fade) {
         list.scrollLeft += a.right - (l.right - fade);
       }
-    }
+    };
+    reveal();
     edges();
     let resize =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(edges);
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            reveal();
+            edges();
+          });
     resize?.observe(list);
     // a web font or a label change resizes the tabs without resizing the list
     for (let tab of list.querySelectorAll('[role="tab"]')) {
@@ -185,6 +194,7 @@ export class Tabs extends Component<TabsSignature> {
       <div
         class='pretui-tabs'
         role='tablist'
+        data-test-pretui-tablist
         aria-label={{@label}}
         data-overflow={{@overflow}}
         {{slidingHighlight}}

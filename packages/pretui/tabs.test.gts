@@ -206,7 +206,7 @@ module('Pretui | Tabs', function (hooks) {
       <template><Tabs @options={{OPTIONS}} @label='Sections' /></template>,
     );
     assert
-      .dom('[data-test-pretui-tabs] [role="tablist"]')
+      .dom('[data-test-pretui-tablist]')
       .hasAttribute('aria-label', 'Sections');
   });
 
