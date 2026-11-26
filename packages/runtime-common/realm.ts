@@ -22833,11 +22833,17 @@ export class Realm {
     // dropped as `type-unavailable` until the realm is indexed again, and an
     // index of realm.json is started to store the tree: nothing else may
     // index this realm for a long time.
-    if (hostRouteTypeRefs(rules).length > 0) {
+    if (
+      hostRouteTypeRefs(rules, {
+        realmURL: new URL(this.url),
+        virtualNetwork: this.#virtualNetwork,
+      }).length > 0
+    ) {
       this.#indexRealmConfigForHostRoutes();
     }
     return validateHostRoutes(rules, {
       realmURL: new URL(this.url),
+      virtualNetwork: this.#virtualNetwork,
       lookupType: () => 'unavailable',
     });
   }

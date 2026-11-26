@@ -63,6 +63,7 @@ function type(name: string): ResolvedCodeRef {
 function routesFor(rules: RawHostRoutingRule[]): readonly HostRoute[] {
   let { routes, warnings } = validateHostRoutes(rules, {
     realmURL: new URL(REALM),
+    virtualNetwork: new VirtualNetwork(),
     lookupType: (ref) => (ref.module === MODULE ? TYPES[ref.name] : undefined),
   });
   let dropped = warnings.filter((w) => w.dropped);

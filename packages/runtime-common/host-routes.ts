@@ -24,6 +24,7 @@ import { assertQuery, type Filter } from './query.ts';
 import { isClientEvaluable } from './instance-filter-matcher.ts';
 import { RealmPaths } from './paths.ts';
 import { rri } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 import {
   DEFAULT_REDIRECT_STATUS,
   findRedirectCycles,
@@ -190,15 +191,26 @@ export function hostRouteTypeInfo(
 }
 
 // The card types the field-match routes in `rules` name, each once, in the
-// order they first appear. A caller looks these up before it validates.
+// order they first appear, less those a route may not name
+// (`isAllowedRouteTypeModule`), whose routes are dropped without a read. A
+// caller looks these up before it validates.
 export function hostRouteTypeRefs(
   rules: readonly RawHostRoutingRule[],
+  realm: { realmURL: URL; virtualNetwork: VirtualNetwork },
 ): ResolvedCodeRef[] {
   let refs = new Map<string, ResolvedCodeRef>();
   let visit = (list: readonly RawHostRoutingRule[]) => {
     for (let rule of list) {
       let ref = asCodeRef(rule.type);
-      if (ref && !refs.has(typeLookupKey(ref))) {
+      if (
+        ref &&
+        isAllowedRouteTypeModule(
+          ref.module,
+          realm.realmURL,
+          realm.virtualNetwork,
+        ) &&
+        !refs.has(typeLookupKey(ref))
+      ) {
         refs.set(typeLookupKey(ref), ref);
       }
       if (rule.routes) {
@@ -208,6 +220,31 @@ export function hostRouteTypeRefs(
   };
   visit(rules);
   return [...refs.values()];
+}
+
+// Whether a field-match route may name a type from `module`: a module of the
+// routing realm itself, or of a realm the server maps by prefix (the base
+// realm, the catalog), in either spelling. Told from the module's address
+// alone. The validated routes are public, and a type in any other realm, a
+// user's workspace, is one a visitor may not be able to read.
+export function isAllowedRouteTypeModule(
+  module: string,
+  realmURL: URL,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  if (virtualNetwork.isRegisteredPrefix(module)) {
+    return true;
+  }
+  let url: URL;
+  try {
+    url = virtualNetwork.toURL(module);
+  } catch {
+    return false;
+  }
+  return (
+    new RealmPaths(realmURL).inRealm(url) ||
+    virtualNetwork.isRegisteredPrefix(virtualNetwork.unresolveURL(url.href))
+  );
 }
 
 // The key `hostRouteTypeRefs` dedupes on. A caller may key its lookup on it.
@@ -370,6 +407,9 @@ export type HostRouteWarningCode =
   | 'card-pattern-missing-param'
   // `type` isn't a code ref.
   | 'invalid-type'
+  // `type` is in a realm other than this one that the server doesn't map by
+  // prefix: another user's workspace (`isAllowedRouteTypeModule`).
+  | 'type-outside-realm'
   // `type` isn't a card type the index knows.
   | 'not-card-type'
   // The definition of `type` couldn't be read when the realm was indexed:
@@ -510,6 +550,9 @@ export interface ValidateHostRoutesOptions {
   // The URL the realm is served at, ending with `/`. A fixed route's card
   // must be in it.
   realmURL: URL;
+  // Tells a module of a realm the server maps by prefix, which a
+  // field-match route may name a type from (`isAllowedRouteTypeModule`).
+  virtualNetwork: VirtualNetwork;
   // The definition of a type a field-match route names. `undefined` when
   // there is no such type; `'unavailable'` when its definition couldn't be
   // read, which drops its routes like any other invalid route.
@@ -921,6 +964,18 @@ class Validator {
       let type = asCodeRef(rule.type);
       if (!type) {
         return drop('invalid-type', 'type must name a module and an export');
+      }
+      if (
+        !isAllowedRouteTypeModule(
+          type.module,
+          this.options.realmURL,
+          this.options.virtualNetwork,
+        )
+      ) {
+        return drop(
+          'type-outside-realm',
+          `type ${type.name} from ${type.module} is in another workspace; use a type from this workspace, the base realm or the catalog`,
+        );
       }
       let found = this.options.lookupType(type);
       if (found === 'unavailable') {

@@ -106,6 +106,10 @@ validation MUST be dropped with a warning, with its child routes. The
 routes MUST be validated when the realm is indexed, and the validated tree
 MUST be stored with the index. A field match's type MUST be read then,
 through the definitions cache, which renders a module it doesn't hold. A
+field match's type MUST be in the routing realm or in a realm the server
+maps by prefix (the base realm, the catalog), told from the module's
+address alone; validation MUST drop any other route with a warning, without
+reading its type. A
 type that can't be read (a module error, a missing export, a render
 timeout, a server that can't be reached) MUST make its route invalid, and
 the next index MUST read it again. A read that fails for a reason that may

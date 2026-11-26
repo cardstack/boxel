@@ -1,5 +1,6 @@
 import {
   hostRouteTypeInfo,
+  hostRouteTypeRefs,
   hostRoutingMapFromRoutes,
   validateHostRoutes,
   type HostRoute,
@@ -12,6 +13,7 @@ import type { Definition } from '../definitions.ts';
 import type { RawHostRoutingRule } from '../realm.ts';
 import type { ResolvedCodeRef } from '../code-ref.ts';
 import type { SharedTests } from '../helpers/index.ts';
+import { VirtualNetwork } from '../virtual-network.ts';
 
 const REALM = 'http://realm.test/site/';
 const MODULE = `${REALM}types`;
@@ -136,6 +138,7 @@ function validate(
 ): HostRoutesValidation {
   return validateHostRoutes(rules, {
     realmURL: new URL(REALM),
+    virtualNetwork: new VirtualNetwork(),
     lookupType: (ref) =>
       ref.module !== MODULE
         ? undefined
@@ -180,6 +183,62 @@ function codes(warnings: readonly HostRouteWarning[]) {
 }
 
 const tests: SharedTests<unknown> = Object.freeze({
+  'validateHostRoutes: a type must be in the realm itself or in a realm the server maps by prefix':
+    async (assert) => {
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addRealmMapping(
+        '@cardstack/base/',
+        'http://localhost:4201/base/',
+      );
+      let typeAt = (path: string, module: string): RawHostRoutingRule => ({
+        path,
+        type: { module, name: 'Post' },
+        match: { slug: ':slug' },
+      });
+      let rules = [
+        typeAt('/own/:slug', MODULE),
+        typeAt('/base/:slug', '@cardstack/base/post'),
+        typeAt('/base-url/:slug', 'http://localhost:4201/base/post'),
+        // What the search document holds for `../other-workspace/site`.
+        typeAt('/escape/:slug', 'http://realm.test/other-workspace/site'),
+        typeAt('/elsewhere/:slug', 'https://other.example/user/workspace/site'),
+      ];
+      let looked: string[] = [];
+      let { routes, warnings } = validateHostRoutes(rules, {
+        realmURL: new URL(REALM),
+        virtualNetwork,
+        lookupType: (ref) => {
+          looked.push(ref.module);
+          return TYPES.Post;
+        },
+      });
+      assert.deepEqual(paths(routes), [
+        '/own/:slug',
+        '/base/:slug',
+        '/base-url/:slug',
+      ]);
+      assert.deepEqual(codes(warnings), [
+        { code: 'type-outside-realm', path: '/escape/:slug', dropped: true },
+        {
+          code: 'type-outside-realm',
+          path: '/elsewhere/:slug',
+          dropped: true,
+        },
+      ]);
+      assert.deepEqual(
+        looked,
+        [MODULE, '@cardstack/base/post', 'http://localhost:4201/base/post'],
+        'a type in another workspace is not looked up',
+      );
+      assert.deepEqual(
+        hostRouteTypeRefs(rules, {
+          realmURL: new URL(REALM),
+          virtualNetwork,
+        }).map((ref) => ref.module),
+        [MODULE, '@cardstack/base/post', 'http://localhost:4201/base/post'],
+        'the index reads no type in another workspace',
+      );
+    },
   'validateHostRoutes: the fixed routing map is what it was': async (
     assert,
   ) => {
