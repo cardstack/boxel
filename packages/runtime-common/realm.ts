@@ -229,6 +229,7 @@ import { automationTouchedBy } from './automation-index-hook.ts';
 import {
   automationsInRealm,
   followKeyApprovals,
+  type AutomationReporters,
   type KeyApprovalFollow,
 } from './automations.ts';
 import {
@@ -260,6 +261,7 @@ import {
   automationVersion,
   type AutomationKeyApprovals,
   type AutomationVersion,
+  type AwaitedKeyApproval,
 } from './automation-key-approval.ts';
 import {
   endsRunOnCredential,
@@ -15622,6 +15624,18 @@ export class Realm {
     }
     for (let automationId of automationIds) {
       try {
+        // Whom the approvals wait on, as the check answered it; undefined
+        // when the automation wasn't checked.
+        let awaiting: AwaitedKeyApproval[] | undefined;
+        // Whom the notices it wrote are to be told, once it commits.
+        let noticed: string[] = [];
+        let reporters: AutomationReporters = reportChanges
+          ? {
+              reportRunChange: (runId) => this.reportRunChange(runId),
+              reportAutomationChange: (automation) =>
+                this.reportAutomationChange(automation),
+            }
+          : {};
         let result = await followKeyApprovals(
           this.#dbAdapter,
           automationId,
@@ -15640,21 +15654,31 @@ export class Realm {
               declaration: read.declaration,
               payer: automation.payer,
             });
+            awaiting = approvals?.awaiting ?? (approvals ? [] : undefined);
             return approvals
               ? { approved: approvals.approved, declaration: read.declaration }
               : undefined;
           },
-          reportChanges
-            ? {
-                reportRunChange: (runId) => this.reportRunChange(runId),
-                reportAutomationChange: (automation) =>
-                  this.reportAutomationChange(automation),
-              }
-            : {},
+          {
+            ...reporters,
+            inTransaction: async (txQuery, done) => {
+              noticed =
+                (await this.#callApi?.writeKeyApprovalNoticesIn?.(txQuery, {
+                  automationId,
+                  automationURL: this.#virtualNetwork.toURLHref(automationId),
+                  realmURL: this.url,
+                  state: done?.automation.state,
+                  awaiting,
+                })) ?? [];
+            },
+          },
         );
         if (result) {
           followed.set(automationId, result);
         }
+        // The people the automation waits on, besides its payer, each have a
+        // notice while it waits, written in the follow's own transaction.
+        this.#callApi?.tellKeyApprovalNoticesChanged?.(noticed);
       } catch (e: any) {
         this.#log.warn(
           `couldn't follow the key approvals of automation ${automationId}: ${e?.message ?? e}`,
