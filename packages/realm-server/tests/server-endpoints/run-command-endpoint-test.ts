@@ -3,7 +3,12 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { realmSecretSeed, insertUser } from '../helpers/index.ts';
-import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
+import { endGrant } from '../../lib/oauth-provider/grants.ts';
+import {
+  insertBoxelApiAccessToken,
+  setupServerEndpointsTest,
+  testRealmURL,
+} from './helpers.ts';
 
 // A realm-defined command that persists a card through SaveCardCommand and
 // reports whether the save threw, so a test can tell a failed save apart from
@@ -72,6 +77,40 @@ const throwingCommandSource = `
 
     protected async run() {
       throw new Error('deliberate failure from the command body');
+    }
+  }
+`;
+
+// A realm-defined command that answers with every credential its tab holds:
+// what code an OAuth app wrote could read and carry out of the tab.
+const leakCredentialsCommandSource = `
+  import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+  import { Command } from '@cardstack/runtime-common';
+
+  export class LeakInput extends CardDef {
+    @field note = contains(StringField);
+  }
+
+  export class LeakResult extends CardDef {
+    @field inMemory = contains(StringField);
+    @field stored = contains(StringField);
+  }
+
+  export class LeakCredentialsCommand extends Command<
+    typeof LeakInput,
+    typeof LeakResult
+  > {
+    static actionVerb = 'Leak';
+
+    async getInputType() {
+      return LeakInput;
+    }
+
+    protected async run() {
+      return new LeakResult({
+        inMemory: JSON.stringify(globalThis.__boxelInMemorySessions ?? null),
+        stored: localStorage.getItem('boxel-session') ?? '',
+      });
     }
   }
 `;
@@ -345,6 +384,179 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         )
         .send('not json');
       assert.strictEqual(response.status, 400, 'HTTP 400 for invalid body');
+    });
+  });
+
+  // An OAuth app (ADR 021) runs a command with a Boxel API token. The command
+  // runs code the app chose, so its tab holds tab tokens the app's grant
+  // bounds (`runtime-common/oauth-tab-token.ts`), never the user's sessions.
+  module('/_run-command with a Boxel API OAuth token', function (hooks) {
+    let context = setupServerEndpointsTest(hooks, {
+      fileSystem: {
+        'save-note-command.gts': saveNoteCommandSource,
+        'leak-credentials-command.gts': leakCredentialsCommandSource,
+      },
+      permissions: {
+        '*': ['read'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
+        [commandWriterUserId]: ['read', 'write'],
+      },
+      oauthProvider: true,
+    });
+
+    function oauthToken(user: string, scope?: string) {
+      return insertBoxelApiAccessToken(context.dbAdapter, user, scope);
+    }
+
+    function runCommand(
+      token: string,
+      command: string,
+      commandInput: Record<string, unknown>,
+    ) {
+      return context.request
+        .post('/_run-command')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'run-command',
+            attributes: {
+              realmURL: testRealmURL.href,
+              command,
+              commandInput,
+            },
+          },
+        });
+    }
+
+    function claimsOf(token: string): Record<string, any> {
+      return JSON.parse(
+        Buffer.from(token.split('.')[1], 'base64url').toString('utf8'),
+      );
+    }
+
+    test('runs a command that writes a card, as the grant’s user', async function (assert) {
+      let { token } = await oauthToken(commandWriterUserId);
+      let response = await runCommand(
+        token,
+        `${testRealmURL.href}save-note-command/SaveNoteCommand`,
+        { body: 'saved by an OAuth app', realm: testRealmURL.href },
+      );
+      assert.strictEqual(response.status, 201, response.text);
+      let attrs = response.body?.data?.attributes;
+      assert.strictEqual(
+        attrs?.status,
+        'ready',
+        `command completed (error: ${attrs?.error ?? 'none'})`,
+      );
+      let saveResult = JSON.parse(attrs.cardResultString)?.data?.attributes;
+      assert.notOk(saveResult?.failure, `the save did not throw`);
+
+      await context.testRealm.incrementalIndexing();
+      let saved = await context.request
+        .get(new URL(String(saveResult?.savedId)).pathname)
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(saved.status, 200, 'the saved card is readable');
+      assert.strictEqual(
+        saved.body?.data?.attributes?.body,
+        'saved by an OAuth app',
+      );
+    });
+
+    test('its tab holds tab tokens its grant bounds, and nothing else', async function (assert) {
+      let { token, grantId } = await oauthToken(commandWriterUserId);
+      let response = await runCommand(
+        token,
+        `${testRealmURL.href}leak-credentials-command/LeakCredentialsCommand`,
+        { note: 'anything' },
+      );
+      let attrs = response.body?.data?.attributes;
+      assert.strictEqual(
+        attrs?.status,
+        'ready',
+        `command completed (error: ${attrs?.error ?? 'none'})`,
+      );
+      let leaked = JSON.parse(attrs.cardResultString)?.data?.attributes;
+      assert.strictEqual(leaked?.stored, '', 'no session is kept in storage');
+      let sessions = JSON.parse(leaked?.inMemory ?? 'null') as Record<
+        string,
+        string
+      > | null;
+      assert.ok(sessions, 'the tab holds its tokens in memory');
+      let tabToken = sessions![testRealmURL.href];
+      assert.ok(tabToken, 'it holds one for the command’s realm');
+      for (let value of Object.values(sessions!)) {
+        let claims = claimsOf(value);
+        assert.strictEqual(claims.oauthTab?.grant, grantId);
+        assert.strictEqual(claims.user, commandWriterUserId);
+        assert.false(
+          (claims.permissions ?? []).includes('realm-owner'),
+          'nothing it holds claims to administer',
+        );
+      }
+
+      // What the command could carry out works as the grant allows...
+      let written = await context.request
+        .post(`${testRealmURL.pathname}leaked.md`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Content-Type', 'application/vnd.card+source')
+        .set('Authorization', tabToken)
+        .send('# Written with a leaked tab token');
+      let wrote = written.status >= 200 && written.status < 300;
+      assert.true(
+        wrote,
+        `the tab token writes as the user: ${written.status} ${written.text}`,
+      );
+
+      // ...and nowhere a session goes.
+      for (let [method, path] of [
+        ['get', `${testRealmURL.pathname}_permissions`],
+        ['post', '/_realm-auth'],
+        ['get', '/_user'],
+        ['post', '/_run-command'],
+        ['post', '/_request-forward'],
+      ] as ['get' | 'post', string][]) {
+        let refused = await context.request[method](path)
+          .set('Accept', 'application/json')
+          .set('Authorization', tabToken);
+        assert.true(
+          [401, 403].includes(refused.status),
+          `${method.toUpperCase()} ${path}: ${refused.status}`,
+        );
+      }
+    });
+
+    test('a tab token outlives neither its grant nor a disconnect', async function (assert) {
+      let { token, grantId } = await oauthToken(commandWriterUserId);
+      let response = await runCommand(
+        token,
+        `${testRealmURL.href}leak-credentials-command/LeakCredentialsCommand`,
+        { note: 'anything' },
+      );
+      let leaked = JSON.parse(response.body.data.attributes.cardResultString)
+        ?.data?.attributes;
+      let tabToken = JSON.parse(leaked.inMemory)[testRealmURL.href];
+
+      await endGrant(context.dbAdapter, grantId, 'user');
+      let refused = await context.request
+        .post(`${testRealmURL.pathname}after-disconnect.md`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Content-Type', 'application/vnd.card+source')
+        .set('Authorization', tabToken)
+        .send('# Written after the app was disconnected');
+      assert.strictEqual(refused.status, 401, refused.text);
+    });
+
+    test('a boxel:read token can’t run a command', async function (assert) {
+      let { token } = await oauthToken(commandWriterUserId, 'boxel:read');
+      let response = await runCommand(
+        token,
+        `${testRealmURL.href}save-note-command/SaveNoteCommand`,
+        { body: 'never saved', realm: testRealmURL.href },
+      );
+      assert.strictEqual(response.status, 403, response.text);
+      assert.strictEqual(response.body?.error, 'insufficient_scope');
     });
   });
 });

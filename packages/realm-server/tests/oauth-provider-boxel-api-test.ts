@@ -22,6 +22,7 @@ import {
   fixtureDir,
   matrixURL,
   realmConfigCardJSON,
+  realmSecretSeed,
   runTestRealmServer,
   setupDB,
   setupTestDatabaseTemplate,
@@ -55,6 +56,12 @@ import {
   setWorkspaceListOf,
 } from './helpers/workspace-list.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
+import jwt from 'jsonwebtoken';
+import {
+  oauthTabTokenSecret,
+  type OAuthTabPurpose,
+} from '@cardstack/runtime-common/oauth-tab-token';
+import { buildCreateOAuthTabAuth } from '../lib/oauth-tab-token.ts';
 
 // The Boxel API (ADR 021): the realm and realm-server routes Boxel's own apps
 // call with an OAuth access token. Its tokens are minted here straight into
@@ -425,9 +432,6 @@ module(basename(import.meta.filename), function (hooks) {
         ['post', '/_incoming-webhooks'],
         ['get', '/_public-realms'],
         ['post', '/_request-forward'],
-        // Its prerender tab holds sessions for every realm the user can
-        // reach, beside code the caller chooses.
-        ['post', '/_run-command'],
       ];
       for (let [method, path] of routes) {
         let response = await request()
@@ -867,6 +871,231 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  // A tab token (`runtime-common/oauth-tab-token.ts`): what the prerender tab
+  // of a command or capture an OAuth app starts holds in place of the user's
+  // sessions. Code the app chose runs in that tab, so these pin that a tab
+  // token reaches no more than the OAuth token behind it (ADR 021 §1.5). The
+  // host sends a realm its session bare, so these do too.
+  module('a tab token', function () {
+    async function tabToken(
+      user: string,
+      {
+        scope = 'boxel:read boxel:write',
+        purpose = 'run-command',
+        lifetimeSeconds,
+        realm = REALM_URL,
+      }: {
+        scope?: string;
+        purpose?: OAuthTabPurpose;
+        lifetimeSeconds?: number;
+        realm?: string;
+      } = {},
+    ): Promise<{ token: string; grantId: string }> {
+      let { grantId } = await oauthToken(user, { scope });
+      let createOAuthTabAuth = buildCreateOAuthTabAuth(realmSecretSeed, {
+        realmServerURL: REALM_URL,
+        ...(lifetimeSeconds !== undefined
+          ? { lifetimeSeconds: () => lifetimeSeconds }
+          : {}),
+      });
+      let sessions = JSON.parse(
+        createOAuthTabAuth({
+          userId: user,
+          permissions: { [realm]: ['read', 'write', 'realm-owner'] },
+          grantId,
+          scopes: scope.split(' '),
+          purpose,
+          permissionCeiling: 'write',
+        }),
+      ) as Record<string, string>;
+      return { token: sessions[realm], grantId };
+    }
+
+    function readCardWith(token: string) {
+      return request()
+        .get('/person-1.json')
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', token);
+    }
+
+    function writeSourceWith(token: string) {
+      return request()
+        .post('/notes.md')
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Content-Type', SupportedMimeType.CardSource)
+        .set('Authorization', token)
+        .send('# Changed by a tab');
+    }
+
+    function federatedInfoWith(token: string) {
+      return request()
+        .post('/_federated-info')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', token)
+        .send({ realms: [REALM_URL] });
+    }
+
+    test('reads a realm as its grant’s user, with that user’s permissions', async function (assert) {
+      let { token } = await tabToken(READER, { scope: 'boxel:read' });
+      let response = await readCardWith(token);
+      assert.strictEqual(response.status, 200, response.text);
+
+      let stranger = await tabToken(STRANGER, { scope: 'boxel:read' });
+      let refused = await readCardWith(stranger.token);
+      assert.strictEqual(refused.status, 403, refused.text);
+    });
+
+    test('passes the federated endpoints’ check as its grant’s user', async function (assert) {
+      let { token } = await tabToken(READER, { scope: 'boxel:read' });
+      let response = await federatedInfoWith(token);
+      assert.strictEqual(response.status, 200, response.text);
+    });
+
+    test('a command’s writes as far as the grant’s scopes allow', async function (assert) {
+      let { token } = await tabToken(OWNER);
+      let written = await writeSourceWith(token);
+      assert.true(succeeded(written), `${written.status} ${written.text}`);
+
+      let read = await tabToken(OWNER, { scope: 'boxel:read' });
+      let refused = await writeSourceWith(read.token);
+      assert.strictEqual(
+        refused.status,
+        403,
+        `a boxel:read grant can't write: ${refused.text}`,
+      );
+    });
+
+    test('a capture’s never writes, whatever its grant allows', async function (assert) {
+      let { token } = await tabToken(OWNER, { purpose: 'capture' });
+      assert.strictEqual((await readCardWith(token)).status, 200);
+      let refused = await writeSourceWith(token);
+      assert.strictEqual(refused.status, 403, refused.text);
+      let unwritten = await request()
+        .get('/notes.md')
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', token);
+      assert.notStrictEqual(unwritten.text, '# Changed by a tab');
+    });
+
+    test('is refused everywhere the Boxel API maps nothing, and on every route that checks a session itself', async function (assert) {
+      let { token } = await tabToken(OWNER);
+      let realmRoutes: ['get' | 'post', string][] = [
+        ['get', '/_permissions'],
+        ['post', '/_session'],
+      ];
+      for (let [method, path] of realmRoutes) {
+        let response = await request()
+          [method](path)
+          .set('Accept', SupportedMimeType.JSONAPI)
+          .set('Authorization', token);
+        let refused = refusedAsClientError(response) && response.status !== 404;
+        assert.true(
+          refused,
+          `${method.toUpperCase()} ${path}: ${response.status} ${response.text}`,
+        );
+      }
+      // A realm-server route behind a session check refuses it on its
+      // signature, mapped or not: a tab never reaches the realm server but
+      // through the federated reads.
+      let serverRoutes: ['get' | 'post', string][] = [
+        ['post', '/_realm-auth'],
+        ['post', '/_server-session'],
+        ['get', '/_user'],
+        ['get', '/_archived-realms'],
+        ['post', '/_run-command'],
+        ['post', '/_capture'],
+        ['post', '/_request-forward'],
+        ['get', '/_user-keys'],
+      ];
+      for (let [method, path] of serverRoutes) {
+        let response = await request()
+          [method](path)
+          .set('Accept', 'application/json')
+          .set('Authorization', token);
+        let refused = refusedAsClientError(response) && response.status !== 404;
+        assert.true(
+          refused,
+          `${method.toUpperCase()} ${path}: ${response.status} ${response.text}`,
+        );
+      }
+    });
+
+    test('disconnecting the app ends it on its next request', async function (assert) {
+      let { token, grantId } = await tabToken(OWNER);
+      assert.strictEqual((await readCardWith(token)).status, 200);
+      assert.strictEqual((await federatedInfoWith(token)).status, 200);
+      await endGrant(dbAdapter, grantId, 'user');
+      assertNoCredential(assert, await readCardWith(token), 'realm');
+      assertInvalidToken(assert, await federatedInfoWith(token), 'federated');
+    });
+
+    test('revoking the user’s sessions alone leaves it, and revoking their grants ends it', async function (assert) {
+      let { token } = await tabToken(OWNER);
+      // As for the access token it stands in for (ADR 021 §1.9).
+      await revokeUserSessions(dbAdapter, OWNER);
+      assert.strictEqual((await readCardWith(token)).status, 200);
+      await revokeUserOAuthGrants(dbAdapter, OWNER);
+      assertNoCredential(assert, await readCardWith(token), 'realm');
+      assertInvalidToken(assert, await federatedInfoWith(token), 'federated');
+    });
+
+    // A realm judges a tab token it can't admit as a session that doesn't
+    // verify: no credential, so a realm only its users may read refuses it.
+    function assertNoCredential(
+      assert: Assert,
+      response: supertest.Response,
+      label: string,
+    ) {
+      assert.strictEqual(response.status, 401, `${label}: ${response.text}`);
+    }
+
+    test('is refused once it expires', async function (assert) {
+      let { token } = await tabToken(OWNER, { lifetimeSeconds: -60 });
+      assertNoCredential(assert, await readCardWith(token), 'realm');
+      assertInvalidToken(assert, await federatedInfoWith(token), 'federated');
+    });
+
+    test('is no credential in a realm it wasn’t minted for', async function (assert) {
+      let { token } = await tabToken(OWNER, {
+        realm: 'http://127.0.0.1:0/another-realm/',
+      });
+      assertNoCredential(assert, await readCardWith(token), 'realm');
+    });
+
+    // The keys never cross: a tab token never verifies as a session (the
+    // tests above present real ones to session checks), and whatever the
+    // tab-token key signs is never a session either.
+    test('what the tab-token key signs is no session', async function (assert) {
+      let sessionShaped = jwt.sign(
+        {
+          user: OWNER,
+          realm: REALM_URL,
+          permissions: ['read', 'write', 'realm-owner'],
+          sessionRoom: '',
+          realmServerURL: REALM_URL,
+        },
+        oauthTabTokenSecret(realmSecretSeed),
+        { expiresIn: '1h' },
+      );
+      assertNoCredential(assert, await readCardWith(sessionShaped), 'realm');
+      assertNoCredential(
+        assert,
+        await federatedInfoWith(sessionShaped),
+        'federated',
+      );
+      assertNoCredential(
+        assert,
+        await request()
+          .get('/_archived-realms')
+          .set('Accept', SupportedMimeType.JSONAPI)
+          .set('Authorization', `Bearer ${sessionShaped}`),
+        'realm server',
+      );
+    });
+  });
+
   module('the Boxel API’s route map', function () {
     test('names only routes the routers register, and none it must never map', async function (assert) {
       let resource = boxelApiResource(
@@ -902,7 +1131,6 @@ module(basename(import.meta.filename), function (hooks) {
         /^\/_secure-/,
         /^\/_oauth(\/|-provider|$)/,
         /^\/mcp$/,
-        /^\/_run-command$/,
       ];
       for (let scope of resource.scopes) {
         for (let route of scope.routes) {

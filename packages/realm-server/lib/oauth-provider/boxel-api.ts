@@ -16,7 +16,11 @@ import {
   realmRouteScopes,
   type RealmOAuthResource,
 } from '@cardstack/runtime-common/oauth-route-admission';
-import { resolveOAuthAccessToken, type OAuthCaller } from './lookup.ts';
+import {
+  resolveOAuthAccessToken,
+  resolveOAuthGrant,
+  type OAuthCaller,
+} from './lookup.ts';
 import {
   boxelApiResource,
   oauthIssuer,
@@ -164,5 +168,7 @@ export function boxelApiForRealms(api: BoxelApi): RealmOAuthResource {
     challenge: (options) => bearerChallenge(api.issuer, api.resource, options),
     resolve: (token) =>
       resolveOAuthAccessToken(api.dbAdapter, token, api.resource.id),
+    resolveGrant: (tabToken) =>
+      resolveOAuthGrant(api.dbAdapter, tabToken, api.resource.id),
   };
 }
