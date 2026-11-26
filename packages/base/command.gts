@@ -761,6 +761,11 @@ export class RunRealmCodeResult extends CardDef {
   @field createdWorkspaces = containsMany(StringField);
   // URLs of the workspaces the script deleted with `realm.workspaces.delete`.
   @field deletedWorkspaces = containsMany(StringField);
+  // What the script's `realm.automations` calls started or switched on, in
+  // order, one line each, such as `Started a Preview of <card>, run <id>`
+  // or `Switched on <card> (active)`. Each spends, and stays done when the
+  // run fails later.
+  @field automationActions = containsMany(StringField);
   // The `realm.index` calls the script made, in order, such as `reindex` or
   // `invalidate <paths>`. The realm server does the indexing after each call.
   @field indexActions = containsMany(StringField);
@@ -801,6 +806,7 @@ export class RunRealmCodeResult extends CardDef {
       !this.scriptFixes?.length &&
       !this.createdWorkspaces?.length &&
       !this.deletedWorkspaces?.length &&
+      !this.automationActions?.length &&
       !this.failedUiActions.length &&
       !this.showError
     );
@@ -841,6 +847,12 @@ export class RunRealmCodeResult extends CardDef {
             <span class='glyph' aria-hidden='true'>−</span>
             <span class='text'>Deleted workspace
               <span class='path'>{{url}}</span></span>
+          </div>
+        {{/each}}
+        {{#each @model.automationActions as |line|}}
+          <div class='line' data-test-realm-code-automation-action>
+            <span class='glyph done' aria-hidden='true'>✓</span>
+            <span class='text'>{{line}}</span>
           </div>
         {{/each}}
         {{#each @model.failedUiActions as |uiAction|}}

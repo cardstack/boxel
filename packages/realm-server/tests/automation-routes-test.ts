@@ -18,6 +18,7 @@ import {
   SupportedMimeType,
   type AutomationRun,
   type DefinitionLookup,
+  type QueuePublisher,
   type Realm,
   type SpendCharge,
   type VirtualNetwork,
@@ -31,6 +32,12 @@ import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declara
 import { recordAutomationRunVersion } from '@cardstack/runtime-common/automation-runs';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
 import { MAX_WEBHOOK_PAYLOAD_CHARS } from '@cardstack/runtime-common/automation-run-command';
+import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  indexingConcurrencyGroup,
+  makeIncrementalArgsWithCallerMetadata,
+  systemInitiatedIndexPriority,
+} from '@cardstack/runtime-common/jobs/indexing';
 import {
   appendRunLog,
   type RunLogLine,
@@ -193,6 +200,7 @@ module(basename(import.meta.filename), function (hooks) {
   let request: SuperTest<Test>;
   let virtualNetwork: VirtualNetwork;
   let testRealmPath: string;
+  let publisher: QueuePublisher;
 
   setupProcessPricing(hooks, 'automation-routes-test');
 
@@ -338,6 +346,7 @@ module(basename(import.meta.filename), function (hooks) {
       request = args.request;
       virtualNetwork = args.virtualNetwork;
       testRealmPath = args.testRealmPath;
+      publisher = args.publisher;
     },
   });
 
@@ -2706,6 +2715,232 @@ module(basename(import.meta.filename), function (hooks) {
           `Bearer ${createJWT(realm, WRITER, ['read', 'write'])}`,
         );
       assert.strictEqual(answered.status, 202, answered.text);
+    });
+
+    // Runs an incremental pass over `paths` that no realm awaits, enqueued
+    // the way the prerender reconcile retries a transient failure, whose
+    // worker asks the realm to check the key approvals of the automations
+    // the pass touched, and waits for the check the request started. Answers
+    // the automation ids of each request the realm got. With `realmChecks`
+    // false the realm answers without checking, which leaves the automations
+    // as the hook alone moves them.
+    async function workerPass(paths: string[], { realmChecks = true } = {}) {
+      let asked: string[][] = [];
+      let original = realm.followAutomationKeyApprovalsAfterWorkerPass;
+      realm.followAutomationKeyApprovalsAfterWorkerPass = function (
+        automationIds,
+        opts,
+      ) {
+        asked.push([...automationIds]);
+        return realmChecks
+          ? original.call(realm, automationIds, opts)
+          : Promise.resolve();
+      };
+      try {
+        let job = await publisher.publish({
+          jobType: 'incremental-index',
+          concurrencyGroup: indexingConcurrencyGroup(realm.url),
+          timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+          priority: systemInitiatedIndexPriority(realm.url),
+          args: makeIncrementalArgsWithCallerMetadata(
+            {
+              realmURL: realm.url,
+              realmUsername: await realm.getRealmOwnerUsername(),
+              changes: paths.map((path) => ({
+                url: `${realm.url}${path}`,
+                operation: 'update' as const,
+              })),
+              ignoreData: {},
+            },
+            null,
+          ),
+        });
+        // The worker waits for the realm's answer before it settles the job,
+        // and the check the answer started is among the realm's indexing.
+        await job.done;
+        await realm.incrementalIndexing();
+      } finally {
+        realm.followAutomationKeyApprovalsAfterWorkerPass = original;
+      }
+      return asked;
+    }
+
+    test("a revert a worker's incremental pass is the first to index runs a waiting automation again, with nobody asked to approve it again", async function (assert) {
+      await switchOnApproved();
+      let approvals = await approvalRowsOf(KEYED);
+      await realm.write(`${KEYED}-script.js`, `return 'changed';`);
+      await reachesState(KEYED, 'waiting-for-key-approval');
+      // The realm's own check after that pass reads the script as the realm
+      // holds it, so it settles before the file changes under it.
+      await realm.incrementalIndexing();
+      editUnwatched(`${KEYED}-script.js`, `return 'ok';`);
+
+      assert.deepEqual(
+        await workerPass([`${KEYED}-script.js`], { realmChecks: false }),
+        [[automationId(KEYED)]],
+        'the worker asks the realm once, naming the automation whose script the pass touched',
+      );
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'waiting-for-key-approval',
+        "the worker's index hook alone leaves it waiting",
+      );
+
+      await workerPass([`${KEYED}-script.js`]);
+      let row = await reachesState(KEYED, 'active');
+      assert.notStrictEqual(row.nextRun, null, 'its schedule starts again');
+      assert.deepEqual(
+        await approvalRowsOf(KEYED),
+        approvals,
+        'the approval its key owner gave matches again, unchanged',
+      );
+    });
+
+    test("an edit a worker's incremental pass is the first to index, adding an operation needing a key to an automation with no approval, moves it to waiting for key approval", async function (assert) {
+      let switchedOn = await switchOn(OWNER, DAILY);
+      assert.strictEqual(switchedOn.body.data.attributes.state, 'active');
+      editUnwatched(
+        `${DAILY}.json`,
+        automationFixture({
+          operations: [{ type: INBOX, names: ['list'] }],
+          path: DAILY,
+          triggers: [
+            {
+              kind: 'cron',
+              label: 'daily',
+              expression: '0 9 * * *',
+              timeZone: 'UTC',
+            },
+          ],
+        })[`${DAILY}.json`],
+      );
+
+      await workerPass([`${DAILY}.json`]);
+      let row = await reachesState(DAILY, 'waiting-for-key-approval');
+      assert.strictEqual(row.nextRun, null);
+      assert.deepEqual(operationStates(await keyApprovalsOf(DAILY)), [
+        {
+          operation: 'list',
+          state: 'missing',
+          missing: [{ slot: 'userKey', canApprove: 'payer' }],
+        },
+      ]);
+    });
+
+    test("a worker's incremental pass doesn't ask the realm to check a paused automation", async function (assert) {
+      await switchOnApproved();
+      await switchOn(OWNER, DAILY);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(KEYED) }))
+          .status,
+        200,
+      );
+
+      assert.deepEqual(
+        await workerPass([`${KEYED}-script.js`, `${DAILY}.json`]),
+        [[automationId(DAILY)]],
+      );
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'paused',
+      );
+    });
+
+    test("an incremental pass the realm awaits is checked by the realm and at its worker's request, and the second check moves and reports nothing", async function (assert) {
+      await switchOnApproved();
+      await realm.write(`${KEYED}-script.js`, `return 'changed';`);
+      await reachesState(KEYED, 'waiting-for-key-approval');
+      await realm.incrementalIndexing();
+
+      let asked: string[][] = [];
+      let original = realm.followAutomationKeyApprovalsAfterWorkerPass;
+      realm.followAutomationKeyApprovalsAfterWorkerPass = function (
+        automationIds,
+        opts,
+      ) {
+        asked.push([...automationIds]);
+        return original.call(realm, automationIds, opts);
+      };
+      let sent: string[];
+      try {
+        sent = await automationEventsDuring(async () => {
+          await realm.write(`${KEYED}-script.js`, `return 'ok';`);
+          await realm.incrementalIndexing();
+        });
+      } finally {
+        realm.followAutomationKeyApprovalsAfterWorkerPass = original;
+      }
+      assert.deepEqual(
+        asked,
+        [[automationId(KEYED)]],
+        "the realm's own pass asks the realm too",
+      );
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED)))?.state,
+        'active',
+      );
+      assert.deepEqual(
+        sent,
+        [automationId(KEYED)],
+        'one automation event, for the one move',
+      );
+    });
+
+    test('the request to check the automations’ key approvals starts checking only the automations its body names, and refuses a body that names none', async function (assert) {
+      let path = `${new URL(realm.url).pathname}_follow-automation-key-approvals`;
+      let auth = `Bearer ${createJWT(realm, WRITER, ['read', 'write'])}`;
+      let asked: { automationIds: string[]; reportChanges: boolean }[] = [];
+      let fromScratch = 0;
+      let original = realm.followAutomationKeyApprovalsAfterWorkerPass;
+      let originalFromScratch =
+        realm.followAutomationKeyApprovalsAfterFromScratchPass;
+      realm.followAutomationKeyApprovalsAfterWorkerPass = async function (
+        automationIds,
+        { reportChanges },
+      ) {
+        asked.push({ automationIds: [...automationIds], reportChanges });
+      };
+      realm.followAutomationKeyApprovalsAfterFromScratchPass =
+        async function () {
+          fromScratch++;
+        };
+      try {
+        let answered = await request
+          .post(path)
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', auth)
+          .send(
+            JSON.stringify({
+              automationIds: [automationId(KEYED)],
+              reportChanges: false,
+            }),
+          );
+        assert.strictEqual(answered.status, 202, answered.text);
+        for (let body of [
+          'not json',
+          '{}',
+          '{"automationIds":[1]}',
+          '{"automationIds":[]}',
+          '{"automationIds":["x"],"reportChanges":"no"}',
+        ]) {
+          let refused = await request
+            .post(path)
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', auth)
+            .send(body);
+          assert.strictEqual(refused.status, 400, `${body}: ${refused.text}`);
+        }
+      } finally {
+        realm.followAutomationKeyApprovalsAfterWorkerPass = original;
+        realm.followAutomationKeyApprovalsAfterFromScratchPass =
+          originalFromScratch;
+      }
+      assert.deepEqual(asked, [
+        { automationIds: [automationId(KEYED)], reportChanges: false },
+      ]);
+      assert.strictEqual(fromScratch, 0, 'it checks no other automation');
     });
 
     test('approving a slot again with another key sends an automation event for the automation whose approval it ended', async function (assert) {
