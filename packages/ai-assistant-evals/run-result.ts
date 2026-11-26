@@ -68,6 +68,9 @@ export interface RunResult {
   // How often a tool (listing-remix, for one) moved the assistant panel to a
   // room of its own and the runner reopened the evaluation's room.
   roomReturns: number;
+  // Automation gates the runner confirmed for the person, in an evaluation
+  // with `confirmAutomations` (a Preview, a Run now or a switch-on).
+  automationConfirmations?: number;
   // File name, next to this result, of what the workspace held when the run
   // ended: every source file and every indexed card document.
   workspaceSnapshot?: string;
