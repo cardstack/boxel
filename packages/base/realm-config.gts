@@ -93,7 +93,7 @@ import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 import { isLiveRender } from './render-context';
 import RealmApiKeys from './realm-api-keys';
-import RealmAutomations from './realm-automations';
+import RealmAutomations, { RealmAutomationNotices } from './realm-automations';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -1880,6 +1880,7 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
       <Header @hasBottomBorder={{true}} class='card-info-header'>
         <CardInfoTemplates.edit @fields={{@fields}} @model={{this.baseModel}} />
       </Header>
+      <RealmAutomationNotices @realm={{this.realm}} @context={{@context}} />
       {{#if this.displayFields}}
         <section class='own-display-fields'>
           {{#each-in this.displayFields as |key Field|}}
