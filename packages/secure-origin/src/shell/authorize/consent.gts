@@ -60,6 +60,9 @@ interface Signature {
     onAllow: () => void;
     onDeny: () => void;
     onSignOut: () => void;
+    // Consent for a code typed into the device page (`device-page.gts`),
+    // rather than for a flow a browser started: the warning names the code.
+    device?: boolean;
   };
 }
 
@@ -462,6 +465,9 @@ export default class Consent extends Component<Signature> {
   }
 
   private get confirmationWarning(): string {
+    if (this.args.device) {
+      return `Only allow this if you typed a code shown in your own terminal, where you just started signing in to ${this.name}. If someone sent you this code, choose Deny.`;
+    }
     let matches = this.args.details.confirmationCode
       ? ' and it shows this code'
       : '';

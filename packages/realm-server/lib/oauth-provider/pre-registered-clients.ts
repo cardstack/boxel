@@ -14,8 +14,18 @@
 // and consent repeats, so the user can tell their own sign-in from one
 // someone else started and sent them (the secure origin's
 // `security/confirmation-code.js`).
+//
+// Only a client here may use device sign-in (RFC 8628; ADR 021 §1.4), and only
+// one whose grant types list it. Its tokens go to whichever computer holds the
+// device code, not this one: the user code, which the user reads from their
+// terminal and types into the secure origin's `device` page, stands in for the
+// confirmation code (`device.ts`).
 
 import type { ClientMetadata } from 'oidc-provider';
+
+// The device authorization grant's type (RFC 8628 §3.4).
+export const DEVICE_CODE_GRANT_TYPE =
+  'urn:ietf:params:oauth:grant-type:device_code';
 
 export interface PreRegisteredClient {
   // The library's client metadata, as its `clients` setting takes it.
@@ -41,15 +51,30 @@ const BOXEL_CLI: PreRegisteredClient = {
     application_type: 'native',
     redirect_uris: ['http://127.0.0.1/callback'],
     response_types: ['code'],
-    // No device-code grant: the library refuses a client with one while the
-    // device flow is off (`provider.ts`).
-    grant_types: ['authorization_code', 'refresh_token'],
+    // Device sign-in, for a terminal with no browser (`device.ts`).
+    grant_types: [
+      'authorization_code',
+      'refresh_token',
+      DEVICE_CODE_GRANT_TYPE,
+    ],
     token_endpoint_auth_method: 'none',
   },
   place: 'this-computer',
 };
 
 export const PRE_REGISTERED_CLIENTS: PreRegisteredClients = byId([BOXEL_CLI]);
+
+// The pre-registered client a device authorization request names, when it may
+// use device sign-in.
+export function deviceFlowClient(
+  clients: PreRegisteredClients,
+  clientId: string | undefined,
+): PreRegisteredClient | undefined {
+  let client = clientId === undefined ? undefined : clients.get(clientId);
+  return client?.metadata.grant_types?.includes(DEVICE_CODE_GRANT_TYPE)
+    ? client
+    : undefined;
+}
 
 function byId(clients: readonly PreRegisteredClient[]): PreRegisteredClients {
   let map = new Map<string, PreRegisteredClient>();

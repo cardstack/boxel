@@ -42,6 +42,10 @@ interface Signature {
     // and the links to reset a password and create an account, which would
     // leave the flow, aren't offered.
     interaction?: string;
+    // An OAuth page other than authorize that signs in on itself, which a
+    // Google sign-in returns to: the device page. The links that would leave
+    // it aren't offered either.
+    oauthPage?: 'device';
     // Cancel, offered only when given.
     onCancel?: () => void;
     // Whether the heading takes focus in place of the first field: for a
@@ -115,8 +119,8 @@ export default class SignInForm extends Component<Signature> {
         @error={{this.state.error}}
         @onSubmit={{this.submit}}
         @onGoogle={{this.startGoogle}}
-        @onForgotPassword={{unless @interaction this.forgotPassword}}
-        @onRegister={{unless @interaction this.register}}
+        @onForgotPassword={{unless this.inOAuthFlow this.forgotPassword}}
+        @onRegister={{unless this.inOAuthFlow this.register}}
         @onCancel={{@onCancel}}
         @focusTitle={{@focusTitle}}
       >
@@ -143,8 +147,8 @@ export default class SignInForm extends Component<Signature> {
         @error={{this.state.error}}
         @onSubmit={{this.submit}}
         @onGoogle={{this.startGoogle}}
-        @onForgotPassword={{unless @interaction this.forgotPassword}}
-        @onRegister={{unless @interaction this.register}}
+        @onForgotPassword={{unless this.inOAuthFlow this.forgotPassword}}
+        @onRegister={{unless this.inOAuthFlow this.register}}
         @onCancel={{@onCancel}}
         @focusTitle={{@focusTitle}}
       >
@@ -240,6 +244,11 @@ export default class SignInForm extends Component<Signature> {
     this.args.onSignedIn(session);
   };
 
+  // A sign-in for an OAuth flow, which offers nothing that would leave it.
+  private get inOAuthFlow(): boolean {
+    return Boolean(this.args.interaction || this.args.oauthPage);
+  }
+
   private startGoogle = async () => {
     this.state.startingGoogle = true;
     this.state.error = undefined;
@@ -250,6 +259,7 @@ export default class SignInForm extends Component<Signature> {
           cli: this.args.cli,
           username: this.args.username,
           interaction: this.args.interaction,
+          page: this.args.oauthPage,
         }),
       );
     } catch (e: any) {
