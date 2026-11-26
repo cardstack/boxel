@@ -66,10 +66,8 @@ export function watcherCompletionOf(
 // later never reaches a watcher by default. Another writer's request id never
 // goes in: a host's id can carry private context, such as the room an
 // assistant's write came from. Nor does whether another writer sent a card's
-// content verbatim. The watcher's own writes go in narrowed to what they may
-// read, so their host recognises its own write, and a card another writer
-// also changed in the pass is taken out of what theirs authored, so their
-// host re-reads it rather than keep its own copy over the other write.
+// content verbatim. See `ownRequestIds` for what the watcher's own writes
+// carry.
 //
 // A copy naming no card is sent only when it carries the watcher's own
 // request id, which tells them their own write landed. Otherwise an empty
@@ -93,10 +91,17 @@ export function watcherListedCopy(
   };
 }
 
-// The request-id members of a watcher's copy: the event's own
-// `clientRequestId` and `clientAuthored` when the watcher made that write, and
-// `coalescedWrites` holding only their own entries, each narrowed to the
-// cards in `readable`.
+// The request-id members of a watcher's copy, which take a shape that depends
+// only on the watcher's own writes, so it never says whether another write
+// shared the pass. One write of theirs goes in as `clientRequestId` with
+// `clientAuthored`; several go in as `coalescedWrites` holding only theirs.
+// Either way each write's authored cards are always stated, narrowed to
+// `readable`, and leave out any card another write in the pass also changed,
+// so the host re-reads that card rather than keep its own copy over the other
+// write. A write that made no report of what it authored is stated as
+// authoring every readable card it changed, or, where the realm doesn't say
+// which those are, every readable card, which is what an absent report means.
+// A write with no request id is left out: a host has nothing to match it by.
 export function ownRequestIds(
   completion: ListedWatcherCompletion,
   watcher: string,
@@ -126,43 +131,60 @@ export function ownRequestIds(
         !changedByOthers.has(url),
     );
 
-  let members: Pick<
-    IncrementalIndexEventContent,
-    'clientRequestId' | 'clientAuthored' | 'coalescedWrites'
-  > = {};
-  let ownsAnId = false;
+  // Each of the watcher's writes once, by request id. The event's own write
+  // appears among a shared pass's writes too, where the realm also says which
+  // cards it changed.
+  let own = new Map<
+    string,
+    { changed: string[] | null | undefined; clientAuthored?: string[] }
+  >();
   let { write } = completion;
-  if (write && isOwn(write.actor)) {
-    members.clientRequestId = write.clientRequestId;
-    if (write.clientAuthored) {
-      members.clientAuthored = authoredByWatcher(write.clientAuthored);
+  if (
+    write &&
+    isOwn(write.actor) &&
+    typeof write.clientRequestId === 'string'
+  ) {
+    own.set(write.clientRequestId, {
+      changed: undefined,
+      clientAuthored: write.clientAuthored,
+    });
+  }
+  for (let entry of completion.coalescedWrites ?? []) {
+    if (isOwn(entry.actor) && typeof entry.clientRequestId === 'string') {
+      own.set(entry.clientRequestId, {
+        changed: entry.changed,
+        clientAuthored: entry.clientAuthored,
+      });
     }
-    ownsAnId ||= typeof write.clientRequestId === 'string';
   }
-  let own = (completion.coalescedWrites ?? []).filter(({ actor }) =>
-    isOwn(actor),
-  );
-  if (own.length > 0) {
-    members.coalescedWrites = own.map(
-      ({ clientRequestId, changed, clientAuthored }) => ({
+  let authored = ({
+    changed,
+    clientAuthored,
+  }: {
+    changed: string[] | null | undefined;
+    clientAuthored?: string[];
+  }) => authoredByWatcher(clientAuthored ?? changed ?? readable);
+
+  if (own.size === 0) {
+    return { members: {}, ownsAnId: false };
+  }
+  if (own.size === 1) {
+    let [[clientRequestId, ownWrite]] = [...own];
+    return {
+      members: { clientRequestId, clientAuthored: authored(ownWrite) },
+      ownsAnId: true,
+    };
+  }
+  return {
+    members: {
+      coalescedWrites: [...own].map(([clientRequestId, ownWrite]) => ({
         clientRequestId,
-        changed: changed ? changed.filter((url) => readableSet.has(url)) : null,
-        // Stated even where the write made no report once another writer
-        // shared the pass: absent, a host would read every card in `changed`
-        // as this write's own content, including one the other writer also
-        // changed.
-        ...(clientAuthored || foreign.length > 0
-          ? {
-              clientAuthored: authoredByWatcher(
-                clientAuthored ?? changed ?? [],
-              ),
-            }
-          : {}),
-      }),
-    );
-    ownsAnId ||= own.some(
-      ({ clientRequestId }) => typeof clientRequestId === 'string',
-    );
-  }
-  return { members, ownsAnId };
+        changed: ownWrite.changed
+          ? ownWrite.changed.filter((url) => readableSet.has(url))
+          : null,
+        clientAuthored: authored(ownWrite),
+      })),
+    },
+    ownsAnId: true,
+  };
 }
