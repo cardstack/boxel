@@ -799,6 +799,12 @@ export class NodeAdapter implements RealmAdapter {
     if (dbAdapter.isClosed) {
       return [];
     }
+    // Logged in first: back-pressure from the homeserver prepares this again
+    // after a pause, and `events` is the costly part, which nothing after it
+    // throws back-pressure for.
+    if (!(await this.loggedIn(matrixClient, undefined))) {
+      return [];
+    }
     let answered: SessionRoomEvent[];
     try {
       answered = await events();
@@ -807,12 +813,6 @@ export class NodeAdapter implements RealmAdapter {
         `Error preparing per-user realm events for ${realmUrl}; skipping them`,
         e,
       );
-      return [];
-    }
-    if (answered.length === 0) {
-      return [];
-    }
-    if (!(await this.loggedIn(matrixClient, undefined))) {
       return [];
     }
     let sends: RealmEventSend[] = [];
