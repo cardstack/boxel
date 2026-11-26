@@ -25,7 +25,7 @@ class DialogUsage extends GlimmerComponent {
       '@onClose={{this.hide}}',
       `@label='Demo'`,
     ];
-    if (this.size !== 's') bits.push(`@size='${this.size}'`);
+    if (this.size !== 'm') bits.push(`@size='${this.size}'`);
     if (!this.dismissible) bits.push('@dismissible={{false}}');
     return `<Dialog ${bits.join(' ')}><:title>…</:title><:default>…</:default><:footer>…</:footer></Dialog>`;
   }

@@ -27,7 +27,7 @@ class ProgressRadialUsage extends GlimmerComponent {
   get usage() {
     let bits = [`@value={{${this.value}}}`];
     if (this.max !== 100) bits.push(`@max={{${this.max}}}`);
-    if (this.size !== 48) bits.push(`@size={{${this.size}}}`);
+    if (this.size !== 28) bits.push(`@size={{${this.size}}}`);
     return `<ProgressRadial ${bits.join(' ')} />`;
   }
 

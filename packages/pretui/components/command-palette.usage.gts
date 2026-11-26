@@ -7,7 +7,7 @@ import { Kbd } from './kbd';
 import { MenuState } from '../demo-menu';
 
 const SOURCE =
-  '<CommandPalette @items={{this.items}} @open={{this.open}} @onOpen={{this.openPalette}} @onClose={{this.closePalette}} @hotkey="Mod+K" />';
+  '<CommandPalette @items={{this.items}} @open={{this.paletteOpen}} @onOpen={{this.openPalette}} @onClose={{this.closePalette}} @hotkey="Mod+K" />';
 
 // ── CommandPalette ───────────────────────────────────────────────────────
 class CommandPaletteUsage extends MenuState {
