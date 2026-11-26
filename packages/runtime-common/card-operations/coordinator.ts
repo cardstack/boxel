@@ -192,6 +192,8 @@ export interface BatchCore {
       // See `CommitBatchOptions.broadcastRealmEvents`.
       broadcastRealmEvents?: boolean;
       initiatingUser?: string | null;
+      // See `WriteOptions.requestActor`.
+      requestActor?: string | null;
       // See `CommitBatchOptions.history`.
       history?: WriteContext;
       // See `CommitBatchOptions.automationRun`.
@@ -2492,6 +2494,9 @@ async function commitStaged(
       // it, the same as every other write path, so a reader draining its own
       // writes waits for this job rather than returning ahead of it.
       initiatingUser: opts.actor ?? opts.actingUser?.() ?? null,
+      // Only a signed-in caller's own request, so the acting user is never
+      // told an anonymous caller's request ids.
+      requestActor: opts.actor ?? null,
       ...(opts.history ? { history: opts.history } : {}),
       ...(opts.automationRun ? { automationRun: opts.automationRun } : {}),
       ...(opts.policyAudit ? { policyAudit: opts.policyAudit } : {}),
