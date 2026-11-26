@@ -707,175 +707,181 @@ module(basename(import.meta.filename), function (hooks) {
         ttlMs: 1_000,
         now: Date.now() - 5_000,
       });
+      // A live watcher keeps the completion's copy queued, so the lapsed one
+      // is decided rather than skipped with the whole queue.
+      await watch(COLLEAGUE);
       await education.write(
         'classrooms/room-204.json',
         classroom('Room 204 E', [TEACHER]),
       );
-      assert.deepEqual(await sentFor(ROOM_204), []);
+      assert.deepEqual(
+        (await sentFor(ROOM_204)).filter(({ user }) => user === TEACHER),
+        [],
+      );
     });
   });
-});
 
-module(`${basename(import.meta.filename)}: watcher copies`, function () {
-  const TEACHER_ID = '@teacher:localhost';
-  const ADMIN_ID = '@admin:localhost';
-  const REALM = 'http://127.0.0.1:4444/education/';
-  const A = `${REALM}a`;
-  const B = `${REALM}b`;
-  const C = `${REALM}c`;
+  module('watcher copies', function () {
+    const TEACHER_ID = '@teacher:localhost';
+    const ADMIN_ID = '@admin:localhost';
+    const REALM = 'http://127.0.0.1:4444/education/';
+    const A = `${REALM}a`;
+    const B = `${REALM}b`;
+    const C = `${REALM}c`;
 
-  test('a watcher whose write shared a pass hears only their own entry', function (assert) {
-    let copy = watcherListedCopy(
-      {
-        kind: 'listed',
-        invalidations: [A, B, C],
-        write: {
-          actor: ADMIN_ID,
-          clientRequestId: 'bot-patch:!private-room:localhost:2',
-          clientAuthored: [A],
-        },
-        coalescedWrites: [
-          {
+    test('a watcher whose write shared a pass hears only their own entry', function (assert) {
+      let copy = watcherListedCopy(
+        {
+          kind: 'listed',
+          invalidations: [A, B, C],
+          write: {
             actor: ADMIN_ID,
             clientRequestId: 'bot-patch:!private-room:localhost:2',
-            changed: [A],
             clientAuthored: [A],
           },
-          {
-            actor: TEACHER_ID,
-            clientRequestId: 'teacher-request',
-            changed: [B, C],
-            clientAuthored: [B, C],
-          },
-        ],
-      },
-      TEACHER_ID,
-      [A, B],
-      REALM,
-    );
-    assert.deepEqual(copy, {
-      eventName: 'index',
-      indexType: 'incremental',
-      invalidations: [A, B],
-      clientRequestId: 'teacher-request',
-      clientAuthored: [B],
-      realmURL: REALM,
-    });
-  });
-
-  test("a watcher's own write takes the same shape whether or not another write shared the pass", function (assert) {
-    let own = {
-      actor: TEACHER_ID,
-      clientRequestId: 'teacher',
-      changed: [A],
-      clientAuthored: [A],
-    };
-    let alone = watcherListedCopy(
-      { kind: 'listed', invalidations: [A], coalescedWrites: [own] },
-      TEACHER_ID,
-      [A],
-      REALM,
-    );
-    let shared = watcherListedCopy(
-      {
-        kind: 'listed',
-        invalidations: [A, C],
-        coalescedWrites: [
-          own,
-          { actor: ADMIN_ID, clientRequestId: 'admin', changed: [C] },
-        ],
-      },
-      TEACHER_ID,
-      [A],
-      REALM,
-    );
-    assert.deepEqual(shared, alone);
-    assert.deepEqual(alone, {
-      eventName: 'index',
-      indexType: 'incremental',
-      invalidations: [A],
-      clientRequestId: 'teacher',
-      clientAuthored: [A],
-      realmURL: REALM,
-    });
-  });
-
-  test("several writes of the watcher's own go in as their own coalesced writes", function (assert) {
-    let copy = watcherListedCopy(
-      {
-        kind: 'listed',
+          coalescedWrites: [
+            {
+              actor: ADMIN_ID,
+              clientRequestId: 'bot-patch:!private-room:localhost:2',
+              changed: [A],
+              clientAuthored: [A],
+            },
+            {
+              actor: TEACHER_ID,
+              clientRequestId: 'teacher-request',
+              changed: [B, C],
+              clientAuthored: [B, C],
+            },
+          ],
+        },
+        TEACHER_ID,
+        [A, B],
+        REALM,
+      );
+      assert.deepEqual(copy, {
+        eventName: 'index',
+        indexType: 'incremental',
         invalidations: [A, B],
-        coalescedWrites: [
-          { actor: TEACHER_ID, clientRequestId: 'first', changed: [A] },
-          { actor: TEACHER_ID, clientRequestId: 'second', changed: [B] },
-          { actor: ADMIN_ID, clientRequestId: 'admin', changed: [B] },
-        ],
-      },
-      TEACHER_ID,
-      [A, B],
-      REALM,
-    );
-    assert.deepEqual(copy?.coalescedWrites, [
-      { clientRequestId: 'first', changed: [A], clientAuthored: [A] },
-      { clientRequestId: 'second', changed: [B], clientAuthored: [] },
-    ]);
-    assert.strictEqual(copy?.clientRequestId, undefined);
-  });
+        clientRequestId: 'teacher-request',
+        clientAuthored: [B],
+        realmURL: REALM,
+      });
+    });
 
-  test("a card another writer also changed is not the watcher's own content", function (assert) {
-    let copy = watcherListedCopy(
-      {
-        kind: 'listed',
-        invalidations: [A, B],
-        coalescedWrites: [
-          { actor: ADMIN_ID, clientRequestId: 'admin', changed: [A] },
-          { actor: TEACHER_ID, clientRequestId: 'teacher', changed: [A, B] },
-        ],
-      },
-      TEACHER_ID,
-      [A, B],
-      REALM,
-    );
-    assert.strictEqual(copy?.clientRequestId, 'teacher');
-    assert.deepEqual(
-      copy?.clientAuthored,
-      [B],
-      'the card the admin changed too is re-read',
-    );
-  });
-
-  test('a writer the realm cannot name shares their id with nobody', function (assert) {
-    let copy = watcherListedCopy(
-      {
-        kind: 'listed',
+    test("a watcher's own write takes the same shape whether or not another write shared the pass", function (assert) {
+      let own = {
+        actor: TEACHER_ID,
+        clientRequestId: 'teacher',
+        changed: [A],
+        clientAuthored: [A],
+      };
+      let alone = watcherListedCopy(
+        { kind: 'listed', invalidations: [A], coalescedWrites: [own] },
+        TEACHER_ID,
+        [A],
+        REALM,
+      );
+      let shared = watcherListedCopy(
+        {
+          kind: 'listed',
+          invalidations: [A, C],
+          coalescedWrites: [
+            own,
+            { actor: ADMIN_ID, clientRequestId: 'admin', changed: [C] },
+          ],
+        },
+        TEACHER_ID,
+        [A],
+        REALM,
+      );
+      assert.deepEqual(shared, alone);
+      assert.deepEqual(alone, {
+        eventName: 'index',
+        indexType: 'incremental',
         invalidations: [A],
-        write: { actor: undefined, clientRequestId: 'unknown' },
-      },
-      TEACHER_ID,
-      [A],
-      REALM,
-    );
-    assert.deepEqual(copy, {
-      eventName: 'index',
-      indexType: 'incremental',
-      invalidations: [A],
-      realmURL: REALM,
+        clientRequestId: 'teacher',
+        clientAuthored: [A],
+        realmURL: REALM,
+      });
     });
-  });
 
-  test('nothing is sent when no card is readable and no write is theirs', function (assert) {
-    assert.strictEqual(
-      watcherListedCopy(
+    test("several writes of the watcher's own go in as their own coalesced writes", function (assert) {
+      let copy = watcherListedCopy(
+        {
+          kind: 'listed',
+          invalidations: [A, B],
+          coalescedWrites: [
+            { actor: TEACHER_ID, clientRequestId: 'first', changed: [A] },
+            { actor: TEACHER_ID, clientRequestId: 'second', changed: [B] },
+            { actor: ADMIN_ID, clientRequestId: 'admin', changed: [B] },
+          ],
+        },
+        TEACHER_ID,
+        [A, B],
+        REALM,
+      );
+      assert.deepEqual(copy?.coalescedWrites, [
+        { clientRequestId: 'first', changed: [A], clientAuthored: [A] },
+        { clientRequestId: 'second', changed: [B], clientAuthored: [] },
+      ]);
+      assert.strictEqual(copy?.clientRequestId, undefined);
+    });
+
+    test("a card another writer also changed is not the watcher's own content", function (assert) {
+      let copy = watcherListedCopy(
+        {
+          kind: 'listed',
+          invalidations: [A, B],
+          coalescedWrites: [
+            { actor: ADMIN_ID, clientRequestId: 'admin', changed: [A] },
+            { actor: TEACHER_ID, clientRequestId: 'teacher', changed: [A, B] },
+          ],
+        },
+        TEACHER_ID,
+        [A, B],
+        REALM,
+      );
+      assert.strictEqual(copy?.clientRequestId, 'teacher');
+      assert.deepEqual(
+        copy?.clientAuthored,
+        [B],
+        'the card the admin changed too is re-read',
+      );
+    });
+
+    test('a writer the realm cannot name shares their id with nobody', function (assert) {
+      let copy = watcherListedCopy(
         {
           kind: 'listed',
           invalidations: [A],
-          write: { actor: ADMIN_ID, clientRequestId: 'admin' },
+          write: { actor: undefined, clientRequestId: 'unknown' },
         },
         TEACHER_ID,
-        [],
+        [A],
         REALM,
-      ),
-      undefined,
-    );
+      );
+      assert.deepEqual(copy, {
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [A],
+        realmURL: REALM,
+      });
+    });
+
+    test('nothing is sent when no card is readable and no write is theirs', function (assert) {
+      assert.strictEqual(
+        watcherListedCopy(
+          {
+            kind: 'listed',
+            invalidations: [A],
+            write: { actor: ADMIN_ID, clientRequestId: 'admin' },
+          },
+          TEACHER_ID,
+          [],
+          REALM,
+        ),
+        undefined,
+      );
+    });
   });
 });
