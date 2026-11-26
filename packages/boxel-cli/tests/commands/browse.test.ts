@@ -6,6 +6,7 @@ import * as path from 'path';
 import {
   hostAppUrlForProfile,
   buildBrowseUrl,
+  buildSignInAsUrl,
   browse,
 } from '../../src/commands/browse.js';
 import {
@@ -96,6 +97,30 @@ describe('buildBrowseUrl', () => {
   it('omits cardPath when not given', () => {
     expect(buildBrowseUrl('https://localhost:4200/', 'tok')).not.toContain(
       'cardPath',
+    );
+  });
+});
+
+describe('buildSignInAsUrl', () => {
+  it('names the account to sign in as, and no credential', () => {
+    let url = new URL(
+      buildSignInAsUrl('https://app.boxel.ai', '@example-user:example.test'),
+    );
+    expect(url.origin + url.pathname).toBe('https://app.boxel.ai/');
+    expect(url.searchParams.get('signInAs')).toBe('@example-user:example.test');
+    expect(url.searchParams.has('loginToken')).toBe(false);
+    expect(url.searchParams.has('cardPath')).toBe(false);
+  });
+
+  it('adds an encoded cardPath when given', () => {
+    expect(
+      buildSignInAsUrl(
+        'https://app.boxel.ai/',
+        '@example-user:example.test',
+        'a/b.json',
+      ),
+    ).toBe(
+      'https://app.boxel.ai/?signInAs=%40example-user%3Aexample.test&cardPath=a%2Fb.json',
     );
   });
 });
@@ -889,5 +914,97 @@ describe('browse', () => {
     expect(written).not.toContain('lt_abc');
     stderr.mockRestore();
     stdout.mockRestore();
+  });
+
+  describe('on a profile signed in with OAuth', () => {
+    const OAUTH_PROFILE = {
+      displayName: 'Example User',
+      matrixUrl: 'http://localhost:8008',
+      realmServerUrl: 'https://localhost:4201/',
+      matrixUserId: '@example-user:localhost',
+      oauth: { accessToken: 'oauth-access-token' },
+    };
+
+    function oauthProfileManager(): ProfileManager {
+      return {
+        getActiveProfile: () => ({
+          id: '@example-user:localhost',
+          profile: OAUTH_PROFILE,
+        }),
+      } as unknown as ProfileManager;
+    }
+
+    it('opens the app naming the account, and mints no login token', async () => {
+      let openBrowserFn = vi.fn().mockResolvedValue(true);
+      let requestLoginTokenFn = vi.fn();
+      let logged: string[] = [];
+
+      await browse('cards/1.json', {
+        profileManager: oauthProfileManager(),
+        requestLoginToken: requestLoginTokenFn,
+        openBrowserFn,
+        log: (message) => logged.push(message),
+      });
+
+      expect(requestLoginTokenFn).not.toHaveBeenCalled();
+      expect(openBrowserFn).toHaveBeenCalledWith(
+        'https://localhost:4200/?signInAs=%40example-user%3Alocalhost&cardPath=cards%2F1.json',
+      );
+      expect(logged.join('\n')).toContain('@example-user:localhost');
+    });
+
+    it('honours --host-url', async () => {
+      let openBrowserFn = vi.fn().mockResolvedValue(true);
+
+      await browse(undefined, {
+        hostUrl: 'https://host.my-env.localhost',
+        profileManager: oauthProfileManager(),
+        openBrowserFn,
+        log: () => {},
+      });
+
+      expect(openBrowserFn).toHaveBeenCalledWith(
+        'https://host.my-env.localhost/?signInAs=%40example-user%3Alocalhost',
+      );
+    });
+
+    it('prints the URL under --print-url, since it holds no credential', async () => {
+      let openBrowserFn = vi.fn();
+      let stdout = vi
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(() => true);
+
+      await browse(undefined, {
+        printUrl: true,
+        profileManager: oauthProfileManager(),
+        openBrowserFn,
+        log: () => {},
+      });
+
+      expect(openBrowserFn).not.toHaveBeenCalled();
+      expect(stdout).toHaveBeenCalledWith(
+        'https://localhost:4200/?signInAs=%40example-user%3Alocalhost\n',
+      );
+      stdout.mockRestore();
+    });
+
+    it('prints the URL when no browser opens, even in a non-interactive shell', async () => {
+      let stderr = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation(() => true);
+
+      await browse(undefined, {
+        profileManager: oauthProfileManager(),
+        openBrowserFn: vi.fn().mockResolvedValue(false),
+        log: () => {},
+        isInteractive: () => false,
+      });
+
+      let written = stderr.mock.calls.map((c) => String(c[0])).join('');
+      expect(written).toContain(
+        'https://localhost:4200/?signInAs=%40example-user%3Alocalhost',
+      );
+      stderr.mockRestore();
+    });
   });
 });
