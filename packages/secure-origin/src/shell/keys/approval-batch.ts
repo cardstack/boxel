@@ -536,7 +536,14 @@ export function sharesForVisitors(
 // caps.
 export function anonymousConfirmation(
   shares: ({ label: string } & AnonymousCaps)[],
+  // For an automation's approval, the display names of the card types the
+  // calls are on, which a person opens to make them; a card's page says
+  // "this card".
+  cardTypes?: string[],
 ): string {
+  let opens = cardTypes?.length
+    ? `a ${listOf(cardTypes, 'or')} card`
+    : 'this card';
   let capped = shares.flatMap((share) => {
     let caps = anonymousCapsPhrase(share, { short: true });
     return caps ? [{ label: share.label, caps }] : [];
@@ -547,7 +554,7 @@ export function anonymousConfirmation(
       : shares.length === 1
         ? anonymousCapsClause(shares[0])
         : `, up to each key’s anonymous caps (${capped.map((s) => `${s.label}: ${s.caps}`).join(', ')})`;
-  return `Anyone on the internet who opens this card, including people who aren’t signed in, can make these calls with ${shares.length === 1 ? 'this key' : 'these keys'}${caps}.`;
+  return `Anyone on the internet who opens ${opens}, including people who aren’t signed in, can make these calls with ${shares.length === 1 ? 'this key' : 'these keys'}${caps}.`;
 }
 
 // A daily budget as typed: a whole number of calls, at least one.
@@ -560,4 +567,11 @@ export function parseDailyBudget(
   }
   let budget = Number(trimmed);
   return budget >= 1 && budget <= 2_147_483_647 ? budget : undefined;
+}
+
+// "A", "A or B", "A, B or C".
+function listOf(items: string[], type: 'or' | 'and'): string {
+  return new Intl.ListFormat('en', {
+    type: type === 'or' ? 'disjunction' : 'conjunction',
+  }).format(items);
 }
