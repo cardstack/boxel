@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 143185,
+      "bytes": 143347,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -1866,7 +1866,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/authorize/60d161aad6.css"
+          "module": "src/shell/authorize/13903c390a.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2099,7 +2099,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 622597,
+      "bytes": 622810,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2587,12 +2587,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/authorize/consent.gts",
-          "size": 11760
+          "size": 11958
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/authorize/copy.ts",
-          "size": 328
+          "size": 407
         },
         {
           "package": "@cardstack/secure-origin",

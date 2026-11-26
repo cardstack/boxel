@@ -1,6 +1,7 @@
 // What an app connecting to Boxel asks for, and the user's answer: the app,
 // the account, what the app will be able to do at each resource, and whether
-// to keep the connection for 30 days. It draws only the details the provider
+// to keep the connection for 30 days, and where it can be disconnected later.
+// It draws only the details the provider
 // answered (`ConsentDetails`): the app as the provider names it, and what the
 // access means in Boxel's own words from its registry. The one value taken
 // from the client's request is a confirmation code, shown only in the code's
@@ -39,7 +40,7 @@ import type {
   ConsentScope,
 } from '../../security/oauth-provider.ts';
 
-import { appNameShown, renewalLine } from './copy.ts';
+import { CONNECTED_APPS_LINE, appNameShown, renewalLine } from './copy.ts';
 
 // How long Allow waits, once the page is in view and its window focused,
 // before it takes a click.
@@ -220,6 +221,10 @@ export default class Consent extends Component<Signature> {
           {{#if this.expiry}}
             <p class='expiry' data-test-authorize-expiry>{{this.expiry}}</p>
           {{/if}}
+          <p
+            class='connected-apps'
+            data-test-authorize-connected-apps
+          >{{CONNECTED_APPS_LINE}}</p>
         </div>
 
         {{#if @error}}
@@ -338,14 +343,16 @@ export default class Consent extends Component<Signature> {
       .lead,
       .coverage,
       .terms,
-      .expiry {
+      .expiry,
+      .connected-apps {
         margin: 0;
         overflow-wrap: anywhere;
       }
       .note,
       .coverage,
       .terms,
-      .expiry {
+      .expiry,
+      .connected-apps {
         color: var(--muted-foreground);
       }
       .confirm {
@@ -383,7 +390,8 @@ export default class Consent extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-4xs);
       }
-      .expiry {
+      .expiry,
+      .connected-apps {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
       }
