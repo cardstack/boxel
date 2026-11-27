@@ -28,12 +28,23 @@ import {
   assertNoSecrets,
   telemetryDuring,
 } from './helpers/oauth-provider-secrets.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
+import {
+  oauthEvents,
+  readableMessage,
+} from './helpers/oauth-provider-events.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { FINISH_NETWORK_TTL_SECONDS } from '../lib/oauth-provider/objects.ts';
 import { BOXEL_CLI_CLIENT_ID } from '../lib/oauth-provider/pre-registered-clients.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
 const CLI_REDIRECT_URI = 'http://127.0.0.1:51234/callback';
+
+// The sentences captured lines give an operator, an event line's `message`
+// among them.
+function readableLines(logs: string): string[] {
+  return logs.split('\n').map(readableMessage);
+}
 
 // Addresses from the documentation ranges (RFC 5737, RFC 3849).
 const HOME = '203.0.113.17';
@@ -149,9 +160,9 @@ module(basename(import.meta.filename), function (hooks) {
       status = (await cliExchangeFrom(exchangedFrom, code)).status;
     });
     assert.strictEqual(status, 200, 'the exchange succeeds whatever matched');
-    return telemetry.logs
-      .split('\n')
-      .find((line) => line.startsWith('token issued:'));
+    return readableLines(telemetry.logs).find((line) =>
+      line.startsWith('token issued:'),
+    );
   }
 
   test('the finish of a boxel-cli flow records its network, for two minutes at most', async function (assert) {
@@ -186,6 +197,21 @@ module(basename(import.meta.filename), function (hooks) {
       await issuedLine(assert, HOME, ELSEWHERE),
       'token issued: client boxel-cli, network other',
     );
+  });
+
+  test('the token-issued event carries the comparison as networkMatch, and neither network', async function (assert) {
+    let code = await cliCodeFinishedAt(HOME);
+    let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+      let exchanged = await cliExchangeFrom(ELSEWHERE, code);
+      assert.strictEqual(exchanged.status, 200, exchanged.text);
+    });
+    let issued = oauthEvents(lines).filter(
+      ({ event }) => event === 'token-issued',
+    );
+    assert.strictEqual(issued.length, 1, 'one token-issued event');
+    assert.strictEqual(issued[0].networkMatch, 'other');
+    assert.strictEqual(issued[0].client, 'boxel-cli');
+    assert.false('network' in issued[0], 'no network pseudonym');
   });
 
   test('IPv6 addresses compare by their /48', async function (assert) {
@@ -229,9 +255,9 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(exchanged.status, 200, exchanged.text);
     });
     assert.true(
-      telemetry.logs
-        .split('\n')
-        .includes('token issued: client boxel-cli, network other'),
+      readableLines(telemetry.logs).includes(
+        'token issued: client boxel-cli, network other',
+      ),
       telemetry.logs,
     );
   });
@@ -246,7 +272,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(exchanged.status, 200, exchanged.text);
     });
     assert.true(
-      telemetry.logs.includes(
+      readableLines(telemetry.logs).includes(
         'token issued: client boxel-cli, network unknown',
       ),
       telemetry.logs,
@@ -279,7 +305,9 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(exchanged.status, 200, exchanged.text);
     });
     assert.true(
-      telemetry.logs.split('\n').includes(`token issued: client ${clientId}`),
+      readableLines(telemetry.logs).includes(
+        `token issued: client ${clientId}`,
+      ),
       telemetry.logs,
     );
   });

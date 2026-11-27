@@ -14,9 +14,10 @@
 // so a plain hash would name it. A token, code, confirmation code, ticket
 // or interaction ID never reaches an event.
 
-// This module imports nothing else of the provider's: it is imported by
-// modules early in the provider's import graph (`caller-limit.ts`), and an
-// import back into that graph would leave their classes uninitialized.
+// This module imports only types from the rest of the provider: it is
+// imported by modules early in the provider's import graph
+// (`caller-limit.ts`), and a value import back into that graph would leave
+// their classes uninitialized.
 
 import { createHash, createHmac } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
@@ -31,6 +32,7 @@ import type {
   OAuthCaller,
   OAuthCallerRefusal,
 } from '@cardstack/runtime-common/oauth-route-admission';
+import type { NetworkMatch } from './network-binding.ts';
 
 export const OAUTH_PROVIDER_CHANNEL = 'boxel:oauth-provider';
 
@@ -59,13 +61,14 @@ export type OAuthProviderEvent =
     }
   // A code exchange (`issued`) or refresh that succeeded. A code exchange by
   // a pre-registered app on the user's computer adds how its network compares
-  // with the one whose browser finished the flow: `other` is the exchange
-  // coming from another network than the one that consented.
+  // with the one whose browser finished the flow (`network-binding.ts`):
+  // `other` is the exchange coming from another network than the one that
+  // consented.
   | {
       event: 'token-issued' | 'token-refreshed';
       client: string;
       grant?: Pseudonym;
-      networkMatch?: 'same' | 'other' | 'other-family' | 'unknown';
+      networkMatch?: NetworkMatch;
     }
   // The token endpoint refused an exchange or refresh.
   | {

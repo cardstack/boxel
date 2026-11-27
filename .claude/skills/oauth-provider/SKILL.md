@@ -304,10 +304,10 @@ the table above gives each one's `message`.
 API`, beside the realm's own `OAuth token refused for …` line with the URL.
 
 `networkMatch` is how a boxel-cli code exchange's network compares with the
-network of the browser that consented: `same`, `other`, `other-family` or
-`unknown`. The event type has the field, but no code sets it yet: until the
-token endpoint checks the exchange's network, the network-mismatch alert
-below sees no data.
+network of the browser that consented (`network-binding.ts`): `same`,
+`other`, `other-family` or `unknown`. Only a code exchange by a
+pre-registered app on the user's computer carries it; a refresh, or another
+client's exchange, has none. The event names neither network.
 
 `user`, `grant` and `network` are pseudonyms of 16 hex characters. They
 count and group without naming anyone. A `user` or `grant` is the start of

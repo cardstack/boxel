@@ -761,7 +761,7 @@ export function createOAuthProvider({
         event: refresh ? 'token-refreshed' : 'token-issued',
         client: clientId ? clientIdForLogs(clientId) : 'unknown',
         grant: grantId ? pseudonym(grantId) : undefined,
-        ...(network ? { networkMatch: network } : {}),
+        networkMatch: network,
       },
       `token ${refresh ? 'refreshed' : 'issued'}: client ${clientId}${
         network ? `, network ${network}` : ''
