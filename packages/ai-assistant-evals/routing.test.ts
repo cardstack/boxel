@@ -79,8 +79,8 @@ function botTurn(
 
 test('a read is credited to the prompt it followed, not to a debug command', () => {
   let events = [
-    userMessage('boxel-debug:feature:enable:catalog-reuse'),
-    ...botTurn([], 'catalog-reuse is now enabled'),
+    userMessage('boxel-debug:feature:enable:example-feature'),
+    ...botTurn([], 'example-feature is now enabled'),
     userMessage('Where am I?'),
     ...botTurn(),
     userMessage('How do I give my card its API key?'),
@@ -272,15 +272,15 @@ test('a workspace read is not a skill read', () => {
 test('paths under a feature the run turned off are unchecked', () => {
   let result = scoreRouting(
     ['Invoices?', 'Kanban?'],
-    [['catalog-reuse/'], ['boxel-patterns/', 'catalog-reuse/']],
+    [['example-feature/'], ['boxel-patterns/', 'example-feature/']],
     [[], []],
-    { skillsRealmURL: SKILLS, featuresOff: ['catalog-reuse'] },
+    { skillsRealmURL: SKILLS, featuresOff: ['example-feature'] },
   );
   assert.deepEqual(
     result.prompts.map((row) => row.outcome),
     ['unchecked', 'missed'],
   );
-  assert.deepEqual(result.prompts[0].featureOff, ['catalog-reuse/']);
+  assert.deepEqual(result.prompts[0].featureOff, ['example-feature/']);
   assert.equal(result.checked, 1);
-  assert.match(routingLines(result)[0], /feature off: catalog-reuse\//);
+  assert.match(routingLines(result)[0], /feature off: example-feature\//);
 });
