@@ -128,6 +128,19 @@ module('Acceptance | interact submode | routed links', function (hooks) {
           return this.name;
         },
       });
+
+      // A linked author is itself a link to the author.
+      static embedded = class Embedded extends Component<typeof this> {
+        routedHref = (card: CardDefType | null | undefined) =>
+          linkHrefTo?.(card);
+
+        <template>
+          <a
+            data-test-link='linked-card'
+            href={{this.routedHref @model}}
+          >{{@model.name}}</a>
+        </template>
+      };
     }
     class Post extends CardDef {
       static displayName = 'Post';
@@ -139,6 +152,7 @@ module('Acceptance | interact submode | routed links', function (hooks) {
           linkHrefTo?.(card);
 
         <template>
+          <@fields.author />
           <a
             data-test-link='routed'
             href={{this.routedHref @model.author}}
@@ -262,6 +276,33 @@ module('Acceptance | interact submode | routed links', function (hooks) {
 
     assert.deepEqual(leftToBrowser, ['routed']);
     assert.dom(author).doesNotExist();
+  });
+
+  test('a click on a linked card whose template is a link opens the card in the stack once, with no page load', async function (assert) {
+    await openPost();
+    await waitFor(`${link('linked-card')}[href="${testRealmURL}people/jane"]`);
+    let pageURL = window.location.href;
+
+    await click(link('linked-card'));
+
+    assert
+      .dom(`[data-test-operator-mode-stack="0"] ${author}`)
+      .exists({ count: 1 }, 'the linked card is on the stack once');
+    assert
+      .dom('[data-test-operator-mode-stack="0"] [data-test-stack-card]')
+      .exists({ count: 2 }, 'only the linked card was added to the stack');
+    assert.deepEqual(leftToBrowser, [], 'the app took the click');
+    assert.strictEqual(window.location.href, pageURL, 'no page load');
+  });
+
+  test('a click with a modifier key on a linked card whose template is a link is left to the browser', async function (assert) {
+    await openPost();
+    await waitFor(`${link('linked-card')}[href="${testRealmURL}people/jane"]`);
+
+    await click(link('linked-card'), { metaKey: true });
+
+    assert.deepEqual(leftToBrowser, ['linked-card']);
+    assert.dom(author).doesNotExist('the card does not open in the stack');
   });
 
   test('a link to an address that resolves to no card is loaded by the browser', async function (assert) {

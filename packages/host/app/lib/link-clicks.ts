@@ -71,3 +71,24 @@ export function pathNamesFile(path: string): boolean {
   let last = path.replace(/\/+$/, '').split('/').pop() ?? '';
   return last.includes('.');
 }
+
+// The link an event happened on, when that link is inside `element` and is
+// not `element` itself.
+export function linkInside(
+  event: Event,
+  element: Element,
+): HTMLAnchorElement | undefined {
+  let origin = event.composedPath()[0] ?? event.target;
+  if (!(origin instanceof Element)) {
+    return undefined;
+  }
+  let anchor = origin.closest('a[href]');
+  if (
+    !(anchor instanceof HTMLAnchorElement) ||
+    anchor === element ||
+    !element.contains(anchor)
+  ) {
+    return undefined;
+  }
+  return anchor;
+}
