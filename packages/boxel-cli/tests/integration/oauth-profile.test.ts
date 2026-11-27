@@ -24,7 +24,11 @@ import {
 import { createRealm } from '../../src/commands/realm/create.ts';
 import { listRealms } from '../../src/commands/realm/list.ts';
 import { removeRealm } from '../../src/commands/realm/remove.ts';
-import { OAuthNotOfferedError, oauthLogin } from '../../src/lib/oauth-login.ts';
+import {
+  OAuthNotOfferedError,
+  oauthDeviceLogin,
+  oauthLogin,
+} from '../../src/lib/oauth-login.ts';
 import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 
 const realmServerUrl = `${TEST_REALM_SERVER_URL}/`;
@@ -38,6 +42,58 @@ const environment = resolveEnvironment({
   matrixUrl: matrixURL.href,
   realmServerUrl,
 }).environment;
+
+// The test user signed in on the secure origin, as a window: the session the
+// authorize and device pages answer under.
+async function secureWindowSession(): Promise<string> {
+  let signedIn = await fetch(`${realmServerUrl}_secure-session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/vnd.api+json',
+      Origin: secureOriginURL.origin,
+    },
+    body: JSON.stringify({
+      data: {
+        type: 'secure-session',
+        attributes: {
+          username: TEST_USERNAME,
+          password: TEST_PASSWORD,
+          client: 'window',
+        },
+      },
+    }),
+  });
+  if (signedIn.status !== 201) {
+    throw new Error(`secure sign-in: ${signedIn.status}`);
+  }
+  return ((await signedIn.json()) as any).data.attributes.token;
+}
+
+// What the device page does with a code typed into it: looks it up, then
+// allows it, under the test user's secure window session.
+async function allowDeviceCode(userCode: string): Promise<void> {
+  let session = await secureWindowSession();
+  for (let [path, body] of [
+    ['lookup', { user_code: userCode }],
+    ['decision', { user_code: userCode, decision: 'allow', renew: true }],
+  ] as const) {
+    let response = await fetch(
+      `${realmServerUrl}_oauth-provider/device/${path}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: secureOriginURL.origin,
+          Authorization: `Bearer ${session}`,
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    if (response.status !== 200) {
+      throw new Error(`device ${path}: ${response.status}`);
+    }
+  }
+}
 
 // The browser the CLI opens: it signs the test user in on the secure origin,
 // allows the app on the authorize page, follows the provider's redirects
@@ -72,27 +128,7 @@ function consentingBrowser() {
     let interaction = redirectOf(started, 'authorize');
     let uid = new URL(interaction).pathname.split('/').pop()!;
 
-    let signedIn = await fetch(`${realmServerUrl}_secure-session`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        Origin: secureOriginURL.origin,
-      },
-      body: JSON.stringify({
-        data: {
-          type: 'secure-session',
-          attributes: {
-            username: TEST_USERNAME,
-            password: TEST_PASSWORD,
-            client: 'window',
-          },
-        },
-      }),
-    });
-    if (signedIn.status !== 201) {
-      throw new Error(`secure sign-in: ${signedIn.status}`);
-    }
-    let session = ((await signedIn.json()) as any).data.attributes.token;
+    let session = await secureWindowSession();
 
     let decided = await fetch(
       `${realmServerUrl}_oauth-provider/consent/${uid}`,
@@ -135,6 +171,8 @@ async function signInWithOAuth(
   let browser = consentingBrowser();
   await addOAuthProfile(home.profileManager, environment, {
     isTty: () => false,
+    // The browser above is here, whatever display the test machine has.
+    noBrowserHere: () => false,
     oauthLogin: (options) =>
       oauthLogin({
         ...options,
@@ -263,6 +301,36 @@ describe('a profile signed in with OAuth (integration)', () => {
       home: home.home,
     });
     expect(third.ok).toBe(true);
+  });
+
+  it('signs in with a code typed into the device page on another device', async () => {
+    let shown = '';
+    let allowed: Promise<void> | undefined;
+    let result = await oauthDeviceLogin({
+      realmServerUrl,
+      log: (line) => {
+        shown += `${line}\n`;
+        let code =
+          /\b[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}\b/.exec(
+            line,
+          )?.[0];
+        if (code && !allowed) {
+          allowed = allowDeviceCode(code);
+        }
+      },
+    });
+    await allowed;
+    expect(shown).toContain(`${secureOriginURL.href}/device`);
+    expect(result.user.userId).toBe(matrixId);
+    expect(result.tokens.refreshToken).toBeTruthy();
+    let response = await fetch(`${PRIVATE_REALM}hello.txt`, {
+      headers: {
+        Accept: 'application/vnd.card+source',
+        Authorization: `Bearer ${result.tokens.accessToken}`,
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('hello from a private realm');
   });
 
   it('refuses boxel run-command before making a request', async () => {

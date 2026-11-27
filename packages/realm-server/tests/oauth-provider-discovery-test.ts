@@ -144,6 +144,8 @@ function setupServer(hooks: NestedHooks, { provider }: { provider: boolean }) {
   return {
     get: (path: string, host = serverURL.host) =>
       supertest(server!).get(path).set('Host', host),
+    post: (path: string) =>
+      supertest(server!).post(path).set('Host', serverURL.host),
     options: (path: string) =>
       supertest(server!).options(path).set('Host', serverURL.host),
   };
@@ -279,6 +281,7 @@ module(basename(import.meta.filename), function () {
         createOAuthProvider({
           issuer: 'https://a.test',
           config: { ...config, jwks: { keys: [key] } },
+          deviceVerificationURI: 'https://secure.a.test/device',
           registry: buildRegistry('https://a.test'),
           adapter: () => {
             throw new Error('the provider never stored anything');
@@ -371,8 +374,8 @@ module(basename(import.meta.filename), function () {
     test('a pre-registered client the library refuses fails its lookup', async function (assert) {
       let { metadata, place } =
         PRE_REGISTERED_CLIENTS.get(BOXEL_CLI_CLIENT_ID)!;
-      // The library refuses a client with the device-code grant while the
-      // device flow is off.
+      // The library refuses a client with the client-credentials grant, which
+      // is off.
       let refused: PreRegisteredClients = new Map([
         [
           BOXEL_CLI_CLIENT_ID,
@@ -382,7 +385,7 @@ module(basename(import.meta.filename), function () {
               ...metadata,
               grant_types: [
                 ...(metadata.grant_types ?? []),
-                'urn:ietf:params:oauth:grant-type:device_code',
+                'client_credentials',
               ],
             },
           },
@@ -391,6 +394,7 @@ module(basename(import.meta.filename), function () {
       let provider = createOAuthProvider({
         issuer: 'https://a.test',
         config: testOAuthProviderConfig(),
+        deviceVerificationURI: 'https://secure.a.test/device',
         registry: buildRegistry('https://a.test'),
         preRegistered: refused,
         adapter: () => {
@@ -434,10 +438,11 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(registryScopes(buildRegistry('https://a.test')), [
         'boxel:read',
         'boxel:write',
+        'boxel:spend-credit',
       ]);
       assert.deepEqual(
         registryScopes(buildRegistry('https://a.test', [testResource])),
-        ['boxel:read', 'boxel:write', 'test:probe'],
+        ['boxel:read', 'boxel:write', 'boxel:spend-credit', 'test:probe'],
       );
     });
 
@@ -549,14 +554,25 @@ module(basename(import.meta.filename), function () {
         code_challenge_methods_supported: ['S256'],
         token_endpoint_auth_methods_supported: ['none'],
         authorization_response_iss_parameter_supported: true,
-        grant_types_supported: ['authorization_code', 'refresh_token'],
-        scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
+        grant_types_supported: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:device_code',
+        ],
+        scopes_supported: [
+          'boxel:read',
+          'boxel:write',
+          'boxel:spend-credit',
+          'test:probe',
+        ],
         authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
         token_endpoint: 'http://127.0.0.1:0/_oauth-provider/token',
         revocation_endpoint:
           'http://127.0.0.1:0/_oauth-provider/token/revocation',
         revocation_endpoint_auth_methods_supported: ['none'],
         registration_endpoint: 'http://127.0.0.1:0/_oauth-provider/reg',
+        device_authorization_endpoint:
+          'http://127.0.0.1:0/_oauth-provider/device/auth',
         client_id_metadata_document_supported: true,
       });
       assert.strictEqual(
@@ -575,15 +591,32 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.status, 404, 'not found on another host');
     });
 
-    test('serves no OpenID discovery, signing keys, or endpoint not yet built', async function (assert) {
+    test("serves no OpenID discovery, signing keys, or the library's own device pages", async function (assert) {
       for (let path of [
         OPENID_DISCOVERY,
         '/_oauth-provider/jwks',
+        '/_oauth-provider/device',
         '/_oauth-provider/device/auth',
       ]) {
         let response = await request.get(path);
-        assert.strictEqual(response.status, 404, `${path} is not found`);
+        assert.strictEqual(response.status, 404, `GET ${path} is not found`);
       }
+      // The library's page for entering a code takes its form by POST. The
+      // request goes on to realm routing, where the realm at the root
+      // refuses an unauthenticated write; the library never answers it.
+      let response = await request
+        .post('/_oauth-provider/device')
+        .type('form')
+        .send({ user_code: 'BCDF-GHJK' });
+      assert.strictEqual(
+        response.status,
+        401,
+        'POST /_oauth-provider/device goes on to the realm',
+      );
+      assert.false(
+        /user_code|xsrf/.test(response.text),
+        "the library's page for entering a code doesn't answer",
+      );
     });
 
     test('the realm at the root still answers its own routes', async function (assert) {

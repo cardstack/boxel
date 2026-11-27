@@ -78,7 +78,8 @@ export interface ConsentDetails {
   renewalOffered: boolean;
   // The code the app showed where the user started signing in, which the
   // page asks them to check. Only a pre-registered app on the user's
-  // computer sends one (the secure origin's `security/confirmation-code.js`).
+  // computer sends one (the secure origin's `security/confirmation-code.js`);
+  // for device sign-in it is the user code the user typed (`device.ts`).
   confirmationCode?: string;
 }
 
@@ -138,27 +139,13 @@ export function consentDetailsHandler(deps: ConsentDeps): Koa.Middleware {
       return respond(ctxt, 503, { error: 'unavailable' });
     }
     let app = nameOf(flow, deps.preRegistered);
-    let details: ConsentDetails = {
+    let details = consentDetails({
       app,
-      outsideApp: app.kind !== 'pre-registered',
-      resources: flow.resources.map(({ resource, scopes }) => ({
-        id: resource.id,
-        name: resource.name,
-        description: resource.description,
-        coverage: resource.coverage,
-        scopes: scopes.map(({ name, description, label, caution }) => ({
-          name,
-          description,
-          label,
-          caution,
-        })),
-      })),
+      client: flow.client,
+      resources: flow.resources,
       account,
-      renewalOffered: renewalOffered(flow.client),
-      ...(flow.confirmationCode
-        ? { confirmationCode: flow.confirmationCode }
-        : {}),
-    };
+      confirmationCode: flow.confirmationCode,
+    });
     log.info(`consent shown: ${describe(flow, app)}`);
     respond(ctxt, 200, details);
   };
@@ -330,6 +317,42 @@ async function findFlow(
   };
 }
 
+// What consent shows, for a flow from the authorize page or a device code from
+// the device page (`device.ts`): the same consent for both (ADR 021 §1.7).
+export function consentDetails({
+  app,
+  client,
+  resources,
+  account,
+  confirmationCode,
+}: {
+  app: AppName;
+  client: LibraryClient;
+  resources: readonly { resource: OAuthResource; scopes: OAuthScope[] }[];
+  account: AccountContact;
+  confirmationCode?: string;
+}): ConsentDetails {
+  return {
+    app,
+    outsideApp: app.kind !== 'pre-registered',
+    resources: resources.map(({ resource, scopes }) => ({
+      id: resource.id,
+      name: resource.name,
+      description: resource.description,
+      coverage: resource.coverage,
+      scopes: scopes.map(({ name, description, label, caution }) => ({
+        name,
+        description,
+        label,
+        caution,
+      })),
+    })),
+    account,
+    renewalOffered: renewalOffered(client),
+    ...(confirmationCode ? { confirmationCode } : {}),
+  };
+}
+
 function nameOf(flow: Flow, preRegistered: PreRegisteredClients): AppName {
   return appName({
     clientId: flow.client.clientId,
@@ -339,7 +362,7 @@ function nameOf(flow: Flow, preRegistered: PreRegisteredClients): AppName {
   });
 }
 
-function renewalOffered(client: LibraryClient): boolean {
+export function renewalOffered(client: LibraryClient): boolean {
   return client.grantTypes?.includes('refresh_token') ?? false;
 }
 
@@ -359,6 +382,25 @@ function describe(flow: Flow, app: AppName): string {
 async function readDecision(
   ctxt: Koa.Context,
 ): Promise<ConsentDecisionRequest | undefined> {
+  let body = await readJSONObject(ctxt);
+  if (!body) {
+    return undefined;
+  }
+  let { decision, renew } = body;
+  if (
+    (decision !== 'allow' && decision !== 'deny') ||
+    typeof renew !== 'boolean'
+  ) {
+    return undefined;
+  }
+  return { decision, renew };
+}
+
+// A small JSON object body, as the secure origin's pages send one, or
+// undefined when the body isn't one.
+export async function readJSONObject(
+  ctxt: Koa.Context,
+): Promise<Record<string, unknown> | undefined> {
   if (!ctxt.is('application/json')) {
     return undefined;
   }
@@ -381,12 +423,5 @@ async function readDecision(
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return undefined;
   }
-  let { decision, renew } = body as Record<string, unknown>;
-  if (
-    (decision !== 'allow' && decision !== 'deny') ||
-    typeof renew !== 'boolean'
-  ) {
-    return undefined;
-  }
-  return { decision, renew };
+  return body as Record<string, unknown>;
 }

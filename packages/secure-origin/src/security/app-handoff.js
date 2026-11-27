@@ -14,6 +14,12 @@
 // are on every deployment's list for a host app on the developer's own
 // machine, and any program on that machine can listen there, so a hand-off to
 // one waits for the user to confirm it.
+//
+// The page may also name the account it needs, `user`, beside `return`, as
+// `boxel browse` does for the account its profile is signed in as. The
+// window then hands a sign-in over only when its session is that account's;
+// filling the account into the form is no check. A user who keeps the
+// window's account instead goes back to `return` with no login token.
 
 import { isListedOrigin } from './app-origins.js';
 
@@ -21,6 +27,8 @@ import { isListedOrigin } from './app-origins.js';
 // sign-in passes through on this origin: creating an account, and Google's
 // round trip, which comes back to this tab.
 const RETURN_KEY = 'boxel-secure-return';
+// The account that sign-in must be, when the page named one.
+const RETURN_USER_KEY = 'boxel-secure-return-user';
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 // The origins `return` may name: those listed in the page's markup, and the
@@ -64,6 +72,23 @@ export function returnFromFragment(hash, listed) {
   );
 }
 
+// A Matrix user ID, `@localpart:server`, as the app and the CLI name an
+// account. Anything else names no account.
+const MATRIX_USER_ID = /^@[A-Za-z0-9._=\-/+]+:[A-Za-z0-9.-]+(?::\d{1,5})?$/;
+const MAX_USER_ID_LENGTH = 255;
+
+// `value` when it is a Matrix user ID; otherwise undefined.
+export function checkedUser(value) {
+  if (
+    typeof value !== 'string' ||
+    value.length > MAX_USER_ID_LENGTH ||
+    !MATRIX_USER_ID.test(value)
+  ) {
+    return undefined;
+  }
+  return value;
+}
+
 // Takes `return` out of the address bar, so a reload or a copied address
 // doesn't carry it on, and keeps it for the rest of this tab's sign-in. A
 // page opened with no `return` keeps any it was already handed: the pages of
@@ -78,16 +103,24 @@ export function rememberReturn(listed) {
     '',
     window.location.pathname + window.location.search,
   );
-  keepReturn(returnFromFragment(hash, listed));
+  let target = returnFromFragment(hash, listed);
+  let user = new URLSearchParams(hash.replace(/^#/, '')).get('user');
+  keepReturn(target, target ? checkedUser(user) : undefined);
 }
 
 // Keeps `target`, already checked, as the page this tab's sign-in hands over
-// to; undefined forgets any kept before.
-export function keepReturn(target) {
+// to, and `user`, already checked, as the account that sign-in must be;
+// undefined forgets any kept before.
+export function keepReturn(target, user) {
   if (target) {
     sessionStorage.setItem(RETURN_KEY, target);
   } else {
     sessionStorage.removeItem(RETURN_KEY);
+  }
+  if (target && user) {
+    sessionStorage.setItem(RETURN_USER_KEY, user);
+  } else {
+    sessionStorage.removeItem(RETURN_USER_KEY);
   }
 }
 
@@ -102,8 +135,21 @@ export function pendingReturn(listed) {
   return checkedReturn(target, listed);
 }
 
+// The account this tab's sign-in must be before it hands over, checked
+// again, or undefined when the page named none.
+export function pendingReturnUser() {
+  let user;
+  try {
+    user = sessionStorage.getItem(RETURN_USER_KEY);
+  } catch {
+    return undefined;
+  }
+  return checkedUser(user);
+}
+
 export function forgetReturn() {
   sessionStorage.removeItem(RETURN_KEY);
+  sessionStorage.removeItem(RETURN_USER_KEY);
 }
 
 // Whether the user confirms a hand-off to `target` first: one to a program on
@@ -116,6 +162,17 @@ export function needsConfirmation(target, config) {
     LOOPBACK_HOSTS.has(url.hostname) &&
     url.origin !== config.realmServerURL.origin
   );
+}
+
+// `target` with no login token in it: going back to the app page without
+// handing a sign-in over, as when the user keeps the window's account rather
+// than sign in as the one the page named. The app then opens as the account it
+// holds, or, signed out, offers to sign in again.
+export function withoutHandOff(target) {
+  let url = new URL(target);
+  url.searchParams.delete('loginToken');
+  url.hash = '';
+  return url.href;
 }
 
 // `target` with the login token in its fragment, in place of any fragment it

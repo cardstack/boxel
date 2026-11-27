@@ -12,7 +12,10 @@
  *   - **Passthrough** — no key: opencode's provider points at the
  *     realm server's `_openrouter/chat/completions` with a server JWT;
  *     the realm applies the server-side OpenRouter key and bills
- *     credits to the operator.
+ *     credits to the operator. On a profile signed in with OAuth, whose
+ *     token lasts minutes and is given to no one, opencode is pointed
+ *     at a loopback forwarder instead (`openrouter-forwarder.ts`), which
+ *     sends each call on through boxel-cli's authed fetch.
  *
  * DONE / CLARIFICATION signals carry a Symbol that doesn't survive
  * JSON-RPC, so the MCP server re-tags them `factory:done` /
@@ -23,6 +26,11 @@ import { createServer as createHttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
+
+import {
+  AiCreditsNotAllowedError,
+  OAuthConnectionEndedError,
+} from '@cardstack/boxel-cli/api';
 
 import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -53,6 +61,10 @@ import {
   type ToolCallEntry,
 } from '../factory-tool-builder.ts';
 import { deriveCatalogRealmUrl } from '../factory-catalog-realm.ts';
+import {
+  startOpenRouterForwarder,
+  type OpenRouterForwarder,
+} from './openrouter-forwarder.ts';
 import { logger } from '../logger.ts';
 import { startSpan, traceEvent } from '../run-trace.ts';
 import {
@@ -174,6 +186,9 @@ export class OpencodeFactoryAgent implements LoopAgent {
   // a long-lived server with many short-lived sessions.
   private opencode?: { url: string; close: () => void };
   private mcp?: { url: string; close: () => Promise<void> };
+  // The loopback forwarder opencode calls in passthrough mode on a profile
+  // signed in with OAuth.
+  private forwarder?: OpenRouterForwarder;
   private client?: ReturnType<
     Awaited<ReturnType<typeof loadOpencodeSdk>>['createOpencodeClient']
   >;
@@ -194,8 +209,10 @@ export class OpencodeFactoryAgent implements LoopAgent {
   async close(): Promise<void> {
     let opencode = this.opencode;
     let mcp = this.mcp;
+    let forwarder = this.forwarder;
     this.opencode = undefined;
     this.mcp = undefined;
+    this.forwarder = undefined;
     this.client = undefined;
     this.currentHooks = undefined;
 
@@ -221,6 +238,9 @@ export class OpencodeFactoryAgent implements LoopAgent {
     if (mcp) {
       await mcp.close().catch(() => undefined);
     }
+    if (forwarder) {
+      await forwarder.close().catch(() => undefined);
+    }
   }
 
   /**
@@ -243,6 +263,43 @@ export class OpencodeFactoryAgent implements LoopAgent {
         'https://openrouter.ai/api/v1',
         `Bearer ${this.config.openRouterApiKey}`,
         'OpenRouter (direct)',
+      );
+    } else if (this.config.client.isOAuthProfile()) {
+      // Passthrough on an OAuth profile: opencode calls the loopback
+      // forwarder, which sends each call on with a fresh OAuth token. The
+      // realm server bills the grant's user, and refuses a grant without
+      // `boxel:spend-credit`, which is checked here first.
+      if (this.config.client.canSpendAiCredits() === false) {
+        throw new AiCreditsNotAllowedError();
+      }
+      let passthroughUrl = new URL(
+        '_openrouter/chat/completions',
+        this.config.realmServerUrl,
+      ).href;
+      let client = this.config.client;
+      this.forwarder = await startOpenRouterForwarder(
+        (body, signal) =>
+          client.authedServerFetch(passthroughUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            signal,
+          }),
+        {
+          // Neither is fixed by trying again: the user has to sign in again.
+          statusFor: (error) =>
+            error instanceof AiCreditsNotAllowedError
+              ? 403
+              : error instanceof OAuthConnectionEndedError
+                ? 401
+                : 502,
+        },
+      );
+      providerConfig = buildProviderConfig(
+        this.config.model,
+        this.forwarder.baseURL,
+        this.forwarder.authorization,
+        'OpenRouter (boxel passthrough)',
       );
     } else {
       // Passthrough: realm-server validates the server JWT, applies

@@ -584,3 +584,83 @@ module('Integration | hrefTo', function (hooks) {
     );
   });
 });
+
+// A realm's first index stores realm.json, the modules and the cards in one
+// batch at its end, so a render in the pass that reads the routes reads them
+// before the index has any.
+module(
+  'Integration | hrefTo | a realm indexed for the first time',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupLocalIndexing(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
+    });
+
+    setupCardLogs(
+      hooks,
+      async () =>
+        await getService('loader-service').loader.import(
+          '@cardstack/base/card-api',
+        ),
+    );
+
+    test('serves the routes of its realm.json once the index is done', async function (assert) {
+      // The app starts this service at boot; a rendering test has no boot.
+      getService('host-route-links');
+      let loader = getService('loader-service').loader;
+      let { CardDef: Base, Component } = await loader.import<
+        typeof import('@cardstack/base/card-api')
+      >('@cardstack/base/card-api');
+      let { hrefTo: linkTo } = await loader.import<typeof HrefToModule>(
+        '@cardstack/base/href-to',
+      );
+
+      class Person extends Base {
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <a href={{linkTo @model.id}}>person</a>
+          </template>
+        };
+      }
+
+      let requests = 0;
+      let network = getService('network');
+      let spy = async (request: Request) => {
+        if (request.url === `${testRealmURL}_host-routes`) {
+          requests++;
+        }
+        return null;
+      };
+      network.virtualNetwork.mount(spy, { prepend: true });
+      let realm: Realm;
+      try {
+        ({ realm } = await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'realm.json': realmConfig('/people/:id'),
+            'person.gts': { Person },
+            'Person/jane.json': {
+              data: {
+                meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+              },
+            },
+          },
+        }));
+      } finally {
+        network.virtualNetwork.unmount(spy);
+      }
+
+      assert.true(requests > 0, 'a render in the index read the routes');
+      let { routes } = await realm.getHostRoutes();
+      assert.deepEqual(
+        routes.map((route) => route.fullPath),
+        ['/people/:id'],
+        'the realm serves the routes its realm.json declares, with no write after the index',
+      );
+    });
+  },
+);

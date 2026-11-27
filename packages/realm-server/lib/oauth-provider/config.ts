@@ -14,6 +14,13 @@ import {
   type NewClientLimit,
 } from './new-client-limit.ts';
 import {
+  DEFAULT_DEVICE_CODE_LIMIT,
+  deviceCodeLimitFormat,
+  OAUTH_DEVICE_CODE_RATE_LIMIT_VAR,
+  parseDeviceCodeLimit,
+  type DeviceCodeLimit,
+} from './device.ts';
+import {
   DEFAULT_TOKEN_LIMIT,
   OAUTH_TOKEN_RATE_LIMIT_VAR,
   parseTokenLimit,
@@ -167,6 +174,25 @@ export function readAuthorizationLimit(
   if (!limit) {
     throw new OAuthProviderConfigError(
       `${OAUTH_AUTHORIZATION_RATE_LIMIT_VAR} must be ${callerLimitFormat(DEFAULT_AUTHORIZATION_LIMIT)}, not "${spec}"`,
+    );
+  }
+  return limit;
+}
+
+// The limit on entering a device sign-in's user code (see `device.ts`). Read
+// only when the provider is on. Unset, the default; a value that is not a
+// limit stops the server.
+export function readDeviceCodeLimit(
+  env: Record<string, string | undefined>,
+): DeviceCodeLimit {
+  let spec = env[OAUTH_DEVICE_CODE_RATE_LIMIT_VAR]?.trim();
+  if (!spec) {
+    return DEFAULT_DEVICE_CODE_LIMIT;
+  }
+  let limit = parseDeviceCodeLimit(spec);
+  if (!limit) {
+    throw new OAuthProviderConfigError(
+      `${OAUTH_DEVICE_CODE_RATE_LIMIT_VAR} must be ${deviceCodeLimitFormat()}, not "${spec}"`,
     );
   }
   return limit;

@@ -15,18 +15,28 @@ import {
   type Realm,
 } from '@cardstack/runtime-common';
 import { revokeUserSessions } from '@cardstack/runtime-common/db-queries/user-queries';
+import sinon from 'sinon';
 import {
   closeServer,
   createVirtualNetwork,
   ensureMatrixAdminUser,
   fixtureDir,
+  insertProxyEndpoints,
   matrixURL,
   realmConfigCardJSON,
   realmSecretSeed,
   runTestRealmServer,
   setupDB,
+  setupSecretsKeyring,
   setupTestDatabaseTemplate,
+  waitUntil,
 } from './helpers/index.ts';
+import {
+  addToCreditsLedger,
+  getLedgerEntries,
+} from '@cardstack/billing/billing-queries';
+import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import {
   OAUTH_TEST_ISSUER,
   OAUTH_TEST_MCP,
@@ -211,6 +221,42 @@ module(basename(import.meta.filename), function (hooks) {
       { bind: [sha256Hex(token), grantId, resource, scope] },
     );
     return { token, grantId };
+  }
+
+  // A tab token as `/_run-command` or a capture mints one, for the realm
+  // under test, on a grant of its own.
+  async function tabToken(
+    user: string,
+    {
+      scope = 'boxel:read boxel:write',
+      purpose = 'run-command',
+      lifetimeSeconds,
+      realm = REALM_URL,
+    }: {
+      scope?: string;
+      purpose?: OAuthTabPurpose;
+      lifetimeSeconds?: number;
+      realm?: string;
+    } = {},
+  ): Promise<{ token: string; grantId: string }> {
+    let { grantId } = await oauthToken(user, { scope });
+    let createOAuthTabAuth = buildCreateOAuthTabAuth(realmSecretSeed, {
+      realmServerURL: REALM_URL,
+      ...(lifetimeSeconds !== undefined
+        ? { lifetimeSeconds: () => lifetimeSeconds }
+        : {}),
+    });
+    let sessions = JSON.parse(
+      createOAuthTabAuth({
+        userId: user,
+        permissions: { [realm]: ['read', 'write', 'realm-owner'] },
+        grantId,
+        scopes: scope.split(' '),
+        purpose,
+        permissionCeiling: 'write',
+      }),
+    ) as Record<string, string>;
+    return { token: sessions[realm], grantId };
   }
 
   // A realm at the test URL is matched by the request's `Host`.
@@ -467,7 +513,6 @@ module(basename(import.meta.filename), function (hooks) {
         ['post', '/_prerender-card'],
         ['post', '/_incoming-webhooks'],
         ['get', '/_public-realms'],
-        ['post', '/_request-forward'],
       ];
       for (let [method, path] of routes) {
         let response = await request()
@@ -913,40 +958,6 @@ module(basename(import.meta.filename), function (hooks) {
   // token reaches no more than the OAuth token behind it (ADR 021 §1.5). The
   // host sends a realm its session bare, so these do too.
   module('a tab token', function () {
-    async function tabToken(
-      user: string,
-      {
-        scope = 'boxel:read boxel:write',
-        purpose = 'run-command',
-        lifetimeSeconds,
-        realm = REALM_URL,
-      }: {
-        scope?: string;
-        purpose?: OAuthTabPurpose;
-        lifetimeSeconds?: number;
-        realm?: string;
-      } = {},
-    ): Promise<{ token: string; grantId: string }> {
-      let { grantId } = await oauthToken(user, { scope });
-      let createOAuthTabAuth = buildCreateOAuthTabAuth(realmSecretSeed, {
-        realmServerURL: REALM_URL,
-        ...(lifetimeSeconds !== undefined
-          ? { lifetimeSeconds: () => lifetimeSeconds }
-          : {}),
-      });
-      let sessions = JSON.parse(
-        createOAuthTabAuth({
-          userId: user,
-          permissions: { [realm]: ['read', 'write', 'realm-owner'] },
-          grantId,
-          scopes: scope.split(' '),
-          purpose,
-          permissionCeiling: 'write',
-        }),
-      ) as Record<string, string>;
-      return { token: sessions[realm], grantId };
-    }
-
     function readCardWith(token: string) {
       return request()
         .get('/person-1.json')
@@ -1033,8 +1044,9 @@ module(basename(import.meta.filename), function (hooks) {
         );
       }
       // A realm-server route behind a session check refuses it on its
-      // signature, mapped or not: a tab never reaches the realm server but
-      // through the federated reads.
+      // signature, mapped or not: a tab reaches the realm server only through
+      // the federated reads and the routes that spend AI credits, which
+      // "spending AI credits" covers.
       let serverRoutes: ['get' | 'post', string][] = [
         ['post', '/_realm-auth'],
         ['post', '/_server-session'],
@@ -1042,7 +1054,6 @@ module(basename(import.meta.filename), function (hooks) {
         ['get', '/_archived-realms'],
         ['post', '/_run-command'],
         ['post', '/_capture'],
-        ['post', '/_request-forward'],
         ['get', '/_user-keys'],
       ];
       for (let [method, path] of serverRoutes) {
@@ -1129,6 +1140,257 @@ module(basename(import.meta.filename), function (hooks) {
           .set('Authorization', `Bearer ${sessionShaped}`),
         'realm server',
       );
+    });
+  });
+
+  // `/_request-forward` and the OpenRouter passthrough spend the user's AI
+  // credits, so only a grant holding `boxel:spend-credit` reaches them, and
+  // a command's tab token on such a grant. The AI provider is stubbed; each
+  // call it answers costs 0.003 USD, 3 credits.
+  module('spending AI credits', function (hooks) {
+    const SPEND = 'boxel:read boxel:write boxel:spend-credit';
+    const CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
+    let providerCalls: string[];
+
+    setupSecretsKeyring(hooks);
+
+    hooks.beforeEach(async function () {
+      await insertProxyEndpoints(dbAdapter, [
+        {
+          url: CHAT_URL,
+          apiKey: 'sk-or-v1-test-oauth-spend',
+          creditStrategy: 'openrouter',
+          supportsStreaming: true,
+        },
+      ]);
+      AllowedProxyDestinations.reset();
+      await addToCreditsLedger(dbAdapter, {
+        userId: userIds[OWNER],
+        creditAmount: 50,
+        creditType: 'extra_credit',
+        subscriptionCycleId: null,
+      });
+      providerCalls = [];
+      let realFetch = global.fetch.bind(globalThis);
+      sinon
+        .stub(global, 'fetch')
+        .callsFake(
+          async (input: string | URL | Request, init?: RequestInit) => {
+            let url =
+              typeof input === 'string'
+                ? input
+                : input instanceof URL
+                  ? input.href
+                  : input.url;
+            if (url.startsWith(CHAT_URL)) {
+              providerCalls.push(url);
+              return new Response(
+                JSON.stringify({
+                  id: `gen-oauth-${providerCalls.length}`,
+                  choices: [{ message: { content: 'Hi' } }],
+                  usage: { total_tokens: 10, cost: 0.003 },
+                }),
+                {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                },
+              );
+            }
+            return realFetch(input, init);
+          },
+        );
+    });
+
+    hooks.afterEach(function () {
+      sinon.restore();
+      AllowedProxyDestinations.reset();
+    });
+
+    const CHAT_BODY = {
+      model: 'openai/gpt-4o-mini',
+      messages: [{ role: 'user', content: 'Hi' }],
+    };
+
+    function forward(authorization: string) {
+      return request()
+        .post('/_request-forward')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', authorization)
+        .send({
+          url: CHAT_URL,
+          method: 'POST',
+          requestBody: JSON.stringify(CHAT_BODY),
+        });
+    }
+
+    function passthrough(authorization: string) {
+      return request()
+        .post('/_openrouter/chat/completions')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', authorization)
+        .send(CHAT_BODY);
+    }
+
+    async function ownerCharges(): Promise<number[]> {
+      return (await getLedgerEntries(dbAdapter, { userId: userIds[OWNER] }))
+        .filter((entry) => entry.creditAmount < 0)
+        .map(({ creditAmount }) => creditAmount);
+    }
+
+    function assertNeedsSpendScope(
+      assert: Assert,
+      response: supertest.Response,
+      label: string,
+    ) {
+      assert.strictEqual(response.status, 403, `${label}: ${response.text}`);
+      let challenge = response.headers['www-authenticate'] ?? '';
+      assert.true(
+        /error="insufficient_scope"/.test(challenge),
+        `${label}: the challenge says insufficient_scope`,
+      );
+      assert.true(
+        /scope="boxel:spend-credit"/.test(challenge),
+        `${label}: the challenge names boxel:spend-credit`,
+      );
+      assert.deepEqual(
+        response.body,
+        { error: 'insufficient_scope', scope: 'boxel:spend-credit' },
+        `${label}: the body names it too`,
+      );
+    }
+
+    test('a token without boxel:spend-credit is refused on both routes, naming the scope', async function (assert) {
+      let { token } = await oauthToken(OWNER);
+      assertNeedsSpendScope(
+        assert,
+        await forward(`Bearer ${token}`),
+        'forward',
+      );
+      assertNeedsSpendScope(
+        assert,
+        await passthrough(`Bearer ${token}`),
+        'passthrough',
+      );
+      assert.deepEqual(providerCalls, [], 'the AI provider is never called');
+      assert.deepEqual(await ownerCharges(), [], 'nothing is charged');
+    });
+
+    test('a boxel:spend-credit token forwards a call on both routes and charges its user', async function (assert) {
+      let { token } = await oauthToken(OWNER, { scope: SPEND });
+      let forwarded = await forward(`Bearer ${token}`);
+      assert.strictEqual(forwarded.status, 200, forwarded.text);
+      let passed = await passthrough(`Bearer ${token}`);
+      assert.strictEqual(passed.status, 200, passed.text);
+      assert.strictEqual(providerCalls.length, 2, 'the provider answered both');
+      await waitUntil(async () => (await ownerCharges()).length === 2, {
+        timeoutMessage: 'both calls are charged to the grant’s user',
+      });
+      assert.deepEqual(await ownerCharges(), [-3, -3]);
+    });
+
+    test('a session still forwards a call', async function (assert) {
+      let session = createRealmServerJWT(
+        { user: OWNER, sessionRoom: 'a-room' },
+        realmSecretSeed,
+      );
+      let forwarded = await forward(`Bearer ${session}`);
+      assert.strictEqual(forwarded.status, 200, forwarded.text);
+    });
+
+    test('a token holding only boxel:spend-credit reaches nothing else', async function (assert) {
+      let { token } = await oauthToken(OWNER, { scope: 'boxel:spend-credit' });
+      assert.strictEqual(
+        (await forward(`Bearer ${token}`)).status,
+        200,
+        'it forwards',
+      );
+      let read = await readCard(token);
+      assert.strictEqual(read.status, 403, `a realm read: ${read.text}`);
+      let archived = await archivedRealms(token);
+      assert.strictEqual(
+        archived.status,
+        403,
+        `a realm-server read: ${archived.text}`,
+      );
+      let written = await patchCard(token);
+      assert.strictEqual(written.status, 403, `a realm write: ${written.text}`);
+    });
+
+    test('disconnecting the app refuses its next spending call', async function (assert) {
+      let { token, grantId } = await oauthToken(OWNER, { scope: SPEND });
+      assert.strictEqual((await forward(`Bearer ${token}`)).status, 200);
+      await endGrant(dbAdapter, grantId, 'user');
+      assertInvalidToken(assert, await forward(`Bearer ${token}`), 'forward');
+      assertInvalidToken(
+        assert,
+        await passthrough(`Bearer ${token}`),
+        'passthrough',
+      );
+      assert.strictEqual(providerCalls.length, 1);
+    });
+
+    test('a command’s tab token spends when its grant holds boxel:spend-credit', async function (assert) {
+      let { token } = await tabToken(OWNER, { scope: SPEND });
+      let forwarded = await forward(token);
+      assert.strictEqual(forwarded.status, 200, forwarded.text);
+      let passed = await passthrough(`Bearer ${token}`);
+      assert.strictEqual(passed.status, 200, passed.text);
+      await waitUntil(async () => (await ownerCharges()).length === 2, {
+        timeoutMessage: 'both calls are charged to the grant’s user',
+      });
+    });
+
+    test('a command’s tab token is refused, naming the scope, when its grant lacks it', async function (assert) {
+      let { token } = await tabToken(OWNER);
+      assertNeedsSpendScope(assert, await forward(token), 'forward');
+      assertNeedsSpendScope(
+        assert,
+        await passthrough(`Bearer ${token}`),
+        'passthrough',
+      );
+      assert.deepEqual(providerCalls, []);
+    });
+
+    test('a capture’s tab token never spends, whatever its grant holds', async function (assert) {
+      let { token } = await tabToken(OWNER, {
+        scope: SPEND,
+        purpose: 'capture',
+      });
+      assertInvalidToken(assert, await forward(token), 'forward');
+      assertInvalidToken(
+        assert,
+        await passthrough(`Bearer ${token}`),
+        'passthrough',
+      );
+      assert.deepEqual(providerCalls, []);
+    });
+
+    test('a tab token is refused once its grant ends', async function (assert) {
+      let { token, grantId } = await tabToken(OWNER, { scope: SPEND });
+      await endGrant(dbAdapter, grantId, 'user');
+      assertInvalidToken(assert, await forward(token), 'forward');
+      assert.deepEqual(providerCalls, []);
+    });
+
+    test('a spending tab token still reaches no other realm-server route behind a session check', async function (assert) {
+      let { token } = await tabToken(OWNER, { scope: SPEND });
+      for (let [method, path] of [
+        ['get', '/_user'],
+        ['get', '/_archived-realms'],
+        ['post', '/_run-command'],
+      ] as ['get' | 'post', string][]) {
+        let response = await request()
+          [method](path)
+          .set('Accept', 'application/json')
+          .set('Authorization', token);
+        assert.strictEqual(
+          response.status,
+          401,
+          `${method.toUpperCase()} ${path}: ${response.text}`,
+        );
+      }
     });
   });
 

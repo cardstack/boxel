@@ -3,7 +3,7 @@
 // stores it. Clients registered dynamically and grants have tables of their
 // own. A kind with no table yet is refused, never kept in memory, which
 // would lose it on restart and differ between the realm server's processes.
-// Short-lived objects (interactions, sessions and authorization codes) share
+// Short-lived objects (interactions, sessions, authorization and device codes) share
 // `oauth_provider_objects` (`objects.ts`); access and refresh tokens are in
 // `oauth_provider_tokens` (`tokens.ts`).
 
@@ -18,6 +18,7 @@ import {
 import {
   asRecord,
   AuthorizationCodeAdapter,
+  DeviceCodeAdapter,
   InteractionAdapter,
   OAuthProviderAdapter,
   SessionAdapter,
@@ -52,6 +53,8 @@ export function oauthProviderAdapter(
         return new SessionAdapter(dbAdapter);
       case 'AuthorizationCode':
         return new AuthorizationCodeAdapter(dbAdapter);
+      case 'DeviceCode':
+        return new DeviceCodeAdapter(dbAdapter);
       case 'AccessToken':
       case 'RefreshToken':
         return new TokenAdapter(dbAdapter, name);

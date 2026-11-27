@@ -73,6 +73,25 @@ module('Integration | Component | matrix/secure-sign-in', function (hooks) {
     assert.dom('iframe').doesNotExist('no credential frame');
   });
 
+  test('a signed-out app names the account a link asks it to sign in as, and leaves it off the page to come back to', async function (assert) {
+    window.location.href = `${APP_PAGE}&signInAs=${encodeURIComponent('@example-other:localhost')}`;
+    let expectedReturn = new URL(APP_PAGE, window.location.origin).href;
+    await render(<template><SecureSignIn /></template>);
+
+    let landed = new URL(window.location.href);
+    assert.strictEqual(
+      landed.origin + landed.pathname,
+      secureURL('sign-in').href,
+    );
+    let fragment = new URLSearchParams(landed.hash.slice(1));
+    assert.strictEqual(fragment.get('user'), '@example-other:localhost');
+    assert.strictEqual(
+      fragment.get('return'),
+      expectedReturn,
+      'the page to come back to no longer asks for an account',
+    );
+  });
+
   test('coming back signed out moments after being sent stops sending the user round', async function (assert) {
     noteRedirect(Date.now() - 1000);
     await render(<template><SecureSignIn /></template>);

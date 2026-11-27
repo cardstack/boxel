@@ -13,6 +13,11 @@ import {
   type ProfileManagerDeps,
 } from '../../src/lib/profile-manager.js';
 import { MatrixAuthError, type MatrixAuth } from '../../src/lib/auth.js';
+import {
+  addProfileNonInteractive,
+  removeProfile,
+  type RemoveProfileDeps,
+} from '../../src/commands/profile.js';
 
 // A fake MatrixAuth shaped like what `matrixLogin` would return — used to
 // drive the dependency-injection seam without touching a real Matrix server.
@@ -396,7 +401,9 @@ describe('ProfileManager', () => {
   it('removes a profile', async () => {
     await manager.addProfile('@testuser:stack.cards', 'password123');
 
-    expect(await manager.removeProfile('@testuser:stack.cards')).toBe(true);
+    expect(await manager.removeProfile('@testuser:stack.cards')).toMatchObject({
+      matrixUserId: '@testuser:stack.cards',
+    });
     expect(manager.listProfiles()).toEqual([]);
     expect(manager.getActiveProfileId()).toBeNull();
   });
@@ -411,8 +418,10 @@ describe('ProfileManager', () => {
     expect(manager.getActiveProfileId()).toBe('@second:stack.cards');
   });
 
-  it('returns false when removing nonexistent profile', async () => {
-    expect(await manager.removeProfile('@nonexistent:stack.cards')).toBe(false);
+  it('returns undefined when removing nonexistent profile', async () => {
+    expect(
+      await manager.removeProfile('@nonexistent:stack.cards'),
+    ).toBeUndefined();
   });
 
   it('persists profiles to disk', async () => {
@@ -646,6 +655,74 @@ describe('reAuthenticate', () => {
     await expect(manager.reAuthenticate()).rejects.toThrow(
       /no longer valid.*boxel profile add/,
     );
+  });
+
+  it('takes up the session another process saved since, without asking for a password', async () => {
+    const matrixUrl = 'https://matrix-staging.stack.cards';
+    const running = new ProfileManager(tmpDir, {
+      ...stubLogin(),
+      isTty: () => false,
+    });
+    await running.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', matrixUrl),
+    );
+    // `boxel profile add` in another process signs the profile in again.
+    await new ProfileManager(tmpDir).addProfileWithAuth('@user:stack.cards', {
+      accessToken: 'signed-in-again',
+      userId: '@user:stack.cards',
+      deviceId: 'NEW_DEVICE',
+      matrixUrl,
+    });
+
+    const fresh = await running.reAuthenticate();
+
+    expect(fresh.accessToken).toBe('signed-in-again');
+    expect(fresh.deviceId).toBe('NEW_DEVICE');
+    expect(running.getStoredMatrixAuth().accessToken).toBe('signed-in-again');
+  });
+
+  it("doesn't take up a session saved for another Matrix server", async () => {
+    const running = new ProfileManager(tmpDir, {
+      ...stubLogin(),
+      isTty: () => false,
+    });
+    await running.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    await new ProfileManager(tmpDir).addProfileWithAuth('@user:stack.cards', {
+      accessToken: 'other-server-token',
+      userId: '@user:stack.cards',
+      deviceId: 'OTHER_DEVICE',
+      matrixUrl: 'https://matrix.example.test',
+    });
+
+    await expect(running.reAuthenticate()).rejects.toThrow(
+      /no longer valid.*boxel profile add/,
+    );
+  });
+
+  it("doesn't sign in again a profile another process removed", async () => {
+    const loginStub = vi.fn(async () =>
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    const promptStub = vi.fn(async () => 'typed-password');
+    const running = new ProfileManager(tmpDir, {
+      matrixLogin: loginStub,
+      promptPassword: promptStub,
+      isTty: () => true,
+    });
+    await running.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    // `boxel profile remove` in another process.
+    await new ProfileManager(tmpDir).removeProfile('@user:stack.cards');
+
+    await expect(running.reAuthenticate()).rejects.toThrow(/was removed/);
+    expect(promptStub).not.toHaveBeenCalled();
+    expect(loginStub).not.toHaveBeenCalled();
   });
 
   it('prompts for password, re-runs matrixLogin, and writes new tokens on TTY', async () => {
@@ -942,5 +1019,224 @@ describe('migrateFromEnv', () => {
 
     expect(result).toEqual({ profileId: '@alice:localhost', created: false });
     expect(manager.getProfile('@alice:localhost')!.displayName).toBe('Alice');
+  });
+});
+
+describe('boxel profile remove', () => {
+  const matrixUrl = 'https://matrix-staging.stack.cards';
+  const realmServerUrl = 'https://realms-staging.stack.cards/';
+  const matrixId = '@user:stack.cards';
+  let tmpDir: string;
+  let manager: ProfileManager;
+  let log: ReturnType<typeof vi.spyOn>;
+
+  // The person at the terminal confirms, and every server answers.
+  function deps() {
+    return {
+      prompt: vi.fn(async () => 'y'),
+      revokeConnection: vi.fn(async () => true),
+      matrixLogout: vi.fn(async () => {}),
+      secureSignOut: vi.fn(async () => {}),
+    } satisfies RemoveProfileDeps;
+  }
+
+  function warnings(): string[] {
+    return log.mock.calls
+      .map((call) => String(call[0]))
+      .filter((line) => line.includes('Warning:'));
+  }
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-remove-'));
+    manager = new ProfileManager(tmpDir);
+    log = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("signs out a Matrix profile's token and ends its secure session", async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      fakeAuth(matrixId, matrixUrl),
+      undefined,
+      realmServerUrl,
+      {
+        token: 'secure-session-token',
+        userId: matrixId,
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      },
+    );
+    let d = deps();
+
+    await removeProfile(manager, matrixId, d);
+
+    expect(manager.getProfile(matrixId)).toBeUndefined();
+    expect(d.matrixLogout).toHaveBeenCalledWith(
+      matrixUrl,
+      `token-for-${matrixId}`,
+    );
+    expect(d.secureSignOut).toHaveBeenCalledWith(
+      realmServerUrl,
+      'secure-session-token',
+    );
+    expect(d.revokeConnection).not.toHaveBeenCalled();
+    expect(warnings()).toEqual([]);
+  });
+
+  it("removes the profile, and warns with its device, when its token can't be signed out", async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      fakeAuth(matrixId, matrixUrl),
+      undefined,
+      realmServerUrl,
+    );
+    let d = deps();
+    d.matrixLogout.mockRejectedValueOnce(new Error('network down'));
+
+    await removeProfile(manager, matrixId, d);
+
+    expect(manager.getProfile(matrixId)).toBeUndefined();
+    let [warning, ...rest] = warnings();
+    expect(rest).toEqual([]);
+    expect(warning).toMatch(/could not sign out its Matrix session/);
+    expect(warning).toContain('DEVICE__user_stack_cards');
+    expect(warning).toMatch(/Element/);
+  });
+
+  it("ends an OAuth profile's connection, and signs nothing out on Matrix", async () => {
+    manager.addOAuthProfile(
+      matrixId,
+      {
+        issuer: 'https://realms-staging.stack.cards',
+        tokenEndpoint:
+          'https://realms-staging.stack.cards/_oauth-provider/token',
+        accessToken: 'access-token-placeholder',
+        accessExpiresAt: '2099-01-01T00:00:00.000Z',
+        connectionEndsAt: '2099-01-01T00:00:00.000Z',
+      },
+      { matrixUrl, realmServerUrl },
+    );
+    let d = deps();
+
+    await removeProfile(manager, matrixId, d);
+
+    expect(manager.getProfile(matrixId)).toBeUndefined();
+    expect(d.revokeConnection).toHaveBeenCalledOnce();
+    expect(d.matrixLogout).not.toHaveBeenCalled();
+    expect(warnings()).toEqual([]);
+  });
+
+  it('signs out the token another process signed the profile in with while removing it was being confirmed', async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      fakeAuth(matrixId, matrixUrl),
+      undefined,
+      realmServerUrl,
+    );
+    let d = {
+      ...deps(),
+      // `boxel profile add` in another process, while the question is open.
+      prompt: vi.fn(async () => {
+        await new ProfileManager(tmpDir).addProfileWithAuth(matrixId, {
+          accessToken: 'signed-in-again',
+          userId: matrixId,
+          deviceId: 'NEW_DEVICE',
+          matrixUrl,
+        });
+        return 'y';
+      }),
+    };
+
+    await removeProfile(manager, matrixId, d);
+
+    expect(new ProfileManager(tmpDir).getProfile(matrixId)).toBeUndefined();
+    expect(d.matrixLogout).toHaveBeenCalledOnce();
+    expect(d.matrixLogout).toHaveBeenCalledWith(matrixUrl, 'signed-in-again');
+  });
+
+  it('leaves the profile and its sign-ins alone when removing it is declined', async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      fakeAuth(matrixId, matrixUrl),
+      undefined,
+      realmServerUrl,
+    );
+    let d = { ...deps(), prompt: vi.fn(async () => '') };
+
+    await removeProfile(manager, matrixId, d);
+
+    expect(manager.getProfile(matrixId)).toBeDefined();
+    expect(d.matrixLogout).not.toHaveBeenCalled();
+  });
+});
+
+describe('boxel profile add -u for a profile it signs in again', () => {
+  const matrixUrl = 'https://matrix-staging.stack.cards';
+  const matrixId = '@user:stack.cards';
+  let tmpDir: string;
+  let manager: ProfileManager;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-add-u-'));
+    manager = new ProfileManager(tmpDir, {
+      matrixLogin: vi.fn(async () => ({
+        accessToken: 'signed-in-again',
+        userId: matrixId,
+        deviceId: 'NEW_DEVICE',
+        matrixUrl,
+      })),
+    });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('signs out the old token, and ends the secure session a move to another realm server drops, on the servers that issued them', async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      fakeAuth(matrixId, matrixUrl),
+      undefined,
+      'https://other-realm.example.test/',
+      {
+        token: 'other-server-session',
+        userId: matrixId,
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      },
+    );
+    let d = {
+      revokeConnection: vi.fn(async () => true),
+      matrixLogout: vi.fn(async () => {}),
+      secureSignOut: vi.fn(async () => {}),
+    };
+
+    await addProfileNonInteractive(
+      manager,
+      matrixId,
+      'example-password',
+      undefined,
+      matrixUrl,
+      'https://realms-staging.stack.cards/',
+      d,
+    );
+
+    let profile = manager.getProfile(matrixId)!;
+    expect(profile.matrixAccessToken).toBe('signed-in-again');
+    expect(profile.realmServerUrl).toBe('https://realms-staging.stack.cards/');
+    expect(profile.secureSession).toBeUndefined();
+    expect(d.matrixLogout).toHaveBeenCalledWith(
+      matrixUrl,
+      `token-for-${matrixId}`,
+    );
+    expect(d.secureSignOut).toHaveBeenCalledWith(
+      'https://other-realm.example.test/',
+      'other-server-session',
+    );
+    expect(d.revokeConnection).not.toHaveBeenCalled();
   });
 });

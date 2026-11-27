@@ -11,13 +11,22 @@ export const OAUTH_REFUSALS = {
   capture:
     "`boxel capture` doesn't work on a profile signed in with OAuth yet: the realm server doesn't let an OAuth token capture cards. " +
     USE_MATRIX,
-  browse:
-    "`boxel browse` can't sign a browser in from a profile signed in with OAuth: that takes a Matrix login token, which this profile doesn't have. " +
-    'A published realm still opens without signing in. ' +
-    USE_MATRIX,
   serverToken:
-    "getServerToken() needs a profile signed in with Matrix: the realm server doesn't let an OAuth token spend AI credits yet.",
+    'getServerToken() needs a profile signed in with Matrix: a profile signed in with OAuth has no realm-server session to give out. ' +
+    'Call the realm server through authedServerFetch() instead, on a profile that may spend AI credits for the routes that spend them.',
+  aiCredits:
+    "This profile can't spend AI credits. Sign in again with `boxel profile add --oauth --allow-ai-credits`.",
 } as const;
+
+// Thrown, before any request or in place of the realm server's refusal, when a
+// profile signed in with OAuth calls a route that spends AI credits without
+// `boxel:spend-credit`.
+export class AiCreditsNotAllowedError extends Error {
+  constructor() {
+    super(OAUTH_REFUSALS.aiCredits);
+    this.name = 'AiCreditsNotAllowedError';
+  }
+}
 
 // The same limits, said up front: in each command's help, and beside a profile
 // signed in with OAuth in `boxel profile list`.
@@ -27,14 +36,13 @@ export const OAUTH_HELP_NOTES = {
   capture:
     "\nNeeds a profile signed in with Matrix: the realm server doesn't let an OAuth token capture cards yet.\n",
   browse:
-    "\nSigning a browser in needs a profile signed in with Matrix: it takes a Matrix login token, which a profile signed in with OAuth doesn't have. A published-realm card URL opens on any profile.\n",
+    "\nOn a profile signed in with OAuth, the app opens as the profile's account and asks you to sign in when the browser isn't already that account: the profile has no Matrix login token to sign it in with. A profile signed in with Matrix opens it already signed in. A published-realm card URL opens on any profile.\n",
 } as const;
 
 // What a profile signed in with OAuth can't do yet, by command.
 export const OAUTH_UNAVAILABLE_COMMANDS = [
   'run-command',
   'capture',
-  'browse',
   'realm list --hidden',
   'realm list --all-accessible',
 ] as const;

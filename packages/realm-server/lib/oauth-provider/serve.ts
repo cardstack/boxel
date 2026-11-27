@@ -16,11 +16,16 @@ import { inMetadataDocumentRequest } from './client-metadata-document.ts';
 import { OAUTH_CONNECTIONS_PATH } from './connections.ts';
 import { OAUTH_CONSENT_PATH } from './consent.ts';
 import {
+  OAUTH_DEVICE_DECISION_PATH,
+  OAUTH_DEVICE_LOOKUP_PATH,
+} from './device.ts';
+import {
   OAUTH_PROTECTED_RESOURCE_PATH,
   protectedResourceMetadataHandler,
   resourcePath,
 } from './resource.ts';
 import {
+  OAUTH_DEVICE_AUTHORIZATION_PATH,
   OAUTH_DISCOVERY_PATH,
   OAUTH_REGISTRATION_PATH,
   OAUTH_REVOCATION_PATH,
@@ -43,12 +48,12 @@ import { MCP_RESOURCE_PATH } from './registry.ts';
 // sets its flow cookies on whatever host a request names. A request on any
 // other host goes on to the realm server's own routing.
 //
-// A registration, the request that starts a flow, a token request, a
-// revocation, and the request that resumes a finished one go through Boxel's
-// own handling first, which hands them on to the library only once Boxel
-// allows them. The interaction, finish, error, consent and connections routes
-// are Boxel's alone, though finishing hands the result to the
-// library, which answers the request.
+// A registration, the request that starts a flow, a device authorization, a
+// token request, a revocation, and the request that resumes a finished one go
+// through Boxel's own handling first, which hands them on to the library only
+// once Boxel allows them. The interaction, finish, error, consent, device
+// lookup and decision, and connections routes are Boxel's alone, though
+// finishing hands the result to the library, which answers the request.
 export function registerOAuthProviderRoutes(
   router: Router,
   {
@@ -62,6 +67,8 @@ export function registerOAuthProviderRoutes(
     handleResume,
     handleErrorDetails,
     handleErrorReturn,
+    handleDeviceAuthorization,
+    deviceHandlers,
     consentHandlers,
     connectionsHandlers,
     issuer,
@@ -74,6 +81,8 @@ export function registerOAuthProviderRoutes(
     consentHandlers(consentDeps);
   let { handleConnectionsList, handleConnectionsDisconnect } =
     connectionsHandlers(consentDeps);
+  let { handleDeviceLookup, handleDeviceDecision } =
+    deviceHandlers(consentDeps);
   let issuerURL = new URL(provider.issuer);
   let issuerHost = issuerURL.host;
   let callback = provider.callback();
@@ -196,6 +205,22 @@ export function registerOAuthProviderRoutes(
     onIssuerHost((ctxt) => handleRevocation(ctxt, () => serve(ctxt))),
   );
   router.options(OAUTH_REVOCATION_PATH, onIssuerHost(serve));
+  // Device sign-in (`device.ts`): an app asks for a device code here, and the
+  // secure origin's `device` page looks a user code up and decides it. The
+  // library's own page for entering a code (`/_oauth-provider/device`) is
+  // never registered.
+  router.post(
+    OAUTH_DEVICE_AUTHORIZATION_PATH,
+    onIssuerHost((ctxt) => handleDeviceAuthorization(ctxt, () => serve(ctxt))),
+  );
+  router.post(
+    OAUTH_DEVICE_LOOKUP_PATH,
+    onIssuerHost(boxelOnly(handleDeviceLookup)),
+  );
+  router.post(
+    OAUTH_DEVICE_DECISION_PATH,
+    onIssuerHost(boxelOnly(handleDeviceDecision)),
+  );
   router.get(
     `${OAUTH_INTERACTION_PATH}/:uid`,
     onIssuerHost(boxelOnly(handleInteraction)),
