@@ -41,7 +41,7 @@ The browser signs in on Boxel's own sign-in page, with the account's password or
 - **One sign-in per browser.** After the first, that browser opens as the account with no prompt, for as long as it stays signed in. Never type the password yourself: ask the user to sign in in the browser that opened.
 - **Several accounts:** keep one persistent browser profile per account (a separate Chrome profile, or a separate user data directory for a browser you drive), signed in once each. Switching one browser between accounts asks for a password every time.
 - **A browser you drive** can be navigated to the URL directly, since it holds no credential: `--print-url` prints it, and it is safe in your output. It lands on the sign-in page until the user signs in there.
-- **Looking at a card with nobody there to sign in:** use `boxel capture` with a profile signed in with Matrix, which renders on the server with that profile's access. It doesn't take a profile signed in with OAuth yet.
+- **Looking at a card with nobody there to sign in:** use `boxel capture`, which renders on the server with the profile's access and saves the image. On a profile signed in with OAuth it can't print a capture URL instead (`--url-only`).
 - **A host given with `--host-url`** may be a build that doesn't know `signInAs` yet (a preview or a local build of another branch). It then opens as whichever account the browser holds. `browse` warns of this on every `--host-url` open: check the account the app shows.
 - **A host Boxel's sign-in page doesn't list** (a Railway deployment, a custom domain) can't be signed in from an OAuth profile at all. Use a Matrix profile there, or run the host locally against the environment (the `local-host-against-remote` skill).
 

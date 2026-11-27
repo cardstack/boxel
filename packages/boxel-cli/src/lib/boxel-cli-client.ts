@@ -47,7 +47,7 @@ import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-rea
 import { getProfileManager, type ProfileManager } from './profile-manager.ts';
 import { resolveRealmNetwork } from './resolve-realm-identifier.ts';
 import { describeFetchError } from './describe-fetch-error.ts';
-import { OAUTH_REFUSALS } from './oauth-refusals.ts';
+import { OAUTH_REFUSALS, describeInsufficientScope } from './oauth-refusals.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export type {
@@ -306,7 +306,8 @@ export class BoxelCLIClient {
 
   /**
    * Execute a Boxel host command on the realm server via the `_run-command`
-   * endpoint. Uses the server-scoped token.
+   * endpoint, with the profile's realm-server token: a session on a profile
+   * signed in with Matrix, the access token on one signed in with OAuth.
    */
   async runCommand(
     realmServerUrl: string,
@@ -314,9 +315,6 @@ export class BoxelCLIClient {
     command: string,
     commandInput?: Record<string, unknown>,
   ): Promise<RunCommandResult> {
-    if (this.pm.getActiveProfile()?.profile.oauth) {
-      return { status: 'error', error: OAUTH_REFUSALS.runCommand };
-    }
     let url = `${ensureTrailingSlash(realmServerUrl)}_run-command`;
     let body = {
       data: {
@@ -347,6 +345,13 @@ export class BoxelCLIClient {
     }
 
     if (!response.ok) {
+      let insufficientScope = describeInsufficientScope(
+        response,
+        'Running a command',
+      );
+      if (insufficientScope) {
+        return { status: 'error', error: insufficientScope };
+      }
       return {
         status: 'error',
         error: `run-command HTTP ${response.status}: ${await response.text().catch(() => '(no body)')}`,
