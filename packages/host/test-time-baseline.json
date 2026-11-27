@@ -1,15 +1,6 @@
 {
   "main": [
     {
-      "run": 44763985969,
-      "at": "2026-11-20T15:30:42Z",
-      "minutes": 249,
-      "slowestShard": 21.3,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
       "run": 44787946327,
       "at": "2026-11-20T17:55:50Z",
       "minutes": 245.4,
@@ -359,36 +350,18 @@
       "shards": 16,
       "runsOn": true,
       "indexCache": false
+    },
+    {
+      "run": 46037491629,
+      "at": "2026-11-27T16:54:21Z",
+      "minutes": 191.2,
+      "slowestShard": 15.3,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": false
     }
   ],
   "pullRequest": [
-    {
-      "run": 45195523644,
-      "at": "2026-11-23T14:33:44Z",
-      "minutes": 231.3,
-      "slowestShard": 23.9,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
-      "run": 45201156415,
-      "at": "2026-11-23T15:04:51Z",
-      "minutes": 224.4,
-      "slowestShard": 18.5,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
-      "run": 45205017091,
-      "at": "2026-11-23T15:25:13Z",
-      "minutes": 254.6,
-      "slowestShard": 22.6,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
     {
       "run": 45205671837,
       "at": "2026-11-23T15:28:43Z",
@@ -3036,6 +3009,33 @@
       "slowestShard": 21,
       "shards": 16,
       "runsOn": false,
+      "indexCache": true
+    },
+    {
+      "run": 46031741750,
+      "at": "2026-11-27T16:13:21Z",
+      "minutes": 265.8,
+      "slowestShard": 21.7,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": true
+    },
+    {
+      "run": 46031825042,
+      "at": "2026-11-27T16:13:56Z",
+      "minutes": 273.4,
+      "slowestShard": 21.2,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": true
+    },
+    {
+      "run": 46034089772,
+      "at": "2026-11-27T16:29:48Z",
+      "minutes": 277.4,
+      "slowestShard": 20.1,
+      "shards": 16,
+      "runsOn": true,
       "indexCache": true
     }
   ]
