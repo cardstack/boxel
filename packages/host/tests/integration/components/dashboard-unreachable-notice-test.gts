@@ -60,7 +60,9 @@ module(
       let sections = new DashboardSections();
       await renderComponent(
         class TestDriver extends GlimmerComponent {
-          <template><Dashboard @sections={{sections}} /></template>
+          <template>
+            <Dashboard @sections={{sections}} @catalogRealmURL={{null}} />
+          </template>
         },
       );
 

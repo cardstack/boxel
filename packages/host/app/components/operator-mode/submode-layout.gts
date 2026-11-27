@@ -37,6 +37,7 @@ import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profi
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
 import type IndexController from '@cardstack/host/controllers';
+import { catalogRealmURL } from '@cardstack/host/lib/utils';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
@@ -621,7 +622,10 @@ export default class SubmodeLayout extends Component<Signature> {
           {{#if this.workspaceChooserOpened}}
             <SectionRail @sections={{this.dashboardSections}} />
             <div class='workspace-overlay'>
-              <Dashboard @sections={{this.dashboardSections}} />
+              <Dashboard
+                @sections={{this.dashboardSections}}
+                @catalogRealmURL={{catalogRealmURL}}
+              />
             </div>
           {{/if}}
 

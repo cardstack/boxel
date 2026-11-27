@@ -7,11 +7,9 @@ import { add, eq } from '@cardstack/boxel-ui/helpers';
 
 import type { RealmIdentifier } from '@cardstack/runtime-common';
 
-import { catalogRealmURL } from '@cardstack/host/lib/utils';
-
 import ManageCatalogs from '../dashboard-modals/manage-catalogs';
 
-import CatalogShelf from './catalog-shelf';
+import CatalogShelf, { type CatalogShelfStories } from './catalog-shelf';
 import SectionHead from './section-head';
 import Workspace from './workspace';
 
@@ -23,7 +21,10 @@ interface Signature {
     realmIdentifiers: RealmIdentifier[];
     // Shown in place of the tiles when there are none.
     emptyMessage: string;
-    showShelf: boolean;
+    // Shown above the tiles while it has a catalog.
+    shelf: CatalogShelfStories;
+    // Where the shelf's stories start in the keyboard cursor's walk.
+    shelfNavBase: number;
     // Where the catalog tiles start in the keyboard cursor's walk.
     navBase: number;
     cursor: KeyboardCursor;
@@ -36,10 +37,6 @@ export default class CatalogSection extends Component<Signature> {
   // Named by the title span in its heading, so the count stays out of the
   // name.
   private headingId = `${guidFor(this)}-catalogs`;
-
-  private get shelfRealmURL() {
-    return this.args.showShelf ? catalogRealmURL : null;
-  }
 
   <template>
     <section
@@ -57,8 +54,12 @@ export default class CatalogSection extends Component<Signature> {
         <:actions><ManageCatalogs /></:actions>
         <:default>Apps, fields and themes to use in your workspaces.</:default>
       </SectionHead>
-      {{#if this.shelfRealmURL}}
-        <CatalogShelf @realmURL={{this.shelfRealmURL}} />
+      {{#if @shelf.realmURL}}
+        <CatalogShelf
+          @stories={{@shelf}}
+          @navBase={{@shelfNavBase}}
+          @cursor={{@cursor}}
+        />
       {{/if}}
       {{#if @realmIdentifiers.length}}
         {{! The role keeps the list semantics Safari drops from a list with no
