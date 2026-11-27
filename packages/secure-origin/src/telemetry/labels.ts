@@ -25,6 +25,8 @@ const REALM_SERVER_ENDPOINTS = [
   '_key-policy-notices/:id/decline',
   '_key-limit-notices',
   '_key-limit-notices/read',
+  '_key-approval-notices',
+  '_key-approval-notices/read',
   '_user-key-grants/:id',
   '_oauth/clients',
   '_oauth/connections',

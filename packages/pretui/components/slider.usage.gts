@@ -5,6 +5,9 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FreestyleUsage } from './freestyle-usage';
 import { Slider } from './slider';
 
+const SOURCE =
+  '<Slider @label="Vintage" @range={{true}} @values={{this.values}} @min={{1954}} @max={{2004}} @interval={{10}} @formatValue={{this.formatYear}} @onValuesChange={{this.setValues}} />';
+
 export class SliderSingleUsage extends Component {
   @tracked value = 64;
   ticks = [40, 50, 60, 70, 80];
@@ -41,7 +44,7 @@ export class SliderRangeUsage extends Component {
     <FreestyleUsage
       @name='Slider (range)'
       @description='Two thumbs over a derived ladder of intervals. One native range input cannot carry two thumbs, so range mode is two of them stacked on one rail — which keeps arrows, PageUp/PageDown, Home/End, touch and pointer capture as the platform’s rather than a re-implementation. The two failures that pattern usually has are both closed: the rail ignores the pointer and only the thumbs take it, so the two never swallow each other’s drags, and when they coincide the trapped thumb is the one raised, not always the lower one. @interval widens the rail to the enclosing interval boundaries so every stop is a meaningful decade, price band or size bucket, and @formatValue feeds aria-valuetext so the reader hears “1960”, not “2”.'
-      @source='<Slider @label="Vintage" @range={{true}} @values={{this.values}} @min={{1954}} @max={{2004}} @interval={{10}} @formatValue={{this.formatYear}} @onValuesChange={{this.setValues}} />'
+      @source={{SOURCE}}
     >
       <:example>
         <Slider

@@ -7,10 +7,14 @@ import { StatusChip } from './status-chip';
 class StatusChipUsage extends GlimmerComponent {
   @tracked value = 'in progress';
   setValue = (v: string) => (this.value = v);
+  get usage() {
+    return `<StatusChip @value='${this.value}' />`;
+  }
   <template>
     <FreestyleUsage
       @name='StatusChip'
       @description='A Chip whose hue is derived by hashing the value — same value, same color, every card, no configuration. Type any status below and watch it keep a stable hue.'
+      @source={{this.usage}}
     >
       <:example>
         <StatusChip @value={{this.value}} />

@@ -1738,7 +1738,10 @@ export class IndexRunner {
     let contexts = new Map<string, Promise<ModuleCacheContext>>();
     return new Map(
       await Promise.all(
-        hostRouteTypeRefs(rules).map(
+        hostRouteTypeRefs(rules, {
+          realmURL: this.#realmURL,
+          virtualNetwork: this.#virtualNetwork,
+        }).map(
           async (ref) =>
             [
               typeLookupKey(ref),

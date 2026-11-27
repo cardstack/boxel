@@ -20,6 +20,9 @@ const STREAM = [
   'Waiting on your approval before the bid goes in.',
 ];
 
+const SOURCE =
+  '<JumpChip @visible={{this.visible}} @count={{this.news}} @onJump={{this.jump}} />';
+
 class JumpChipUsage extends GlimmerComponent {
   @tracked atEnd = true;
   @tracked news = 3;
@@ -56,6 +59,7 @@ class JumpChipUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='JumpChip'
+      @source={{SOURCE}}
       @description='Scroll orientation for a stream that grows while you are reading it, doing two jobs in one control: "3 new messages" when something arrived, "Back to bottom" when nothing did. It is presentational by contract — the caller owns the scroller — but the measurement ships beside it as `scrollEdge`, an ember-modifier that attaches ONE passive scroll listener and reports only when the at-the-bottom answer changes. That boolean latch is the whole design: a handler that wrote state on every scroll event would re-render the transcript on every wheel tick, and a debounce would be a re-arming timer, which a realm forbids. The chip positions itself against the nearest positioned ancestor; give the scroll frame `position: relative` and it lands.'
     >
       <:example>

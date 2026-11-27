@@ -35,6 +35,16 @@ const STEPS: OnboardingStep[] = [
   },
 ];
 
+const SOURCE = `<Onboarding
+  @steps={{this.steps}}
+  @current={{this.current}}
+  @onStepChange={{this.setCurrent}}
+  @onDone={{this.done}}
+  @onSkip={{this.skip}}
+>
+  <:media as |step index|>…</:media>
+</Onboarding>`;
+
 class OnboardingUsage extends GlimmerComponent {
   @tracked current = 0;
   @tracked outcome = '';
@@ -50,6 +60,7 @@ class OnboardingUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='Onboarding'
+      @source={{SOURCE}}
       @description='The first-run walkthrough. Four decisions carry it. The rail is StepList — the same rail SessionPrep uses — so the kit has one visual grammar for "where am I in a sequence". The media is a slot, not a prop: an onboarding step shows a video, a screenshot, a live component or nothing, and no prop shape covers all four. Position is announced ("Step 2 of 4 — Ask before you Act"), because a walkthrough whose progress is only visible is a walkthrough a screen-reader user has to count. And Skip is always available and never hidden behind a corner glyph — a walkthrough you cannot leave is a modal, and this is not one.'
     >
       <:example>

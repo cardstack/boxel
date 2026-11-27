@@ -115,6 +115,11 @@ const automationReconcile: Task<
               `${tag}: run ${outcome.run.id} of automation ${outcome.run.automationId} (trigger ${outcome.run.trigger}, slot ${outcome.run.slot}) had no live job and ended ${outcome.run.state}: ${outcome.why}`,
             );
             break;
+          case 'held':
+            log.info(
+              `${tag}: batch follow-up run ${outcome.run.id} of automation ${outcome.run.automationId} had no live job while its automation is stopped; held it`,
+            );
+            break;
           case 'failed':
             result.failed++;
             log.error(

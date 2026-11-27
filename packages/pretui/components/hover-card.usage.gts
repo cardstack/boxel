@@ -5,7 +5,13 @@ import { FreestyleUsage } from './freestyle-usage';
 import { HoverCard } from './hover-card';
 import type { PopupPlacement } from '../internal/overlay';
 
-const HC_PLACEMENTS = ['bottom-start', 'bottom', 'top', 'right-start', 'left-start'];
+const HC_PLACEMENTS = [
+  'bottom-start',
+  'bottom',
+  'top',
+  'right-start',
+  'left-start',
+];
 
 // Glimmer accepts decimal number literals, but `{{0.5}}` reads like the
 // `{{foo.0}}` numeric-path form the transpiler rejects. Named constants keep
@@ -30,9 +36,22 @@ class HoverCardUsage extends GlimmerComponent {
     return this.placement as PopupPlacement;
   }
 
+  get usage() {
+    let bits = [];
+    if (this.placement !== 'bottom-start')
+      bits.push(`@placement='${this.placement}'`);
+    if (this.openDelay !== OPEN_DELAY_DEFAULT)
+      bits.push(`@openDelay={{${this.openDelay}}}`);
+    if (this.closeDelay !== CLOSE_DELAY_DEFAULT)
+      bits.push(`@closeDelay={{${this.closeDelay}}}`);
+    let args = bits.length ? ` ${bits.join(' ')}` : '';
+    return `<HoverCard @label="Ama Boateng"${args}>\n  <:trigger><a href="#profile">Ama Boateng</a></:trigger>\n  <:default>…</:default>\n</HoverCard>`;
+  }
+
   <template>
     <FreestyleUsage
       @name='HoverCard'
+      @source={{this.usage}}
       @description='The rich link preview: a Popup with hover intent in front of it. Accessibility is the whole problem, because content that only appears on hover is content a keyboard user, a screen reader and every touch device cannot reach. Focus opens it with no delay, since a reader who deliberately tabbed to the trigger has already expressed the intent. The card keeps its own tab stops, so Tab walks into it and out again — Radix sets tabindex=-1 on everything inside, which prevents a trap by making the card useless to exactly the people it was made reachable for. And a tap opens it on a coarse pointer, where Radix simply excludes touch and the card does not exist at all.'
     >
       <:example>

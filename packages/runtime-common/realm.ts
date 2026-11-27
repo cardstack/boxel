@@ -229,6 +229,7 @@ import { automationTouchedBy } from './automation-index-hook.ts';
 import {
   automationsInRealm,
   followKeyApprovals,
+  type AutomationReporters,
   type KeyApprovalFollow,
 } from './automations.ts';
 import {
@@ -260,6 +261,7 @@ import {
   automationVersion,
   type AutomationKeyApprovals,
   type AutomationVersion,
+  type AwaitedKeyApproval,
 } from './automation-key-approval.ts';
 import {
   endsRunOnCredential,
@@ -1981,19 +1983,62 @@ export async function notifyRealmIndexUpdated(
   }
 }
 
-// The realm route the worker asks, once a from-scratch index pass over the
-// realm has landed and its index hook has synced the realm's automations, to
-// check every automation's key approvals in full
-// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`), which the worker
-// can't do, as it reads no operation definitions. A `POST` with no body,
-// answered 202 once the check has started, without waiting for it: the pass's
-// job holds the realm's exclusive index lane, so its writers would wait
-// behind the check's definition lookups. `Realm.incrementalIndexing()` holds
-// the check until it settles. Like every `POST`, it takes a caller the realm
-// ACL grants write, which includes the realm's own user (the worker asks as
-// it); it doesn't ask `isDirectWriter`, which counts no bot account.
+// The realm route the worker asks, once an index pass over the realm has
+// landed and its index hook has synced the realm's automations, to check
+// their key approvals in full, which the worker can't do, as it reads no
+// operation definitions. After a from-scratch pass it is a `POST` with no
+// body, and the realm checks every automation in it
+// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`). After an
+// incremental pass the body names the automations the pass touched
+// (`FollowAutomationKeyApprovalsRequest`), and the realm checks those
+// (`Realm.followAutomationKeyApprovalsAfterWorkerPass`). Either way it answers
+// 202 once the check has started, without waiting for it: the pass's job
+// holds the realm's exclusive index lane, so its writers would wait behind
+// the check's definition lookups. `Realm.incrementalIndexing()` holds the
+// check until it settles. Like every `POST`, it takes a caller the realm ACL
+// grants write, which includes the realm's own user (the worker asks as it);
+// it doesn't ask `isDirectWriter`, which counts no bot account.
 export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
   '/_follow-automation-key-approvals';
+
+// The body of `FOLLOW_AUTOMATION_KEY_APPROVALS_PATH` after an incremental
+// pass.
+export interface FollowAutomationKeyApprovalsRequest {
+  // The automations the pass touched, by id: at least one, as an empty list
+  // is refused.
+  automationIds: string[];
+  // False when the writes behind the pass asked for no realm events: the
+  // check moves the rows all the same, and reports nothing. Absent, it
+  // reports.
+  reportChanges?: boolean;
+}
+
+function parseFollowAutomationKeyApprovalsRequest(
+  body: string,
+): FollowAutomationKeyApprovalsRequest | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return undefined;
+  }
+  let { automationIds, reportChanges } = parsed as Record<string, unknown>;
+  if (
+    !Array.isArray(automationIds) ||
+    automationIds.length === 0 ||
+    !automationIds.every((id) => typeof id === 'string') ||
+    (reportChanges !== undefined && typeof reportChanges !== 'boolean')
+  ) {
+    return undefined;
+  }
+  return {
+    automationIds,
+    ...(reportChanges !== undefined ? { reportChanges } : {}),
+  };
+}
 
 // Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
 // peer realm-server replicas drop every cached path for this realm. Use
@@ -4166,9 +4211,9 @@ export class Realm {
         this.runState.bind(this),
         ACL_ONLY,
       )
-      // The worker's request, after a from-scratch pass over this realm, to
-      // check its automations' key approvals in full. Answered on the realm
-      // ACL alone: it runs only what the realm's own follow would.
+      // The worker's request, after an index pass over this realm, to check
+      // its automations' key approvals in full. Answered on the realm ACL
+      // alone: it runs only what the realm's own follow would.
       .post(
         FOLLOW_AUTOMATION_KEY_APPROVALS_PATH,
         SupportedMimeType.JSONAPI,
@@ -15579,6 +15624,18 @@ export class Realm {
     }
     for (let automationId of automationIds) {
       try {
+        // Whom the approvals wait on, as the check answered it; undefined
+        // when the automation wasn't checked.
+        let awaiting: AwaitedKeyApproval[] | undefined;
+        // Whom the notices it wrote are to be told, once it commits.
+        let noticed: string[] = [];
+        let reporters: AutomationReporters = reportChanges
+          ? {
+              reportRunChange: (runId) => this.reportRunChange(runId),
+              reportAutomationChange: (automation) =>
+                this.reportAutomationChange(automation),
+            }
+          : {};
         let result = await followKeyApprovals(
           this.#dbAdapter,
           automationId,
@@ -15597,21 +15654,31 @@ export class Realm {
               declaration: read.declaration,
               payer: automation.payer,
             });
+            awaiting = approvals?.awaiting ?? (approvals ? [] : undefined);
             return approvals
               ? { approved: approvals.approved, declaration: read.declaration }
               : undefined;
           },
-          reportChanges
-            ? {
-                reportRunChange: (runId) => this.reportRunChange(runId),
-                reportAutomationChange: (automation) =>
-                  this.reportAutomationChange(automation),
-              }
-            : {},
+          {
+            ...reporters,
+            inTransaction: async (txQuery, done) => {
+              noticed =
+                (await this.#callApi?.writeKeyApprovalNoticesIn?.(txQuery, {
+                  automationId,
+                  automationURL: this.#virtualNetwork.toURLHref(automationId),
+                  realmURL: this.url,
+                  state: done?.automation.state,
+                  awaiting,
+                })) ?? [];
+            },
+          },
         );
         if (result) {
           followed.set(automationId, result);
         }
+        // The people the automation waits on, besides its payer, each have a
+        // notice while it waits, written in the follow's own transaction.
+        this.#callApi?.tellKeyApprovalNoticesChanged?.(noticed);
       } catch (e: any) {
         this.#log.warn(
           `couldn't follow the key approvals of automation ${automationId}: ${e?.message ?? e}`,
@@ -15738,10 +15805,92 @@ export class Realm {
     }
   }
 
+  // Once an incremental pass has landed, follows the key approvals of the
+  // automations it touched that are in this realm and aren't paused. The
+  // worker that ran the pass asks for this after every pass whose hook synced
+  // an automation (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`, naming them), and
+  // the request mounts the realm on whichever realm server it reaches. That
+  // covers a pass no realm awaits (one the worker enqueues on its own, such
+  // as the prerender reconcile's retry or a commit's follow-up), which can be
+  // the first to index an edit made while no realm server watched the files,
+  // and a pass whose realm server stopped before it landed. A pass this realm
+  // awaits is also followed by the realm itself
+  // (`#followAutomationKeyApprovalsAfterPass`); each automation's follow
+  // locks its row, so the second takes its turn, finds the row in step, and
+  // moves and reports nothing.
+  //
+  // `reportChanges` is false when the writes behind the pass asked for no
+  // realm events. The follow is held in `#automationFollowsAfterPass`, so
+  // `incrementalIndexing()` waits for it. Never rejects: a failure is logged.
+  async followAutomationKeyApprovalsAfterWorkerPass(
+    automationIds: readonly string[],
+    { reportChanges }: { reportChanges: boolean },
+  ): Promise<void> {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !this.#callApi?.checkAutomationKeyApprovals ||
+      automationIds.length === 0
+    ) {
+      return;
+    }
+    let tracked = (async () => {
+      try {
+        let touched = new Set(automationIds);
+        let automations = (
+          await automationsInRealm(
+            this.#dbAdapter,
+            ri(this.#virtualNetwork.unresolveURL(this.url)),
+          )
+        ).filter(
+          ({ automationId, state }) =>
+            state !== 'paused' && touched.has(automationId),
+        );
+        if (automations.length === 0) {
+          return;
+        }
+        await this.followAutomationKeyApprovals(
+          automations.map(({ automationId }) => automationId),
+          { reportChanges },
+        );
+      } catch (e: any) {
+        this.#log.warn(
+          `couldn't follow the key approvals of the automations a worker's index pass touched in ${this.url}: ${e?.message ?? e}`,
+        );
+      }
+    })();
+    this.#automationFollowsAfterPass.add(tracked);
+    try {
+      await tracked;
+    } finally {
+      this.#automationFollowsAfterPass.delete(tracked);
+    }
+  }
+
   private async followAutomationKeyApprovalsOnRequest(
-    _request: Request,
+    request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let body = (await request.text()).trim();
+    if (body) {
+      let touched = parseFollowAutomationKeyApprovalsRequest(body);
+      if (!touched) {
+        return badRequest({
+          message: `the body of ${FOLLOW_AUTOMATION_KEY_APPROVALS_PATH} names no automations as { automationIds: string[] (at least one), reportChanges?: boolean }`,
+          requestContext,
+        });
+      }
+      // Held in `#automationFollowsAfterPass` from here, so
+      // `incrementalIndexing()` waits for it; it never rejects.
+      void this.followAutomationKeyApprovalsAfterWorkerPass(
+        touched.automationIds,
+        { reportChanges: touched.reportChanges !== false },
+      );
+      return createResponse({
+        body: null,
+        init: { status: 202 },
+        requestContext,
+      });
+    }
     let tracked = this.followAutomationKeyApprovalsAfterFromScratchPass();
     this.#automationFollowsAfterPass.add(tracked);
     void tracked.finally(() =>
@@ -22194,6 +22343,7 @@ export class Realm {
       viewer: await this.#statusViewer(requestContext),
       listInstances: (typeKey) =>
         this.#realmIndexQueryEngine.instanceSourcesOfType(typeKey),
+      credentialNotices: this.#callApi?.automationCredentialNotices,
     });
     return createResponse({
       body: JSON.stringify(answer.document),
@@ -22264,8 +22414,13 @@ export class Realm {
     // Loaded on first use: only a realm server answers it with a row, and
     // the schedule code it reads stays out of every bundle that imports the
     // realm.
-    let { answerAutomationStatus, automationRef, AUTOMATION_STATUS_PARAM } =
-      await import('./automation-status.ts');
+    let {
+      answerAutomationStatus,
+      automationRef,
+      AUTOMATION_STATUS_PARAM,
+      AUTOMATION_STATUS_KEY_APPROVALS_PARAM,
+    } = await import('./automation-status.ts');
+    let searchParams = new URL(request.url).searchParams;
     let answer = await answerAutomationStatus({
       dbAdapter: this.#dbAdapter,
       realmURL: new URL(this.url),
@@ -22277,10 +22432,18 @@ export class Realm {
         this.#virtualNetwork,
       ),
       viewer: await this.#statusViewer(requestContext),
-      automation: new URL(request.url).searchParams.get(
-        AUTOMATION_STATUS_PARAM,
-      ),
+      automation: searchParams.get(AUTOMATION_STATUS_PARAM),
       readInstance: (url) => this.#realmIndexQueryEngine.instanceSource(url),
+      ...(searchParams.get(AUTOMATION_STATUS_KEY_APPROVALS_PARAM) === 'true'
+        ? {
+            checkKeyApprovals: (args: {
+              automationId: string;
+              declaration: AutomationDeclaration;
+              payer: string;
+            }) => this.checkAutomationKeyApprovals(args),
+          }
+        : {}),
+      credentialNotices: this.#callApi?.automationCredentialNotices,
     });
     if (answer.status !== 200) {
       return createResponse({
@@ -22833,11 +22996,17 @@ export class Realm {
     // dropped as `type-unavailable` until the realm is indexed again, and an
     // index of realm.json is started to store the tree: nothing else may
     // index this realm for a long time.
-    if (hostRouteTypeRefs(rules).length > 0) {
+    if (
+      hostRouteTypeRefs(rules, {
+        realmURL: new URL(this.url),
+        virtualNetwork: this.#virtualNetwork,
+      }).length > 0
+    ) {
       this.#indexRealmConfigForHostRoutes();
     }
     return validateHostRoutes(rules, {
       realmURL: new URL(this.url),
+      virtualNetwork: this.#virtualNetwork,
       lookupType: () => 'unavailable',
     });
   }

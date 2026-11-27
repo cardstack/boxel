@@ -25,10 +25,9 @@
 // Which automations may take a delivery: those that are active or *waiting
 // for credits*, whose caps snapshot lists the webhook among the webhooks
 // the payer agreed to (`webhookPaths`). A snapshot without `webhookPaths`
-// limits no webhook (`webhooksChangedFrom`), so such an automation is a
-// candidate too, and its card decides. Either way the card, as indexed, must
-// name the webhook, and the webhook's owner must be a direct writer of
-// the automation's realm, which each delivery asks again
+// agreed to no webhook, so its automation takes no delivery. The card, as
+// indexed, must also name the webhook, and the webhook's owner must be a
+// direct writer of the automation's realm, which each delivery asks again
 // (`takeWebhookDelivery`). An owner who lost write pauses the automation with
 // `webhook-owner-lost-access`.
 //
@@ -210,17 +209,17 @@ export async function startWebhookAutomationRuns(
 }
 
 // The automations that may take a delivery to `webhookPath`: active or
-// waiting for credits, with a snapshot that agreed to the webhook or that
-// predates the record of webhooks.
+// waiting for credits, with a snapshot that agreed to the webhook. A snapshot
+// without `webhookPaths` contains no path, so its automation is never one.
 async function candidateAutomations(
   dbAdapter: DBAdapter,
   webhookPath: string,
 ): Promise<RealmResourceIdentifier[]> {
   let rows = await query(dbAdapter, [
     "SELECT automation_id FROM automations WHERE state IN ('active', 'waiting-for-credits')",
-    "AND (caps_snapshot->'webhookPaths' @> jsonb_build_array(",
+    "AND caps_snapshot->'webhookPaths' @> jsonb_build_array(",
     param(webhookPath),
-    "::text) OR caps_snapshot->'webhookPaths' IS NULL)",
+    '::text)',
     'ORDER BY automation_id',
   ]);
   return rows.map((row) => row.automation_id as RealmResourceIdentifier);

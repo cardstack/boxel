@@ -21,9 +21,19 @@ class ItemUsage extends Component {
   setAlignStart = (v: boolean) => (this.alignStart = v);
   setShowActions = (v: boolean) => (this.showActions = v);
 
+  get usage() {
+    let bits = ['@title="Ceylon OP1"'];
+    if (this.size !== 'm') bits.push(`@size="${this.size}"`);
+    if (this.alignStart) bits.push('@alignStart={{true}}');
+    let blocks = ['  <:leading>…</:leading>', '  <:trailing>…</:trailing>'];
+    if (this.showActions) blocks.push('  <:actions>…</:actions>');
+    return `<Item ${bits.join(' ')}>\n${blocks.join('\n')}\n</Item>`;
+  }
+
   <template>
     <FreestyleUsage
       @name='Item'
+      @source={{this.usage}}
       @slug='item'
       @description='One row of a listing: leading slot, title, description, a trailing meta column and an actions column. It renders a div, never an li, so List owns the li and Item can also stand alone in a card or inside a DataTable detail row.'
     >

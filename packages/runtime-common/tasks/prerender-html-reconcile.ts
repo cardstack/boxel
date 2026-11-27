@@ -301,6 +301,10 @@ const prerenderHtmlReconcile: Task<
     };
   };
 
+// How many retried URLs one sweep's log line names. The sweep runs every
+// minute, so the line names a sample, not a backlog.
+const LOGGED_RETRY_URLS_MAX = 20;
+
 // The index pass's half of the transient-failure retries: each realm's index
 // rows due a retry (`findTransientIndexRetryRows`) are re-indexed by one
 // incremental pass over exactly those URLs, run as the realm's owner at the
@@ -335,6 +339,10 @@ async function retryTransientIndexFailures({
     ),
   );
   let enqueued = 0;
+  // Each retry is an index pass the realm's `_readiness-check` waits on, so
+  // the URLs it names are what explains a realm reading not-ready after its
+  // boot index finished.
+  let retried: string[] = [];
   for (let [realmURL, urls] of due) {
     let owner = owners.get(realmURL);
     if (
@@ -361,6 +369,12 @@ async function retryTransientIndexFailures({
         ),
       });
       enqueued += urls.length;
+      for (let url of urls) {
+        if (retried.length >= LOGGED_RETRY_URLS_MAX) {
+          break;
+        }
+        retried.push(url);
+      }
     } catch (error: any) {
       log.error(
         `${jobLabel} prerender-html reconcile: failed to enqueue the index retry of ${urls.length} url(s) in ${realmURL}`,
@@ -369,7 +383,13 @@ async function retryTransientIndexFailures({
     }
   }
   log.info(
-    `${jobLabel} prerender-html reconcile: enqueued index retries of ${enqueued} url(s) whose visits failed transiently`,
+    `${jobLabel} prerender-html reconcile: enqueued index retries of ${enqueued} url(s) whose visits failed transiently` +
+      (retried.length
+        ? `: ${retried.join(', ')}` +
+          (enqueued > retried.length
+            ? ` and ${enqueued - retried.length} more`
+            : '')
+        : ''),
   );
   return enqueued;
 }

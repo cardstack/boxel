@@ -743,6 +743,28 @@ async function returnToRoom(page: Page, roomId: string): Promise<boolean> {
   }
 }
 
+// Clicks Confirm on the first gate that asks the person to confirm an
+// automation, once Boxel has read the automation for it. False when no gate
+// shown is an automation's.
+async function confirmAutomationGate(page: Page): Promise<boolean> {
+  let gate = page
+    .locator('[data-test-tool-call-approval]')
+    .filter({
+      has: page.locator(
+        '[data-test-automation-confirmation], [data-test-automation-confirmation-loading]',
+      ),
+    })
+    .first();
+  if ((await gate.count()) === 0) {
+    return false;
+  }
+  await gate
+    .locator('[data-test-automation-confirmation-loading]')
+    .waitFor({ state: 'detached', timeout: 60_000 });
+  await gate.locator('[data-test-pretui-tool-gate-action="apply"]').click();
+  return true;
+}
+
 async function waitForIdle(
   page: Page,
   deadline: number,
@@ -750,6 +772,8 @@ async function waitForIdle(
   onActivity?: (activity: Activity) => void,
   roomId?: string,
   roomReturns: { count: number } = { count: 0 },
+  // Set for an evaluation that confirms automation gates; counts them.
+  automationConfirmations?: { count: number },
 ): Promise<{ stoppedBy: RunResult['stoppedBy']; irregularities: string[] }> {
   let idleSince: number | undefined;
   let applyingSince: number | undefined;
@@ -804,6 +828,17 @@ async function waitForIdle(
         stoppedBy: 'irregularity',
         irregularities: activity.irregularities,
       };
+    }
+    // An evaluation that confirms automation gates clicks Confirm on one,
+    // as the person does after saying yes in the chat, and watches on.
+    if (
+      automationConfirmations &&
+      activity.awaitingApproval > 0 &&
+      !activity.generating &&
+      (await confirmAutomationGate(page))
+    ) {
+      automationConfirmations.count++;
+      continue;
     }
     // The room looks idle while a call waits for approval, so without this
     // the next prompt would go out over a turn that never finished.
@@ -1391,6 +1426,9 @@ async function runModel(
     let deadline = Date.now() + MAX_MINUTES * 60_000;
     let botMessagesBefore = 0;
     let roomReturns = { count: 0 };
+    let automationConfirmations = evaluation?.confirmAutomations
+      ? { count: 0 }
+      : undefined;
     let promptCards = evaluation
       ? promptCardIds(evaluation, result.realmUrl)
       : [];
@@ -1443,6 +1481,7 @@ async function runModel(
         },
         result.roomId,
         roomReturns,
+        automationConfirmations,
       );
       result.stoppedBy = waited.stoppedBy;
       result.irregularities = waited.irregularities;
@@ -1455,6 +1494,9 @@ async function runModel(
       roomReturns.count++;
     }
     result.roomReturns = roomReturns.count;
+    if (automationConfirmations) {
+      result.automationConfirmations = automationConfirmations.count;
+    }
     setStep('check render');
 
     // An evaluation that names the cards it expects changed passes only when

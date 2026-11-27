@@ -815,6 +815,111 @@ module('Integration | key pages', function (hooks) {
       );
     });
 
+    test('lists automations waiting on the user, marks them read, and opens the approve page for the automation', async function (assert) {
+      let automation = `${REALM}automations/nightly-sync`;
+      serve({
+        'GET _key-approval-notices': () =>
+          json(200, {
+            data: [
+              {
+                type: 'key-approval-notice',
+                id: '7',
+                attributes: {
+                  automation,
+                  realm: REALM,
+                  title: 'Nightly sync',
+                  operations: [
+                    {
+                      operation: 'list',
+                      targetType: {
+                        module: `${REALM}inbox`,
+                        name: 'Inbox',
+                      },
+                      destination: 'https://api.vendor.example/v1/list',
+                      ask: 'approve',
+                    },
+                    {
+                      operation: 'post',
+                      targetType: {
+                        module: `${REALM}inbox`,
+                        name: 'Inbox',
+                      },
+                      destination: 'https://hooks.other.example/post',
+                      ask: 'share-a-key',
+                    },
+                  ],
+                  readAt: null,
+                  createdAt: '2026-11-25T12:00:00.000Z',
+                },
+              },
+            ],
+            meta: { unread: 1 },
+          }),
+        'POST _key-approval-notices/read': () =>
+          json(200, { meta: { marked: 1, unread: 0 } }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-approval-notices]');
+      await settled();
+
+      let approve =
+        '[data-test-key-approval-notice="Nightly sync"][data-test-key-approval-notice-ask="approve"]';
+      let share =
+        '[data-test-key-approval-notice="Nightly sync"][data-test-key-approval-notice-ask="share-a-key"]';
+      assert
+        .dom(approve)
+        .includesText(
+          'The automation “Nightly sync” in realm-server.test/someone/workspace/',
+        )
+        .includesText('waits for your approval to use your key.');
+      assert
+        .dom(`${approve} [data-test-key-approval-notice-operation="list"]`)
+        .hasText('list sends to https://api.vendor.example/v1/list');
+      assert
+        .dom(`${approve} [data-test-key-approval-notice-operation="post"]`)
+        .doesNotExist('each entry lists only what it asks about');
+      assert
+        .dom(share)
+        .includesText(
+          'needs a key that is not currently shared in the workspace.',
+        );
+      assert
+        .dom(`${share} [data-test-key-approval-notice-operation="post"]`)
+        .hasText('post sends to https://hooks.other.example/post');
+
+      assert.deepEqual(
+        requests
+          .filter(
+            (r) =>
+              r.method === 'POST' && r.path === '_key-approval-notices/read',
+          )
+          .map((r) => r.body),
+        [{ data: [{ type: 'key-approval-notice', id: '7' }] }],
+        'the unread notice it lists is marked read once',
+      );
+
+      await click(`${approve} [data-test-key-approval-notice-approve]`);
+      await click(`${share} [data-test-key-approval-notice-share]`);
+      assert.deepEqual(navigations, [
+        {
+          how: 'assign',
+          url: `/secure/approve#${new URLSearchParams({
+            automation,
+            then: 'keys',
+            back: 'keys',
+          })}`,
+        },
+        {
+          how: 'assign',
+          url: `/secure/share-key#${new URLSearchParams({
+            realm: REALM,
+            back: 'keys',
+          })}`,
+        },
+      ]);
+    });
+
     test('a page whose notices are all read marks nothing', async function (assert) {
       serve({
         'GET _key-policy-notices': () =>
@@ -1061,6 +1166,7 @@ module('Integration | key pages', function (hooks) {
           'GET _key-bindings',
           'GET _key-policy-notices',
           'GET _key-limit-notices',
+          'GET _key-approval-notices',
         ],
         'the page asks nothing per key',
       );

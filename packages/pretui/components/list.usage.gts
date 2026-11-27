@@ -42,9 +42,24 @@ class ListUsage extends Component {
   };
   meta = (row: Lot): string => String(row.kg) + ' kg';
 
+  get usage() {
+    let bits = [
+      '@items={{this.lots}}',
+      '@key={{this.rowKey}}',
+      '@label="Lots on the desk"',
+    ];
+    if (this.selectionMode !== 'none')
+      bits.push(`@selectionMode="${this.selectionMode}"`);
+    if (this.size !== 'm') bits.push(`@size="${this.size}"`);
+    if (!this.divided) bits.push('@divided={{false}}');
+    if (this.bordered) bits.push('@bordered={{true}}');
+    return `<List ${bits.join(' ')}>\n  <:item as |row|>\n    <Item @title={{row.tea}} />\n  </:item>\n</List>`;
+  }
+
   <template>
     <FreestyleUsage
       @name='List'
+      @source={{this.usage}}
       @slug='list'
       @description='The row collection: ul/li semantics, one tab stop with arrows within, the same DataSource selection model DataTable uses, and the same loading / empty / error chrome. It is what a DataTable becomes when the pane is too narrow for columns.'
     >

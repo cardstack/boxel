@@ -24,9 +24,21 @@ class DrawerUsage extends GlimmerComponent {
   get placementVal() {
     return this.placement as 'end' | 'start' | 'bottom';
   }
+  get usage() {
+    let bits = [
+      '@open={{this.open}}',
+      '@onClose={{this.hide}}',
+      `@label='Demo drawer'`,
+    ];
+    if (this.placement !== 'end') bits.push(`@placement='${this.placement}'`);
+    if (!this.dismissible) bits.push('@dismissible={{false}}');
+    return `<Drawer ${bits.join(' ')}><:title>…</:title><:default>…</:default><:footer>…</:footer></Drawer>`;
+  }
+
   <template>
     <FreestyleUsage
       @name='Drawer'
+      @source={{this.usage}}
       @description='A modal drawer that slides in over a dark, translucent overlay that obscures the page underneath — riding the native dialog top layer, so focus trap, Escape, backdrop, and stacking come from the platform.'
     >
       <:example>

@@ -21,6 +21,7 @@ import {
   Deferred,
   isCardInstance,
   validateHostRoutes,
+  VirtualNetwork,
   type HostRoute,
   type HostRouteTypeInfo,
   type HostRoutingRule,
@@ -158,6 +159,7 @@ function dynamicRoutes(): readonly HostRoute[] {
   };
   let { routes, warnings } = validateHostRoutes(DYNAMIC_ROUTE_RULES, {
     realmURL: new URL(testHostModeRealmURL),
+    virtualNetwork: new VirtualNetwork(),
     lookupType: (ref) => types[`${ref.module}/${ref.name}`],
   });
   let dropped = warnings.filter((w) => w.dropped);
