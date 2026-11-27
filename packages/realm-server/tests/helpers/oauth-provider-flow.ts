@@ -20,6 +20,7 @@ import {
   testOAuthSecureOriginURL,
 } from './oauth-provider.ts';
 import type { CallerLimit } from '../../lib/oauth-provider/caller-limit.ts';
+import type { DeviceCodeLimit } from '../../lib/oauth-provider/device.ts';
 import { CONFIRMATION_CODE_PARAM } from '@cardstack/secure-origin/security/confirmation-code.js';
 import type { OAuthResourceDefinition } from '../../lib/oauth-provider/registry.ts';
 import type { TokenLimit } from '../../lib/oauth-provider/token-limit.ts';
@@ -54,6 +55,13 @@ export const ROOMY_TOKEN_LIMIT: TokenLimit = {
   },
 };
 
+// Device-code entry limits no test reaches, for modules that aren't testing
+// them.
+export const ROOMY_DEVICE_CODE_LIMIT: DeviceCodeLimit = {
+  perUser: { requests: 1000, windowSeconds: 600 },
+  caller: ROOMY_LIMIT,
+};
+
 // The verifier every flow these helpers start proves its code with, and the
 // S256 challenge it starts with.
 export const OAUTH_TEST_CODE_VERIFIER = 'test-verifier-'.padEnd(64, 'v');
@@ -76,11 +84,15 @@ export async function startOAuthProviderServer(
   name: string,
   {
     tokenLimit,
+    authorizationLimit,
+    deviceCodeLimit,
     testResources,
     documentOrigins,
     trustedProxyHops = 0,
   }: {
     tokenLimit?: TokenLimit;
+    authorizationLimit?: CallerLimit;
+    deviceCodeLimit?: DeviceCodeLimit;
     testResources?: OAuthResourceDefinition[];
     // Client ID metadata documents served from a stub: each `https://` origin
     // maps to the stub's plain HTTP origin on loopback.
@@ -108,8 +120,9 @@ export async function startOAuthProviderServer(
     clientAddress: { trustedProxyHops, infraAddresses: [] },
     oauthProvider: testOAuthProviderConfig(),
     oauthNewClientLimit: ROOMY_LIMIT,
-    oauthAuthorizationLimit: ROOMY_LIMIT,
+    oauthAuthorizationLimit: authorizationLimit ?? ROOMY_LIMIT,
     oauthTokenLimit: tokenLimit ?? ROOMY_TOKEN_LIMIT,
+    oauthDeviceCodeLimit: deviceCodeLimit ?? ROOMY_DEVICE_CODE_LIMIT,
     ...(testResources ? { oauthTestResources: testResources } : {}),
     ...(documentOrigins ? { oauthTestDocumentOrigins: documentOrigins } : {}),
   });

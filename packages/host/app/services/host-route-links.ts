@@ -6,13 +6,18 @@ import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
+  ensureTrailingSlash,
+  hasExecutableExtension,
+  invalidationsMayChangeHostRoutes,
   hostRouteLink,
   isCardInstance,
   logger,
   registerHostRouteLinks,
+  resolveHostRoute,
   runtimeNonQueryDependencyContext,
   type CardAPIForMatching,
   type HostRoute,
+  type HostRouteErrorResult,
   type HostRouteAddressTarget,
   type HostRouteLinkRoutes,
   type HostRouteLinks,
@@ -20,17 +25,23 @@ import {
 } from '@cardstack/runtime-common';
 
 import { CardError } from '@cardstack/runtime-common/error';
+import { scopedRenderContext } from '@cardstack/runtime-common/render-context';
 
 import { currentRenderScope } from '@cardstack/host/lib/gc-card-store';
+import { visitorHostRouteLookups } from '@cardstack/host/lib/host-route-lookups';
+import { plainLinkClickURL } from '@cardstack/host/lib/link-clicks';
 import { duringPrerenderHeaders } from '@cardstack/host/lib/prerender-fetch-headers';
 
 import type HostModeService from './host-mode-service';
+import type MessageService from './message-service';
 import type NetworkService from './network';
+import type OperatorModeStateService from './operator-mode-state-service';
 import type RenderStoreService from './render-store';
 import type SessionService from './session';
 import type StoreService from './store';
 
 import type { BaseDef, CardDef } from '@cardstack/base/card-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const log = logger('host-route-links');
 
@@ -42,6 +53,12 @@ interface RealmRoutes {
   key: string;
   routes: HostRouteLinkRoutes | undefined;
 }
+
+// What one request to a realm's routes endpoint got: the routes (`undefined`
+// for a 404, no routes), or the failure to read them.
+type RoutesRead =
+  | { routes: HostRouteLinkRoutes | undefined }
+  | { failure: CardError };
 
 // The cards links asked the store for, for one store identity in one render
 // scope; see `scopedCards`.
@@ -74,9 +91,15 @@ type RenderGlobals = {
 // - In an HTML visit, the realm's routes endpoint. The stored HTML carries
 //   the address on the realm's own URL.
 //
-// In the app (interact mode, code mode, host submode) there are no routes
-// yet, and links keep card URLs: the app doesn't open a routed address on a
-// workspace's URL.
+// - In interact mode and code mode, the routes endpoint of the realm
+//   currently open (the workspace the stacks show, or the realm of the open
+//   file). A click on a routed address opens its card in the app (see
+//   `followRoutedLinks`). The app reads the routes when one of the two modes
+//   shows, and again after each index of the realm that changes realm.json
+//   or a module, so a change to the routes or to a route type reaches the
+//   app. Until a first read lands, links keep card URLs.
+//
+// In host submode there are no routes, and links keep card URLs.
 //
 // The endpoint serves the routes the realm's last index validated and
 // stored, so nothing here validates them again. That tree can lack routes
@@ -99,7 +122,9 @@ export default class HostRouteLinksService
   implements HostRouteLinks
 {
   @service declare private hostModeService: HostModeService;
+  @service declare private messageService: MessageService;
   @service declare private network: NetworkService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service('render-store') declare private renderStore: RenderStoreService;
   @service declare private session: SessionService;
   @service('store') declare private appStore: StoreService;
@@ -147,6 +172,28 @@ export default class HostRouteLinksService
   // `hrefTo` wrote, on the realm's URL, matches it.
   private linkedCards = new Map<string, string>();
 
+  // How many views that follow routed links are shown (interact mode, code
+  // mode); see `followRoutedLinks`. Not tracked: `linkViewChanges` tells
+  // the links when it changed.
+  private linkViews = 0;
+  @tracked private linkViewChanges = 0;
+  // In such a view: the routes of the last read of a realm's endpoint that
+  // got an answer. `undefined` routes: the realm has none. They stay in use
+  // while the next read is under way, after it fails, and while no such
+  // view shows, so links keep their addresses meanwhile.
+  // Written only when a read settles, never during a render, and only when
+  // the routes changed, so a read that finds the same routes renders no link
+  // again.
+  @tracked private appRoutes:
+    | { realmURL: string; routes: HostRouteLinkRoutes | undefined }
+    | undefined;
+  // The realm whose routes the app reads while such a view shows: the
+  // realm open there. `read` is the number of the read under way. A read
+  // that settles after another took its place is dropped.
+  private appRoutesWatch:
+    | { realmURL: string; unsubscribe: () => void; read: number | undefined }
+    | undefined;
+
   constructor(owner: Owner) {
     super(owner);
     this.session.register(this);
@@ -160,6 +207,90 @@ export default class HostRouteLinksService
     this.routeReads.clear();
     this.realmRoutes.clear();
     this.routeFailures.clear();
+    this.stopWatchingAppRoutes();
+    this.appRoutes = undefined;
+  }
+
+  willDestroy() {
+    this.stopWatchingAppRoutes();
+    super.willDestroy();
+  }
+
+  // Called while a view of the open realm shows (interact mode, code
+  // mode). Until the returned function is called, every link in the app
+  // gets a routed address from the open realm's routes, and a plain click
+  // on a link to a routed address, anywhere on `page`, opens the card the
+  // address resolves to, with no page load, as a page load of the address
+  // would serve it. The view says how, in `follower`.
+  //
+  // A redirect inside the realm is followed in the app. A lookup that fails
+  // keeps the app where it is, and opens the card whose load failed when
+  // there is one, which shows the failure. An address no route serves
+  // opens its card when it is a card's own URL. A redirect out of the realm,
+  // and any other address no route serves, go to the view's `load`. Any
+  // other click keeps the browser's default: see `lib/link-clicks`.
+  //
+  // A click is dropped when another click follows it before its card is
+  // known, when another realm was opened meanwhile, and when the view no
+  // longer shows.
+  followRoutedLinks(page: Document, follower: RoutedLinkFollower): () => void {
+    let follows = 0;
+    let shown = true;
+    let follow = async (url: URL, open: (cardHref: string) => void) => {
+      let mine = ++follows;
+      let realm = this.operatorModeStateService.openRealmURL;
+      let target = await this.followAddress(url);
+      if (
+        !target ||
+        !shown ||
+        mine !== follows ||
+        this.isDestroying ||
+        this.isDestroyed ||
+        this.operatorModeStateService.openRealmURL !== realm
+      ) {
+        return;
+      }
+      if (target.kind === 'load') {
+        follower.load(target.href);
+      } else if (target.cardHref) {
+        open(target.cardHref);
+      }
+    };
+    let onClick = (event: MouseEvent) => {
+      let url = plainLinkClickURL(event);
+      if (!url || !this.holdsRoutesFor(url)) {
+        return;
+      }
+      event.preventDefault();
+      void follow(url, follower.opener(event));
+    };
+    page.addEventListener('click', onClick);
+    this.linkViews++;
+    this.noteLinkViewChange();
+    return () => {
+      if (shown) {
+        shown = false;
+        page.removeEventListener('click', onClick);
+        this.linkViews--;
+        this.noteLinkViewChange();
+      }
+    };
+  }
+
+  // The caller is a modifier, inside a render that links may have read in,
+  // so the links render again in a later microtask. Once no view that
+  // follows routed links shows, the app stops reading the routes, and it
+  // reads them again when one shows again.
+  private noteLinkViewChange() {
+    void Promise.resolve().then(() => {
+      if (this.isDestroying || this.isDestroyed) {
+        return;
+      }
+      if (this.linkViews === 0) {
+        this.stopWatchingAppRoutes();
+      }
+      this.linkViewChanges++;
+    });
   }
 
   // Whether this render is an HTML visit, not a render for a person looking
@@ -247,8 +378,14 @@ export default class HostRouteLinksService
       return fromPage;
     }
     if (!this.inHTMLVisit) {
-      // The app can't open a routed address.
-      return undefined;
+      return this.openRealmRoutes();
+    }
+    if (scopedRenderContext()) {
+      // This tab renders a card for its own index, and a link can't tell
+      // whether it renders for that or for someone looking at the app. It
+      // takes the visit's routes, and also reads the app's, so that a link
+      // in the app renders again once they change.
+      void this.openRealmRoutes();
     }
     let realmURL = this.visitedRealmURL();
     return realmURL ? this.routesOfRealm(realmURL) : undefined;
@@ -320,8 +457,27 @@ export default class HostRouteLinksService
     // A link asks from inside a render, and the result is tracked state, so
     // everything here happens in a later microtask.
     await Promise.resolve();
-    let routes: HostRouteLinkRoutes | undefined;
-    let failure: CardError | undefined;
+    let result = await this.requestRoutes(realmURL);
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+    if (this.routeReads.get(realmURL)?.read !== read) {
+      // Another read took this one's place.
+      return;
+    }
+    this.routeReads.delete(realmURL);
+    if ('failure' in result) {
+      this.routeFailures.set(realmURL, result.failure);
+      this.routeFailureCount++;
+      return;
+    }
+    this.routeFailures.delete(realmURL);
+    this.realmRoutes.set(realmURL, { key, routes: result.routes });
+  }
+
+  // One request to a realm's routes endpoint. Only a 200 (the routes) and a
+  // 404 (no routes) are answers; anything else is a failure to read them.
+  private async requestRoutes(realmURL: string): Promise<RoutesRead> {
     let url = `${realmURL}_host-routes`;
     try {
       let response = await this.network.authedFetch(url, {
@@ -337,40 +493,235 @@ export default class HostRouteLinksService
         if (!Array.isArray(body?.routes)) {
           throw new Error(`${url} answered 200 with no routes`);
         }
-        routes = {
-          realmURL: new URL(realmURL),
-          routes: body.routes as HostRoute[],
+        return {
+          routes: {
+            realmURL: new URL(realmURL),
+            routes: body.routes as HostRoute[],
+          },
         };
-      } else if (response.status === 404) {
+      }
+      if (response.status === 404) {
         // The realm serves no routes endpoint: no routes, so links fall back.
         log.debug(`no host routes from ${realmURL}: ${url} answered 404`);
-      } else {
-        let message = `the host routes of ${realmURL} could not be read: ${url} answered HTTP ${response.status}`;
-        log.debug(message);
-        failure = routesReadFailure(message, response.status);
+        return { routes: undefined };
       }
+      let message = `the host routes of ${realmURL} could not be read: ${url} answered HTTP ${response.status}`;
+      log.debug(message);
+      return { failure: routesReadFailure(message, response.status) };
     } catch (e) {
       log.debug(`reading the host routes of ${realmURL} failed: ${String(e)}`);
-      failure = routesReadFailure(
-        `reading the host routes of ${realmURL} failed: ${String(e)}`,
-        502,
-      );
+      return {
+        failure: routesReadFailure(
+          `reading the host routes of ${realmURL} failed: ${String(e)}`,
+          502,
+        ),
+      };
     }
-    if (this.isDestroying || this.isDestroyed) {
+  }
+
+  // While a view that follows routed links shows, the routes of the realm
+  // currently open, or `undefined` while they are read. `undefined` when no
+  // such view shows.
+  private openRealmRoutes(): HostRouteLinkRoutes | undefined {
+    void this.linkViewChanges;
+    let realmURL = this.openRealmURL();
+    if (!realmURL) {
+      return undefined;
+    }
+    if (this.appRoutesWatch?.realmURL !== realmURL) {
+      this.watchAppRoutes(realmURL);
+    }
+    let held = this.appRoutes;
+    return held?.realmURL === realmURL ? held.routes : undefined;
+  }
+
+  // While a view that follows routed links shows, the URL of the realm
+  // open there.
+  private openRealmURL(): string | undefined {
+    if (this.linkViews === 0) {
+      return undefined;
+    }
+    let realm = this.operatorModeStateService.openRealmURL;
+    if (!realm) {
+      return undefined;
+    }
+    try {
+      return ensureTrailingSlash(this.network.virtualNetwork.toURL(realm).href);
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Reads a realm's routes for the app, in place of the realm read so far,
+  // and listens for the realm's indexes, after each one that may have
+  // changed them it reads them again.
+  private watchAppRoutes(realmURL: string): void {
+    this.stopWatchingAppRoutes();
+    let unsubscribe = this.messageService.subscribe(realmURL, (event) => {
+      if (
+        this.appRoutesWatch?.realmURL === realmURL &&
+        routesMayHaveChanged(realmURL, event)
+      ) {
+        this.readAppRoutes();
+      }
+    });
+    this.appRoutesWatch = { realmURL, unsubscribe, read: undefined };
+    this.readAppRoutes();
+  }
+
+  private stopWatchingAppRoutes(): void {
+    this.appRoutesWatch?.unsubscribe();
+    this.appRoutesWatch = undefined;
+  }
+
+  // Reads the watched realm's routes, in place of a read under way.
+  private readAppRoutes(): void {
+    let watch = this.appRoutesWatch;
+    if (!watch) {
       return;
     }
-    if (this.routeReads.get(realmURL)?.read !== read) {
-      // Another read took this one's place.
+    let read = ++this.routeReadCount;
+    watch.read = read;
+    void this.fetchAppRoutes(watch.realmURL, read);
+  }
+
+  private async fetchAppRoutes(realmURL: string, read: number): Promise<void> {
+    // A link asks from inside a render, and the result is tracked state, so
+    // everything here happens in a later microtask.
+    await Promise.resolve();
+    let result = await this.requestRoutes(realmURL);
+    let watch = this.appRoutesWatch;
+    if (
+      this.isDestroying ||
+      this.isDestroyed ||
+      watch?.realmURL !== realmURL ||
+      watch.read !== read
+    ) {
       return;
     }
-    this.routeReads.delete(realmURL);
-    if (failure) {
-      this.routeFailures.set(realmURL, failure);
-      this.routeFailureCount++;
+    watch.read = undefined;
+    if ('failure' in result) {
+      // The routes held so far stay in use. The app reads them again after
+      // the realm's next index that may change them, and when a view that
+      // follows routed links shows again.
       return;
     }
-    this.routeFailures.delete(realmURL);
-    this.realmRoutes.set(realmURL, { key, routes });
+    let held = this.appRoutes;
+    if (held?.realmURL === realmURL && sameRoutes(held.routes, result.routes)) {
+      return;
+    }
+    this.appRoutes = { realmURL, routes: result.routes };
+  }
+
+  // What a click on a routed address does in the app, worked out
+  // with the same resolver and lookups a page load of the address runs, as
+  // the signed-in user (ADR 036 §1.4). Only for an address in the open
+  // realm, whose routes the app holds; see `holdsRoutesFor`. `undefined`
+  // when they are no longer held.
+  //
+  // A redirect inside the realm is resolved here too, at most
+  // `MAX_REDIRECT_HOPS` times, so that a realm with no host URL, whose
+  // server doesn't resolve routes, never gets the address. A redirect out
+  // of the realm is the browser's to load. An address no route serves
+  // opens its card when it is a card's own URL, and is the browser's to
+  // load otherwise.
+  async followAddress(url: URL): Promise<RoutedAddressFollow | undefined> {
+    let routes = this.heldRoutesFor(url);
+    if (!routes) {
+      return undefined;
+    }
+    let address = url;
+    for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+      let resolution = await resolveHostRoute({
+        path: `/${address.pathname.slice(routes.realmURL.pathname.length)}`,
+        routes: routes.routes,
+        realmURL: routes.realmURL,
+        ...visitorHostRouteLookups({
+          fetch: this.network.authedFetch,
+          virtualNetwork: this.network.virtualNetwork,
+          realmURL: routes.realmURL.href,
+        }),
+      });
+      switch (resolution.kind) {
+        // An alias serves its card for now, as in host mode.
+        case 'card':
+        case 'alias':
+          return { kind: 'card', cardHref: resolution.cardHref };
+        case 'nothing':
+          return (await this.isCardURL(address))
+            ? { kind: 'card', cardHref: address.href }
+            : { kind: 'load', href: address.href };
+        case 'error':
+          log.warn(
+            `host route lookup for ${address.href} failed: ${String(
+              resolution.error,
+            )}`,
+          );
+          return { kind: 'failed', cardHref: failedLoadHref(resolution) };
+        case 'redirect': {
+          let target = resolution.external
+            ? new URL(resolution.location)
+            : new URL(resolution.location.slice(1), routes.realmURL);
+          if (
+            target.origin !== routes.realmURL.origin ||
+            !target.pathname.startsWith(routes.realmURL.pathname) ||
+            target.search ||
+            target.hash
+          ) {
+            return { kind: 'load', href: target.href };
+          }
+          address = target;
+          break;
+        }
+      }
+    }
+    log.warn(
+      `host route redirects from ${url.href} go on past ${MAX_REDIRECT_HOPS} hops`,
+    );
+    return { kind: 'failed', cardHref: undefined };
+  }
+
+  // Whether an address no route serves is a card's own URL, which the app
+  // opens as host mode does (`HostLinkNavigationService.findDestination`).
+  // The store decides, because a card's id can have a dot in its last
+  // segment (`Milestone/v1.2`), as a file's name does. A card's `.json`
+  // file and a module are never asked for. An address whose card can't be
+  // loaded, such as an image, is the browser's to load.
+  private async isCardURL(address: URL): Promise<boolean> {
+    if (
+      address.pathname.endsWith('.json') ||
+      hasExecutableExtension(address.pathname)
+    ) {
+      return false;
+    }
+    try {
+      return isCardInstance(await this.appStore.get(address.href));
+    } catch (e) {
+      log.debug(`could not load ${address.href} as a card: ${String(e)}`);
+      return false;
+    }
+  }
+
+  // Whether a URL is in the realm open in the app, whose routes the
+  // app holds, and that has any: a URL a click may follow with
+  // `followAddress`.
+  holdsRoutesFor(url: URL): boolean {
+    return this.heldRoutesFor(url) !== undefined;
+  }
+
+  private heldRoutesFor(url: URL): HostRouteLinkRoutes | undefined {
+    let held = this.appRoutes;
+    let routes = held?.routes;
+    if (
+      !routes ||
+      held?.realmURL !== this.openRealmURL() ||
+      routes.routes.length === 0 ||
+      url.origin !== routes.realmURL.origin ||
+      !url.pathname.startsWith(routes.realmURL.pathname)
+    ) {
+      return undefined;
+    }
+    return routes;
   }
 
   // When Host Mode v2 lands, give the addresses on the host URL the page is
@@ -468,6 +819,74 @@ function routesReadFailure(message: string, status: number): CardError {
   let error = new CardError(message, { status });
   error.gatewayFailure = true;
   return error;
+}
+
+// How a view opens what a click on a routed address leads to; see
+// `followRoutedLinks`.
+export interface RoutedLinkFollower {
+  // Called at the click. Returns what opens the card once the address has
+  // resolved, so the view can note where the click happened.
+  opener(event: MouseEvent): (cardHref: string) => void;
+  // Has the browser load a URL the app can't show.
+  load(href: string): void;
+}
+
+// How many redirects a click on a routed address follows in the app.
+const MAX_REDIRECT_HOPS = 5;
+
+// What a click on a routed address does in the app.
+export type RoutedAddressFollow =
+  // Open this card.
+  | { kind: 'card'; cardHref: string }
+  // Leave the app: the browser loads this URL.
+  | { kind: 'load'; href: string }
+  // A lookup failed. `cardHref` is the card whose load failed, when the
+  // failed lookup was the load of one card.
+  | { kind: 'failed'; cardHref: string | undefined };
+
+// The card whose load made a resolution fail, when the failed lookup was a
+// load of one card, not a search.
+function failedLoadHref(resolution: HostRouteErrorResult): string | undefined {
+  let step = resolution.trace[resolution.trace.length - 1];
+  return step?.outcome === 'error' && step.lookup?.kind === 'load'
+    ? step.lookup.cardHref
+    : undefined;
+}
+
+// Whether a realm event may have changed the routes the realm's endpoint
+// serves. The stored tree changes only in an index that changes realm.json
+// or a module (ADR 036 §1.5). A full index, and an incremental one too
+// large to list what it changed, may have changed either.
+function routesMayHaveChanged(
+  realmURL: string,
+  event: RealmEventContent,
+): boolean {
+  if (event.eventName !== 'index') {
+    return false;
+  }
+  if (event.indexType === 'full') {
+    return true;
+  }
+  if (event.indexType !== 'incremental') {
+    return false;
+  }
+  if ('realmWide' in event) {
+    return true;
+  }
+  return invalidationsMayChangeHostRoutes(
+    new URL(realmURL),
+    event.invalidations,
+  );
+}
+
+function sameRoutes(
+  a: HostRouteLinkRoutes | undefined,
+  b: HostRouteLinkRoutes | undefined,
+): boolean {
+  return (
+    a?.realmURL.href === b?.realmURL.href &&
+    JSON.stringify(a?.routes) === JSON.stringify(b?.routes)
+  );
 }
 
 declare module '@ember/service' {

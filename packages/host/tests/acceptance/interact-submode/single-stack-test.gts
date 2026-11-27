@@ -871,6 +871,62 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
       assert.dom(opener).isFocused('focus is back on the opener');
     });
 
+    test('a click on a card inside a link opens the card and does not follow the link', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}PetLink/mango`, format: 'isolated' }]],
+      });
+      let clicks: MouseEvent[] = [];
+      let recordClick = (event: MouseEvent) => clicks.push(event);
+      document.addEventListener('click', recordClick, { capture: true });
+      try {
+        await click(
+          `[data-test-pet-link] [data-test-card="${testRealmURL}Pet/mango"]`,
+        );
+      } finally {
+        document.removeEventListener('click', recordClick, { capture: true });
+      }
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .exists('the card is open on the stack');
+      assert.strictEqual(clicks.length, 1, 'one click happened');
+      assert.true(
+        clicks[0].defaultPrevented,
+        'the browser does not follow the link',
+      );
+    });
+
+    test('a click with a modifier key on a card inside a link leaves the link to the browser', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}PetLink/mango`, format: 'isolated' }]],
+      });
+      let card = `[data-test-pet-link] [data-test-card="${testRealmURL}Pet/mango"]`;
+      let defaultPrevented: boolean[] = [];
+      // This listener runs after the card's own click listener. It records
+      // what that listener decided, then stops the test browser from opening
+      // a tab.
+      let recordClick = (event: Event) => {
+        defaultPrevented.push(event.defaultPrevented);
+        event.preventDefault();
+      };
+      let cardElement = find(card)!;
+      cardElement.addEventListener('click', recordClick);
+      try {
+        await click(card, { metaKey: true });
+      } finally {
+        cardElement.removeEventListener('click', recordClick);
+      }
+
+      assert.deepEqual(
+        defaultPrevented,
+        [false],
+        'the link keeps its default action',
+      );
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .doesNotExist('the card does not open on the stack');
+    });
+
     test('Escape closes the card that has focus and returns focus to what opened it', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],

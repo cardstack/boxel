@@ -25,9 +25,12 @@ import {
 } from './personal-realm.ts';
 import {
   boxelApiResource,
+  grantsSpendCredit,
   OAuthConnectionEndedError,
   refreshTokens,
+  SPEND_CREDIT_SCOPE,
 } from './oauth-login.ts';
+import { AiCreditsNotAllowedError } from './oauth-refusals.ts';
 import { promptPassword as defaultPromptPassword } from './prompt.ts';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
 import { realmFetch } from './realm-fetch.ts';
@@ -1132,6 +1135,38 @@ export class ProfileManager implements RealmAuthenticator {
     return find();
   }
 
+  // Whether the active profile may spend AI credits: a Matrix profile always
+  // may, and an OAuth profile when its connection holds `boxel:spend-credit`.
+  // Undefined with no active profile, or for an OAuth connection whose token
+  // endpoint reported no scopes, which leaves the realm server to decide.
+  canSpendAiCredits(): boolean | undefined {
+    let active = this.getActiveProfile();
+    if (!active) {
+      return undefined;
+    }
+    if (!active.profile.oauth) {
+      return true;
+    }
+    return grantsSpendCredit(active.profile.oauth.scope);
+  }
+
+  // Whether `input` is one of the active realm server's routes that spend AI
+  // credits: `_request-forward` and the OpenRouter passthrough.
+  spendsAiCredits(input: string | URL | Request): boolean {
+    let active = this.getActiveProfile();
+    if (!active || !this.isRealmServerOrigin(input)) {
+      return false;
+    }
+    let base = new URL(ensureTrailingSlash(active.profile.realmServerUrl))
+      .pathname;
+    let path = new URL(input instanceof Request ? input.url : String(input))
+      .pathname;
+    return (
+      path === `${base}_request-forward` ||
+      path.startsWith(`${base}_openrouter/`)
+    );
+  }
+
   // Whether `input` is on the active profile's realm server, the only origin
   // its OAuth token is sent to.
   isRealmServerOrigin(input: string | URL | Request): boolean {
@@ -1294,7 +1329,15 @@ export class ProfileManager implements RealmAuthenticator {
     init?: RequestInit,
   ): Promise<Response> {
     if (this.getActiveProfile()?.profile.oauth) {
-      return this.oauthFetch(input, init, fetch);
+      let spends = this.spendsAiCredits(input);
+      if (spends && this.canSpendAiCredits() === false) {
+        throw new AiCreditsNotAllowedError();
+      }
+      let response = await this.oauthFetch(input, init, fetch);
+      if (spends && refusedForLackOfSpendCredit(response)) {
+        throw new AiCreditsNotAllowedError();
+      }
+      return response;
     }
     let token = await this.getOrRefreshServerToken();
     let headers = this.buildHeaders(input, init, token);
@@ -1548,4 +1591,19 @@ export function resetProfileManager(): void {
  */
 export function setProfileManager(configDir: string): void {
   _instance = new ProfileManager(configDir);
+}
+
+// Whether the realm server refused a request because the OAuth connection
+// lacks `boxel:spend-credit`: a 403 whose challenge names that scope.
+function refusedForLackOfSpendCredit(response: Response): boolean {
+  if (response.status !== 403) {
+    return false;
+  }
+  let challenge = response.headers.get('www-authenticate') ?? '';
+  let scope = /scope="([^"]*)"/.exec(challenge)?.[1];
+  return (
+    /error="insufficient_scope"/.test(challenge) &&
+    scope !== undefined &&
+    scope.split(' ').includes(SPEND_CREDIT_SCOPE)
+  );
 }

@@ -11,8 +11,10 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
+import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
+import window from 'ember-window-mock';
 import { get } from 'lodash-es';
 
 import { cn, gt, MenuItem, MenuDivider } from '@cardstack/boxel-ui/helpers';
@@ -80,6 +82,7 @@ import SubmodeLayout from './submode-layout';
 
 import type CardService from '../../services/card-service';
 import type FileUploadService from '../../services/file-upload';
+import type HostRouteLinksService from '../../services/host-route-links';
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -126,6 +129,15 @@ interface CardToDelete {
   isFile?: boolean;
 }
 
+// The instance id of the stack item an event happened in, if any.
+function stackItemOf(event: Event): string | undefined {
+  let origin = event.composedPath()[0] ?? event.target;
+  return origin instanceof Element
+    ? (origin.closest('[data-stack-item]')?.getAttribute('data-stack-item') ??
+        undefined)
+    : undefined;
+}
+
 export default class InteractSubmode extends Component {
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
@@ -143,12 +155,42 @@ export default class InteractSubmode extends Component {
   @service declare private recentCardsService: RecentCardsService;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
+  @service('host-route-links')
+  declare private hostRouteLinks: HostRouteLinksService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
   @tracked private recentCardCollection:
     | ReturnType<getCardCollection>
     | undefined;
+
+  // While interact mode shows, a plain click on a link to a routed address
+  // opens its card in the stack the link is in, or in the right-most stack
+  // for a link outside the stacks, such as in a modal or the search sheet.
+  // The browser loads an address the app can't show. See
+  // `HostRouteLinksService.followRoutedLinks`.
+  private followRoutedLinks = modifier((element: HTMLElement) =>
+    this.hostRouteLinks.followRoutedLinks(element.ownerDocument, {
+      // The stacks can change while the address resolves, so the stack is
+      // found again after that: when the link's stack item was closed, the
+      // click is dropped.
+      opener: (event) => {
+        let stackItem = stackItemOf(event);
+        return (cardHref) => {
+          let stackIndex =
+            stackItem === undefined
+              ? this.rightMostStackIndex
+              : this.stacks.findIndex((stack) =>
+                  stack.some((item) => item.instanceId === stackItem),
+                );
+          if (stackIndex !== -1) {
+            this.viewCard(stackIndex, cardHref, 'isolated');
+          }
+        };
+      },
+      load: (href) => window.location.assign(href),
+    }),
+  );
 
   @action private handleEscape(event: KeyboardEvent) {
     // A modal owns Escape regardless of where focus is.
@@ -843,6 +885,7 @@ export default class InteractSubmode extends Component {
           has-expanded-card=this.operatorModeStateService.hasAnyStackItemExpanded
         }}
         style={{this.backgroundImageStyle}}
+        {{this.followRoutedLinks}}
         {{onKeyMod 'Escape' this.handleEscape}}
         {{! Ctrl+E (not Cmd+E — taken by browsers' "Use Selection for Find").
            Lowercase 'e' matches event.key, so Dvorak/AZERTY users get the
