@@ -5,6 +5,8 @@ scope:
   - packages/realm-server/lib/oauth-provider/**
   - packages/realm-server/handlers/handle-oauth-provider-*.ts
   - packages/realm-server/handlers/handle-mcp.ts
+  - packages/realm-server/handlers/handle-request-forward.ts
+  - packages/realm-server/handlers/handle-openrouter-passthrough.ts
   - packages/realm-server/middleware/index.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
   - packages/realm-server/routes.ts
@@ -21,6 +23,7 @@ scope:
   - packages/runtime-common/jobs/capture.ts
   - packages/runtime-common/tasks/capture.ts
   - packages/host/app/utils/realm-sessions.ts
+  - packages/host/app/services/realm-server.ts
   - packages/host/app/utils/auth-service-worker-registration.ts
   - packages/host/public/auth-service-worker.js
   - packages/realm-server/prerender/affinity.ts
@@ -231,7 +234,8 @@ there, MUST judge it as a session that doesn't verify, which gains nothing a
 request with no credential lacks. A tab token for work that only reads, such as
 a capture, MUST allow reading only, whatever its grant allows. A realm-server
 route MUST refuse a tab token, except the federated reads a tab makes through
-`multiRealmAuthorization`. The tab MUST hold nothing but its tab tokens,
+`multiRealmAuthorization`, and the routes that spend AI credits (§1.6), which
+MUST refuse a capture's tab token and judge a command's as above. The tab MUST hold nothing but its tab tokens,
 and those only in memory. It MAY give one to its browser context's auth
 service worker for the one request the worker asks about, so its images draw,
 and the worker MUST NOT keep it. The tab MUST NOT share a browser context with
@@ -250,6 +254,13 @@ realm's permissions. Nor does publishing one: it writes read for everyone
 only on the published copy, a separate read-only realm it creates, and the
 realm published from keeps the permissions it had. Each of these refusals MUST be tested on
 the realm server, and each that names a realm route in the realm too.
+
+A route that spends the user's AI credits MUST be mapped only by a scope of its
+own, which no other scope implies and which admits nothing else, and only by an
+entry that accepts only pre-registered clients. Forwarding a call with a
+system key the caller never sees is not key management. A call already sent
+upstream when its grant ends MUST be let finish and charged to the grant's
+user, since the AI provider charges for it either way.
 
 An OAuth token MUST NOT change what a realm's policy admits (ADR 006 §1.3): a
 write that changes `realm.json`'s `policy`, `config` or type, any change to a
@@ -397,6 +408,14 @@ strings, and grants hold them, so their form is fixed here.
 An outside app acts on content the user didn't write, so widening who can
 reach a realm stays with the user in Boxel itself, whether by its permissions
 or by its policy.
+
+Reading and changing workspaces costs the user nothing, and spending AI
+credits costs them money, so consent names spending on a line of its own and
+a stolen token that may change workspaces can't drain the balance. Only Boxel's
+own apps may ask for it, since an openly registered app is named on consent
+only by its domain. A command an OAuth app runs may spend through its tab,
+since the app could spend directly with the same grant, but a capture only
+reads.
 
 Running a command or capturing a card renders in a prerender tab, which runs
 code the caller may have written, so whatever the tab holds can reach the
@@ -581,6 +600,20 @@ it, and the provider warns before it does.
 - **A cap below what the rate limit admits while the cleanup keeps a client.**
   A day-long flood within the limit would fill it, and registration would stay
   refused for everyone for up to the cleanup's retention.
+- **Spending AI credits under `boxel:write`.** Every app that may change
+  workspaces could also drain the user's balance, which costs money where a
+  write costs none.
+- **Spending AI credits through `/mcp`.** MCP clients bring their own model,
+  and `/mcp` takes openly registered clients, so any app that registers could
+  ask to spend.
+- **A spending cap on each grant.** A stolen token is already held to the
+  user's balance and to the calls one user may have in flight, and a cap needs
+  each charge to name its grant, a cap chosen at consent, and settlement
+  against a running total.
+- **A long-lived OAuth token, or a server session, for a client that can't
+  refresh, such as an AI SDK with a fixed `Authorization` header.** A longer
+  lifetime breaks §1.9, and a session is an exchange (§1.5). Such a client
+  calls through a local forwarder of the app, which refreshes.
 
 ## 4. Sources
 

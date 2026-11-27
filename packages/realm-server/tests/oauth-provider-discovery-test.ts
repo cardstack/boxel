@@ -433,10 +433,11 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(registryScopes(buildRegistry('https://a.test')), [
         'boxel:read',
         'boxel:write',
+        'boxel:spend-credit',
       ]);
       assert.deepEqual(
         registryScopes(buildRegistry('https://a.test', [testResource])),
-        ['boxel:read', 'boxel:write', 'test:probe'],
+        ['boxel:read', 'boxel:write', 'boxel:spend-credit', 'test:probe'],
       );
     });
 
@@ -553,7 +554,12 @@ module(basename(import.meta.filename), function () {
           'refresh_token',
           'urn:ietf:params:oauth:grant-type:device_code',
         ],
-        scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
+        scopes_supported: [
+          'boxel:read',
+          'boxel:write',
+          'boxel:spend-credit',
+          'test:probe',
+        ],
         authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
         token_endpoint: 'http://127.0.0.1:0/_oauth-provider/token',
         revocation_endpoint:

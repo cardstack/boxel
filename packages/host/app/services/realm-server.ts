@@ -45,7 +45,10 @@ import ENV from '@cardstack/host/config/environment';
 import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
 import { TokenRefreshSchedule } from '@cardstack/host/lib/token-refresh-schedule';
 import { RealmServerSessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
-import { readRealmSessions } from '@cardstack/host/utils/realm-sessions';
+import {
+  heldOAuthTabTokens,
+  readRealmSessions,
+} from '@cardstack/host/utils/realm-sessions';
 
 import { createServerRequestTimingMiddleware } from './client-telemetry';
 
@@ -1623,6 +1626,29 @@ export default class RealmServerService
 
   private reauthenticating: Promise<string | undefined> | undefined;
 
+  // In the tab of a command an OAuth app runs, which holds tab tokens in
+  // memory and no realm-server session, the call carries the tab token this
+  // realm server minted: the realm server judges it as the app's OAuth
+  // grant, and admits it only where that grant may spend AI credits. Such a
+  // tab never sends anything else, so it can't fall back to a session it
+  // might find in storage, and it never hands one server's tab token to
+  // another. Undefined in every other tab.
+  private oauthTabTokenForThisServer(): string | undefined {
+    let tokens = heldOAuthTabTokens();
+    if (!tokens) {
+      return undefined;
+    }
+    let forThisServer = Object.values(tokens).find(
+      (token) => tabTokenRealmServerURL(token) === this.url.href,
+    );
+    if (!forThisServer) {
+      throw new Error(
+        `This tab holds no tab token for ${this.url.href}, so it can't call it.`,
+      );
+    }
+    return forThisServer;
+  }
+
   // The forwarded fields are `RequestForwardBody` in
   // realm-server/handlers/handle-request-forward. `timeoutMs` is not one of
   // them — it is the caller's budget for the call, spent here rather than
@@ -1644,7 +1670,11 @@ export default class RealmServerService
     timeoutMs?: number;
     signal?: AbortSignal;
   }) {
-    await this.login();
+    let bearer = this.oauthTabTokenForThisServer();
+    if (!bearer) {
+      await this.login();
+      bearer = this.token;
+    }
 
     let { timeoutMs, signal: callerSignal, ...forwardedRequest } = args;
     let deadline: AbortController | undefined;
@@ -1667,7 +1697,7 @@ export default class RealmServerService
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.token}`,
+            Authorization: `Bearer ${bearer}`,
           },
           body: JSON.stringify(forwardedRequest),
           signal,
@@ -2236,6 +2266,23 @@ function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
 function isTokenExpired(rawToken: string): boolean {
   let exp = realmClaimsFromRawToken(rawToken)?.exp;
   return !Number.isFinite(exp) || (exp as number) * 1000 <= Date.now();
+}
+
+// The `realmServerURL` claim of a tab token, read without verifying it: it
+// only chooses which server a token is sent to. A JWT's payload is base64url,
+// which `atob` doesn't read as it stands.
+function tabTokenRealmServerURL(token: string): string | undefined {
+  try {
+    let payload = token.split('.')[1] ?? '';
+    let claims = JSON.parse(
+      atob(payload.replace(/-/g, '+').replace(/_/g, '/')),
+    ) as { realmServerURL?: unknown };
+    return typeof claims.realmServerURL === 'string'
+      ? claims.realmServerURL
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function realmClaimsFromRawToken(

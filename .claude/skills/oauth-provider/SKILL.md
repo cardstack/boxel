@@ -26,8 +26,8 @@ discovery documents included. On, the server also needs:
   Missing or malformed stops the server at start with a message naming what
   is wrong, never the value (`config.ts`).
 - A secure origin (`secureOriginURL`): the authorize page and its error page
-  are served there (the `secure-origin` skill). So will the Connected apps
-  page be, which isn't built yet (ADR 021's remediation file lists it).
+  are served there (the `secure-origin` skill), and so is the Connected apps
+  page.
 
 A development stack turns it on by default (`mise-tasks/services/realm-server`;
 `BOXEL_DEV_OAUTH_PROVIDER=false` turns it off) with keys made once by
@@ -127,26 +127,26 @@ entering a code are never served: `/_oauth-provider/device` is not a route.
 
 ## Routes
 
-| Route                                                  | Who calls it                   | What it does                                                                                                                                                    |
-| ------------------------------------------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /.well-known/oauth-authorization-server`          | an app                         | The authorization server's metadata (RFC 8414)                                                                                                                  |
-| `GET /.well-known/oauth-protected-resource/<path>`     | an app                         | A resource's metadata (RFC 9728), named in its 401 challenge                                                                                                    |
-| `POST /_oauth-provider/reg`                            | an app                         | Dynamic client registration (RFC 7591); no client secret is ever issued                                                                                         |
-| `GET /_oauth-provider/auth`                            | the user's browser             | Starts a flow; on success sends the browser to the interaction route, on a refusal to the authorize page with an error reference                                |
-| `GET /_oauth-provider/interaction/:uid`                | the user's browser             | Sends the browser to the secure origin's authorize page                                                                                                         |
-| `GET`/`POST /_oauth-provider/consent/:uid`             | the authorize page             | The flow's details, and the user's Allow or Deny (answers a ticket); secure window session only. An answer it can't read ends the flow, with an error reference |
-| `GET /_oauth-provider/interaction/:uid/finish?ticket=` | the user's browser             | Finishes a decided flow, then the library's resume (`/_oauth-provider/auth/:uid`) sends the code                                                                |
-| `GET /_oauth-provider/error/:reference`                | the authorize page             | What went wrong with a flow that was refused; readable again until the reference expires (10 minutes)                                                           |
-| `GET /_oauth-provider/error/:reference/return`         | the user's browser             | The error page's "Return to …": sends the error to the app's redirect URI and spends the reference                                                              |
-| `POST /_oauth-provider/device/auth`                    | an app (boxel-cli)             | Device sign-in's start: answers a device code, a user code and the `device` page's address                                                                      |
-| `POST /_oauth-provider/device/lookup`                  | the device page                | The consent for the sign-in a user code names; secure window session only                                                                                       |
-| `POST /_oauth-provider/device/decision`                | the device page                | The user's Allow or Deny for a user code; secure window session only                                                                                            |
-| `POST /_oauth-provider/token`                          | an app                         | Code exchange, device-code poll, and refresh                                                                                                                    |
-| `POST /_oauth-provider/token/revocation`               | an app                         | Revocation (RFC 7009); either token of a grant ends the whole grant                                                                                             |
-| `GET /_oauth-provider/connections`                     | Connected apps (not built yet) | The user's live grants whose code was exchanged; secure window session only                                                                                     |
-| `DELETE /_oauth-provider/connections/:grantId`         | Connected apps (not built yet) | Ends one of the user's live grants; secure window session only                                                                                                  |
-| `POST /mcp`                                            | an MCP client                  | The placeholder MCP endpoint, behind its controller: `initialize`, `ping`, `tools/list` (no tools); every tool call is refused                                  |
-| `GET`/`DELETE /mcp`                                    | an MCP client                  | `405`: the placeholder is stateless, with no event stream and no session; no token is looked at                                                                 |
+| Route                                                  | Who calls it       | What it does                                                                                                                                                    |
+| ------------------------------------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /.well-known/oauth-authorization-server`          | an app             | The authorization server's metadata (RFC 8414)                                                                                                                  |
+| `GET /.well-known/oauth-protected-resource/<path>`     | an app             | A resource's metadata (RFC 9728), named in its 401 challenge                                                                                                    |
+| `POST /_oauth-provider/reg`                            | an app             | Dynamic client registration (RFC 7591); no client secret is ever issued                                                                                         |
+| `GET /_oauth-provider/auth`                            | the user's browser | Starts a flow; on success sends the browser to the interaction route, on a refusal to the authorize page with an error reference                                |
+| `GET /_oauth-provider/interaction/:uid`                | the user's browser | Sends the browser to the secure origin's authorize page                                                                                                         |
+| `GET`/`POST /_oauth-provider/consent/:uid`             | the authorize page | The flow's details, and the user's Allow or Deny (answers a ticket); secure window session only. An answer it can't read ends the flow, with an error reference |
+| `GET /_oauth-provider/interaction/:uid/finish?ticket=` | the user's browser | Finishes a decided flow, then the library's resume (`/_oauth-provider/auth/:uid`) sends the code                                                                |
+| `GET /_oauth-provider/error/:reference`                | the authorize page | What went wrong with a flow that was refused; readable again until the reference expires (10 minutes)                                                           |
+| `GET /_oauth-provider/error/:reference/return`         | the user's browser | The error page's "Return to …": sends the error to the app's redirect URI and spends the reference                                                              |
+| `POST /_oauth-provider/device/auth`                    | an app (boxel-cli) | Device sign-in's start: answers a device code, a user code and the `device` page's address                                                                      |
+| `POST /_oauth-provider/device/lookup`                  | the device page    | The consent for the sign-in a user code names; secure window session only                                                                                       |
+| `POST /_oauth-provider/device/decision`                | the device page    | The user's Allow or Deny for a user code; secure window session only                                                                                            |
+| `POST /_oauth-provider/token`                          | an app             | Code exchange, device-code poll, and refresh                                                                                                                    |
+| `POST /_oauth-provider/token/revocation`               | an app             | Revocation (RFC 7009); either token of a grant ends the whole grant                                                                                             |
+| `GET /_oauth-provider/connections`                     | Connected apps     | The user's live grants whose code was exchanged; secure window session only                                                                                     |
+| `DELETE /_oauth-provider/connections/:grantId`         | Connected apps     | Ends one of the user's live grants; secure window session only                                                                                                  |
+| `POST /mcp`                                            | an MCP client      | The placeholder MCP endpoint, behind its controller: `initialize`, `ping`, `tools/list` (no tools); every tool call is refused                                  |
+| `GET`/`DELETE /mcp`                                    | an MCP client      | `405`: the placeholder is stateless, with no event stream and no session; no token is looked at                                                                 |
 
 The resources an access token may be used at are listed in `registry.ts`:
 the MCP endpoint, `<issuer>/mcp`, and the Boxel API, identified by the issuer
@@ -167,8 +167,14 @@ the app chose in a prerender tab, so for an OAuth caller that tab holds tab
 tokens bound to the grant, never the user's sessions (ADR 021 §1.5). An OAuth
 capture is published as a `capture-oauth` job, kept under the reader
 `oauth:<user>`, and answered with its bytes and no URL: the GET `_capture/`
-route stays unmapped. The `realm-auth` skill covers how those controllers
-judge the caller, tab tokens included.
+route stays unmapped. `boxel:spend-credit` maps only the routes that spend
+the user's AI credits, `/_request-forward` and `/_openrouter/chat/completions`,
+which forward with a system key and charge the grant's user; no other scope
+reaches them, and it reaches nothing else. boxel-cli asks for it only with
+`--allow-ai-credits`. A command's tab token reaches those two routes too, when
+its grant holds the scope; a capture's never does. A call already upstream
+when the grant ends finishes and is charged. The `realm-auth` skill covers how
+those controllers judge the caller, tab tokens included.
 
 Lifetimes (`provider.ts`, `grants.ts`): an interaction and the library's
 session last 10 minutes, a code 60 seconds. A grant lasts 30 days if the user
@@ -302,6 +308,7 @@ never named.
 | `tab token accepted: resource …, client …, <ms>ms`                                                                                                                                     | debug | A Boxel API controller accepted a tab token after checking its grant                                                                                                                                                                                                                                                                                                    | Nothing to do                                                                                                                                                                                                                                                                                                                       |
 | `tab token refused: <reason>, resource …, <ms>ms`                                                                                                                                      | info  | A tab token's grant failed the grant checks: `unknown` (no such grant, or one for another user) or `revoked` (ended, expired, covered by a revocation of the user's grants, or no longer holding the Boxel API)                                                                                                                                                         | The app was disconnected while its command or capture ran; the command fails on its next call                                                                                                                                                                                                                                       |
 | `tab token refused: expired`/`invalid`, Boxel API (`realm-server:multi-realm-authorization`) and `OAuth tab token not accepted for <method> <url>, judged as a session: <why>` (realm) | info  | A tab token that wasn't admitted. Federated: past its lifetime, or signed under another key. Realm: `expired`, `did not verify`, `malformed`, `minted for another realm` or `its grant was refused`; the request is then judged as one whose session doesn't verify                                                                                                     | `expired` on a long command: it ran past one prerender request's time limit                                                                                                                                                                                                                                                         |
+| `tab token refused: a capture tab token on a route that spends credits, Boxel API`                                                                                                     | info  | A capture's tab token reached `/_request-forward` or the OpenRouter passthrough, which admit only a command's                                                                                                                                                                                                                                                           | A card rendered in a capture tried to spend credits; nothing to do                                                                                                                                                                                                                                                                  |
 | `request refused: form body over … bytes, resource …`                                                                                                                                  | info  | A form body too large for the controller to read a token from (413)                                                                                                                                                                                                                                                                                                     | —                                                                                                                                                                                                                                                                                                                                   |
 | `<endpoint> request refused: rate limit, …` / `…unknown address`                                                                                                                       | info  | Token or revocation endpoint over its limit (429), or the caller's address couldn't be read (403)                                                                                                                                                                                                                                                                       | `unknown address` for every caller: check the realm server's client-address settings against the load balancer                                                                                                                                                                                                                      |
 | `<endpoint> request refused: rate limit unavailable`                                                                                                                                   | warn  | The rate-limit store failed; requests are answered 503 `temporarily_unavailable`                                                                                                                                                                                                                                                                                        | The `rate-limit-store` skill                                                                                                                                                                                                                                                                                                        |
@@ -375,11 +382,9 @@ again. Its grant has no `redirect_uri`.
 
 ## Ending connections
 
-- **The user, one app**: `DELETE /_oauth-provider/connections/:grantId`,
-  which the secure origin's Connected apps page will call. The page isn't
-  built yet, so today a user can't end one app's connection themselves: an
-  operator ends it by hand (below). The route needs the user's own secure
-  window session, so an operator can't call it for them.
+- **The user, one app**: the secure origin's Connected apps page, which calls
+  `DELETE /_oauth-provider/connections/:grantId`. The route needs the user's
+  own secure window session, so an operator can't call it for them.
 - **An operator, every app of a user**: revoking the user's sessions
   (`POST /_grafana-revoke-user-sessions?user=<matrix id>`, or the Users
   dashboard's button) also sets `users.oauth_grants_revoked_at` and ends
