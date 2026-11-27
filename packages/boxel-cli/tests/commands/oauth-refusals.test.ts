@@ -94,20 +94,23 @@ describe('commands an OAuth profile refuses', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('refuses to sign a browser in with boxel browse', async () => {
+  it('opens boxel browse naming the account, with no login token', async () => {
     let requestLoginToken = vi.fn();
-    let openBrowserFn = vi.fn();
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
 
-    await expect(
-      browse(undefined, {
-        profileManager: pm,
-        requestLoginToken,
-        openBrowserFn,
-        log: () => {},
-      }),
-    ).rejects.toThrow(OAUTH_REFUSALS.browse);
+    await browse(undefined, {
+      profileManager: pm,
+      requestLoginToken,
+      openBrowserFn,
+      log: () => {},
+    });
+
     expect(requestLoginToken).not.toHaveBeenCalled();
-    expect(openBrowserFn).not.toHaveBeenCalled();
+    expect(openBrowserFn).toHaveBeenCalledTimes(1);
+    let opened = new URL(openBrowserFn.mock.calls[0][0]);
+    expect(opened.searchParams.get('signInAs')).toBe(USER_ID);
+    expect(opened.searchParams.has('loginToken')).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('refuses getServerToken', async () => {
@@ -118,11 +121,7 @@ describe('commands an OAuth profile refuses', () => {
   });
 
   it('suggests a Matrix profile in each refusal of a command', () => {
-    for (let refusal of [
-      OAUTH_REFUSALS.runCommand,
-      OAUTH_REFUSALS.capture,
-      OAUTH_REFUSALS.browse,
-    ]) {
+    for (let refusal of [OAUTH_REFUSALS.runCommand, OAUTH_REFUSALS.capture]) {
       expect(refusal).toContain('`boxel profile add` without --oauth');
     }
   });
@@ -212,7 +211,7 @@ describe('the help of a command an OAuth profile refuses', () => {
     return out;
   }
 
-  it('says, before anyone runs it, that it needs a profile signed in with Matrix', () => {
+  it('says, before anyone runs it, what needs a profile signed in with Matrix', () => {
     expect(helpOf('run-command')).toContain(
       "Needs a profile signed in with Matrix: the realm server doesn't let an OAuth token run commands yet.",
     );
@@ -220,7 +219,7 @@ describe('the help of a command an OAuth profile refuses', () => {
       "Needs a profile signed in with Matrix: the realm server doesn't let an OAuth token capture cards yet.",
     );
     expect(helpOf('browse')).toContain(
-      'Signing a browser in needs a profile signed in with Matrix',
+      'On a profile signed in with OAuth, the app opens as the profile',
     );
   });
 });

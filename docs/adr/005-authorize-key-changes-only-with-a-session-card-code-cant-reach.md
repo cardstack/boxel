@@ -16,6 +16,7 @@ scope:
   - packages/secure-origin/**
   - packages/boxel-cli/src/commands/keys/**
   - packages/boxel-cli/src/lib/secure-session.ts
+  - packages/boxel-cli/src/commands/browse.ts
   - packages/host/app/services/realm-server.ts
   - packages/host/app/services/matrix-service.ts
   - packages/host/app/lib/secure-sign-in.ts
