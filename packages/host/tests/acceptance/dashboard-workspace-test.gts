@@ -137,6 +137,38 @@ module('Acceptance | dashboard workspace', function (hooks) {
     );
   });
 
+  test('the options menu moves with its button when the dashboard scrolls', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    let trigger = `[data-test-workspace-menu-trigger="${realmAURL}"]`;
+    await click(trigger);
+    let menu = find('[data-test-boxel-menu-item-text="Favorite"]')!.closest(
+      '[data-test-boxel-dropdown-content]',
+    ) as HTMLElement;
+    let triggerTop = () => find(trigger)!.getBoundingClientRect().top;
+    let menuTop = () => menu.getBoundingClientRect().top;
+    let [triggerBefore, menuBefore] = [triggerTop(), menuTop()];
+
+    // A real scroll, whose event doesn't bubble: a synthetic one would reach
+    // the test container, which the menu also follows.
+    let scroller = find('[data-test-dashboard-scroller]') as HTMLElement;
+    let scrolled = new Promise((resolve) =>
+      scroller.addEventListener('scroll', resolve, { once: true }),
+    );
+    scroller.scrollTop = 40;
+    assert.true(scroller.scrollTop > 0, 'the dashboard scrolls');
+    // No scroll event comes when the dashboard can't scroll.
+    if (scroller.scrollTop > 0) {
+      await scrolled;
+    }
+    await settled();
+
+    // The test container is scaled, which throws off the menu's distance but
+    // not its direction.
+    assert.true(menu.isConnected, 'the menu stays open');
+    assert.true(triggerTop() < triggerBefore, 'the button scrolls up');
+    assert.true(menuTop() < menuBefore, 'the menu moves up with it');
+  });
+
   // Only desks show counts; tiles and rows show the name and visibility
   // instead.
   module('desk counts', function () {

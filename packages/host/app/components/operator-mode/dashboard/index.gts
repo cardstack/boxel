@@ -1004,6 +1004,11 @@ export default class Dashboard extends Component<Signature> {
               var(--boxel-sp-xl)
           )
         );
+        /* Positioned, so a workspace's options menu follows the page's
+           scroll: its button sits in an absolutely positioned wrapper, and
+           the dropdown then looks for the scroll container among positioned
+           ancestors only. */
+        position: relative;
         height: 100%;
         overflow: auto;
         /* Tiles scrolled into view by the keyboard land below the frosted band. */
