@@ -4,7 +4,8 @@
 // session of its own. A hand-off to a program on the user's own machine waits
 // for the user to confirm it. A page that named the account it needs is
 // handed a sign-in only by that account: signed in as another, the window
-// says so and hands nothing over. Otherwise the window says it is signed in, and
+// says so and hands nothing over, and Cancel goes back to that page with no
+// login token. Otherwise the window says it is signed in, and
 // offers a link to the key page: the app asks the realm server whether the
 // window has a session, rather than hearing it from the window.
 import { on } from '@ember/modifier';
@@ -19,6 +20,7 @@ import {
   needsConfirmation,
   pendingReturn,
   pendingReturnUser,
+  withoutHandOff,
 } from '../../security/app-handoff.js';
 import {
   loginToken,
@@ -67,7 +69,7 @@ export default class SignedIn extends Component {
         </div>
       </MessagePage>
     {{else if this.wrongAccount}}
-      <MessagePage @heading='Signed in as another account'>
+      <MessagePage @heading='Signed in as another account' @focus={{true}}>
         <p class='info' data-test-secure-wrong-account>
           You’re signed in as
           <span class='user-id'>{{this.wrongAccount.signedInAs}}</span>, but the
@@ -85,7 +87,7 @@ export default class SignedIn extends Component {
             type='button'
             @variant='secondary'
             data-test-secure-wrong-account-cancel
-            {{on 'click' this.cancel}}
+            {{on 'click' this.keepAccount}}
           >Cancel</AuthButton>
         </div>
       </MessagePage>
@@ -218,10 +220,22 @@ export default class SignedIn extends Component {
 
   private confirm = () => this.handOff();
 
-  // Declining a loopback hand-off, or one for another account, leaves the user
-  // signed in here, handing nothing over.
+  // Declining a loopback hand-off leaves the user signed in here, handing
+  // nothing over.
   private cancel = () => {
     forgetReturn();
+    this.page.state = { name: 'signed-in' };
+  };
+
+  // Keeping the window's account, when the page to go back to needs another,
+  // goes back to that page with no login token.
+  private keepAccount = () => {
+    let target = this.target;
+    forgetReturn();
+    if (target) {
+      navigation.replace(withoutHandOff(target));
+      return;
+    }
     this.page.state = { name: 'signed-in' };
   };
 

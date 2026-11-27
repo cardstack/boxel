@@ -23,6 +23,7 @@ scope:
   - packages/postgres/migrations/1793069013762_add-secure-sessions-app-device.js
   - packages/host/app/components/matrix/secure-sign-in.gts
   - packages/host/app/routes/cli-auth.ts
+  - packages/host/app/routes/index.gts
   - packages/host/app/lib/reset-password-link.ts
   - packages/matrix/support/synapse/**
 ---
@@ -331,7 +332,12 @@ one, instead of handing over whatever session the window holds. Anyone can
 link to the sign-in page naming any account, so the name decides only which
 account's sign-in the window offers, never which one it hands over: a
 hand-off still needs that account's session, signed in with its own
-credential.
+credential. So when the app holds one account and the window another, a link
+naming the window's account switches the app to it with no click, signing the
+app's account out in its other tabs, as any hand-off to a listed origin does:
+the link gains nothing the browser doesn't already hold. A user who keeps the
+window's account rather than sign in as the one named goes back to the app
+page with no token, where the app opens as the account it holds.
 
 A window's session lasts a week, but the app's can last much longer, and the
 app comes back from the secure origin only when it signs in. Without

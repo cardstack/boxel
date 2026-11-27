@@ -1324,17 +1324,16 @@ module('Integration | sign-in', function (hooks) {
       );
     });
 
-    test('keeping the window’s account hands nothing over', async function (assert) {
+    test('keeping the window’s account goes back to the page with nothing handed over', async function (assert) {
       storeSession(SESSION);
       let server = serve(NO_GOOGLE, MINTS, {
         'GET _secure-session': () => json(200, { data: {} }),
       });
-      visitShell(`sign-in${returnAs(`${APP}/`, WANTED)}`);
+      visitShell(`sign-in${returnAs(RETURN, WANTED)}`);
       await render(SignInPage);
       await waitFor('[data-test-secure-sign-in-cancel]');
       await click('[data-test-secure-sign-in-cancel]');
-      await waitFor('[data-test-secure-signed-in]');
-      assert.deepEqual(navigations, []);
+      assert.deepEqual(navigations, [{ how: 'replace', url: RETURN }]);
       assert.false(
         server.requests.some((r) => r.path === '_secure-session/login-token'),
       );
@@ -1366,9 +1365,44 @@ module('Integration | sign-in', function (hooks) {
         server.requests.some((r) => r.path === '_secure-session/login-token'),
         'no login token is minted',
       );
+      assert
+        .dom('[data-test-secure-title]')
+        .isFocused('the page that replaced the form takes focus');
       await click('[data-test-secure-wrong-account-cancel]');
-      await waitFor('[data-test-secure-signed-in]');
+      assert.deepEqual(
+        navigations,
+        [{ how: 'replace', url: `${APP}/` }],
+        'Cancel goes back to the page with no login token',
+      );
       assert.strictEqual(sessionStorage.getItem('boxel-secure-return'), null);
+      assert.strictEqual(
+        sessionStorage.getItem('boxel-secure-return-user'),
+        null,
+      );
+    });
+
+    test('a window signed in as another account in the meantime hands nothing over', async function (assert) {
+      storeSession(WANTED_SESSION);
+      let server = serve(NO_GOOGLE, MINTS, {
+        'GET _secure-session': () => json(200, { data: {} }),
+      });
+      visitShell(`sign-in${returnAs('http://localhost:4200/', WANTED)}`);
+      await render(SignInPage);
+      await waitFor('[data-test-secure-loopback-confirm]');
+      // Another tab signs the window in as someone else while this one waits
+      // for the user to confirm.
+      storeSession(SESSION);
+      await click('[data-test-secure-loopback-continue]');
+      await waitFor('[data-test-secure-wrong-account]');
+      assert
+        .dom('[data-test-secure-wrong-account]')
+        .includesText(SESSION.user)
+        .includesText(WANTED);
+      assert.deepEqual(navigations, []);
+      assert.false(
+        server.requests.some((r) => r.path === '_secure-session/login-token'),
+        'no login token is minted',
+      );
     });
 
     test('the named account survives the round trip to Google, and another account is not handed over', async function (assert) {

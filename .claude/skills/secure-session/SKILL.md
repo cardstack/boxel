@@ -388,10 +388,13 @@ server's password check.
    then hands over only when its session is that account's. Signed in as
    another, it offers that account's sign-in, filled in, with Cancel to keep
    its own; a sign-in as yet another account hands nothing over and says so.
-   The app, signed in as another account, doesn't boot it but sends the user
-   on with the account named, once in a short while (the same redirect guard
-   a signed-out app uses), so coming back without switching boots the stored
-   account.
+   Cancel, on either, goes back to `return` with no token.
+   The app takes only a Matrix user ID too. Signed in as another account, it
+   doesn't boot it but sends the user on with the account named, once in a
+   short while (the same redirect guard a signed-out app uses), so coming back
+   without switching boots the stored account. Holding the named account's
+   session, it boots it, and keeps the account for the sign-in that follows
+   should that session turn out to be dead.
 3. The app redeems the token (from the fragment, or the query, where
    `boxel browse` puts it) with an `m.login.token` login,
    as the fragment's `deviceId` when it names one, before it loads any card, takes it out of the address, and boots as after any sign-in:

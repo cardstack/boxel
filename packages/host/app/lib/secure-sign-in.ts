@@ -40,16 +40,44 @@ export function withFragment(url: URL, fragment: Record<string, string>) {
 // from `window.location`, as `loginToken` is.
 export const SIGN_IN_AS_PARAM = 'signInAs';
 
+// A Matrix user ID, `@localpart:server`, the only shape the secure origin
+// takes an account in (`checkedUser` in its `security/app-handoff.js`): any
+// other value names no account, so the app ignores it.
+const MATRIX_USER_ID = /^@[A-Za-z0-9._=\-/+]+:[A-Za-z0-9.-]+(?::\d{1,5})?$/;
+const MAX_USER_ID_LENGTH = 255;
+
 export function peekSignInAs(): string | undefined {
-  return (
-    new URLSearchParams(window.location.search).get(SIGN_IN_AS_PARAM) ||
-    undefined
-  );
+  let value = new URLSearchParams(window.location.search).get(SIGN_IN_AS_PARAM);
+  if (
+    !value ||
+    value.length > MAX_USER_ID_LENGTH ||
+    !MATRIX_USER_ID.test(value)
+  ) {
+    return undefined;
+  }
+  return value;
+}
+
+// The account a link asked for while the app boots the session stored for it.
+// That session may turn out to be dead, and signing out of it rewrites the
+// address, so the account is held here for the sign-in that follows.
+let heldSignInAs: string | undefined;
+
+export function holdSignInAs(user: string) {
+  heldSignInAs = user;
+}
+
+// The account a link asked the app to sign in as: in the address, or held
+// while the session stored for it booted.
+export function signInAsAccount(): string | undefined {
+  return peekSignInAs() ?? heldSignInAs;
 }
 
 // Takes `signInAs` out of the address once the app has acted on it, so a
-// reload or a copied address doesn't carry it on.
+// reload or a copied address doesn't carry it on, and lets go of any account
+// held for it.
 export function stripSignInAs() {
+  heldSignInAs = undefined;
   let url = new URL(window.location.href);
   if (!url.searchParams.has(SIGN_IN_AS_PARAM)) {
     return;
@@ -118,7 +146,7 @@ export function landsOnWorkspaceChooser(): boolean {
 // page asks for, if any, beside the page to come back to.
 export function secureSignInURL(
   returnTo = currentAppPage(),
-  user = peekSignInAs(),
+  user = signInAsAccount(),
 ): string {
   return withFragment(pageURL('sign-in'), {
     return: returnTo,

@@ -21,8 +21,10 @@ import {
   pendingReturn,
   pendingReturnUser,
   rememberReturn,
+  withoutHandOff,
 } from '../../security/app-handoff.js';
 import AuthContainer from '../../components/auth-container.gts';
+import { navigation } from '../navigation.js';
 
 import MessagePage from './message-page.gts';
 import SignedIn from './signed-in.gts';
@@ -130,10 +132,16 @@ export default class SignInPage extends Component {
     this.page.state = session ? 'signed-in' : 'signed-out';
   }
 
-  // Staying signed in as the window's account hands nothing over: the page
-  // that sent the user here needs another account.
+  // Staying signed in as the window's account hands nothing over, since the
+  // page that sent the user here needs another account: the user goes back to
+  // that page with no login token.
   private keepAccount = () => {
+    let target = pendingReturn(appOrigins(this.config));
     forgetReturn();
+    if (target) {
+      navigation.replace(withoutHandOff(target));
+      return;
+    }
     this.page.state = 'signed-in';
   };
 

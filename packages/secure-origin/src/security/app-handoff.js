@@ -18,7 +18,8 @@
 // The page may also name the account it needs, `user`, beside `return`, as
 // `boxel browse` does for the account its profile is signed in as. The
 // window then hands a sign-in over only when its session is that account's;
-// filling the account into the form is no check.
+// filling the account into the form is no check. A user who keeps the
+// window's account instead goes back to `return` with no login token.
 
 import { isListedOrigin } from './app-origins.js';
 
@@ -161,6 +162,17 @@ export function needsConfirmation(target, config) {
     LOOPBACK_HOSTS.has(url.hostname) &&
     url.origin !== config.realmServerURL.origin
   );
+}
+
+// `target` with no login token in it: going back to the app page without
+// handing a sign-in over, as when the user keeps the window's account rather
+// than sign in as the one the page named. The app then opens as the account it
+// holds, or, signed out, offers to sign in again.
+export function withoutHandOff(target) {
+  let url = new URL(target);
+  url.searchParams.delete('loginToken');
+  url.hash = '';
+  return url.href;
 }
 
 // `target` with the login token in its fragment, in place of any fragment it
