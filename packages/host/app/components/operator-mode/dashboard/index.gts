@@ -1,7 +1,7 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
-import { schedule } from '@ember/runloop';
+import { renderSettled } from '@ember/renderer';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -82,12 +82,6 @@ const log = logger('component:dashboard');
 // A workspace tile's or row's key in the keyboard cursor's walk.
 function workspaceWalkKey(realmIdentifier: string) {
   return `workspace:${realmIdentifier}`;
-}
-
-function afterRender() {
-  return new Promise<void>((resolve) =>
-    schedule('afterRender', () => resolve()),
-  );
 }
 
 const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
@@ -297,7 +291,7 @@ export default class Dashboard extends Component<Signature> {
         name: name ?? this.realm.info(realmIdentifier).name,
       };
     }
-    await afterRender();
+    await renderSettled();
     let active = document.activeElement;
     // Focus the user has put somewhere stays. The cursor's container holds
     // focus while its item is out of view.
@@ -324,7 +318,7 @@ export default class Dashboard extends Component<Signature> {
     this.setScope('all');
     // The re-render can hand focus to the cursor's item, so focus is taken
     // from it without checking whether it is free.
-    await afterRender();
+    await renderSettled();
     this.focusWorkspace(restored.realmIdentifier);
   }
 
