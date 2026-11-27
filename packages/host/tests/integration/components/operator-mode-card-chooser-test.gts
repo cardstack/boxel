@@ -272,7 +272,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       await waitFor(`[data-test-search-result="${baseRealm.url}cards/skill"]`);
       assert.dom('[data-test-search-result]').exists({ count: 5 });
 
-      await click('[data-test-realm-picker]');
+      await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
       await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
       assert
         .dom('[data-section-sid="recents"] [data-test-search-result]')
@@ -1198,7 +1198,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
-    await click('[data-test-realm-picker]');
+    await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
     await click(`[data-test-boxel-picker-option-row="${testRealmURL}"]`);
     await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
     assert
