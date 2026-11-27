@@ -464,7 +464,10 @@ module('Acceptance | dashboard archive | restore focus', function (hooks) {
     );
   }
 
-  test('restoring a workspace the Hosted scope hides switches to All and moves focus to the workspace', async function (assert) {
+  const RESTORED_NOTICE = '[data-test-restored-notice]';
+  const SHOW_ALL = '[data-test-restored-show-all]';
+
+  test('restoring a workspace the Hosted scope hides says so, and Show all shows it', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
     // So Hosted still lists Workspace C and New Workspace for the cursor.
     markPublished(readOnlyRealmURL);
@@ -475,14 +478,28 @@ module('Acceptance | dashboard archive | restore focus', function (hooks) {
     let name = NAMES[first!];
 
     await click(`[data-test-restore-workspace-btn="${first}"]`);
+    await waitUntil(() => document.activeElement === find(SHOW_ALL), {
+      timeoutMessage: 'focus never reached Show all',
+    });
+    await settled();
+
+    assert.dom(SCOPE_HOSTED).isChecked('the scope stays Hosted');
+    assert
+      .dom(`[data-test-workspace-menu-trigger="${first}"]`)
+      .doesNotExist('Hosted leaves the unpublished workspace out');
+    assert
+      .dom(RESTORED_NOTICE)
+      .containsText(`${name} is restored`, 'the notice names the workspace');
+    assert.dom(SHOW_ALL).isFocused('focus moves to Show all');
+
+    await click(SHOW_ALL);
     await waitUntil(() => focusedWorkspace() === name, {
       timeoutMessage: `focus never reached ${name}`,
     });
     await settled();
 
-    assert
-      .dom(SCOPE_ALL)
-      .isChecked('the scope widens to All, which shows the workspace');
+    assert.dom(SCOPE_ALL).isChecked('Show all switches the scope to All');
+    assert.dom(RESTORED_NOTICE).doesNotExist('the notice goes away');
     assert.strictEqual(
       focusedWorkspace(),
       name,
@@ -507,10 +524,47 @@ module('Acceptance | dashboard archive | restore focus', function (hooks) {
     await settled();
 
     assert.dom(SCOPE_HOSTED).isChecked('the scope stays Hosted');
+    assert.dom(RESTORED_NOTICE).doesNotExist('no notice, since it is shown');
     assert.strictEqual(
       focusedWorkspace(),
       name,
       'focus moves to the workspace',
     );
+  });
+
+  test('the Hosted notice shows when the user has moved focus, until the scope changes', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await archiveBothAndExpand();
+    await clickScopeOption('hosted');
+    let [first] = restoreURLs();
+
+    // Holds the restore back until the user has moved on.
+    let realmServer = this.owner.lookup(
+      'service:realm-server',
+    ) as RealmServerService;
+    let unarchive = realmServer.unarchiveRealm.bind(realmServer);
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    realmServer.unarchiveRealm = async (url: string) => {
+      await held;
+      return unarchive(url);
+    };
+
+    await click(`[data-test-restore-workspace-btn="${first}"]`);
+    await focus(ARCHIVED_TOGGLE);
+    release();
+    await waitFor(RESTORED_NOTICE);
+    await settled();
+
+    assert
+      .dom(RESTORED_NOTICE)
+      .containsText(`${NAMES[first!]} is restored`, 'the notice shows');
+    assert.dom(ARCHIVED_TOGGLE).isFocused('focus stays on Archived');
+
+    await clickScopeOption('all');
+
+    assert
+      .dom(RESTORED_NOTICE)
+      .doesNotExist('changing the scope clears the notice');
   });
 });
