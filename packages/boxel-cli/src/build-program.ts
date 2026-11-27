@@ -119,7 +119,7 @@ export function buildBoxelProgram(version: string): Command {
     )
     .option(
       '--no-browser',
-      'Sign in with a username and password in the terminal instead of opening a browser (for add command)',
+      'Sign in with a username and password in the terminal instead of opening a browser; with --oauth, sign in with a code on any device (for add command)',
     )
     .option(
       '--oauth',
@@ -159,9 +159,11 @@ Sign-in (for 'add'):
   --oauth signs in with OAuth instead. The profile keeps a token limited to
   the Boxel API, which ends within 30 days and shows on Connected apps, and
   no Matrix session. The terminal prints a confirmation code; check that the
-  browser shows the same one before you allow Boxel CLI. It works only where
-  the realm server offers OAuth sign-in, and can't be combined with
-  --no-browser, -u, -p or --host-url.
+  browser shows the same one before you allow Boxel CLI. With --no-browser,
+  over SSH, or when no browser opens, it signs in with a code instead: open
+  the page it prints on any device, sign in there, and enter the code. It
+  works only where the realm server offers OAuth sign-in, and can't be
+  combined with -u, -p or --host-url.
 
 Environment (for 'add'):
   Defaults to production. Pass --staging or --local for another environment
