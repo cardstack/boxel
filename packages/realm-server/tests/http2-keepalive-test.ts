@@ -47,9 +47,48 @@ class FakeSession extends EventEmitter {
     return true;
   };
 
+  // When each ping was sent, in ms since the fake was made. A timing assertion
+  // that fails prints these, so a late timer shows in the failure.
+  createdAt = Date.now();
+  pingTimes: number[] = [];
+  private pingWaiters: { count: number; resolve: () => void }[] = [];
+
   ping(cb: PingCallback): boolean {
     this.pingCount++;
-    return this.pingImpl(cb);
+    this.pingTimes.push(Date.now() - this.createdAt);
+    let result = this.pingImpl(cb);
+    this.pingWaiters = this.pingWaiters.filter((waiter) => {
+      if (this.pingCount >= waiter.count) {
+        waiter.resolve();
+        return false;
+      }
+      return true;
+    });
+    return result;
+  }
+
+  // Resolves once `count` pings have been sent, or after `timeoutMs` so a
+  // keepalive that stops pinging fails the test instead of hanging it.
+  waitForPings(count: number, timeoutMs = 2000): Promise<void> {
+    if (this.pingCount >= count) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      let timer = setTimeout(resolve, timeoutMs);
+      this.pingWaiters.push({
+        count,
+        resolve: () => {
+          clearTimeout(timer);
+          resolve();
+        },
+      });
+    });
+  }
+
+  timeline() {
+    return `pings sent at [${this.pingTimes.join(', ')}]ms, now ${
+      Date.now() - this.createdAt
+    }ms`;
   }
 
   close() {
@@ -287,21 +326,29 @@ module(basename(import.meta.filename), function () {
     let stopKeepalive = startSessionKeepalive(asSession(fake), log, FAST);
     try {
       // FAST timeline: ping1 @20ms, miss1 @35ms, ping2 @55ms, and ping2's
-      // pong timeout would fire @70ms — close the session while ping2 is in
-      // flight and wait past that timeout.
-      await wait(60);
-      assert.strictEqual(fake.pingCount, 2, 'second ping is in flight');
+      // pong timeout would fire @70ms. Wait for ping2 to be sent rather than
+      // a fixed time: each of those timers can fire late on a loaded runner,
+      // so no fixed wait reliably lands between ping2 and its pong timeout.
+      await fake.waitForPings(2);
+      assert.strictEqual(
+        fake.pingCount,
+        2,
+        `second ping is in flight (${fake.timeline()})`,
+      );
+      // Close while ping2 is in flight, then wait past its pong timeout. The
+      // pong timer was set before this wait's timer with a shorter delay, so
+      // it fires first however late both are.
       fake.emit('close');
-      await wait(60);
+      await wait(FAST.pongTimeoutMs * 4);
       assert.strictEqual(
         fake.closeCount,
         0,
-        'late pong timeout after session close does not tear down',
+        `late pong timeout after session close does not tear down (${fake.timeline()})`,
       );
       assert.strictEqual(
         fake.destroyCount,
         0,
-        'no force-destroy after session close',
+        `no force-destroy after session close (${fake.timeline()})`,
       );
     } finally {
       stopKeepalive();
