@@ -86,8 +86,10 @@ module('Acceptance | dashboard state', function (hooks) {
     let matrixService = getService('matrix-service') as MatrixService;
     await matrixService.updateDashboardState({ onboardingDismissed: true });
 
+    let { writeId, ...stored } = mockMatrixUtils.getDashboardState() as any;
+    assert.strictEqual(typeof writeId, 'string', 'the write stores its ID');
     assert.deepEqual(
-      mockMatrixUtils.getDashboardState(),
+      stored,
       {
         agent: 'grok',
         agentSetup: { grok: 3 },
@@ -185,6 +187,36 @@ module('Acceptance | dashboard state', function (hooks) {
       matrixService.dashboardState.agentSetup,
       { codex: 2, claude: 2 },
       "the second write's echo applies, since the server stored it last",
+    );
+  });
+
+  test("another tab's write applies even when it stores what a superseded write of this tab stored", async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+
+    let matrixService = getService('matrix-service') as MatrixService;
+    mockMatrixUtils.holdDashboardEchoes();
+    await matrixService.updateDashboardState({ agentSetup: { claude: 1 } });
+    // Stored before that write syncs, so its echo never arrives.
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+      agentSetup: { grok: 1 },
+    });
+    await settled();
+    await matrixService.updateDashboardState({ agentSetup: { claude: 2 } });
+    assert.deepEqual(matrixService.dashboardState.agentSetup, {
+      grok: 1,
+      claude: 2,
+    });
+
+    // Stored before the second write syncs, so that echo never arrives either.
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+      agent: 'codex',
+      agentSetup: { codex: 2, claude: 1 },
+    });
+    await settled();
+    assert.deepEqual(
+      matrixService.dashboardState,
+      { agent: 'codex', agentSetup: { codex: 2, claude: 1 } },
+      'this tab shows what the account holds',
     );
   });
 

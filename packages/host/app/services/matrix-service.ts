@@ -1293,7 +1293,10 @@ export default class MatrixService extends Service {
   private dashboardSession = 0;
   // The content of each write of this tab whose sync echo hasn't arrived, in
   // write order, so the account-data listener can tell a stale echo of an
-  // earlier write from another tab's write.
+  // earlier write from another tab's write. An entry is added when its write
+  // returns, so a write whose echo arrived first, or never comes because
+  // another tab's write superseded it, keeps its entry until the listener
+  // matches a later write's echo, or the session ends.
   private dashboardEchoesPending: string[] = [];
 
   // A failed read must not keep the user from logging in: the state starts
@@ -1351,7 +1354,14 @@ export default class MatrixService extends Service {
           typeof change === 'function'
             ? change(parseDashboardContent(stored))
             : change;
-        let next = mergeDashboardContent(stored, changes);
+        // The ID makes this write's content unique, so its echo can't be
+        // mistaken for another tab's write of the same fields, nor the reverse.
+        // A tab on a build from before the ID copies it when it writes, so its
+        // write that changes nothing can still look like this one's echo.
+        let next = {
+          ...mergeDashboardContent(stored, changes),
+          writeId: uuidv4(),
+        };
         await client.setAccountDataRaw(APP_BOXEL_DASHBOARD_EVENT_TYPE, next);
         // Shown right away; the account-data listener then applies whatever
         // syncs after it, including a newer write from another tab.

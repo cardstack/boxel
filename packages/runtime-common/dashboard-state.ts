@@ -2,7 +2,8 @@ import { isPlainObject } from './is-plain-object.ts';
 
 // The content of the app.boxel.dashboard account-data key. Fields are only
 // ever added: a field whose meaning changes gets a new name, so every version
-// of the app can read and write what any other stored.
+// of the app can read and write what any other stored. Each write also stores
+// a writeId unique to it, which isn't state, so parseDashboardContent drops it.
 
 // Coding agents that build through the Boxel plugin, and Boxel's own
 // assistant.
