@@ -304,6 +304,20 @@ export function setupInteractSubmodeTests(
       static displayName = 'Personnel';
     }
 
+    class PetLink extends CardDef {
+      static displayName = 'Pet link';
+      @field pet = linksTo(Pet);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          {{! The address stays on the page, so a click the app does not
+              prevent leaves the test page loaded. }}
+          <a href='#pet' data-test-pet-link>
+            <@fields.pet @format='embedded' />
+          </a>
+        </template>
+      };
+    }
+
     class FocusTest extends CardDef {
       static displayName = 'Focus test';
       @field names = containsMany(StringField);
@@ -357,6 +371,7 @@ export function setupInteractSubmodeTests(
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'address.gts': { Address },
           'focus-test.gts': { FocusTest },
+          'pet-link.gts': { PetLink },
           'focus-nested.gts': { FocusNested, FocusNestedItem },
           'file-link-card.gts': { FileLinkCard },
           'image-link-card.gts': { ImageLinkCard },
@@ -398,6 +413,7 @@ export function setupInteractSubmodeTests(
           'Pet/mango.json': mangoPet,
           'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
           'FocusTest/1.json': new FocusTest({ names: [] }),
+          'PetLink/mango.json': new PetLink({ pet: mangoPet }),
           'FocusNested/1.json': new FocusNested({
             items: [
               new FocusNestedItem({ label: 'Plain', pets: [] }),
