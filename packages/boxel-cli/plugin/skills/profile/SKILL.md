@@ -105,7 +105,7 @@ Manage saved profiles for different users/environments
 - `-n, --name <displayName>` — Display name (for add command)
 - `-m, --matrix-url <url>` — Matrix server URL (for add command with non-standard domains)
 - `-r, --realm-server-url <url>` — Realm server URL (for add command with non-standard domains)
-- `--no-browser` — Sign in with a username and password in the terminal instead of opening a browser (for add command)
+- `--no-browser` — Sign in with a username and password in the terminal instead of opening a browser; with --oauth, sign in with a code on any device (for add command)
 - `--oauth` — Sign in through the browser with OAuth: a token limited to the Boxel API that ends within 30 days, instead of your Matrix session (for add command)
 - `--host-url <url>` — Sign in on this origin's /cli-auth page instead of the realm server's secure origin (for add command)
 - `--production` — Target production — the default (for add command)
