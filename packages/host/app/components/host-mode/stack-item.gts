@@ -222,6 +222,9 @@ export default class HostModeStackItem extends Component<Signature> {
         padding-top: var(--boxel-sp-2xl);
         z-index: 0;
         pointer-events: none;
+        /* A stacked card keeps the corners of its frame, even above a primary
+           card that sets its own radius to 0. */
+        --host-mode-card-border-radius: var(--boxel-border-radius-2xl);
       }
 
       .host-mode-stack-item:not(.buried) {
@@ -241,6 +244,7 @@ export default class HostModeStackItem extends Component<Signature> {
          100%, so they don't reflow every time the stack changes. */
       .host-mode-stack-item.buried {
         --host-mode-card-width: 50rem;
+        --host-mode-card-border-radius: var(--boxel-border-radius-lg);
       }
 
       .host-mode-stack-item.full-width {

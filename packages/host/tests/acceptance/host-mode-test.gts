@@ -815,6 +815,20 @@ module('Acceptance | host mode tests', function (hooks) {
     assert.strictEqual(getPageTitle(), 'Mango');
 
     await percySnapshot(assert);
+
+    let stackedCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([stackedCardId]),
+    );
+    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
+    assert
+      .dom(
+        `[data-test-host-mode-stack-item="${stackedCardId}"] [data-test-host-mode-card-loaded]`,
+      )
+      .hasStyle(
+        { 'border-radius': '20px' },
+        'a card opened on top keeps its rounded corners',
+      );
   });
 
   test('visiting a full width card in host mode', async function (assert) {
