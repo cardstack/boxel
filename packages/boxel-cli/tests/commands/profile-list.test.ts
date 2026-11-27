@@ -256,7 +256,7 @@ describe('profile list', () => {
       }
 
       expect(out.lines()).toContain(
-        'Not with OAuth yet: boxel capture --url-only, boxel browse, boxel realm list --hidden, boxel realm list --all-accessible',
+        'Not with OAuth yet: boxel capture --url-only, boxel realm list --hidden, boxel realm list --all-accessible',
       );
     });
 
@@ -271,7 +271,6 @@ describe('profile list', () => {
       const [profile] = JSON.parse(out.lines()).profiles;
       expect(profile.unavailableCommands).toEqual([
         'capture --url-only',
-        'browse',
         'realm list --hidden',
         'realm list --all-accessible',
       ]);

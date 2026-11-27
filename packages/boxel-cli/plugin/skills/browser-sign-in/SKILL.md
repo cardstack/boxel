@@ -4,7 +4,10 @@ description: Sign a browser into the Boxel app as a boxel-cli profile with `boxe
 
 # Signing a browser in
 
-Wraps `boxel browse`, which mints a Matrix login token from a saved profile and builds a host-app URL that redeems it on load. The browser comes up signed in as that profile, optionally deep-linked to a card. It never touches the sign-in page.
+Wraps `boxel browse`. What it does depends on how the profile signed in (`boxel profile list` shows it):
+
+- **Matrix:** it mints a Matrix login token from the profile and builds a host-app URL that redeems it on load. The browser comes up signed in as that profile, optionally deep-linked to a card. It never touches the sign-in page.
+- **OAuth** (`boxel profile add --oauth`): the profile has no Matrix token, and its OAuth token never becomes a browser's sign-in. `browse` opens the app with `?signInAs=<the profile's account>`. A browser already signed in as that account opens straight away. Otherwise the app sends it to Boxel's sign-in page, which signs in only that account, so a person signs in there once per browser. The URL holds no credential. See "On a profile signed in with OAuth" below.
 
 ## When to use it
 
@@ -25,11 +28,22 @@ When the user wants a browser signed in, run `boxel browse` for them. Don't hand
 | Local or custom host                  | `boxel browse [card-path] --profile <id> --host-url https://localhost:<port>/` |
 | Rate-limited                          | add `--wait`                                                           |
 
-`boxel profile list` shows the profiles; match an account the user names ("my test account") to its ID there, and pass `--profile` even when it is the active one. Pick a profile whose sign-in is Matrix: one signed in with OAuth (`boxel profile add --oauth`) has no Matrix login token to give the browser, and `browse` refuses it. A staging profile is `@<user>:stack.cards`, with realm server `https://realms-staging.stack.cards/`; a production one is `@<user>:boxel.ai`, with `https://app.boxel.ai/`. Without `--host-url`, the token is redeemed on the profile's realm-server origin (`https://localhost:4200/` for standard local dev).
+`boxel profile list` shows the profiles; match an account the user names ("my test account") to its ID there, and pass `--profile` even when it is the active one. To skip the sign-in page entirely, pick a profile whose sign-in is Matrix; one signed in with OAuth opens the app and leaves signing in to the browser (below). A staging profile is `@<user>:stack.cards`, with realm server `https://realms-staging.stack.cards/`; a production one is `@<user>:boxel.ai`, with `https://app.boxel.ai/`. Without `--host-url`, the token is redeemed on the profile's realm-server origin (`https://localhost:4200/` for standard local dev).
 
 The browser that opens is the user's default browser, not one you drive. You can't see it, so a clean exit ("Opening <host> as <id>") is all the confirmation you get: tell the user which account should be signed in and to say if the page shows otherwise.
 
 A published-realm card URL needs no sign-in: `boxel browse <published-url>` opens it as-is.
+
+## On a profile signed in with OAuth
+
+The browser signs in on Boxel's own sign-in page, with the account's password or Google, never from the CLI. Plan for it:
+
+- **One sign-in per browser.** After the first, that browser opens as the account with no prompt, for as long as it stays signed in. Never type the password yourself: ask the user to sign in in the browser that opened.
+- **Several accounts:** keep one persistent browser profile per account (a separate Chrome profile, or a separate user data directory for a browser you drive), signed in once each. Switching one browser between accounts asks for a password every time.
+- **A browser you drive** can be navigated to the URL directly, since it holds no credential: `--print-url` prints it, and it is safe in your output. It lands on the sign-in page until the user signs in there.
+- **Looking at a card with nobody there to sign in:** use `boxel capture`, which renders on the server with the profile's access and saves the image. On a profile signed in with OAuth it can't print a capture URL instead (`--url-only`).
+- **A host given with `--host-url`** may be a build that doesn't know `signInAs` yet (a preview or a local build of another branch). It then opens as whichever account the browser holds. `browse` warns of this on every `--host-url` open: check the account the app shows.
+- **A host Boxel's sign-in page doesn't list** (a Railway deployment, a custom domain) can't be signed in from an OAuth profile at all. Use a Matrix profile there, or run the host locally against the environment (the `local-host-against-remote` skill).
 
 ## Pick the browser
 
@@ -66,7 +80,7 @@ _Generated from the boxel-cli Commander tree by_ `pnpm build:plugin`. _Edit pros
 
 ### `boxel browse [card-path]`
 
-Open the Boxel app in your browser, already signed in as your active profile or the one --profile names (a published-realm card URL opens directly, no sign-in needed)
+Open the Boxel app in your browser as your active profile or the one --profile names: already signed in on a profile signed in with Matrix, and asking you to sign in, if the browser is not already, on one signed in with OAuth (a published-realm card URL opens directly, no sign-in needed)
 
 **Arguments:**
 
@@ -74,8 +88,8 @@ Open the Boxel app in your browser, already signed in as your active profile or 
 
 **Options:**
 
-- `--host-url <url>` — Override the host app URL the token is redeemed against
-- `--print-url` — Print the authenticated URL instead of opening a browser (for remote shells / agents)
+- `--host-url <url>` — Override the host app URL to open (where a Matrix profile’s login token is redeemed)
+- `--print-url` — Print the URL instead of opening a browser (for remote shells / agents); for a Matrix profile it carries a single-use login token
 - `--wait` — If login-token minting is rate-limited (~1/min per account), wait out the reported delay (or a full window when none is reported) and retry once instead of erroring
 
 <!-- generated:commands:end -->

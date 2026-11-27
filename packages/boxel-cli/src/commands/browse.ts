@@ -16,7 +16,7 @@ import { resolveAnonymousBrowseUrl as defaultResolveAnonymousBrowseUrl } from '.
 import { openBrowser } from '../lib/open-browser.ts';
 import { FG_RED, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
-import { OAUTH_HELP_NOTES, OAUTH_REFUSALS } from '../lib/oauth-refusals.ts';
+import { OAUTH_HELP_NOTES } from '../lib/oauth-refusals.ts';
 
 // The standard local dev URLs. The realm server and the host app dev server run
 // on different ports, and the browser session lives in origin-scoped storage,
@@ -103,6 +103,35 @@ export function buildBrowseUrl(
   return url.href;
 }
 
+// A host given with `--host-url` may be a build that doesn't know
+// `signInAs` (a preview or a local build of another branch), and nothing here
+// can tell. Such a host ignores it and opens as whichever account the browser
+// holds.
+const HOST_URL_SIGN_IN_AS_NOTE =
+  "A host given with --host-url that doesn't support signInAs opens as " +
+  'whichever account the browser is signed in as. Check the account the app ' +
+  'shows.';
+
+/**
+ * Build the host-app URL for a profile signed in with OAuth: the account to
+ * sign in as, plus an optional `cardPath`. It carries no credential. The app
+ * opens straight away when the browser is already that account, and
+ * otherwise sends the user to sign in as it on the secure origin, which hands
+ * a sign-in back only for that account. Exported for unit testing.
+ */
+export function buildSignInAsUrl(
+  hostUrl: string,
+  matrixUserId: string,
+  cardPath?: string,
+): string {
+  let url = new URL(ensureTrailingSlash(hostUrl));
+  url.searchParams.set('signInAs', matrixUserId);
+  if (cardPath) {
+    url.searchParams.set('cardPath', cardPath);
+  }
+  return url.href;
+}
+
 export interface BrowseOptions {
   hostUrl?: string;
   printUrl?: boolean;
@@ -178,8 +207,36 @@ export async function browse(
     throw new Error(NO_ACTIVE_PROFILE_ERROR);
   }
   let { id: profileId, profile } = resolved;
+
+  // A profile signed in with OAuth holds no Matrix token, and its OAuth token
+  // never becomes a browser's sign-in (ADR 021 §1.5). The app opens naming
+  // the account instead, and the browser signs in as it on the secure origin
+  // unless it already is that account (ADR 005 §1.7). The URL holds no
+  // credential, so it can be printed anywhere.
   if (profile.oauth) {
-    throw new Error(OAUTH_REFUSALS.browse);
+    let hostUrl = hostAppUrlForProfile(profile, options.hostUrl);
+    let url = buildSignInAsUrl(hostUrl, profile.matrixUserId, cardPath);
+    if (options.printUrl) {
+      if (options.hostUrl) {
+        cliLog.warn(HOST_URL_SIGN_IN_AS_NOTE);
+      }
+      cliLog.output(url);
+      return;
+    }
+    log(
+      `Opening ${hostUrl} as ${profile.matrixUserId}. If this browser isn't ` +
+        `signed in as ${profile.matrixUserId}, Boxel asks you to sign in.`,
+    );
+    if (options.hostUrl) {
+      cliLog.warn(HOST_URL_SIGN_IN_AS_NOTE);
+    }
+    let opened = await openBrowserFn(url);
+    if (!opened) {
+      cliLog.warn(
+        `Couldn't open a browser automatically. Open this URL:\n  ${url}`,
+      );
+    }
+    return;
   }
 
   // Mint the login token, recovering once from a rejected access token via the
@@ -198,9 +255,10 @@ export async function browse(
 
   // A 429 rate limit is separate from the auth recovery above: re-auth wouldn't
   // help (the limit is per account). Wait+retry once when the wait is short or
-  // `--wait` was given; otherwise surface a clear, actionable message. We never
-  // fall back to opening the app without a fresh token — the CLI can't tell which
-  // account the browser holds, so a tokenless open could land on the wrong one.
+  // `--wait` was given; otherwise surface a clear, actionable message. A Matrix
+  // profile never falls back to opening the app without a fresh token: the CLI
+  // can't tell which account the browser holds, so a tokenless open could land
+  // on the wrong one. (An OAuth profile's URL names its account instead, above.)
   let token;
   try {
     token = await mintToken();
@@ -291,9 +349,11 @@ export function registerBrowseCommand(program: Command): void {
   program
     .command('browse')
     .description(
-      'Open the Boxel app in your browser, already signed in as your active ' +
-        'profile or the one --profile names (a published-realm card URL opens ' +
-        'directly, no sign-in needed)',
+      'Open the Boxel app in your browser as your active profile or the one ' +
+        '--profile names: already signed in on a profile signed in with ' +
+        'Matrix, and asking you to sign in, if the browser is not already, on ' +
+        'one signed in with OAuth (a published-realm card URL opens directly, ' +
+        'no sign-in needed)',
     )
     .addHelpText('after', OAUTH_HELP_NOTES.browse)
     .argument(
@@ -303,11 +363,13 @@ export function registerBrowseCommand(program: Command): void {
     )
     .option(
       '--host-url <url>',
-      'Override the host app URL the token is redeemed against',
+      'Override the host app URL to open (where a Matrix profile’s login ' +
+        'token is redeemed)',
     )
     .option(
       '--print-url',
-      'Print the authenticated URL instead of opening a browser (for remote shells / agents)',
+      'Print the URL instead of opening a browser (for remote shells / ' +
+        'agents); for a Matrix profile it carries a single-use login token',
     )
     .option(
       '--wait',

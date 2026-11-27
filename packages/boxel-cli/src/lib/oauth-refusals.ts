@@ -9,10 +9,6 @@ export const OAUTH_REFUSALS = {
     "`boxel capture --url-only` doesn't work on a profile signed in with OAuth: the realm server answers an OAuth app's capture with its bytes and no served URL. " +
     'Run it without --url-only to save the capture. ' +
     USE_MATRIX,
-  browse:
-    "`boxel browse` can't sign a browser in from a profile signed in with OAuth: that takes a Matrix login token, which this profile doesn't have. " +
-    'A published realm still opens without signing in. ' +
-    USE_MATRIX,
   serverToken:
     'getServerToken() needs a profile signed in with Matrix: a profile signed in with OAuth has no realm-server session to give out. ' +
     'Call the realm server through authedServerFetch() instead, on a profile that may spend AI credits for the routes that spend them.',
@@ -36,13 +32,12 @@ export const OAUTH_HELP_NOTES = {
   capture:
     "\n--url-only doesn't work on a profile signed in with OAuth: the realm server answers an OAuth app's capture with its bytes and no served URL.\n",
   browse:
-    "\nSigning a browser in needs a profile signed in with Matrix: it takes a Matrix login token, which a profile signed in with OAuth doesn't have. A published-realm card URL opens on any profile.\n",
+    "\nOn a profile signed in with OAuth, the app opens as the profile's account and asks you to sign in when the browser isn't already that account: the profile has no Matrix login token to sign it in with. A profile signed in with Matrix opens it already signed in. A published-realm card URL opens on any profile.\n",
 } as const;
 
 // What a profile signed in with OAuth can't do yet, by command.
 export const OAUTH_UNAVAILABLE_COMMANDS = [
   'capture --url-only',
-  'browse',
   'realm list --hidden',
   'realm list --all-accessible',
 ] as const;
@@ -51,10 +46,10 @@ export const OAUTH_UNAVAILABLE_COMMANDS = [
 // route needs with `403` and a bearer challenge naming `insufficient_scope`
 // and the scopes that would admit it (RFC 6750 §3). The CLI's own sign-in
 // always asks for `boxel:read` and `boxel:write`, so this mostly guards a
-// connection made another way. A challenge naming no scope means no OAuth token can do
-// it at all, such as a route that needs the realm's administer permission.
-// Returns what to tell the user for such a response, and undefined for any
-// other.
+// connection made another way. A challenge naming no scope means no OAuth
+// token can do it at all, such as a route that needs the realm's administer
+// permission. Returns what to tell the user for such a response, and
+// undefined for any other.
 export function describeInsufficientScope(
   response: Response,
   action: string,

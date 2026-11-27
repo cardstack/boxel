@@ -18,6 +18,14 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
 import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
+import {
+  clearRedirectGuard,
+  framing,
+  holdSignInAs,
+  peekSignInAs,
+  redirectedRecently,
+  stripSignInAs,
+} from '@cardstack/host/lib/secure-sign-in';
 import type { StackItemType } from '@cardstack/host/lib/stack-item';
 
 import type BillingService from '@cardstack/host/services/billing-service';
@@ -183,6 +191,32 @@ export default class Card extends Route {
 
     let { operatorModeState, cardPath } = params;
 
+    // A link that names the account to sign in as (`?signInAs=`, from
+    // `boxel browse` on a profile with no Matrix token). Signed in as another
+    // account, the stored session isn't booted: <SecureSignIn> sends the user
+    // to the secure origin to sign in as the named account, and the login
+    // token it hands back switches accounts below. Signed out, or holding a
+    // session for that account, the app boots as usual and drops the
+    // parameter once that session is up; should the stored session be dead,
+    // <SecureSignIn> names the account it holds. A frame is never navigated,
+    // and a page back from the secure origin without switching boots the
+    // stored account rather than going round again.
+    let signInAs = peekLoginToken() ? undefined : peekSignInAs();
+    if (signInAs && !this.didMatrixServiceStart) {
+      await this.matrixService.ready;
+      let storedUser = this.matrixService.persistedUserId;
+      if (storedUser && storedUser !== signInAs) {
+        if (!framing.isFramed() && !redirectedRecently()) {
+          return;
+        }
+        stripSignInAs();
+      } else {
+        holdSignInAs(signInAs);
+      }
+    } else if (signInAs) {
+      stripSignInAs();
+    }
+
     // Account switch: a loginToken next to a session stored in this browser
     // means "switch to the token's account" (`boxel browse --profile B` against
     // a browser signed in as A). Run this BEFORE booting the stored session — a
@@ -211,6 +245,9 @@ export default class Card extends Route {
         // the boot below (the new session is already up).
         this.didMatrixServiceStart = true;
         await this.matrixService.switchAccount(handoff);
+        // Signed in: the next signed-out arrival is a new one, which
+        // redirects, as after <SecureSignIn>'s own sign-in.
+        clearRedirectGuard();
         return;
       } catch (e) {
         this.didMatrixServiceStart = didStart;
@@ -236,6 +273,9 @@ export default class Card extends Route {
       await this.matrixService.ready;
       await this.matrixService.start();
       this.didMatrixServiceStart = true;
+      if (signInAs && this.matrixService.isLoggedIn) {
+        stripSignInAs();
+      }
     } else if (this.matrixService.needsPostLoginRecovery) {
       // `start()` above is a one-shot (guarded by `didMatrixServiceStart`). If
       // `postLoginCompleted` was cleared after that first start while there's

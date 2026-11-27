@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 145043,
+      "bytes": 145274,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -2098,11 +2098,15 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/sign-in/4e08a1d89a.css"
+          "module": "src/shell/sign-in/6a4c897b7f.css"
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/7fc13290d1.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/sign-in/a2de595f17.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2111,7 +2115,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 647983,
+      "bytes": 651815,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2539,7 +2543,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/app-handoff.js",
-          "size": 1874
+          "size": 2771
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2999,7 +3003,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/sign-in-page.gts",
-          "size": 1534
+          "size": 3374
         },
         {
           "package": "@cardstack/secure-origin",
@@ -3009,7 +3013,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/signed-in.gts",
-          "size": 5006
+          "size": 7200
         },
         {
           "package": "@cardstack/secure-origin",

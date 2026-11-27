@@ -68,20 +68,23 @@ describe('commands an OAuth profile refuses', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('refuses to sign a browser in with boxel browse', async () => {
+  it('opens boxel browse naming the account, with no login token', async () => {
     let requestLoginToken = vi.fn();
-    let openBrowserFn = vi.fn();
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
 
-    await expect(
-      browse(undefined, {
-        profileManager: pm,
-        requestLoginToken,
-        openBrowserFn,
-        log: () => {},
-      }),
-    ).rejects.toThrow(OAUTH_REFUSALS.browse);
+    await browse(undefined, {
+      profileManager: pm,
+      requestLoginToken,
+      openBrowserFn,
+      log: () => {},
+    });
+
     expect(requestLoginToken).not.toHaveBeenCalled();
-    expect(openBrowserFn).not.toHaveBeenCalled();
+    expect(openBrowserFn).toHaveBeenCalledTimes(1);
+    let opened = new URL(openBrowserFn.mock.calls[0][0]);
+    expect(opened.searchParams.get('signInAs')).toBe(USER_ID);
+    expect(opened.searchParams.has('loginToken')).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('refuses getServerToken', async () => {
@@ -91,8 +94,8 @@ describe('commands an OAuth profile refuses', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('suggests a Matrix profile when browse refuses', () => {
-    expect(OAUTH_REFUSALS.browse).toContain(
+  it('suggests a Matrix profile when capture --url-only refuses', () => {
+    expect(OAUTH_REFUSALS.captureUrlOnly).toContain(
       '`boxel profile add` without --oauth',
     );
   });
@@ -444,7 +447,7 @@ describe('the help of a command whose use an OAuth profile limits', () => {
       "--url-only doesn't work on a profile signed in with OAuth",
     );
     expect(helpOf('browse')).toContain(
-      'Signing a browser in needs a profile signed in with Matrix',
+      'On a profile signed in with OAuth, the app opens as the profile',
     );
   });
 });
