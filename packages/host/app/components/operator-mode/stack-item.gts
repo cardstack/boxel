@@ -1196,16 +1196,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
         overflow: auto;
       }
 
-      /* A card that another card opens over keeps its look under the
-         opening card while that card fades in, so the stack never shows an
-         empty card between the two. The stack's motion region sets the
-         delay to outlast the fade (motion/stack-motion.gts); with motion
-         off it is 0. A card that is uncovered shows its content at once. */
       .buried > .stack-item-card {
         border-radius: var(--boxel-border-radius-lg);
         background-color: var(--boxel-200);
-        transition: background-color 0s linear
-          var(--stack-item-covered-delay, 0s);
       }
 
       .buried .stack-item-header {
@@ -1216,6 +1209,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --boxel-card-header-card-type-icon-size: var(--boxel-icon-xs);
       }
 
+      /* A card that another card opens over keeps its content under the
+         opening card while that card fades in, so the stack never shows an
+         empty card between the two. The stack's motion region sets the
+         delay to outlast the fade (motion/stack-motion.gts); with motion
+         off it is 0. A card that is uncovered shows its content at once. */
       .buried .stack-item-content {
         display: none;
         transition: display 0s linear var(--stack-item-covered-delay, 0s);
