@@ -274,11 +274,12 @@ export class LeaseManager {
   }
 
   // The lease of every held shard runs at least `expiryMs` from the start of
-  // the tick that renewed or claimed it. The next tick starts `renewMs` in,
-  // or at the first interval slot after this tick finished when this tick
-  // took longer than that; if it hasn't finished halfway from `renewMs` to
-  // the expiry, the task gives up the shards rather than record while another
-  // task may take them.
+  // the tick that renewed or claimed it. The next tick starts `renewMs` in.
+  // After the first tick from `start()` it starts `renewMs` after that tick
+  // finished, and after a tick slower than `renewMs` it starts at the first
+  // interval slot after that tick finished. If it hasn't finished halfway
+  // from `renewMs` to the expiry, the task gives up the shards rather than
+  // record while another task may take them.
   #armDeadline(tickStartedAt: number): void {
     let { renewMs, expiryMs } = this.#options;
     let windowMs = (renewMs + expiryMs) / 2;
@@ -339,13 +340,15 @@ interface TickInFlight {
   phase: 'renewal' | 'claim';
 }
 
-// How a missed deadline came about. A last tick that took longer than
-// `renewMs` made the interval skip a slot, so the next tick starting late is
-// the database's doing as well. A tick waiting on its renewal or claim for
-// most of the window, with a deadline timer that fired on time, points at the
-// database. A tick that started late after a quick last tick, no tick in
-// flight, or a deadline timer that fired well past its due time points at a
-// stalled process (a blocked event loop or a starved CPU).
+// How a missed deadline came about. A slow last tick delays the next one by
+// its own database time: after the first tick from `start()` the next starts
+// `renewMs` after it finished, and after a tick slower than `renewMs` the
+// interval skips a slot. So a tick that started no later than the last
+// tick's duration plus `renewMs`, then waited on its renewal or claim for most
+// of the window under a deadline timer that fired on time, points at the
+// database. A start later than that, no tick in flight, or a deadline timer
+// that fired well past its due time points at a stalled process (a blocked
+// event loop or a starved CPU).
 function missedDeadlineTiming({
   now,
   lastTickStartedAt,
