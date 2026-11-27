@@ -1,5 +1,5 @@
 // The showcase: moving between home and the docs inside one card, the docs
-// sidebar's category groups, and the hero's theme cycle.
+// sidebar's category groups, search, and the hero's theme cycle.
 import { module, test } from 'qunit';
 import { render, click, triggerEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -7,6 +7,7 @@ import { PretUIHome } from './pretui-home';
 import { PretUIOverview } from './pretui-overview';
 import { ThemeStage } from './showcase-stage';
 import { CATEGORIES } from './showcase-data';
+import { SpecCatalog } from './showcase-chrome';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Home = PretUIHome.isolated as any;
@@ -135,5 +136,89 @@ module('Pretui | showcase', function (hooks) {
     assert.dom('[data-test-theme-tick]').exists('play resumes it');
     await click('[aria-label="Previous theme"]');
     assert.dom('[data-test-theme-name]').hasText('Beta');
+  });
+  test('search matches split names and each word, best match first', function (assert) {
+    let specs = new SpecCatalog(
+      [
+        {
+          id: 'a',
+          componentName: 'List',
+          cardTitle: 'List',
+          brief: 'Rows with selection',
+        },
+        {
+          id: 'b',
+          componentName: 'DatePicker',
+          cardTitle: 'DatePicker',
+          brief: 'Pick a day',
+        },
+        {
+          id: 'c',
+          componentName: 'LayoutControl',
+          cardTitle: 'LayoutControl',
+          brief: 'Toolbar row that fits its controls',
+        },
+        {
+          id: 'd',
+          componentName: 'EmptyState',
+          cardTitle: 'EmptyState',
+          brief: 'Nothing-here surface',
+        },
+        {
+          id: 'e',
+          componentName: 'SheetToolbar',
+          cardTitle: 'SheetToolbar',
+          brief: 'Spreadsheet bar',
+        },
+        {
+          id: 'f',
+          componentName: 'Toolbar',
+          cardTitle: 'Toolbar',
+          brief: 'A row of controls',
+        },
+        {
+          id: 'g',
+          componentName: 'Spinner',
+          cardTitle: 'Spinner',
+          brief: 'Loading ring',
+        },
+        {
+          id: 'h',
+          componentName: 'PinInput',
+          cardTitle: 'PinInput',
+          brief: 'One box per digit',
+        },
+      ],
+      false,
+    );
+    let ids = (text: string) => specs.search(text).map((spec) => spec.id);
+    assert.deepEqual(
+      ids('date picker'),
+      ['b'],
+      'a spaced name finds the joined one',
+    );
+    assert.deepEqual(
+      ids('toolbar'),
+      ['f', 'e', 'c'],
+      'the exact name first, then a longer name, then a brief',
+    );
+    assert.deepEqual(ids('pin'), ['h'], 'a word inside a name is no match');
+    assert.deepEqual(
+      ids('date pick'),
+      ['b'],
+      'every word must match when some component matches them all',
+    );
+    assert.deepEqual(
+      ids('empty list'),
+      ['a', 'd'],
+      'when none matches every word, each word finds its own',
+    );
+    assert.deepEqual(ids('picker date'), ['b'], 'word order does not matter');
+    assert.deepEqual(
+      ids('spread'),
+      ['e'],
+      'a brief matches from the start of a word',
+    );
+    assert.deepEqual(ids(' - '), [], 'a search without words lists nothing');
   });
 });

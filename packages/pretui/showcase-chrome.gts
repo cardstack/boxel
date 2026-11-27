@@ -107,14 +107,47 @@ export class SpecCatalog {
   count = (name: string): number | undefined =>
     this.loading && !this.all.length ? undefined : this.inCategory(name).length;
   search = (text: string): SpecLike[] => {
-    let term = text.trim().toLowerCase();
-    if (!term) return [];
-    return this.all.filter((spec) =>
-      [specName(spec), spec.cardTitle, spec.brief].some((value) =>
-        value?.toLowerCase().includes(term),
-      ),
-    );
+    let terms = words(text);
+    if (!terms.length) return [];
+    let phrase = terms.join(' ');
+    let every: { spec: SpecLike; score: number }[] = [];
+    let some: { spec: SpecLike; score: number }[] = [];
+    for (let spec of this.all) {
+      let name = words(specName(spec));
+      let prose = words(`${spec.cardTitle ?? ''} ${spec.brief ?? ''}`);
+      let scores = terms.map((term): number =>
+        name.includes(term)
+          ? 3
+          : name.some((word) => word.startsWith(term))
+            ? 2
+            : prose.some((word) => word.startsWith(term))
+              ? 1
+              : 0,
+      );
+      let score = scores.reduce((sum, s) => sum + s, 0);
+      if (!score) continue;
+      if (name.join(' ') === phrase) score += 10;
+      (scores.every(Boolean) ? every : some).push({ spec, score });
+    }
+    // every word must match; only when nothing does, any word will.
+    // Sort is stable, so equal scores keep the index order
+    return (every.length ? every : some)
+      .sort((a, b) => b.score - a.score)
+      .map(({ spec }) => spec);
   };
+}
+
+export function hasSearchWords(text: string): boolean {
+  return words(text).length > 0;
+}
+
+// "DatePicker" and "date picker" both become ["date", "picker"]
+function words(text: string): string[] {
+  return text
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
 }
 
 export const EMPTY_CATALOG = new SpecCatalog([], false);
