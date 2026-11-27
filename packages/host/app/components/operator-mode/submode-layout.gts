@@ -112,12 +112,13 @@ let captureElement = modifier(
 );
 
 type PanelWidths = {
-  defaultWidth: number | null;
   minWidth: number | null;
 };
 
 const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 46;
 const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 23;
+// The share of the window the assistant opens at before the window is measured.
+const AI_PANEL_UNMEASURED_WIDTH_PERCENT = 30;
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
@@ -142,9 +143,13 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   private aiPanelWidths: PanelWidths = new TrackedObject({
-    defaultWidth: 30,
     minWidth: 25,
   });
+  @tracked private mainPanelMinWidth = 0;
+  // A window no wider than the assistant's 320px minimum leaves the main panel
+  // 0px wide, but its controls would still take focus and reach a screen
+  // reader, so it is inert while it has no width.
+  @tracked private mainPanelCollapsed = false;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
   @service declare private keyNotices: KeyNoticesService;
@@ -181,36 +186,61 @@ export default class SubmodeLayout extends Component<Signature> {
     // layout is an array of two numbers,
     // the first number is the width of the main panel,
     // the second number is the width of the ai panel.
-    if (layout.length === 2) {
+    // A window no wider than the assistant's minimum leaves the main panel no
+    // room, so its whole-window width isn't saved over the one chosen on a
+    // wider window.
+    if (layout.length === 2 && this.mainPanelMinWidth > 0) {
       window.localStorage.setItem(AiAssistantPanelWidth, String(layout[1]));
+    }
+    let collapsed = layout.length === 2 && layout[0]! <= 0;
+    if (collapsed !== this.mainPanelCollapsed) {
+      this.mainPanelCollapsed = collapsed;
     }
   }
 
-  // Handles window resize and initializes AI panel width from localStorage
+  // Handles window resize: both panels' minimums are in pixels, so their
+  // shares of the window follow its width.
   onWindowResize = (windowWidth: number) => {
     this.currentWindowWidth = windowWidth;
-
-    let aiPanelDefaultWidthInPixels = 371;
-    if (windowWidth < aiPanelDefaultWidthInPixels) {
-      aiPanelDefaultWidthInPixels = windowWidth;
-    }
-    let aiPanelDefaultWidth = (aiPanelDefaultWidthInPixels / windowWidth) * 100;
-    const persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth)
-      ? Number(window.localStorage.getItem(AiAssistantPanelWidth))
-      : undefined;
-
-    let aiPanelMinWidth = (Math.min(320, windowWidth) / windowWidth) * 100;
-    if (!persistedWidth || persistedWidth < aiPanelMinWidth) {
-      this.aiPanelWidths.defaultWidth = aiPanelDefaultWidth;
-    } else {
-      this.aiPanelWidths.defaultWidth = persistedWidth;
-    }
 
     // The panel opens at 371px but may be dragged down to 320px: the
     // assistant is designed to read at 320 (narrow), 440 and 680 (wide).
     let aiPanelMinWidthInPixels = Math.min(320, windowWidth);
     this.aiPanelWidths.minWidth = (aiPanelMinWidthInPixels / windowWidth) * 100;
+
+    // The main panel is at least 320px wide, so a wide assistant can't
+    // squeeze the dashboard or a stack past where its layout holds. A
+    // window too narrow for both gives the assistant its minimum and the main
+    // panel the rest. Like the assistant's, it holds when the panels lay out
+    // and while one is dragged; narrowing the window alone doesn't apply it.
+    let mainPanelMinWidthInPixels = Math.min(
+      320,
+      windowWidth - aiPanelMinWidthInPixels,
+    );
+    this.mainPanelMinWidth = (mainPanelMinWidthInPixels / windowWidth) * 100;
   };
+
+  // The width the assistant opens at: the saved one, or else 371px. Glimmer
+  // keeps this getter's reference across opens and recomputes it only when
+  // something it read has changed. The saved width isn't tracked, so reading
+  // whether the assistant is open is what makes each open read it afresh.
+  private get aiPanelDefaultWidth(): number {
+    let windowWidth = this.currentWindowWidth;
+    if (!this.aiAssistantPanelService.isOpen || !windowWidth) {
+      return AI_PANEL_UNMEASURED_WIDTH_PERCENT;
+    }
+    let standardWidth = (Math.min(371, windowWidth) / windowWidth) * 100;
+    let persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth)
+      ? Number(window.localStorage.getItem(AiAssistantPanelWidth))
+      : undefined;
+    // The width is saved as a share of the window, so on another window it can
+    // leave the main panel under 320px. The panel group then keeps the main
+    // panel at its minimum and gives the assistant the rest.
+    return !persistedWidth ||
+      persistedWidth < (this.aiPanelWidths.minWidth ?? 0)
+      ? standardWidth
+      : persistedWidth;
+  }
 
   get operatorModeController(): IndexController {
     return this.operatorModeStateService.operatorModeController;
@@ -505,7 +535,13 @@ export default class SubmodeLayout extends Component<Signature> {
         class='columns'
         as |ResizablePanel ResizeHandle|
       >
-        <ResizablePanel class='main-panel'>
+        <ResizablePanel
+          class='main-panel'
+          @minSize={{this.mainPanelMinWidth}}
+          @collapsible={{false}}
+          inert={{if this.mainPanelCollapsed true}}
+          data-test-main-panel
+        >
           <div class='submode-layout-top-bar'>
             <IconButton
               @icon={{BoxelIconWithText}}
@@ -650,7 +686,7 @@ export default class SubmodeLayout extends Component<Signature> {
         {{#if this.aiAssistantPanelService.isOpen}}
           <ResizablePanel
             class='ai-assistant-resizable-panel'
-            @defaultSize={{this.aiPanelWidths.defaultWidth}}
+            @defaultSize={{this.aiPanelDefaultWidth}}
             @minSize={{this.aiPanelWidths.minWidth}}
             @collapsible={{false}}
             data-theme='dark'

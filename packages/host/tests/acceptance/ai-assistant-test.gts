@@ -1,6 +1,8 @@
 import {
   click,
+  doubleClick,
   fillIn,
+  find,
   waitFor,
   waitUntil,
   visit,
@@ -266,6 +268,37 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   ]);
 
   setupBaseRealm(hooks);
+
+  let testingRoot: HTMLElement | null = null;
+  let originalTestingWidth = '';
+
+  hooks.beforeEach(function () {
+    testingRoot = document.querySelector<HTMLElement>('#ember-testing');
+    originalTestingWidth = testingRoot?.style.width ?? '';
+  });
+
+  hooks.afterEach(function () {
+    testingRoot?.style.setProperty('width', originalTestingWidth);
+    window.localStorage.removeItem('ai-assistant-panel-width');
+  });
+
+  // The test container is about 640px across, where the assistant and the
+  // main panel each sit at their 320px minimum, so a test that resizes the
+  // assistant gives the app more room first.
+  function widenApp() {
+    testingRoot?.style.setProperty('width', '2560px');
+  }
+
+  function openAssistantOnIndex() {
+    return visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        stringify({
+          stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+          aiAssistantOpen: true,
+        })!,
+      )}`,
+    );
+  }
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -3645,6 +3678,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   });
 
   test('ai assistant panel width persists to localStorage', async function (assert) {
+    widenApp();
     // Clear any existing localStorage data for AI assistant panel width
     window.localStorage.removeItem('ai-assistant-panel-width');
 
@@ -3702,7 +3736,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Now test resizing the panel and verify localStorage updates
     let resizeHandle = document.querySelector(
-      '[data-boxel-panel-resize-handle-id]',
+      '[data-test-ai-assistant-resize-handle]',
     );
     assert.ok(resizeHandle, 'Resize handle should exist');
 
@@ -3753,6 +3787,166 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.ok(
       resizedWidth > 0,
       'AI assistant panel should still have a width after resize',
+    );
+  });
+
+  // Drags the assistant's resize handle to `offset` pixels from the app's
+  // left edge.
+  async function dragAssistantHandleTo(offset: number) {
+    let resizeHandle = find('[data-test-ai-assistant-resize-handle]')!;
+    let { x, y } = resizeHandle.getBoundingClientRect();
+    let left = find('[data-test-submode-layout]')!.getBoundingClientRect().x;
+    await triggerEvent(resizeHandle, 'pointerdown', { clientX: x, clientY: y });
+    await triggerEvent(resizeHandle, 'pointermove', {
+      clientX: left + offset,
+      clientY: y,
+    });
+    await triggerEvent(resizeHandle, 'pointerup');
+  }
+
+  function mainPanelWidth() {
+    return find('[data-test-main-panel]')!.getBoundingClientRect().width;
+  }
+
+  test('dragging the ai assistant panel wide stops the main panel at 320px', async function (assert) {
+    widenApp();
+    window.localStorage.removeItem('ai-assistant-panel-width');
+    await openAssistantOnIndex();
+
+    await dragAssistantHandleTo(400);
+    let width = mainPanelWidth();
+    assert.ok(
+      width >= 320,
+      `the main panel is at least 320px wide (${width.toFixed(1)}px)`,
+    );
+    assert.ok(
+      width < 420,
+      `the main panel follows the drag (${width.toFixed(1)}px)`,
+    );
+
+    await dragAssistantHandleTo(10);
+    width = mainPanelWidth();
+    assert.ok(
+      Math.abs(width - 320) < 1,
+      `a drag past 320px stops the main panel at 320px (${width.toFixed(1)}px)`,
+    );
+    assert
+      .dom('[data-test-main-panel]')
+      .doesNotHaveAttribute('inert', 'the main panel is reachable');
+  });
+
+  test('double-clicking the ai assistant resize handle narrows the main panel to 320px', async function (assert) {
+    widenApp();
+    window.localStorage.removeItem('ai-assistant-panel-width');
+    await openAssistantOnIndex();
+
+    let startWidth = mainPanelWidth();
+    assert.ok(startWidth > 400, `the main panel starts wide (${startWidth}px)`);
+
+    await doubleClick('[data-test-ai-assistant-resize-handle]');
+    let width = mainPanelWidth();
+    assert.ok(
+      Math.abs(width - 320) < 1,
+      `the main panel narrows to 320px (${width.toFixed(1)}px)`,
+    );
+    assert
+      .dom('[data-test-main-panel]')
+      .doesNotHaveAttribute('inert', 'the main panel is reachable');
+  });
+
+  test('a saved ai assistant panel width that would leave the main panel narrower than 320px opens it at 320px', async function (assert) {
+    widenApp();
+    window.localStorage.setItem('ai-assistant-panel-width', '95');
+    await openAssistantOnIndex();
+
+    let width = mainPanelWidth();
+    assert.ok(
+      Math.abs(width - 320) < 1,
+      `the main panel opens at 320px (${width.toFixed(1)}px)`,
+    );
+  });
+
+  test('with no saved width, a window too narrow for the ai assistant panel’s default width gives the main panel the rest', async function (assert) {
+    // About 350px across once the test container scales it.
+    testingRoot?.style.setProperty('width', '700px');
+    window.localStorage.removeItem('ai-assistant-panel-width');
+    await openAssistantOnIndex();
+
+    let layoutWidth = find(
+      '[data-test-submode-layout]',
+    )!.getBoundingClientRect().width;
+    assert.ok(
+      layoutWidth < 371,
+      `the app is narrower than the assistant's default width (${layoutWidth.toFixed(1)}px)`,
+    );
+    let width = mainPanelWidth();
+    assert.ok(
+      Math.abs(width - (layoutWidth - 320)) < 1,
+      `the main panel gets what the assistant's 320px leaves (${width.toFixed(1)}px)`,
+    );
+    let saved = window.localStorage.getItem('ai-assistant-panel-width');
+    assert.notStrictEqual(saved, null, 'the width is saved');
+    assert.ok(
+      Number(saved) < 99.99,
+      `the saved width is not the whole window (${saved})`,
+    );
+  });
+
+  test('reopening the ai assistant panel opens it at the width saved since the page loaded', async function (assert) {
+    widenApp();
+    window.localStorage.removeItem('ai-assistant-panel-width');
+    await openAssistantOnIndex();
+    let openedWidth = mainPanelWidth();
+
+    await dragAssistantHandleTo(400);
+    let draggedWidth = mainPanelWidth();
+    assert.ok(
+      Math.abs(draggedWidth - openedWidth) >= 1,
+      `the drag resizes the main panel (${openedWidth.toFixed(1)}px to ${draggedWidth.toFixed(1)}px)`,
+    );
+
+    await click('[data-test-close-ai-assistant]');
+    await click('[data-test-open-ai-assistant]');
+    let reopenedWidth = mainPanelWidth();
+    assert.ok(
+      Math.abs(reopenedWidth - draggedWidth) < 1,
+      `the main panel keeps the dragged width (${reopenedWidth.toFixed(1)}px)`,
+    );
+  });
+
+  test('on a window no wider than the ai assistant panel’s minimum, the main panel is out of reach and the width is not saved', async function (assert) {
+    // About 300px across once the test container scales it.
+    testingRoot?.style.setProperty('width', '600px');
+    window.localStorage.setItem('ai-assistant-panel-width', '40');
+    await openAssistantOnIndex();
+
+    assert
+      .dom('[data-test-main-panel]')
+      .hasAttribute('inert', '', 'the 0px main panel is out of reach');
+    assert.strictEqual(
+      window.localStorage.getItem('ai-assistant-panel-width'),
+      '40',
+      'the width saved on a wider window is kept',
+    );
+  });
+
+  test('a saved ai assistant panel width of the whole window opens the main panel at 320px', async function (assert) {
+    widenApp();
+    window.localStorage.setItem('ai-assistant-panel-width', '100');
+    await openAssistantOnIndex();
+
+    let width = mainPanelWidth();
+    assert.ok(
+      Math.abs(width - 320) < 1,
+      `the main panel opens at 320px (${width.toFixed(1)}px)`,
+    );
+    assert
+      .dom('[data-test-main-panel]')
+      .doesNotHaveAttribute('inert', 'the main panel is reachable');
+    let saved = window.localStorage.getItem('ai-assistant-panel-width');
+    assert.ok(
+      Number(saved) < 99.99,
+      `the width it opens at replaces the saved one (${saved})`,
     );
   });
 
