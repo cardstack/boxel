@@ -53,6 +53,7 @@ class PanelProperties {
 class RenderController {
   @tracked containerStyle = '';
   @tracked panels: PanelProperties[] = [];
+  @tracked reverseCollapse = true;
 }
 
 interface MyTestContext extends RenderingTestContext {
@@ -77,12 +78,14 @@ let orientationPropertiesToTest = [
 let moveResizePanelHandle = async function ({
   panelIndex,
   orientation,
-  moveDelta, // A negative indicates movement to the left in a horizontal orientation and upward in a vertical orientation."
+  moveDelta, // A negative indicates movement to the left in a horizontal orientation and upward in a vertical orientation. Several are moves in one drag, each from where it started.
   hitAreaMargin = 0,
   moveWithSeparator = false, // Use the separator parent element of the handle to move
+  afterMove, // Called after each move, before the pointer is released
 }: {
+  afterMove?: (moveIndex: number) => void;
   hitAreaMargin?: number;
-  moveDelta: number;
+  moveDelta: number | number[];
   moveWithSeparator?: boolean;
   orientation: string;
   panelIndex: number;
@@ -106,7 +109,6 @@ let moveResizePanelHandle = async function ({
     orientation === 'horizontal' ? groupRect.width : groupRect.height;
   let resizeHandleRect =
     resizePanelHandles[panelIndex]!.children[0]!.getBoundingClientRect();
-  let moveDeltaInPixels = (groupSizeInPixels * moveDelta) / 100;
 
   let elementToMove = find(
     `[data-boxel-panel-resize-handle-id="${resizeHandleId}"]`,
@@ -129,19 +131,27 @@ let moveResizePanelHandle = async function ({
           clientY: resizeHandleRect.y + hitAreaMargin,
         },
   );
-  await triggerEvent(
-    elementToMove!,
-    'pointermove',
-    orientation === 'horizontal'
-      ? {
-          clientX: resizeHandleRect.x + moveDeltaInPixels + hitAreaMargin,
-          clientY: resizeHandleRect.y,
-        }
-      : {
-          clientX: resizeHandleRect.x,
-          clientY: resizeHandleRect.y + moveDeltaInPixels + hitAreaMargin,
-        },
-  );
+  let moveDeltas = Array.isArray(moveDelta) ? moveDelta : [moveDelta];
+  for (let [moveIndex, delta] of moveDeltas.entries()) {
+    let moveDeltaInPixels = (groupSizeInPixels * delta) / 100;
+    await triggerEvent(
+      elementToMove!,
+      'pointermove',
+      orientation === 'horizontal'
+        ? {
+            clientX: resizeHandleRect.x + moveDeltaInPixels + hitAreaMargin,
+            clientY: resizeHandleRect.y,
+          }
+        : {
+            clientX: resizeHandleRect.x,
+            clientY: resizeHandleRect.y + moveDeltaInPixels + hitAreaMargin,
+          },
+    );
+    if (afterMove) {
+      await waitForRerender();
+      afterMove(moveIndex);
+    }
+  }
   await triggerEvent(elementToMove!, 'pointerup');
   await waitForRerender();
 };
@@ -222,7 +232,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
             <div style={{htmlSafe renderController.containerStyle}}>
               <ResizablePanelGroup
                 @orientation={{orientationProperties.orientation}}
-                @reverseCollapse={{true}}
+                @reverseCollapse={{renderController.reverseCollapse}}
                 as |ResizablePanel ResizeHandle|
               >
                 {{#each renderController.panels as |panel index|}}
@@ -476,6 +486,433 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           assert,
           orientation: orientationProperties.orientation,
           panelSizesInPixels: ['120px', '180px'],
+        });
+      });
+
+      test<MyTestContext>(`a double-click opens a panel a drag collapsed to the size it had before the drag, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['180px', '120px'],
+        });
+
+        // From a size other than the panel's default, which a double-click
+        // with nothing remembered would fall back to.
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '150px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 45,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['300px', '0px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '150px'],
+        });
+      });
+
+      test<MyTestContext>(`a double-click opens a first panel that started collapsed, with no default or minimum size, at half the group, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.reverseCollapse = false;
+        this.renderController.panels[0]!.defaultSize = 0;
+        this.renderController.panels[1]!.defaultSize = 100;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '300px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '150px'],
+        });
+      });
+
+      test<MyTestContext>(`a double-click opens a panel that started collapsed no wider than the panel across the handle allows, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.reverseCollapse = false;
+        this.renderController.panels[0]!.defaultSize = 0;
+        this.renderController.panels[1]!.defaultSize = 100;
+        this.renderController.panels[1]!.minSize = 60;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['120px', '180px'],
+        });
+      });
+
+      test<MyTestContext>(`a double-click leaves a panel that started collapsed closed when the panel across the handle can't give up its minimum, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.reverseCollapse = false;
+        this.renderController.panels[0]!.defaultSize = 0;
+        this.renderController.panels[0]!.minSize = 30;
+        this.renderController.panels[1]!.defaultSize = 100;
+        this.renderController.panels[1]!.minSize = 80;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '300px'],
+        });
+      });
+
+      test<MyTestContext>(`a double-click opens a panel that started collapsed at its minimum, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.panels[0]!.defaultSize = 100;
+        this.renderController.panels[1]!.defaultSize = 0;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['300px', '0px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['255px', '45px'],
+        });
+      });
+
+      test<MyTestContext>(`a double-click opens a first panel a drag collapsed to the size it had before the drag, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.reverseCollapse = false;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -10,
+        });
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -55,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '300px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '150px'],
+        });
+      });
+
+      test<MyTestContext>(`a double-click opens a panel that started collapsed with room from every other panel, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.reverseCollapse = false;
+        let outerContainerStyle = `${orientationProperties.dimension}: 100%`;
+        this.renderController.panels = [
+          new PanelProperties(
+            { defaultSize: 0 },
+            { showResizeHandle: true, outerContainerStyle },
+          ),
+          new PanelProperties(
+            { defaultSize: 22, minSize: 20 },
+            { showResizeHandle: true, outerContainerStyle },
+          ),
+          new PanelProperties(
+            { defaultSize: 78, collapsible: false },
+            { outerContainerStyle },
+          ),
+        ];
+        let containerSize = 300 + 2 * RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '66px', '234px'],
+        });
+
+        // The middle panel, collapsible, gives only the 2% above its minimum;
+        // the last keeps half its 78% and gives 39%, so the first opens at 41%.
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['123px', '60px', '117px'],
+        });
+      });
+
+      test<MyTestContext>(`a panel a double-click opened with room from fractional sizes can still be resized, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.reverseCollapse = false;
+        let outerContainerStyle = `${orientationProperties.dimension}: 100%`;
+        this.renderController.panels = [
+          new PanelProperties(
+            { defaultSize: 0 },
+            { showResizeHandle: true, outerContainerStyle },
+          ),
+          new PanelProperties(
+            { defaultSize: 33.3333333333 },
+            { showResizeHandle: true, outerContainerStyle },
+          ),
+          new PanelProperties(
+            { defaultSize: 66.6666666667 },
+            { outerContainerStyle },
+          ),
+        ];
+        let containerSize = 300 + 2 * RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '50px', '100px'],
+        });
+
+        // Rounding the others' sizes mustn't leave the layout off 100%, which
+        // would refuse this drag.
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -10,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['120px', '80px', '100px'],
+        });
+      });
+
+      test<MyTestContext>(`a double-click opens a panel whose default size is below its minimum at its minimum, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.reverseCollapse = false;
+        this.renderController.panels[0]!.defaultSize = 10;
+        this.renderController.panels[0]!.minSize = 20;
+        this.renderController.panels[1]!.defaultSize = 90;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '300px'],
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['60px', '240px'],
+        });
+      });
+
+      test<MyTestContext>(`a double-click with the pointer presses a browser sends collapses a panel and reopens it at its size, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.reverseCollapse = false;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+        // Each click presses and releases the pointer, which starts and ends
+        // a drag, before the dblclick.
+        let browserDoubleClick = async () => {
+          for (let click = 0; click < 2; click++) {
+            await moveResizePanelHandle({
+              panelIndex: 0,
+              orientation: orientationProperties.orientation,
+              moveDelta: [],
+            });
+          }
+          await doubleClick('[data-test-resize-handle]');
+          await waitForRerender();
+        };
+
+        await renderResizablePanelGroup(this.renderController);
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -10,
+        });
+
+        await browserDoubleClick();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '300px'],
+        });
+
+        await browserDoubleClick();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '150px'],
+        });
+      });
+
+      test<MyTestContext>(`a drag that pulls a collapsed panel out and back keeps the size it had before it collapsed, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.reverseCollapse = false;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        // From a size other than the panel's default, which a double-click
+        // with nothing remembered would fall back to.
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -10,
+        });
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '300px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: [5, 0],
+          afterMove: (moveIndex) =>
+            assertPanels({
+              assert,
+              orientation: orientationProperties.orientation,
+              panelSizesInPixels:
+                moveIndex === 0 ? ['15px', '285px'] : ['0px', '300px'],
+            }),
+        });
+
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '150px'],
+        });
+      });
+
+      test<MyTestContext>(`a panel dragged open forgets the size it had before an earlier collapse, in ${orientationProperties.orientation} orientation`, async function (assert) {
+        this.renderController.reverseCollapse = false;
+        this.renderController.panels[0]!.defaultSize = 0;
+        this.renderController.panels[0]!.minSize = 15;
+        this.renderController.panels[1]!.defaultSize = 100;
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 15,
+        });
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '300px'],
+        });
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: 20,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['60px', '240px'],
+        });
+
+        // A change to the panels lays them out at their default sizes again,
+        // which collapses the first one without remembering a size.
+        this.renderController.panels[1]!.isHidden = true;
+        await waitForRerender();
+        this.renderController.panels[1]!.isHidden = false;
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['0px', '300px'],
+        });
+
+        // It opens at its minimum, not at the 30% it had before the
+        // double-click collapsed it.
+        await doubleClick('[data-test-resize-handle]');
+        await waitForRerender();
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['45px', '255px'],
         });
       });
 

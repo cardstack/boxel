@@ -176,6 +176,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       this.panels.splice(panelIndex, 1);
       this.panelsChanged = true;
     }
+    this.panelSizeBeforeCollapse.delete(panel.id);
   }
 
   @action
@@ -198,8 +199,30 @@ export default class ResizablePanelGroup extends Component<Signature> {
           initialLayout: [...this.layout],
         };
       },
+      // When a drag ends, each panel it collapsed remembers its size from when
+      // the drag started, so a double-click reopens it, as it does a panel a
+      // double-click collapsed. A panel the drag leaves open forgets the size
+      // from an earlier collapse.
       stopDragging: () => {
+        let initialLayout = this.dragState?.initialLayout;
         this.dragState = null;
+        // Start sizes match panels by position, which a panel added or
+        // removed during the drag would shift.
+        if (!initialLayout || initialLayout.length !== this.layout.length) {
+          return;
+        }
+        this.layout.forEach((size, index) => {
+          let panel = this.panels[index];
+          if (!panel) {
+            return;
+          }
+          let startSize = initialLayout[index];
+          if (size > 0) {
+            this.panelSizeBeforeCollapse.delete(panel.id);
+          } else if (startSize) {
+            this.panelSizeBeforeCollapse.set(panel.id, startSize);
+          }
+        });
       },
       resizeHandler: (event: ResizeEvent) => {
         event.preventDefault();
@@ -280,9 +303,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
             panel.id,
           );
           if (panelSizeBeforeCollapse == null) {
-            throw new Error(
-              `panelSizeBeforeCollapse is not found for panel with id = ${panel.id}`,
+            let nextLayout = this.layoutReopening(
+              isFirstElement ? 0 : this.panels.length - 1,
             );
+            if (nextLayout) {
+              this.updateLayout(nextLayout);
+            }
+            return;
           }
           delta = isFirstElement
             ? panelSizeBeforeCollapse
@@ -302,11 +329,62 @@ export default class ResizablePanelGroup extends Component<Signature> {
         });
         const layoutChanged = !compareLayouts(prevLayout, nextLayout);
         if (layoutChanged) {
-          this.panelSizeBeforeCollapse.set(panel.id, panelSize);
+          // Only a collapsed panel keeps a size to reopen at.
+          let nextPanelSize = isFirstElement
+            ? nextLayout[0]
+            : nextLayout[this.panels.length - 1];
+          if (nextPanelSize) {
+            this.panelSizeBeforeCollapse.delete(panel.id);
+          } else if (panelSize > 0) {
+            this.panelSizeBeforeCollapse.set(panel.id, panelSize);
+          }
           this.updateLayout(nextLayout);
         }
       },
     };
+  }
+
+  // Opens a collapsed end panel that has no remembered size (it loaded
+  // collapsed, or a re-layout collapsed it) at its default size, or else its
+  // minimum, or else half the group, and never below its minimum. The other
+  // panels make room from the handle outward, each down to its own minimum,
+  // or to half its size when it sets none. The panel stays closed when they
+  // can't make room for its minimum.
+  private layoutReopening(panelIndex: number): number[] | undefined {
+    let panel = this.panels[panelIndex];
+    if (!panel) {
+      return undefined;
+    }
+    let { defaultSize, maxSize, minSize } = panel.constraints;
+    let target = Math.min(
+      Math.max(defaultSize || minSize || 50, minSize ?? 0),
+      maxSize ?? 100,
+    );
+    let layout = [...this.layout];
+    let step = panelIndex === 0 ? 1 : -1;
+    let room = 0;
+    for (
+      let index = panelIndex + step;
+      index >= 0 && index < layout.length && room < target;
+      index += step
+    ) {
+      let size = layout[index] ?? 0;
+      let keep = this.panels[index]?.constraints.minSize ?? size / 2;
+      let give = Math.min(Math.max(size - keep, 0), target - room);
+      layout[index] = parseFloat((size - give).toFixed(PRECISION));
+      room += give;
+    }
+    if (room <= 0 || room < (minSize ?? 0)) {
+      return undefined;
+    }
+    // The panel takes what the others' rounded sizes leave, since a layout
+    // that doesn't add up to 100 refuses every later resize.
+    let others = layout.reduce(
+      (sum, size, index) => (index === panelIndex ? sum : sum + size),
+      0,
+    );
+    layout[panelIndex] = parseFloat((100 - others).toFixed(PRECISION));
+    return layout;
   }
 
   @action
