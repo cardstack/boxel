@@ -1,6 +1,7 @@
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 
 import { service } from '@ember/service';
@@ -9,20 +10,15 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { Badge } from '@cardstack/pretui/components/badge';
+import { ResizeHandle } from '@cardstack/pretui/components/resize-handle';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { modifier } from 'ember-modifier';
 import window from 'ember-window-mock';
 
-import { TrackedObject } from 'tracked-built-ins';
-
-import {
-  Avatar,
-  IconButton,
-  ResizablePanelGroup,
-} from '@cardstack/boxel-ui/components';
-import { bool, cn, eq, not } from '@cardstack/boxel-ui/helpers';
+import { Avatar, IconButton } from '@cardstack/boxel-ui/components';
+import { bool, cn, cssVar, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
 
@@ -39,7 +35,10 @@ import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
-import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
+import {
+  AiAssistantPanelWidth,
+  LegacyAiAssistantPanelWidth,
+} from '@cardstack/host/utils/local-storage-keys';
 import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 
 import QuickLookMotion from '../ai-assistant/motion/quick-look-motion';
@@ -91,10 +90,13 @@ interface Signature {
 }
 
 let handleWindowResizeModifier = modifier(
-  (element, [onWindowResize]: [(width: number) => void]) => {
+  (
+    element: HTMLElement,
+    [onWindowResize]: [(width: number, layoutWidth: number) => void],
+  ) => {
     let updateWindowWidth = () => {
       let boundingClient = element.getBoundingClientRect();
-      onWindowResize(boundingClient.width);
+      onWindowResize(boundingClient.width, element.offsetWidth);
     };
     updateWindowWidth();
     window.addEventListener('resize', updateWindowWidth);
@@ -111,19 +113,33 @@ let captureElement = modifier(
   },
 );
 
-type PanelWidths = {
-  minWidth: number | null;
-};
-
 const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 46;
 const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 23;
-// The share of the window the assistant opens at before the window is measured.
-const AI_PANEL_UNMEASURED_WIDTH_PERCENT = 30;
+// The assistant opens at 371px and can be dragged down to 320px: it is
+// designed to read at 320 (narrow), 440 and 680 (wide).
+const AI_PANEL_DEFAULT_WIDTH = 371;
+const AI_PANEL_MIN_WIDTH = 320;
+// Beside the assistant, the main panel is at least 320px wide, so a wide
+// assistant can't squeeze the dashboard or a stack past where its layout
+// holds.
+const MAIN_PANEL_MIN_WIDTH = 320;
+
+function readSavedAiPanelWidth(): number | undefined {
+  window.localStorage.removeItem(LegacyAiAssistantPanelWidth);
+  let width = Number(window.localStorage.getItem(AiAssistantPanelWidth));
+  return Number.isFinite(width) && width > 0 ? width : undefined;
+}
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
   @tracked private currentWindowWidth = 0;
+  // The layout's width in layout px, which a scaled ancestor doesn't change.
+  // The assistant's width is set in these, and its resize handle reports in
+  // them.
+  @tracked private layoutWidth = 0;
+  @tracked private savedAiPanelWidth = readSavedAiPanelWidth();
+  private aiPanelId = `ai-assistant-panel-${guidFor(this)}`;
 
   private get topBarButtonsCollapsed(): boolean {
     let rootFontSize = Number.parseFloat(
@@ -142,14 +158,6 @@ export default class SubmodeLayout extends Component<Signature> {
     );
   }
 
-  private aiPanelWidths: PanelWidths = new TrackedObject({
-    minWidth: 25,
-  });
-  @tracked private mainPanelMinWidth = 0;
-  // A window no wider than the assistant's 320px minimum leaves the main panel
-  // 0px wide, but its controls would still take focus and reach a screen
-  // reader, so it is inert while it has no width.
-  @tracked private mainPanelCollapsed = false;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
   @service declare private keyNotices: KeyNoticesService;
@@ -181,65 +189,83 @@ export default class SubmodeLayout extends Component<Signature> {
       element as HTMLElement;
   }
 
-  @action
-  private onLayoutChange(layout: number[]) {
-    // layout is an array of two numbers,
-    // the first number is the width of the main panel,
-    // the second number is the width of the ai panel.
-    // A window no wider than the assistant's minimum leaves the main panel no
-    // room, so its whole-window width isn't saved over the one chosen on a
-    // wider window.
-    if (layout.length === 2 && this.mainPanelMinWidth > 0) {
-      window.localStorage.setItem(AiAssistantPanelWidth, String(layout[1]));
-    }
-    let collapsed = layout.length === 2 && layout[0]! <= 0;
-    if (collapsed !== this.mainPanelCollapsed) {
-      this.mainPanelCollapsed = collapsed;
-    }
-  }
-
-  // Handles window resize: both panels' minimums are in pixels, so their
-  // shares of the window follow its width.
-  onWindowResize = (windowWidth: number) => {
+  onWindowResize = (windowWidth: number, layoutWidth: number) => {
     this.currentWindowWidth = windowWidth;
-
-    // The panel opens at 371px but may be dragged down to 320px: the
-    // assistant is designed to read at 320 (narrow), 440 and 680 (wide).
-    let aiPanelMinWidthInPixels = Math.min(320, windowWidth);
-    this.aiPanelWidths.minWidth = (aiPanelMinWidthInPixels / windowWidth) * 100;
-
-    // The main panel is at least 320px wide, so a wide assistant can't
-    // squeeze the dashboard or a stack past where its layout holds. A
-    // window too narrow for both gives the assistant its minimum and the main
-    // panel the rest. Like the assistant's, it holds when the panels lay out
-    // and while one is dragged; narrowing the window alone doesn't apply it.
-    let mainPanelMinWidthInPixels = Math.min(
-      320,
-      windowWidth - aiPanelMinWidthInPixels,
-    );
-    this.mainPanelMinWidth = (mainPanelMinWidthInPixels / windowWidth) * 100;
+    this.layoutWidth = layoutWidth;
   };
 
-  // The width the assistant opens at: the saved one, or else 371px. Glimmer
-  // keeps this getter's reference across opens and recomputes it only when
-  // something it read has changed. The saved width isn't tracked, so reading
-  // whether the assistant is open is what makes each open read it afresh.
-  private get aiPanelDefaultWidth(): number {
-    let windowWidth = this.currentWindowWidth;
-    if (!this.aiAssistantPanelService.isOpen || !windowWidth) {
-      return AI_PANEL_UNMEASURED_WIDTH_PERCENT;
-    }
-    let standardWidth = (Math.min(371, windowWidth) / windowWidth) * 100;
-    let persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth)
-      ? Number(window.localStorage.getItem(AiAssistantPanelWidth))
+  // A layout too narrow for both panels gives the assistant its minimum and
+  // the main panel the rest.
+  private get aiPanelMinWidth(): number {
+    return this.layoutWidth
+      ? Math.min(AI_PANEL_MIN_WIDTH, this.layoutWidth)
+      : AI_PANEL_MIN_WIDTH;
+  }
+
+  private get aiPanelMaxWidth(): number | undefined {
+    return this.layoutWidth
+      ? Math.max(this.aiPanelMinWidth, this.layoutWidth - MAIN_PANEL_MIN_WIDTH)
       : undefined;
-    // The width is saved as a share of the window, so on another window it can
-    // leave the main panel under 320px. The panel group then keeps the main
-    // panel at its minimum and gives the assistant the rest.
-    return !persistedWidth ||
-      persistedWidth < (this.aiPanelWidths.minWidth ?? 0)
-      ? standardWidth
-      : persistedWidth;
+  }
+
+  private fitAiPanelWidth(width: number): number {
+    return Math.min(
+      this.aiPanelMaxWidth ?? Infinity,
+      Math.max(this.aiPanelMinWidth, width),
+    );
+  }
+
+  // The saved width, or else 371px, as much of it as fits beside the main
+  // panel. It follows the layout's width, and it isn't saved.
+  private get aiPanelWidth(): number {
+    return this.fitAiPanelWidth(
+      this.savedAiPanelWidth ?? AI_PANEL_DEFAULT_WIDTH,
+    );
+  }
+
+  private get aiPanelWidthCss(): string {
+    return `${this.aiPanelWidth}px`;
+  }
+
+  // Each open reads the saved width afresh, so a width saved in another tab
+  // applies. It reads no tracked state, so it runs only when the assistant
+  // opens.
+  private readSavedAiPanelWidthOnOpen = modifier(() => {
+    this.savedAiPanelWidth = readSavedAiPanelWidth();
+  });
+
+  // The handle reports only the widths the user sets.
+  @action
+  private resizeAiPanel(width: number) {
+    this.savedAiPanelWidth = width;
+    window.localStorage.setItem(AiAssistantPanelWidth, String(width));
+  }
+
+  // A double-click or Enter restores 371px, or as much of it as fits beside
+  // the main panel. That cap is the app's choice, so a restore clears the
+  // saved width instead of keeping the capped one the handle may report.
+  // Whichever of the two listeners runs last, the width ends up cleared.
+  @action
+  private restoreAiPanelWidth(event: Event) {
+    if (
+      event instanceof KeyboardEvent &&
+      (event.key !== 'Enter' || event.altKey || event.ctrlKey || event.metaKey)
+    ) {
+      return;
+    }
+    this.savedAiPanelWidth = undefined;
+    window.localStorage.removeItem(AiAssistantPanelWidth);
+  }
+
+  // A layout no wider than the assistant's minimum leaves the main panel 0px
+  // wide, but its controls would still take focus and reach a screen reader,
+  // so it is inert while it has no width.
+  private get mainPanelOutOfReach(): boolean {
+    return (
+      this.aiAssistantPanelService.isOpen &&
+      this.layoutWidth > 0 &&
+      this.layoutWidth <= AI_PANEL_MIN_WIDTH
+    );
   }
 
   get operatorModeController(): IndexController {
@@ -529,180 +555,182 @@ export default class SubmodeLayout extends Component<Signature> {
       data-test-submode-layout
       ...attributes
     >
-      <ResizablePanelGroup
-        @onLayoutChange={{this.onLayoutChange}}
-        @orientation='horizontal'
-        class='columns'
-        as |ResizablePanel ResizeHandle|
+      <div
+        class='main-panel'
+        inert={{if this.mainPanelOutOfReach true}}
+        data-test-main-panel
       >
-        <ResizablePanel
-          class='main-panel'
-          @minSize={{this.mainPanelMinWidth}}
-          @collapsible={{false}}
-          inert={{if this.mainPanelCollapsed true}}
-          data-test-main-panel
-        >
-          <div class='submode-layout-top-bar'>
-            <IconButton
-              @icon={{BoxelIconWithText}}
-              @width='160px'
-              @height='40px'
-              disabled={{this.isToggleWorkspaceChooserDisabled}}
-              class={{cn
-                'workspace-button'
-                workspace-button--dark=(not this.workspaceChooserOpened)
-                workspace-button--chooser-open=this.workspaceChooserOpened
-              }}
-              {{on 'click' this.toggleWorkspaceChooser}}
-              data-workspace-chooser-toggle
-              data-test-workspace-chooser-toggle
+        <div class='submode-layout-top-bar'>
+          <IconButton
+            @icon={{BoxelIconWithText}}
+            @width='160px'
+            @height='40px'
+            disabled={{this.isToggleWorkspaceChooserDisabled}}
+            class={{cn
+              'workspace-button'
+              workspace-button--dark=(not this.workspaceChooserOpened)
+              workspace-button--chooser-open=this.workspaceChooserOpened
+            }}
+            {{on 'click' this.toggleWorkspaceChooser}}
+            data-workspace-chooser-toggle
+            data-test-workspace-chooser-toggle
+          />
+          {{#if (not this.workspaceChooserOpened)}}
+            <SubmodeSwitcher
+              class='submode-switcher'
+              @isCollapsed={{this.submodeSwitcherCollapsed}}
+              @submode={{this.operatorModeStateService.state.submode}}
+              @codeSubmodeOffered={{this.codeSubmodeOffered}}
+              @onSubmodeSelect={{this.updateSubmode}}
             />
-            {{#if (not this.workspaceChooserOpened)}}
-              <SubmodeSwitcher
-                class='submode-switcher'
-                @isCollapsed={{this.submodeSwitcherCollapsed}}
-                @submode={{this.operatorModeStateService.state.submode}}
-                @codeSubmodeOffered={{this.codeSubmodeOffered}}
-                @onSubmodeSelect={{this.updateSubmode}}
+            {{#if @newFileOptions}}
+              <NewFileButton
+                class='new-file-button'
+                @dropdownOptions={{@newFileOptions}}
+                @initiallyOpened={{bool
+                  this.operatorModeStateService.state.newFileDropdownOpen
+                }}
+                @isCollapsed={{this.topBarButtonsCollapsed}}
               />
-              {{#if @newFileOptions}}
-                <NewFileButton
-                  class='new-file-button'
-                  @dropdownOptions={{@newFileOptions}}
-                  @initiallyOpened={{bool
-                    this.operatorModeStateService.state.newFileDropdownOpen
-                  }}
-                  @isCollapsed={{this.topBarButtonsCollapsed}}
-                />
-              {{/if}}
-              {{#if
-                (eq this.operatorModeStateService.state.submode 'interact')
-              }}
-                <div
-                  class={{cn
-                    'expanded-card-header-slot'
-                    has-expanded=this.operatorModeStateService.hasAnyStackItemExpanded
-                  }}
-                  data-test-expanded-card-header-slot
-                  {{captureElement this.storeExpandedCardHeaderElement}}
-                ></div>
-              {{/if}}
-              {{yield to='topBar'}}
             {{/if}}
-
-            {{! How many key notices the user hasn't seen, as the profile
-                menu's API Keys item shows too. }}
-            <Badge
-              class='profile-icon-badge'
-              @circular={{true}}
-              @count={{this.keyNotices.unread}}
-              @label='unseen key notices'
-              @invisible={{not this.keyNotices.unread}}
-              data-test-profile-icon-key-notices-badge={{if
-                this.keyNotices.unread
-                'unread'
-              }}
-            >
-              <button
-                class='profile-icon-button'
-                {{on 'click' this.toggleProfileSummary}}
-                data-test-profile-icon-button
-              >
-                <Avatar
-                  @isReady={{this.matrixService.profile.isLoaded}}
-                  @userId={{this.matrixService.userId}}
-                  @displayName={{this.matrixService.profile.displayName}}
-                />
-              </button>
-            </Badge>
-          </div>
-          {{! Ahead of the page, so Tab reaches the rail right after the top
-              bar, as it reads. }}
-          {{#if this.workspaceChooserOpened}}
-            <SectionRail @sections={{this.dashboardSections}} />
-            <div class='workspace-overlay'>
-              <Dashboard @sections={{this.dashboardSections}} />
-            </div>
+            {{#if (eq this.operatorModeStateService.state.submode 'interact')}}
+              <div
+                class={{cn
+                  'expanded-card-header-slot'
+                  has-expanded=this.operatorModeStateService.hasAnyStackItemExpanded
+                }}
+                data-test-expanded-card-header-slot
+                {{captureElement this.storeExpandedCardHeaderElement}}
+              ></div>
+            {{/if}}
+            {{yield to='topBar'}}
           {{/if}}
 
-          {{! The dashboard covers the submode, which stays rendered under it
-              so closing the dashboard returns to it as it was. Meanwhile it is
-              inert, so focus, the pointer and a screen reader can't reach it. }}
-          <div
-            class='submode-content'
-            inert={{if this.workspaceChooserOpened true}}
-            {{this.uncoverSubmode this.workspaceChooserOpened}}
+          {{! How many key notices the user hasn't seen, as the profile
+              menu's API Keys item shows too. }}
+          <Badge
+            class='profile-icon-badge'
+            @circular={{true}}
+            @count={{this.keyNotices.unread}}
+            @label='unseen key notices'
+            @invisible={{not this.keyNotices.unread}}
+            data-test-profile-icon-key-notices-badge={{if
+              this.keyNotices.unread
+              'unread'
+            }}
           >
-            {{yield
-              (hash
-                openSearchToPrompt=this.openSearchSheetToPrompt
-                openSearchToResults=this.openSearchAndShowResults
-                updateSubmode=this.updateSubmode
+            <button
+              class='profile-icon-button'
+              {{on 'click' this.toggleProfileSummary}}
+              data-test-profile-icon-button
+            >
+              <Avatar
+                @isReady={{this.matrixService.profile.isLoaded}}
+                @userId={{this.matrixService.userId}}
+                @displayName={{this.matrixService.profile.displayName}}
+              />
+            </button>
+          </Badge>
+        </div>
+        {{! Ahead of the page, so Tab reaches the rail right after the top
+            bar, as it reads. }}
+        {{#if this.workspaceChooserOpened}}
+          <SectionRail @sections={{this.dashboardSections}} />
+          <div class='workspace-overlay'>
+            <Dashboard @sections={{this.dashboardSections}} />
+          </div>
+        {{/if}}
+
+        {{! The dashboard covers the submode, which stays rendered under it
+            so closing the dashboard returns to it as it was. Meanwhile it is
+            inert, so focus, the pointer and a screen reader can't reach it. }}
+        <div
+          class='submode-content'
+          inert={{if this.workspaceChooserOpened true}}
+          {{this.uncoverSubmode this.workspaceChooserOpened}}
+        >
+          {{yield
+            (hash
+              openSearchToPrompt=this.openSearchSheetToPrompt
+              openSearchToResults=this.openSearchAndShowResults
+              updateSubmode=this.updateSubmode
+            )
+          }}
+        </div>
+        {{#if @onCardSelectFromSearch}}
+          <SearchSheet
+            @mode={{this.searchSheetMode}}
+            @onSetup={{this.setupSearch}}
+            @onBlur={{this.closeSearchSheet}}
+            @onCancel={{this.closeSearchSheet}}
+            @onFocus={{this.openSearchSheetToPrompt}}
+            @onSearch={{this.expandSearchToShowResults}}
+            @onCardSelect={{this.handleCardSelectFromSearch}}
+            @onInputInsertion={{this.storeSearchElement}}
+            @onFilterChange={{this.expandSearchOnFilterChange}}
+          />
+        {{/if}}
+        <AiAssistantToast
+          @hide={{this.aiAssistantPanelService.isOpen}}
+          @onViewInChatClick={{this.aiAssistantPanelService.openPanel}}
+        />
+        {{#unless this.aiAssistantPanelService.isAiAssistantHidden}}
+          <AiAssistantButton
+            class='chat-btn'
+            @isActive={{this.aiAssistantPanelService.isOpen}}
+            {{on
+              'click'
+              (if
+                this.aiAssistantPanelService.isOpen
+                this.aiAssistantPanelService.closePanel
+                this.aiAssistantPanelService.openPanel
               )
             }}
-          </div>
-          {{#if @onCardSelectFromSearch}}
-            <SearchSheet
-              @mode={{this.searchSheetMode}}
-              @onSetup={{this.setupSearch}}
-              @onBlur={{this.closeSearchSheet}}
-              @onCancel={{this.closeSearchSheet}}
-              @onFocus={{this.openSearchSheetToPrompt}}
-              @onSearch={{this.expandSearchToShowResults}}
-              @onCardSelect={{this.handleCardSelectFromSearch}}
-              @onInputInsertion={{this.storeSearchElement}}
-              @onFilterChange={{this.expandSearchOnFilterChange}}
-            />
-          {{/if}}
-          <AiAssistantToast
-            @hide={{this.aiAssistantPanelService.isOpen}}
-            @onViewInChatClick={{this.aiAssistantPanelService.openPanel}}
           />
-          {{#unless this.aiAssistantPanelService.isAiAssistantHidden}}
-            <AiAssistantButton
-              class='chat-btn'
-              @isActive={{this.aiAssistantPanelService.isOpen}}
-              {{on
-                'click'
-                (if
-                  this.aiAssistantPanelService.isOpen
-                  this.aiAssistantPanelService.closePanel
-                  this.aiAssistantPanelService.openPanel
-                )
-              }}
-            />
-          {{/unless}}
-          {{#if this.profileSummaryOpened}}
-            <ProfileInfoPopover
-              {{onClickOutside
-                this.toggleProfileSummary
-                exceptSelector='.profile-icon-button'
-              }}
-              @toggleProfileSettings={{this.toggleProfileSettings}}
-              @toggleSubscriptionPlans={{this.toggleSubscriptionPlans}}
-            />
-          {{/if}}
-        </ResizablePanel>
-        {{#if this.aiAssistantPanelService.isOpen}}
-          <ResizablePanel
-            class='ai-assistant-resizable-panel'
-            @defaultSize={{this.aiPanelDefaultWidth}}
-            @minSize={{this.aiPanelWidths.minWidth}}
-            @collapsible={{false}}
-            data-theme='dark'
-          >
-            <AiAssistantPanel
-              @onClose={{this.aiAssistantPanelService.closePanel}}
-              @resizeHandle={{ResizeHandle}}
-              @selectedCardRef={{@selectedCardRef}}
-              class={{cn
-                'ai-assistant-panel'
-                left-border=this.workspaceChooserOpened
-              }}
-            />
-          </ResizablePanel>
+        {{/unless}}
+        {{#if this.profileSummaryOpened}}
+          <ProfileInfoPopover
+            {{onClickOutside
+              this.toggleProfileSummary
+              exceptSelector='.profile-icon-button'
+            }}
+            @toggleProfileSettings={{this.toggleProfileSettings}}
+            @toggleSubscriptionPlans={{this.toggleSubscriptionPlans}}
+          />
         {{/if}}
-      </ResizablePanelGroup>
+      </div>
+      {{#if this.aiAssistantPanelService.isOpen}}
+        <div
+          class='ai-assistant-column'
+          style={{cssVar ai-assistant-column-width=this.aiPanelWidthCss}}
+          data-theme='dark'
+          {{this.readSavedAiPanelWidthOnOpen}}
+        >
+          <ResizeHandle
+            class='ai-assistant-resize-handle'
+            @size={{this.aiPanelWidth}}
+            @min={{this.aiPanelMinWidth}}
+            @max={{this.aiPanelMaxWidth}}
+            @defaultSize={{AI_PANEL_DEFAULT_WIDTH}}
+            @onSizeChange={{this.resizeAiPanel}}
+            @placement='start'
+            @label='Resize AI Assistant'
+            @controls={{this.aiPanelId}}
+            {{on 'dblclick' this.restoreAiPanelWidth}}
+            {{on 'keydown' this.restoreAiPanelWidth}}
+            data-test-ai-assistant-resize-handle
+          />
+          <AiAssistantPanel
+            @onClose={{this.aiAssistantPanelService.closePanel}}
+            @selectedCardRef={{@selectedCardRef}}
+            id={{this.aiPanelId}}
+            class={{cn
+              'ai-assistant-panel'
+              left-border=this.workspaceChooserOpened
+            }}
+          />
+        </div>
+      {{/if}}
     </div>
     {{! the assistant's Quick Look, over the whole viewport (motion/) }}
     <QuickLookMotion>
@@ -747,20 +775,32 @@ export default class SubmodeLayout extends Component<Signature> {
         z-index: 0;
       }
 
-      .submode-layout > .boxel-panel-group {
-        width: 100%;
-      }
-
-      .ai-assistant-resizable-panel {
-        max-width: 100%;
-        min-width: 0;
-        overflow: initial;
-      }
-
+      /* Takes the width the assistant leaves. */
       .main-panel {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
         display: flex;
         flex-direction: column;
         position: relative;
+      }
+
+      .ai-assistant-column {
+        position: relative;
+        flex: none;
+        width: var(--ai-assistant-column-width);
+        max-width: 100%;
+      }
+
+      /* On the assistant's edge, above the panel, about as wide as the
+         panel's left padding. It stays inside the assistant: reaching over
+         the main panel, it would cover a scrollbar. */
+      .ai-assistant-resize-handle {
+        --pretui-resize-handle-size: 1rem;
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        z-index: calc(var(--host-ai-panel-z-index) + 1);
       }
 
       .ai-assistant-open {
