@@ -38,10 +38,12 @@ function realmServer({
   polls = ['issued'],
   device = true,
   userStatus,
+  scopes = ['boxel:read', 'boxel:write'],
 }: {
   polls?: string[];
   device?: boolean;
   userStatus?: number;
+  scopes?: string[];
 } = {}) {
   let requests: { url: string; body?: string }[] = [];
   let remaining = [...polls];
@@ -55,7 +57,7 @@ function realmServer({
       return jsonResponse({
         resource: ISSUER,
         authorization_servers: [ISSUER],
-        scopes_supported: ['boxel:read', 'boxel:write'],
+        scopes_supported: scopes,
       });
     }
     if (url === `${ISSUER}/.well-known/oauth-authorization-server`) {
@@ -118,6 +120,7 @@ function signIn(
   server: ReturnType<typeof realmServer>,
   time = clock(),
   log: (message: string) => void = () => {},
+  { allowAiCredits = false }: { allowAiCredits?: boolean } = {},
 ) {
   return oauthDeviceLogin({
     realmServerUrl: REALM_SERVER_URL,
@@ -125,7 +128,13 @@ function signIn(
     log,
     now: time.now,
     sleep: time.sleep,
+    allowAiCredits,
   });
+}
+
+function scopeAskedFor(server: ReturnType<typeof realmServer>) {
+  let asked = server.requests.find(({ url }) => url === DEVICE_ENDPOINT);
+  return asked ? new URLSearchParams(asked.body).get('scope') : undefined;
 }
 
 describe('oauthDeviceLogin', () => {
@@ -269,6 +278,28 @@ describe('oauthDeviceLogin', () => {
       OAuthNotOfferedError,
     );
   });
+
+  it('asks to spend AI credits with --allow-ai-credits', async () => {
+    let server = realmServer({
+      scopes: ['boxel:read', 'boxel:write', 'boxel:spend-credit'],
+    });
+    await signIn(server, clock(), () => {}, { allowAiCredits: true });
+    expect(scopeAskedFor(server)).toBe(
+      'boxel:read boxel:write boxel:spend-credit',
+    );
+  });
+
+  it("refuses a server that doesn't let a connection spend, before showing a code", async () => {
+    let server = realmServer();
+    let lines: string[] = [];
+    await expect(
+      signIn(server, clock(), (line) => lines.push(line), {
+        allowAiCredits: true,
+      }),
+    ).rejects.toThrow("doesn't let an OAuth connection spend AI credits yet");
+    expect(scopeAskedFor(server)).toBeUndefined();
+    expect(lines.join('\n')).not.toContain('WDJB-MJHT');
+  });
 });
 
 describe('oauthLogin with the device fallback', () => {
@@ -291,5 +322,26 @@ describe('oauthLogin with the device fallback', () => {
     expect(lines.join('\n')).toContain("Couldn't open a browser here");
     expect(lines.join('\n')).toContain('WDJB-MJHT');
     expect(result.user.userId).toBe(USER_ID);
+  });
+
+  it('still asks to spend AI credits when it falls back to a code', async () => {
+    let server = realmServer({
+      scopes: ['boxel:read', 'boxel:write', 'boxel:spend-credit'],
+    });
+    let time = clock();
+    await oauthLogin({
+      realmServerUrl: REALM_SERVER_URL,
+      fetchFn: server.fetchFn,
+      openBrowserFn: async () => false,
+      log: () => {},
+      now: time.now,
+      sleep: time.sleep,
+      deviceFallback: true,
+      allowAiCredits: true,
+      timeoutMs: 5_000,
+    });
+    expect(scopeAskedFor(server)).toBe(
+      'boxel:read boxel:write boxel:spend-credit',
+    );
   });
 });

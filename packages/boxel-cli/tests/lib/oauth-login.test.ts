@@ -7,8 +7,11 @@ import {
   CONFIRMATION_CODE_PARAM,
   OAuthConnectionEndedError,
   OAuthNotOfferedError,
+  SPEND_CREDIT_SCOPE,
+  boxelApiScopes,
   buildAuthorizeUrl,
   discoverBoxelApi,
+  grantsSpendCredit,
   exchangeCode,
   makeConfirmationCode,
   makePkce,
@@ -237,6 +240,68 @@ describe('discoverBoxelApi', () => {
     });
     await expect(discoverBoxelApi(REALM_SERVER_URL, fetchFn)).rejects.toThrow(
       /names https:\/\/elsewhere\.example\.test as its issuer/,
+    );
+  });
+});
+
+describe('spending AI credits', () => {
+  it('is asked for only with allowAiCredits', () => {
+    expect(boxelApiScopes()).toEqual(['boxel:read', 'boxel:write']);
+    expect(boxelApiScopes({ allowAiCredits: true })).toEqual([
+      'boxel:read',
+      'boxel:write',
+      SPEND_CREDIT_SCOPE,
+    ]);
+  });
+
+  it('reads whether a connection may spend from the scopes it was granted', () => {
+    expect(grantsSpendCredit('boxel:read boxel:write boxel:spend-credit')).toBe(
+      true,
+    );
+    expect(grantsSpendCredit('boxel:read boxel:write')).toBe(false);
+    expect(grantsSpendCredit(undefined)).toBeUndefined();
+  });
+
+  it("refuses a realm server that doesn't offer it, before a browser opens", async () => {
+    let { fetchFn } = realmServer();
+    let error = await discoverBoxelApi(
+      REALM_SERVER_URL,
+      fetchFn,
+      boxelApiScopes({ allowAiCredits: true }),
+    ).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(OAuthNotOfferedError);
+    expect(error.message).toContain("doesn't let an OAuth connection spend");
+    expect(error.message).toContain('without --allow-ai-credits');
+  });
+
+  it('asks for it on the authorization request when allowed', async () => {
+    let server = realmServer({
+      scopes: ['boxel:read', 'boxel:write', SPEND_CREDIT_SCOPE],
+      tokenBody: {
+        access_token: 'access-token-placeholder',
+        refresh_token: 'refresh-token-placeholder',
+        token_type: 'Bearer',
+        expires_in: 600,
+        scope: 'boxel:read boxel:write boxel:spend-credit',
+      },
+    });
+    let { openBrowserFn, seen } = browser(allows);
+    let result = await oauthLogin({
+      realmServerUrl: REALM_SERVER_URL,
+      fetchFn: server.fetchFn,
+      openBrowserFn,
+      log: () => {},
+      makeConfirmationCodeFn: () => 'WDJB-MJHT',
+      now: () => Date.parse('2026-11-24T00:00:00Z'),
+      timeoutMs: 5_000,
+      allowAiCredits: true,
+    });
+    expect(seen.authorize!.searchParams.get('scope')).toBe(
+      'boxel:read boxel:write boxel:spend-credit',
+    );
+    expect(result.tokens.scope).toBe(
+      'boxel:read boxel:write boxel:spend-credit',
     );
   });
 });

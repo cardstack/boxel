@@ -126,6 +126,10 @@ export function buildBoxelProgram(version: string): Command {
       'Sign in through the browser with OAuth: a token limited to the Boxel API that ends within 30 days, instead of your Matrix session (for add command)',
     )
     .option(
+      '--allow-ai-credits',
+      'With --oauth, also let the connection spend your AI credits, which the software factory and calls to AI models through Boxel need (for add command)',
+    )
+    .option(
       '--host-url <url>',
       "Sign in on this origin's /cli-auth page instead of the realm server's secure origin (for add command)",
     )
@@ -163,7 +167,10 @@ Sign-in (for 'add'):
   over SSH, or when no browser opens, it signs in with a code instead: open
   the page it prints on any device, sign in there, and enter the code. It
   works only where the realm server offers OAuth sign-in, and can't be
-  combined with -u, -p or --host-url.
+  combined with -u, -p or --host-url. Add --allow-ai-credits to let the
+  connection spend your AI credits too, as the software factory and calls to
+  AI models through Boxel need; consent then shows it on a line of its own.
+  Without it, those calls are refused until you sign in again with it.
 
 Environment (for 'add'):
   Defaults to production. Pass --staging or --local for another environment
@@ -195,6 +202,7 @@ Environment variables (for 'add'):
           matrixUrl?: string;
           realmServerUrl?: string;
           browser?: boolean;
+          allowAiCredits?: boolean;
           hostUrl?: string;
           production?: boolean;
           staging?: boolean;

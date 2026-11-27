@@ -21,6 +21,32 @@ import {
 
 export const BOXEL_CLI_CLIENT_ID = 'boxel-cli';
 export const BOXEL_API_SCOPES = ['boxel:read', 'boxel:write'];
+// Lets the connection spend the user's AI credits (the realm server's
+// `/_request-forward` and OpenRouter passthrough). Asked for only with
+// `--allow-ai-credits`, so a connection that only syncs files can't drain
+// the user's balance.
+export const SPEND_CREDIT_SCOPE = 'boxel:spend-credit';
+
+// The scopes a sign-in asks for.
+export function boxelApiScopes({
+  allowAiCredits = false,
+}: { allowAiCredits?: boolean } = {}): string[] {
+  return allowAiCredits
+    ? [...BOXEL_API_SCOPES, SPEND_CREDIT_SCOPE]
+    : [...BOXEL_API_SCOPES];
+}
+
+// Whether a connection's granted scopes, as the token endpoint reported them,
+// include spending AI credits. Undefined when the token endpoint reported no
+// scopes, so the realm server is left to decide.
+export function grantsSpendCredit(
+  scope: string | undefined,
+): boolean | undefined {
+  if (scope === undefined) {
+    return undefined;
+  }
+  return scope.split(/\s+/).includes(SPEND_CREDIT_SCOPE);
+}
 
 // The device authorization grant's type (RFC 8628 §3.4).
 export const DEVICE_CODE_GRANT_TYPE =
@@ -121,6 +147,7 @@ async function readJson(
 export async function discoverBoxelApi(
   realmServerUrl: string,
   fetchFn: typeof fetch = fetch,
+  scopesNeeded: readonly string[] = BOXEL_API_SCOPES,
 ): Promise<BoxelApiProvider> {
   let resource = boxelApiResource(realmServerUrl);
   let metadata = await readJson(
@@ -147,6 +174,15 @@ export async function discoverBoxelApi(
     throw new OAuthNotOfferedError(
       realmServerUrl,
       `the resource doesn't offer ${BOXEL_API_SCOPES.join(' and ')}`,
+    );
+  }
+  if (
+    scopesNeeded.includes(SPEND_CREDIT_SCOPE) &&
+    !scopes.includes(SPEND_CREDIT_SCOPE)
+  ) {
+    throw new Error(
+      `${realmServerUrl} doesn't let an OAuth connection spend AI credits yet. ` +
+        'Sign in again without --allow-ai-credits.',
     );
   }
   let servers = metadata.body.authorization_servers;
@@ -223,6 +259,7 @@ export function buildAuthorizeUrl(
     state: string;
     codeChallenge: string;
     confirmationCode: string;
+    scopes?: readonly string[];
   },
 ): string {
   let url = new URL(provider.authorizationEndpoint);
@@ -230,7 +267,7 @@ export function buildAuthorizeUrl(
   params.set('client_id', BOXEL_CLI_CLIENT_ID);
   params.set('response_type', 'code');
   params.set('redirect_uri', request.redirectUri);
-  params.set('scope', BOXEL_API_SCOPES.join(' '));
+  params.set('scope', (request.scopes ?? BOXEL_API_SCOPES).join(' '));
   params.set('resource', provider.resource);
   params.set('state', request.state);
   params.set('code_challenge', request.codeChallenge);
@@ -517,6 +554,8 @@ export async function fetchSignedInUser(
 
 export interface OAuthLoginOptions {
   realmServerUrl: string;
+  // Also ask for `boxel:spend-credit` (`--allow-ai-credits`).
+  allowAiCredits?: boolean;
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   openBrowserFn?: (url: string) => Promise<boolean>;
@@ -553,10 +592,12 @@ export async function oauthLogin(
     log = console.log,
     makeConfirmationCodeFn = makeConfirmationCode,
     now = Date.now,
+    allowAiCredits = false,
     deviceFallback = false,
   } = options;
 
-  let provider = await discoverBoxelApi(realmServerUrl, fetchFn);
+  let scopes = boxelApiScopes({ allowAiCredits });
+  let provider = await discoverBoxelApi(realmServerUrl, fetchFn, scopes);
   let callback = await startLoopbackCallback({
     timeoutMs,
     oauthRedirect: true,
@@ -572,6 +613,7 @@ export async function oauthLogin(
       state: callback.state,
       codeChallenge: pkce.challenge,
       confirmationCode,
+      scopes,
     });
 
     let opened = await openBrowserFn(authUrl);
@@ -663,6 +705,7 @@ interface DeviceAuthorization {
 async function authorizeDevice(
   provider: BoxelApiProvider,
   endpoint: string,
+  scopes: readonly string[],
   fetchFn: typeof fetch,
 ): Promise<DeviceAuthorization> {
   let response = await fetchFn(endpoint, {
@@ -674,7 +717,7 @@ async function authorizeDevice(
     },
     body: new URLSearchParams({
       client_id: BOXEL_CLI_CLIENT_ID,
-      scope: BOXEL_API_SCOPES.join(' '),
+      scope: scopes.join(' '),
       resource: provider.resource,
     }).toString(),
   });
@@ -727,11 +770,14 @@ export async function oauthDeviceLogin(
     fetchFn = fetch,
     log = console.log,
     now = Date.now,
+    allowAiCredits = false,
     sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
   } = options;
 
+  let scopes = boxelApiScopes({ allowAiCredits });
   let provider =
-    options.provider ?? (await discoverBoxelApi(realmServerUrl, fetchFn));
+    options.provider ??
+    (await discoverBoxelApi(realmServerUrl, fetchFn, scopes));
   if (!provider.deviceAuthorizationEndpoint) {
     throw new OAuthNotOfferedError(
       realmServerUrl,
@@ -742,6 +788,7 @@ export async function oauthDeviceLogin(
   let device = await authorizeDevice(
     provider,
     provider.deviceAuthorizationEndpoint,
+    scopes,
     fetchFn,
   );
   let expiresAt =
