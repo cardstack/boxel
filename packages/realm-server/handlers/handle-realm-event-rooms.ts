@@ -1,13 +1,18 @@
 import type Koa from 'koa';
 import {
+  deleteExpiredRealmEventWatchers,
   fetchRealmEventRoom,
   fetchRealmNamedGrantees,
   logger,
+  param,
+  query,
   SupportedMimeType,
+  upsertRealmEventWatcher,
 } from '@cardstack/runtime-common';
 import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
+import { realmPolicyPointer } from '../lib/realm-policy-pointer.ts';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -22,6 +27,15 @@ const MAX_REALMS_PER_REQUEST = 100;
 // Looking a realm's room up can mount the realm, create its room and invite
 // its grantees, so a request works through its realms a few at a time.
 const REALMS_IN_FLIGHT = 4;
+// Each realm a user watches costs that realm a pass through its policy gate
+// per index completion, for as long as the watch lasts. A host watches the
+// policy realms it has open, which is a handful; this bounds what one user
+// can make every such realm do.
+const MAX_WATCHED_REALMS_PER_USER = 20;
+// Each watcher of a realm costs it gate decisions on every index completion,
+// made at the head of its line of events, so this bounds what the realm's
+// completions can be made to wait behind.
+const MAX_WATCHERS_PER_REALM = 100;
 
 // Answers a signed-in host with the rooms the private realms it names send
 // their realm events into, so it can join them. Only a realm whose grants
@@ -33,15 +47,28 @@ const REALMS_IN_FLIGHT = 4;
 // if they reach it at all. A realm is named by its URL or by a registered
 // prefix.
 //
+// A private realm that names no grant on the user but names a policy may
+// still let them read some of its cards. The user is registered as one of its
+// watchers instead (see `realm-event-watcher-queries.ts`), and the realm sends
+// their session room its index events filtered to what the policy lets them
+// read. A watch lapses unless renewed, so a host asks again while the realm
+// stays open. Only a user the policy could admit to something is registered
+// (see `Realm.policyMayAdmit`); a realm is mounted to ask only once its
+// `realm.json` is read to name a policy.
+//
 // When a realm's room can't be looked up or created, the answer is a 503
 // carrying the rooms that were found, so the host asks again rather than take
 // the realm for one without a room.
 //
 // Body: `{ realms: string[] }`. Answer: `{ rooms: { [realm]: roomId } }`,
-// keyed by each realm as the request spelled it.
+// with `watched: string[]` beside it when the user watches any of them, and
+// `capped: string[]` naming those a watch was refused for because the user or
+// the realm already had as many as it may, each realm as the request spelled
+// it.
 export default function handleRealmEventRooms({
   dbAdapter,
   reconciler,
+  realmsRootPath,
   virtualNetwork,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
@@ -74,7 +101,59 @@ export default function handleRealmEventRooms({
     }
 
     let rooms: Record<string, string> = {};
+    let watched: string[] = [];
     let failed = false;
+    let sweptLapsedWatches = false;
+    let capped: string[] = [];
+    let watch = async (realm: string, realmURL: string) => {
+      let pointer = await realmPolicyPointer(realmURL, {
+        reconciler,
+        realmsRootPath,
+        virtualNetwork,
+      });
+      if (pointer === undefined) {
+        return;
+      }
+      // A pointer that can't be read without mounting doesn't mount the realm
+      // for a user it doesn't name. A registered realm whose pointer couldn't
+      // be read, its file unreadable or this process not knowing it yet,
+      // fails the request, so the host asks again; a realm no registry row
+      // names has nothing to watch.
+      if (pointer === null) {
+        if (
+          reconciler.mounted.has(realmURL) ||
+          (await isRegisteredRealm(realmURL))
+        ) {
+          throw new Error(`the policy pointer of ${realmURL} can't be read`);
+        }
+        return;
+      }
+      let mounted = await reconciler.lookupOrMount(realmURL);
+      if (!mounted || !(await mounted.policyMayAdmit(user))) {
+        return;
+      }
+      if (!sweptLapsedWatches) {
+        sweptLapsedWatches = true;
+        await deleteExpiredRealmEventWatchers(dbAdapter);
+      }
+      if (
+        await upsertRealmEventWatcher(dbAdapter, realmURL, user, {
+          maxRealmsPerUser: MAX_WATCHED_REALMS_PER_USER,
+          maxWatchersPerRealm: MAX_WATCHERS_PER_REALM,
+        })
+      ) {
+        watched.push(realm);
+      } else {
+        capped.push(realm);
+      }
+    };
+    let isRegisteredRealm = async (realmURL: string) =>
+      (
+        await query(dbAdapter, [
+          'SELECT 1 AS registered FROM realm_registry WHERE url =',
+          param(realmURL),
+        ])
+      ).length > 0;
     let lookUp = async (realm: string) => {
       let identifier = virtualNetwork.isRegisteredPrefix(realm)
         ? virtualNetwork.toURL(realm).href
@@ -92,6 +171,7 @@ export default function handleRealmEventRooms({
         }
         let grantees = await fetchRealmNamedGrantees(dbAdapter, realmURL);
         if (!grantees.includes(user)) {
+          await watch(realm, realmURL);
           return;
         }
         // The realm's room is created and its members invited through the
@@ -102,8 +182,13 @@ export default function handleRealmEventRooms({
           rooms[realm] = roomId;
         }
       } catch (e) {
+        // A watch that failed to register fails the request the same way, so
+        // the host asks about the realm again.
         failed = true;
-        log.error(`Unable to provide the realm event room of ${realmURL}`, e);
+        log.error(
+          `Unable to provide the realm event room or watch of ${realmURL}`,
+          e,
+        );
       }
     };
     let queue = [...new Set(realms as string[])];
@@ -124,10 +209,17 @@ export default function handleRealmEventRooms({
 
     await setContextResponse(
       ctxt,
-      new Response(JSON.stringify({ rooms }), {
-        status: failed ? 503 : 200,
-        headers: { 'content-type': SupportedMimeType.JSON },
-      }),
+      new Response(
+        JSON.stringify({
+          rooms,
+          ...(watched.length > 0 ? { watched } : {}),
+          ...(capped.length > 0 ? { capped } : {}),
+        }),
+        {
+          status: failed ? 503 : 200,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+      ),
     );
   };
 }

@@ -90,6 +90,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=session_rooms \
   --exclude-table-and-children=realm_event_rooms \
   --exclude-table-and-children=retired_realm_event_rooms \
+  --exclude-table-and-children=realm_event_watchers \
   --exclude-table-and-children=host_shell_generation \
   --no-tablespaces \
   --no-table-access-method \

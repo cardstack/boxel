@@ -95,6 +95,10 @@ export interface IncrementalIndexOptions {
   // the read endpoints' read-your-writes drain — see
   // #incrementalIndexingDeferreds.
   initiatedBy?: string | null;
+  // The signed-in user whose request this pass indexes, recorded on its
+  // caller entry for policy watchers (see `WriteOptions.requestActor`).
+  // Absent, it is `initiatedBy`.
+  requestActor?: string | null;
   // See IncrementalArgs. `onDeferredPrerenderHtml` receives the set the pass
   // declined to enqueue; it runs inside the deferred lifecycle, alongside
   // onInvalidation, so a caller can carry the set forward before
@@ -647,6 +651,10 @@ export class RealmIndexUpdater {
           clientAuthored: opts?.clientAuthored ?? null,
           announcesPass: opts?.announcesPass === true,
           realmEvents: opts?.realmEvents !== false,
+          initiatedBy:
+            opts?.requestActor !== undefined
+              ? opts.requestActor
+              : (opts?.initiatedBy ?? null),
         },
       );
       job = await this.#queue.publish<IncrementalDoneResult>({
@@ -765,6 +773,7 @@ export class RealmIndexUpdater {
       | 'announcesPass'
       | 'realmEvents'
       | 'initiatedBy'
+      | 'requestActor'
       | 'deferPrerenderHtml'
       | 'carriedPrerenderHtmlChanges'
       | 'onDeferredPrerenderHtml'
