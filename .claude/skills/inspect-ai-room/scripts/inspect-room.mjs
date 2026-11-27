@@ -8,6 +8,10 @@
 //   node inspect-room.mjs state <roomId>     room state (LLM model, mode, skills)
 //   node inspect-room.mjs raw <roomId> [filter]  full event JSON, optionally
 //                                            only events whose JSON contains `filter`
+//   node inspect-room.mjs replay <roomId> [--turns N] [--keep-text] [--out f]
+//                                            a fixture for the host's motion
+//                                            replay test (see replay-fixture.mjs);
+//                                            text is filled in unless --keep-text
 //
 // Auth (first match wins):
 //   --profile <id>   use a boxel-cli profile from ~/.boxel-cli/profiles.json
@@ -22,6 +26,20 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { roomToFixture } from './replay-fixture.mjs';
+
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../..',
+);
+
+function envOf(url) {
+  if (/localhost|127\.0\.0\.1/.test(url)) return 'local';
+  if (url.includes('stack.cards')) return 'staging';
+  return 'production';
+}
 
 let argv = process.argv.slice(2);
 let profileArg;
@@ -240,9 +258,42 @@ if (cmd === 'rooms') {
     let s = JSON.stringify(e);
     if (!arg2 || s.includes(arg2)) console.log(s);
   }
+} else if (cmd === 'replay') {
+  let flag = (name) => {
+    let i = argv.indexOf(name);
+    return i === -1 ? undefined : argv[i + 1];
+  };
+  let token = await login();
+  let fixture = roomToFixture(await allEvents(token, arg1), {
+    turns: Number(flag('--turns') ?? 1),
+    maxGap: Number(flag('--max-gap') ?? 1500),
+    maxStream: Number(flag('--max-stream') ?? 4000),
+    keepText: argv.includes('--keep-text'),
+    description: flag('--description'),
+    source: { env: envOf(MATRIX_URL), roomId: arg1 },
+  });
+  let out =
+    flag('--out') ??
+    path.join(
+      REPO_ROOT,
+      'packages/host/tests/fixtures/ai-room-replay/local',
+      `room-${new Date().toISOString().replace(/[:.]/g, '-')}.json`,
+    );
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(out, JSON.stringify(fixture, null, 2) + '\n');
+  let played = fixture.events.filter((e) => e.phase !== 'history');
+  console.log(
+    `wrote ${out}: ${fixture.events.length - played.length} history events, ${played.length} played over ${(played.at(-1)?.at - (played[0]?.at ?? 0)) / 1000}s`,
+  );
+  for (let note of fixture.source.notes) console.log(`  - ${note}`);
+  if (!fixture.source.anonymized) {
+    console.log(
+      '  ! text kept as written: keep this file out of the repository',
+    );
+  }
 } else {
   console.error(
-    'usage: inspect-room.mjs rooms [N] | timeline <roomId> | usage <roomId> | state <roomId> | raw <roomId> [filter]',
+    'usage: inspect-room.mjs rooms [N] | timeline <roomId> | usage <roomId> | state <roomId> | raw <roomId> [filter] | replay <roomId> [--turns N] [--keep-text] [--max-gap ms] [--max-stream ms] [--description text] [--out file]',
   );
   process.exit(1);
 }

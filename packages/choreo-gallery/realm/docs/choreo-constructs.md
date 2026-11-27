@@ -96,7 +96,10 @@ prior run was driving through space, which the new score does not name —
 the timeline that launched it was conditional and un-rendered, or the
 new score names other things — gets a continuation move from its painted
 box to its rest, synthesized by the region (transform-only, on the
-interrupted cue's own spring where it had one). Without this, every
+interrupted cue's own spring where it had one). It carries on only what
+was being driven: a flight that drove the sprite's size is shape-matched
+to its rest, and one that only moved it goes on translate-only, so a size
+the sprite took in the same pass lands at once. Without this, every
 conditional timeline needed a hand-written `c.moved` twin, and forgetting
 it was an intermittent whole-bay snap. The boundary is deliberate: an
 unnamed sprite that merely REFLOWED was never being driven, and stays

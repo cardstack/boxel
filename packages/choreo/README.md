@@ -138,7 +138,9 @@ the hard way.
   `initial` is the painted box, so a replacement run starts from what is on screen, with velocities
   handed over. A replacement pass may not drop a flight either: anything the prior run was driving
   that the new score doesn't name gets a synthesized continuation to its rest. Without that rule,
-  any unrelated re-render could snap a flying element home in one frame.
+  any unrelated re-render could snap a flying element home in one frame. The continuation carries
+  on only what was being driven: a flight that only moved its sprite goes on translate-only, and a
+  size the sprite took in the same pass lands at once, as any reflow does.
 - **Unnamed means no animation.** A reflow the score doesn't name lands instantly, and apps rely on
   that. The continuity rule above is scoped to what was _flying_; layout stays layout.
 - **A beacon is a place, not an identity.** `{{beacon 'trash'}}` publishes a box, and `@from` /

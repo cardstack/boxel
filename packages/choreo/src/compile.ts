@@ -1410,18 +1410,30 @@ export default function compile(
  * A replacement pass's continuity cue (§3.1): the prior run was driving
  * this sprite through space and the new score does not name it. Unnamed
  * it would be released to its rest in one frame — the whole-bay snap —
- * so the region completes the score: one shape-matched move from the
- * painted box (which is what a mid-flight sprite's `initial` IS, by
- * design) to its rest. Transform-only, so a continuation can never
- * reflow the scene it is tidying; on the interrupted cue's own spring
- * when it had one, so the carry-on keeps the flight's character.
+ * so the region completes the score: one move from the painted box (which
+ * is what a mid-flight sprite's `initial` IS, by design) to its rest.
+ * Transform-only, so a continuation can never reflow the scene it is
+ * tidying; on the interrupted cue's own spring when it had one, so the
+ * carry-on keeps the flight's character.
+ *
+ * It carries on only what the flight was driving. A flight that drove the
+ * sprite's size (`shape`) is shape-matched, its painted size scaled to its
+ * rest. One that only moved it is carried on translate-only: a size the
+ * sprite took this pass is a reflow, which lands at once as it does for any
+ * sprite nobody drives. Shape-matched, a block of text that grew while it
+ * flew would be squashed to its old height and stretched back.
  */
 export function continuation(
   sprite: Sprite,
   cs: ChangesetLike,
   inherited?: Record<string, unknown>,
+  shape = true,
 ): Cue | null {
-  const step: MoveStep = { kind: 'move', of: {}, size: 'scale' };
+  const step: MoveStep = {
+    kind: 'move',
+    of: {},
+    size: shape ? 'scale' : false,
+  };
   const r = resolveMove(step, sprite, cs);
   if (!r) {
     return null;

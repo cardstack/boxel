@@ -148,6 +148,7 @@ export class TranscriptMotion extends Component<Signature> {
         @inView={{true}}
         @maxFrameStep={{MAX_FRAME_STEP}}
         {{this.wakeWhenReady @ready @roomId}}
+        data-test-transcript-motion={{if this.awake 'awake' 'idle'}}
         ...attributes
         as |c|
       >
@@ -205,6 +206,20 @@ export class TranscriptMotion extends Component<Signature> {
          the messages below crawled, then snapped into place. */
       .transcript-region {
         --pretui-disclosure-duration: 0s;
+        /* A move starts each message where it was painted: after a follow
+           that is below where it now lives, so the last message's
+           translate reaches past the end of the content. Unclipped, that
+           overflow counts toward the scroller's height, and the end
+           StickToBottom follows moves with every frame of the flight: the
+           settle that holds the end scrolls past it, the next pass
+           measures from there and launches a longer flight, and as the
+           translates shrink the browser clamps the scroll back by the
+           same amount, so what the reader sees is one jump and no glide.
+           Clipped, the flights stay paint: the end is where layout puts
+           it. Only the vertical axis is clipped, so rings and insets
+           still hang into the gutter, and popups are fixed or portaled,
+           out of reach of the clip. */
+        overflow-y: clip;
       }
     </style>
   </template>

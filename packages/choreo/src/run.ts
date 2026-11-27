@@ -63,6 +63,9 @@ const MIDFLIGHT_KEYS = [
   'y',
 ];
 
+/** the ones among them that change a sprite's shape, not just its place */
+const SHAPE_KEYS = ['height', 'scale', 'scaleX', 'scaleY', 'width'];
+
 /** how fast each value was moving, in units per second, keyed by element then property */
 export type Velocities = Map<HTMLElement, Map<string, number>>;
 
@@ -95,6 +98,14 @@ export interface Fade {
   remaining: number;
   /** where its values were going */
   to: Record<string, unknown>;
+}
+
+/** a sprite a run is driving through space, as `Run.midflight()` reports it */
+export interface Midflight {
+  /** some cue drives its width, height or scale, not only its place */
+  shape: boolean;
+  /** the last such cue's transition, for a continuation to inherit */
+  transition: Record<string, unknown> | undefined;
 }
 
 export interface Run {
@@ -133,11 +144,13 @@ export interface Run {
   /**
    * The sprites this run is DRIVING through space right now — an
    * unfinished move/spring/tween writing geometry — with each cue's
-   * transition. A replacement pass reads this to complete its score: a
-   * flying sprite the new score does not name gets a continuation move
-   * instead of a one-frame release to rest (§3.1).
+   * transition, and whether any of them drives the sprite's size (width,
+   * height or a scale) as well as its place. A replacement pass reads this
+   * to complete its score: a flying sprite the new score does not name gets
+   * a continuation move instead of a one-frame release to rest (§3.1), and
+   * the continuation carries on only what was being driven.
    */
-  midflight(): Map<ChoreoNode, Record<string, unknown> | undefined>;
+  midflight(): Map<ChoreoNode, Midflight>;
   /** standing at a gate, waiting for advance() — a still, and settled */
   readonly parked: boolean;
   pause(): void;
@@ -839,8 +852,8 @@ export class ChoreoRun implements Run {
     return out;
   }
 
-  midflight(): Map<ChoreoNode, Record<string, unknown> | undefined> {
-    const out = new Map<ChoreoNode, Record<string, unknown> | undefined>();
+  midflight(): Map<ChoreoNode, Midflight> {
+    const out = new Map<ChoreoNode, Midflight>();
     if (this.isDone()) {
       return out;
     }
@@ -854,7 +867,13 @@ export class ChoreoRun implements Run {
         (cue.target !== undefined &&
           MIDFLIGHT_KEYS.some((key) => key in cue.target!));
       if (geometry) {
-        out.set(cue.sprite.node, cue.transition);
+        const shape =
+          cue.target !== undefined &&
+          SHAPE_KEYS.some((key) => key in cue.target!);
+        out.set(cue.sprite.node, {
+          shape: shape || (out.get(cue.sprite.node)?.shape ?? false),
+          transition: cue.transition,
+        });
       }
     }
     return out;

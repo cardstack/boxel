@@ -101,3 +101,15 @@ module('the inbox', function (hooks) {
 
 Reference suites: `packages/choreo/tests/integration/choreo/` (the Choreo
 contract suite) and the upstream ports under `packages/glimmer-motion/tests/`.
+
+## The AI assistant transcript: replay a room
+
+Host tests run the assistant's regions with motion off. To test the
+transcript's motion, or re-create a bug a reader saw, record the room
+(`inspect-room.mjs replay <roomId>`, the inspect-ai-room skill) and play it
+back with the motion replay test
+(`packages/host/tests/integration/components/ai-assistant-panel/motion-replay-test.gts`),
+which turns the region on with `setMotionInTests` and fails on a scaled
+message, an overlap, a one-frame jump or a glide the scroll cancels. The
+assistant motion README's "Replaying a room" section covers watching one
+slowed down.

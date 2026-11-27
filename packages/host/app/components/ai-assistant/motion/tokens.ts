@@ -51,18 +51,37 @@ export const MAX_FRAME_STEP = 20;
 /** how far an entering block rises, in px */
 export const RISE = 6;
 
+/** the assistant's regions' key, for `motionEnabled` and `setMotionInTests` */
+export const ASSISTANT_MOTION = 'boxel-assistant-motion';
+
+// the region keys a test has turned motion on for
+const motionInTests = new Set<string>();
+
+/**
+ * Turns one region's motion on, or off again, for the test that calls it. A
+ * test that plays a region's motion (the assistant's room replay) sets it
+ * before it renders, since a region reads `motionEnabled` when it mounts.
+ */
+export function setMotionInTests(regionKey: string, on: boolean) {
+  if (on) {
+    motionInTests.add(regionKey);
+  } else {
+    motionInTests.delete(regionKey);
+  }
+}
+
 /**
  * Host tests run with motion off: the regions render plain markup, and the
  * DOM they leave must be the same as with motion on (ADR 007 §1.1).
  */
-// Off in tests, and off on demand for measuring what motion costs (read when
-// a region mounts): localStorage 'boxel-motion' = 'off' turns off every host
-// region, and a region's own key ('boxel-assistant-motion' for the
-// assistant's, 'boxel-stack-motion' for the operator-mode stacks) that
-// region alone.
-export const motionEnabled = (regionKey = 'boxel-assistant-motion') => {
+// Off in tests unless a test turned its region on (`setMotionInTests`), and
+// off on demand for measuring what motion costs (read when a region mounts):
+// localStorage 'boxel-motion' = 'off' turns off every host region, and a
+// region's own key ('boxel-assistant-motion' for the assistant's,
+// 'boxel-stack-motion' for the operator-mode stacks) that region alone.
+export const motionEnabled = (regionKey = ASSISTANT_MOTION) => {
   if (isTesting()) {
-    return false;
+    return motionInTests.has(regionKey);
   }
   try {
     let storage = globalThis.localStorage;
