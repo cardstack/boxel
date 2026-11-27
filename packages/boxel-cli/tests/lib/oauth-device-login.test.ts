@@ -212,6 +212,29 @@ describe('oauthDeviceLogin', () => {
     expect(time.waits).toEqual([5000, 10000, 20000]);
   });
 
+  it('waits no longer than the code lasts, however far it has backed off', async () => {
+    let server = realmServer({ polls: [] });
+    let fetchFn = (async (input: string | URL, init?: RequestInit) => {
+      let url = typeof input === 'string' ? input : input.href;
+      if (url === TOKEN_ENDPOINT) {
+        throw new TypeError('fetch failed');
+      }
+      return server.fetchFn(input, init);
+    }) as typeof fetch;
+    let time = clock();
+    await expect(
+      oauthDeviceLogin({
+        realmServerUrl: REALM_SERVER_URL,
+        fetchFn,
+        log: () => {},
+        now: time.now,
+        sleep: time.sleep,
+      }),
+    ).rejects.toThrow(/The code expired/);
+    expect(time.now() - START).toBe(600_000);
+    expect(Math.max(...time.waits)).toBeLessThanOrEqual(60_000);
+  });
+
   it('stops when the sign-in is denied', async () => {
     await expect(
       signIn(realmServer({ polls: ['access_denied'] })),

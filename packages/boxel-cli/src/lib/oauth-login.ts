@@ -760,7 +760,10 @@ export async function oauthDeviceLogin(
   let intervalSeconds = device.intervalSeconds;
   let tokens: OAuthTokens | undefined;
   while (!tokens) {
-    await sleep(intervalSeconds * 1000);
+    // Never wait past the code's expiry, however long the interval has grown.
+    await sleep(
+      Math.max(0, Math.min(intervalSeconds * 1000, expiresAt - now())),
+    );
     if (now() >= expiresAt) {
       throw new Error(
         'The code expired before the sign-in was allowed. Run the command again for a new one.',
