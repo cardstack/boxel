@@ -57,18 +57,40 @@ const startsByPass = new WeakMap<Changeset, Map<Sprite, Start>>();
  * grew pushes the ones below down at once, as layout does, and a message
  * that shrank lets them glide up.
  *
- * Following, the end is where the reader looks, and it stays put: what the
- * follow's scroll moved lands with it, and the newest message never starts
- * below the view's edge. What changed above the end still moves (a turn
- * folding, a disclosure), relative to the end. Played as a glide, the
- * follow kept the newest lines out of view for a move's length on every
- * update, and a cap opening under the transcript moved it a pixel a frame.
+ * When the follow scrolled, the end is where the reader looks, and it
+ * stays put: what the follow's scroll moved lands with it, and the newest
+ * message never starts below the view's edge. What changed above the end
+ * still moves (a turn folding), relative to the end. Played as a glide,
+ * the follow kept the newest lines out of view for a move's length on
+ * every update, and a cap opening under the transcript moved it a pixel a
+ * frame. Only the scroll lands: in a transcript too short to scroll, a
+ * message that moved up because one above it shrank still glides.
  *
  * Not following, an arrival is fixed to the block above the same way: it
  * starts where that block's move puts it and travels on its clock; with
  * nothing above it moving, it rises its usual few px. Following, it fades
  * in where it lands.
  */
+/** each scroller's position after the last pass or scroll this layer saw */
+const scrollSeen = new WeakMap<HTMLElement, number>();
+
+/** How far the scroller moved since the last pass, and note where it is. */
+function scrolledSince(scroller: HTMLElement): number {
+  let now = scroller.scrollTop;
+  let before = scrollSeen.get(scroller);
+  if (before === undefined) {
+    // the reader's own scrolls between passes are not this pass's
+    scroller.addEventListener(
+      'scroll',
+      () => scrollSeen.set(scroller, scroller.scrollTop),
+      { passive: true },
+    );
+    before = now;
+  }
+  scrollSeen.set(scroller, now);
+  return now - before;
+}
+
 function startsOf(changeset: Changeset): Map<Sprite, Start> {
   let known = startsByPass.get(changeset);
   if (known) {
@@ -80,15 +102,19 @@ function startsOf(changeset: Changeset): Map<Sprite, Start> {
     .filter((s) => s.final)
     .sort((a, b) => a.final!.page.y - b.final!.page.y);
   let painted = (s: Sprite) => -(s.delta?.y ?? 0);
-  let following =
-    stack[0]?.element
-      .closest('[data-following]')
-      ?.getAttribute('data-following') === 'true';
-  if (following) {
-    // the end holds: offsets are taken against the bottom kept message's,
-    // and from the bottom up no message starts below the one under it
+  let scroller = stack[0]?.element.closest<HTMLElement>('[data-following]');
+  let scrolled = scroller ? scrolledSince(scroller) : 0;
+  let following = scroller?.getAttribute('data-following') === 'true';
+  if (following && scrolled !== 0) {
+    // the end holds: what the bottom kept message moved on screen, as far
+    // as the scroll moved it, lands; from the bottom up no message starts
+    // below the one under it
     let kept = stack.filter((s) => s.type === 'kept');
-    let base = kept.length ? painted(kept[kept.length - 1]!) : 0;
+    let bottom = kept.length ? painted(kept[kept.length - 1]!) : 0;
+    let base =
+      Math.sign(bottom) === Math.sign(scrolled)
+        ? Math.sign(bottom) * Math.min(Math.abs(bottom), Math.abs(scrolled))
+        : 0;
     let below: number | undefined;
     for (let i = stack.length - 1; i >= 0; i--) {
       let s = stack[i]!;
@@ -100,7 +126,7 @@ function startsOf(changeset: Changeset): Map<Sprite, Start> {
         below = below === undefined ? 0 : Math.min(below, 0);
       } else {
         let own = painted(s) - base;
-        let y = below === undefined ? Math.min(own, 0) : Math.min(own, below);
+        let y = below === undefined ? own : Math.min(own, below);
         start = { y, travelling: false };
         below = y;
       }
