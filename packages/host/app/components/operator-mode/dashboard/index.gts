@@ -1,6 +1,7 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
+import { renderSettled } from '@ember/renderer';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -16,7 +17,7 @@ import { Collapsible } from '@cardstack/pretui/components/collapsible';
 import { SegmentedControl } from '@cardstack/pretui/components/segmented-control';
 import { Spinner } from '@cardstack/pretui/components/spinner';
 import { add, and, eq, gt, not, or } from '@cardstack/pretui/helpers';
-import { didCancel, dropTask } from 'ember-concurrency';
+import { didCancel, dropTask, task } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
 import { cn } from '@cardstack/boxel-ui/helpers';
@@ -26,7 +27,12 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
-import { logger, nowDate } from '@cardstack/runtime-common';
+import {
+  logger,
+  nowDate,
+  ri,
+  type RealmIdentifier,
+} from '@cardstack/runtime-common';
 
 import {
   isHostedRealm,
@@ -72,6 +78,11 @@ interface Signature {
 }
 
 const log = logger('component:dashboard');
+
+// A workspace tile's or row's key in the keyboard cursor's walk.
+function workspaceWalkKey(realmIdentifier: string) {
+  return `workspace:${realmIdentifier}`;
+}
 
 const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -155,8 +166,26 @@ export default class Dashboard extends Component<Signature> {
       this.scope = option.value;
       // A different list starts collapsed.
       this.showAllWorkspaces = false;
+      this.hiddenRestore = undefined;
     }
   }
+
+  // A restored workspace the Hosted scope hid, which the Archived section
+  // names until the scope changes.
+  @tracked private hiddenRestore:
+    | { realmIdentifier: RealmIdentifier; name: string }
+    | undefined;
+
+  // Shown while Hosted still hides the workspace: info that arrives later
+  // and says it's published lists it instead.
+  private get restoredNotice() {
+    let restored = this.hiddenRestore;
+    return restored && !this.isHosted(restored.realmIdentifier)
+      ? restored
+      : undefined;
+  }
+
+  private restoredNoticeId = `${guidFor(this)}-restored-notice`;
 
   @tracked private isArchivedExpanded = false;
 
@@ -206,6 +235,109 @@ export default class Dashboard extends Component<Signature> {
     if (this.isArchivedExpanded) {
       this.loadArchivedRealms();
     }
+  }
+
+  private dashboardElement: HTMLElement | undefined;
+
+  private captureDashboard = modifier((element: HTMLElement) => {
+    this.dashboardElement = element;
+    return () => {
+      if (this.dashboardElement === element) {
+        this.dashboardElement = undefined;
+      }
+    };
+  });
+
+  // Restores an archived workspace for its row, answering with the error to
+  // show, if any. The dashboard runs it because a restore that succeeds
+  // removes the row, taking its focused Restore button with it.
+  @action private async restoreWorkspace(url: string) {
+    return await this.restoreTask.perform(url);
+  }
+
+  private restoreTask = task(
+    async (url: string): Promise<string | undefined> => {
+      // Read first: a restore takes the workspace off the archived list, and
+      // the realm's own info may fail to load.
+      let name = this.archivedRealms.find((realm) => realm.url === url)?.name;
+      try {
+        await this.realmServer.unarchiveRealm(url);
+      } catch (error: any) {
+        return error.message;
+      }
+      await this.focusRestoredWorkspace(url, name);
+      return undefined;
+    },
+  );
+
+  // Focus fell to the page when the restored workspace's row left. Unless the
+  // user has put it somewhere since, it goes to the restored workspace once
+  // that has loaded. When the Hosted scope hides the workspace, the Archived
+  // section says so, and focus goes to its Show all instead.
+  private async focusRestoredWorkspace(url: string, name: string | undefined) {
+    let realmIdentifier = ri(url);
+    try {
+      // Loads the realm as its workspace does: the Hosted filter and the
+      // recent tiles' order read its info, so the walk only places it after.
+      await this.realm.login(realmIdentifier);
+      await this.realm.ensureRealmMeta(realmIdentifier);
+    } catch {
+      // The workspace reports its own load failure.
+    }
+    let isHidden = this.scope === 'hosted' && !this.isHosted(realmIdentifier);
+    if (isHidden) {
+      this.hiddenRestore = {
+        realmIdentifier,
+        name: name ?? this.realm.info(realmIdentifier).name,
+      };
+    }
+    await renderSettled();
+    let active = document.activeElement;
+    // Focus the user has put somewhere stays. The cursor's container holds
+    // focus while its item is out of view.
+    if (
+      !this.dashboardElement ||
+      (active && active !== document.body && active !== this.dashboardElement)
+    ) {
+      return;
+    }
+    if (isHidden) {
+      this.dashboardElement
+        .querySelector<HTMLElement>('[data-restored-show-all]')
+        ?.focus();
+      return;
+    }
+    this.focusWorkspace(realmIdentifier);
+  }
+
+  @action private async showRestoredWorkspace() {
+    let restored = this.hiddenRestore;
+    if (!restored) {
+      return;
+    }
+    this.setScope('all');
+    // The re-render can hand focus to the cursor's item, so focus is taken
+    // from it without checking whether it is free.
+    await renderSettled();
+    this.focusWorkspace(restored.realmIdentifier);
+  }
+
+  // Focuses a workspace's tile or row and scrolls it into view, or the
+  // Archived toggle if the workspace isn't shown.
+  private focusWorkspace(realmIdentifier: RealmIdentifier) {
+    let container = this.dashboardElement;
+    if (!container) {
+      return;
+    }
+    let index = this.walkKeys.indexOf(workspaceWalkKey(realmIdentifier));
+    let target =
+      index >= 0
+        ? container.querySelector<HTMLElement>(`[data-nav-index="${index}"]`)
+        : container
+            .querySelector('[data-archived-section]')
+            ?.querySelector<HTMLElement>('button[aria-expanded]');
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: 'nearest' });
   }
 
   @action private loadArchivedRealms() {
@@ -427,8 +559,8 @@ export default class Dashboard extends Component<Signature> {
     return [
       ...this.favoriteRealmIdentifiers.map((url) => `desk:${url}`),
       ...(this.isAddWorkspaceShown ? ['new-workspace'] : []),
-      ...this.recentRealmIdentifiers.map((url) => `workspace:${url}`),
-      ...this.visibleRowRealmIdentifiers.map((url) => `workspace:${url}`),
+      ...this.recentRealmIdentifiers.map(workspaceWalkKey),
+      ...this.visibleRowRealmIdentifiers.map(workspaceWalkKey),
       ...this.filteredCatalogRealmIdentifiers.map((url) => `catalog:${url}`),
     ];
   }
@@ -535,6 +667,7 @@ export default class Dashboard extends Component<Signature> {
       aria-label='Dashboard'
       data-theme='dark'
       data-keyboard-cursor
+      {{this.captureDashboard}}
       {{on 'keydown' this.cursor.onKeydown}}
       {{on 'focusin' this.cursor.onFocusIn}}
       {{on 'pointerup' this.cursor.onPointerUp}}
@@ -808,7 +941,7 @@ export default class Dashboard extends Component<Signature> {
               {{/if}}
             </div>
 
-            <div class='group' data-test-archived-section>
+            <div class='group' data-archived-section data-test-archived-section>
               <Collapsible
                 @open={{this.isArchivedExpanded}}
                 @onOpenChange={{this.setArchivedExpanded}}
@@ -831,6 +964,29 @@ export default class Dashboard extends Component<Signature> {
                 </:trigger>
                 <:default>
                   <div class='archived-content'>
+                    {{! Rendered empty up front: a live region inserted
+                        already filled is often not announced. }}
+                    <div role='status'>
+                      {{#if this.restoredNotice}}
+                        <p
+                          class='group-empty restored-notice'
+                          data-test-restored-notice
+                        >
+                          <span
+                            id={{this.restoredNoticeId}}
+                          >{{this.restoredNotice.name}}
+                            is restored. Hosted shows only published workspaces.</span>
+                          <Button
+                            @tone='primary'
+                            @appearance='link'
+                            aria-describedby={{this.restoredNoticeId}}
+                            data-restored-show-all
+                            {{on 'click' this.showRestoredWorkspace}}
+                            data-test-restored-show-all
+                          >Show all</Button>
+                        </p>
+                      {{/if}}
+                    </div>
                     {{#if this.loadArchivedRealmsTask.isRunning}}
                       <Spinner
                         @size={{20}}
@@ -843,6 +999,7 @@ export default class Dashboard extends Component<Signature> {
                           <li class='list-item'>
                             <ArchivedWorkspace
                               @archivedRealm={{archivedRealm}}
+                              @onRestore={{this.restoreWorkspace}}
                             />
                           </li>
                         {{/each}}
@@ -1128,9 +1285,15 @@ export default class Dashboard extends Component<Signature> {
         padding-top: var(--boxel-sp-lg);
       }
       .group-empty {
+        /* A link button in the sentence matches its text. */
+        --pretui-size-m: var(--boxel-font-size-sm);
         margin: 0;
         color: var(--muted-foreground);
         font: 400 var(--boxel-font-sm);
+      }
+      .restored-notice {
+        margin-bottom: var(--boxel-sp-sm);
+        overflow-wrap: break-word;
       }
       /* As many desks per row as fit at their minimum width, spanning the
          section like the lists below them. */

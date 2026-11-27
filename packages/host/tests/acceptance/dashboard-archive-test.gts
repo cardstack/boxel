@@ -1,11 +1,28 @@
-import { click, triggerEvent, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  find,
+  findAll,
+  focus,
+  settled,
+  triggerEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
+import { isOffScreen } from '@cardstack/host/lib/workspace-list';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { visitOperatorMode } from '../helpers';
-import { assertList, setupDashboardTest } from '../helpers/dashboard';
+import {
+  assertList,
+  clickScopeOption,
+  operatorModeState,
+  overrideRealmInfo,
+  pressKey,
+  setupDashboardTest,
+} from '../helpers/dashboard';
 
 import {
   getRealmServerRoute,
@@ -35,8 +52,8 @@ const cardsGridIndex = {
   },
 };
 
-async function archiveOwnedWorkspace() {
-  await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
+async function archiveOwnedWorkspace(realmURL = ownedRealmURL) {
+  await click(`[data-test-workspace-menu-trigger="${realmURL}"]`);
   await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
   await click('[data-test-confirm-archive-button]');
 }
@@ -252,5 +269,302 @@ module('Acceptance | dashboard archive', function (hooks) {
     assert
       .dom('[data-test-boxel-menu-item-text="Realm Settings"]')
       .exists('the rest of the menu still renders for readers');
+  });
+});
+
+// Two owned workspaces, so the Archived section can hold two.
+module('Acceptance | dashboard archive | restore focus', function (hooks) {
+  const secondOwnedRealmURL = 'http://test-realm/testuser/workspace-b/';
+
+  setupDashboardTest(hooks, {
+    matrix: {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [ownedRealmURL, secondOwnedRealmURL, readOnlyRealmURL],
+    },
+    authEndpoints: false,
+    realms: [
+      {
+        url: ownedRealmURL,
+        name: 'Workspace A',
+        contents: { 'index.json': cardsGridIndex },
+      },
+      {
+        url: secondOwnedRealmURL,
+        name: 'Workspace B',
+        contents: { 'index.json': cardsGridIndex },
+      },
+      {
+        url: readOnlyRealmURL,
+        name: 'Workspace C',
+        permissions: { '@testuser:localhost': ['read'] },
+        contents: { 'index.json': cardsGridIndex },
+      },
+    ],
+  });
+
+  const RESTORE = '[data-test-archived-list] [data-test-restore-workspace-btn]';
+
+  // Archives both owned workspaces, then reopens the dashboard, so its
+  // keyboard cursor starts where it rests before the user moves it.
+  async function archiveBothAndExpand() {
+    await archiveOwnedWorkspace(ownedRealmURL);
+    await archiveOwnedWorkspace(secondOwnedRealmURL);
+    operatorModeState().workspaceChooserOpened = false;
+    await settled();
+    operatorModeState().workspaceChooserOpened = true;
+    await waitFor('[data-test-dashboard]');
+    await click(ARCHIVED_TOGGLE);
+    await waitUntil(() => findAll(RESTORE).length === 2);
+  }
+
+  function restoreURLs() {
+    return findAll(RESTORE).map((button) =>
+      button.getAttribute('data-test-restore-workspace-btn'),
+    );
+  }
+
+  const NAMES: Record<string, string> = {
+    [ownedRealmURL]: 'Workspace A',
+    [secondOwnedRealmURL]: 'Workspace B',
+  };
+
+  // The name of the workspace whose tile or row holds focus.
+  function focusedWorkspace() {
+    return document.activeElement
+      ?.closest('[data-test-workspace]')
+      ?.getAttribute('data-test-workspace');
+  }
+
+  // Restores each archived workspace in turn, checking that focus moves to it
+  // among the workspaces.
+  async function restoreBoth(assert: Assert) {
+    for (let url of restoreURLs()) {
+      let name = NAMES[url!];
+      await click(`[data-test-restore-workspace-btn="${url}"]`);
+      await waitUntil(() => focusedWorkspace() === name, {
+        timeoutMessage: `focus never reached ${name}`,
+      });
+      await settled();
+      assert.strictEqual(
+        focusedWorkspace(),
+        name,
+        `focus moves to ${name} once it is restored`,
+      );
+    }
+  }
+
+  test('with the keyboard cursor never moved, restoring moves focus to the restored workspace', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await archiveBothAndExpand();
+
+    await restoreBoth(assert);
+  });
+
+  test('with the keyboard cursor never moved, restoring a workspace scrolled out of view moves focus to it', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await archiveBothAndExpand();
+    let scroller = find('[data-test-dashboard-scroller]') as HTMLElement;
+    scroller.scrollTop = scroller.scrollHeight;
+    await settled();
+    assert.true(
+      isOffScreen(find('[data-test-workspace="Workspace C"]') as HTMLElement),
+      'the workspaces are scrolled out of view',
+    );
+    let [first] = restoreURLs();
+    let name = NAMES[first!];
+
+    await click(`[data-test-restore-workspace-btn="${first}"]`);
+    await waitUntil(() => focusedWorkspace() === name, {
+      timeoutMessage: `focus never reached ${name}`,
+    });
+    await settled();
+
+    assert.strictEqual(
+      focusedWorkspace(),
+      name,
+      'focus moves to the workspace',
+    );
+    assert.false(
+      isOffScreen(document.activeElement as HTMLElement),
+      'the workspace is scrolled into view',
+    );
+  });
+
+  test('with the keyboard cursor moved, restoring moves focus to the restored workspace', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await archiveBothAndExpand();
+    let start = find('[data-test-workspace-button="Workspace C"]')!;
+    await focus(start);
+    // The first arrow key only shows the cursor's ring; the second moves it.
+    await pressKey('ArrowLeft');
+    await pressKey('ArrowLeft');
+    assert.notStrictEqual(
+      document.activeElement,
+      start,
+      'the keyboard cursor has moved off its starting item',
+    );
+
+    await restoreBoth(assert);
+  });
+
+  test('focus the user moves during a restore stays where they put it', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await archiveBothAndExpand();
+    let [first] = restoreURLs();
+
+    // Holds the restore back until the user has moved on.
+    let realmServer = this.owner.lookup(
+      'service:realm-server',
+    ) as RealmServerService;
+    let unarchive = realmServer.unarchiveRealm.bind(realmServer);
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    realmServer.unarchiveRealm = async (url: string) => {
+      await held;
+      return unarchive(url);
+    };
+
+    await click(`[data-test-restore-workspace-btn="${first}"]`);
+    await focus(ARCHIVED_TOGGLE);
+    release();
+    await waitUntil(() => !restoreURLs().includes(first!));
+    await settled();
+
+    assert
+      .dom(`[data-test-workspace-menu-trigger="${first}"]`)
+      .exists('the workspace is restored');
+    assert.dom(ARCHIVED_TOGGLE).isFocused('focus stays on Archived');
+  });
+
+  const SCOPE_ALL =
+    '[data-test-dashboard-filter] [data-test-pretui-segmented-option="all"]';
+  const SCOPE_HOSTED =
+    '[data-test-dashboard-filter] [data-test-pretui-segmented-option="hosted"]';
+
+  // Set on the realm, since archiving drops the info the host loaded and
+  // restoring loads it again.
+  function markPublished(realmURL: string) {
+    overrideRealmInfo(realmURL, {
+      lastPublishedAt: { 'https://published.example.com/': String(Date.now()) },
+    });
+  }
+
+  // Moves the keyboard cursor from Workspace C to New Workspace. Left on its
+  // default, the cursor would focus the restored workspace's tile itself.
+  async function parkCursorOnNewWorkspace(assert: Assert) {
+    let start = find('[data-test-workspace-button="Workspace C"]')!;
+    await focus(start);
+    // The first arrow key only shows the cursor's ring; the second moves it.
+    await pressKey('ArrowLeft');
+    await pressKey('ArrowLeft');
+    assert.notStrictEqual(
+      document.activeElement,
+      start,
+      'the keyboard cursor has moved off its starting item',
+    );
+  }
+
+  const RESTORED_NOTICE = '[data-test-restored-notice]';
+  const SHOW_ALL = '[data-test-restored-show-all]';
+
+  test('restoring a workspace the Hosted scope hides says so, and Show all shows it', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    // So Hosted still lists Workspace C and New Workspace for the cursor.
+    markPublished(readOnlyRealmURL);
+    await archiveBothAndExpand();
+    await clickScopeOption('hosted');
+    await parkCursorOnNewWorkspace(assert);
+    let [first] = restoreURLs();
+    let name = NAMES[first!];
+
+    await click(`[data-test-restore-workspace-btn="${first}"]`);
+    await waitUntil(() => document.activeElement === find(SHOW_ALL), {
+      timeoutMessage: 'focus never reached Show all',
+    });
+    await settled();
+
+    assert.dom(SCOPE_HOSTED).isChecked('the scope stays Hosted');
+    assert
+      .dom(`[data-test-workspace-menu-trigger="${first}"]`)
+      .doesNotExist('Hosted leaves the unpublished workspace out');
+    assert
+      .dom(RESTORED_NOTICE)
+      .containsText(`${name} is restored`, 'the notice names the workspace');
+    assert.dom(SHOW_ALL).isFocused('focus moves to Show all');
+
+    await click(SHOW_ALL);
+    await waitUntil(() => focusedWorkspace() === name, {
+      timeoutMessage: `focus never reached ${name}`,
+    });
+    await settled();
+
+    assert.dom(SCOPE_ALL).isChecked('Show all switches the scope to All');
+    assert.dom(RESTORED_NOTICE).doesNotExist('the notice goes away');
+    assert.strictEqual(
+      focusedWorkspace(),
+      name,
+      'focus moves to the workspace',
+    );
+  });
+
+  test('restoring a hosted workspace keeps the Hosted scope', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    markPublished(ownedRealmURL);
+    // So Hosted still lists Workspace C and New Workspace for the cursor.
+    markPublished(readOnlyRealmURL);
+    await archiveBothAndExpand();
+    let name = NAMES[ownedRealmURL];
+    await clickScopeOption('hosted');
+    await parkCursorOnNewWorkspace(assert);
+
+    await click(`[data-test-restore-workspace-btn="${ownedRealmURL}"]`);
+    await waitUntil(() => focusedWorkspace() === name, {
+      timeoutMessage: `focus never reached ${name}`,
+    });
+    await settled();
+
+    assert.dom(SCOPE_HOSTED).isChecked('the scope stays Hosted');
+    assert.dom(RESTORED_NOTICE).doesNotExist('no notice, since it is shown');
+    assert.strictEqual(
+      focusedWorkspace(),
+      name,
+      'focus moves to the workspace',
+    );
+  });
+
+  test('the Hosted notice shows when the user has moved focus, until the scope changes', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await archiveBothAndExpand();
+    await clickScopeOption('hosted');
+    let [first] = restoreURLs();
+
+    // Holds the restore back until the user has moved on.
+    let realmServer = this.owner.lookup(
+      'service:realm-server',
+    ) as RealmServerService;
+    let unarchive = realmServer.unarchiveRealm.bind(realmServer);
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    realmServer.unarchiveRealm = async (url: string) => {
+      await held;
+      return unarchive(url);
+    };
+
+    await click(`[data-test-restore-workspace-btn="${first}"]`);
+    await focus(ARCHIVED_TOGGLE);
+    release();
+    await waitFor(RESTORED_NOTICE);
+    await settled();
+
+    assert
+      .dom(RESTORED_NOTICE)
+      .containsText(`${NAMES[first!]} is restored`, 'the notice shows');
+    assert.dom(ARCHIVED_TOGGLE).isFocused('focus stays on Archived');
+
+    await clickScopeOption('all');
+
+    assert
+      .dom(RESTORED_NOTICE)
+      .doesNotExist('changing the scope clears the notice');
   });
 });
