@@ -171,6 +171,10 @@ module('lease', (hooks) => {
       `the loss was reported before the lease could expire (after ${waited}ms)`,
     );
     assert.deepEqual(lost!.shards, [0]);
+    assert.true(
+      lost!.message.includes('waiting on its renewal'),
+      `the loss names the query it was waiting on (${lost!.message})`,
+    );
     assert.deepEqual(first.held, [], 'the task holds nothing after the loss');
     await sleep(RENEW_MS * 3);
     assert.deepEqual(
