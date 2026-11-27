@@ -12,6 +12,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import { Deferred } from '@cardstack/runtime-common';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
@@ -43,6 +44,7 @@ module('Acceptance | dashboard get started', function (hooks) {
 
   const GET_STARTED = '[data-test-get-started]';
   const BUTTON = '[data-test-get-started-button]';
+  const TOGGLE = '[data-test-get-started-toggle]';
 
   // As `hasText` reads it: the count's markup breaks across lines.
   function countText() {
@@ -57,15 +59,21 @@ module('Acceptance | dashboard get started', function (hooks) {
     );
   }
 
-  // Closes the dashboard and opens it again, where Get started starts
-  // closed.
-  // The chooser's toggle is disabled with no stack open, so this sets
+  // Closes the dashboard and opens it again, which renders Get started
+  // anew. The chooser's toggle is disabled with no stack open, so this sets
   // the state it toggles.
   async function reopenDashboard() {
     operatorModeState().workspaceChooserOpened = false;
     await settled();
     operatorModeState().workspaceChooserOpened = true;
     await waitFor('[data-test-dashboard-greeting]');
+  }
+
+  // Reopens the dashboard and waits for Get started to read its state, which
+  // its button shows once it has.
+  async function rerenderGetStarted() {
+    await reopenDashboard();
+    await waitFor(BUTTON);
   }
 
   // From no progress at all, as a new account starts.
@@ -134,7 +142,6 @@ module('Acceptance | dashboard get started', function (hooks) {
   });
 
   test('the minimize button folds the list to its progress and next step, and expands it again', async function (assert) {
-    const TOGGLE = '[data-test-get-started-toggle]';
     await visitAsNewUser();
     await openSteps();
     (getService('recent-cards-service') as any).add(`${realmURL}index`);
@@ -194,19 +201,244 @@ module('Acceptance | dashboard get started', function (hooks) {
     assert.strictEqual(stepDone('open-card'), 'false');
   });
 
-  test('opened steps are closed again when the dashboard reopens', async function (assert) {
+  test('the steps come back open, minimized, expanded or closed, as the user left them', async function (assert) {
     await visitAsNewUser();
     await openSteps();
     (getService('recent-cards-service') as any).add(`${realmURL}index`);
     await settled();
 
-    await reopenDashboard();
+    await rerenderGetStarted();
+    assert.dom(GET_STARTED).exists('opened, the steps stay open');
+    assert.dom(BUTTON).hasAttribute('aria-expanded', 'true');
+    assert.dom('[data-test-get-started-step]').exists({ count: 3 });
+    assert.strictEqual(stepDone('open-card'), 'true');
 
+    await click(TOGGLE);
+    await rerenderGetStarted();
+    assert.dom(GET_STARTED).exists();
+    assert
+      .dom('[data-test-get-started-step]')
+      .doesNotExist('minimized, the steps stay minimized');
+    assert.dom(TOGGLE).hasAttribute('aria-expanded', 'false');
+    assert.dom(BUTTON).hasAttribute('aria-expanded', 'true');
+
+    await click(TOGGLE);
+    await rerenderGetStarted();
+    assert
+      .dom('[data-test-get-started-step]')
+      .exists({ count: 3 }, 'expanded again, the steps stay expanded');
+    assert.dom(TOGGLE).hasAttribute('aria-expanded', 'true');
+
+    await click(BUTTON);
+    await rerenderGetStarted();
+    assert.dom(GET_STARTED).doesNotExist('closed, the steps stay closed');
+    assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+  });
+
+  test('minimized and then closed, the steps open expanded from the button when the dashboard renders again', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+    await click(TOGGLE);
+    await click(BUTTON);
+
+    await rerenderGetStarted();
+    assert.dom(GET_STARTED).doesNotExist();
+
+    await openSteps();
+    assert.dom('[data-test-get-started-step]').exists({ count: 3 });
+    assert.dom(TOGGLE).hasAttribute('aria-expanded', 'true');
+  });
+
+  test('rendered again while a choice is still saving, the dashboard shows the steps as the user left them', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    let matrixService = getService('matrix-service') as MatrixService;
+    let update = matrixService.updateDashboardState;
+    let save = new Deferred<void>();
+    matrixService.updateDashboardState = async (change) => {
+      await save.promise;
+      return update.call(matrixService, change);
+    };
+    // settled() waits for the held save, so until it's released the test
+    // waits with waitFor and leaves the click unawaited.
+    let minimized = click(TOGGLE);
+    try {
+      await waitFor(`${TOGGLE}[aria-expanded="false"]`);
+      // With no stack open, the index route opens the chooser again as soon
+      // as it closes, before a poll can see the dashboard gone. A new Get
+      // started shows the dashboard rendered again and read its state.
+      let before = find(GET_STARTED);
+      operatorModeState().workspaceChooserOpened = false;
+      await waitUntil(() => {
+        let current = find(GET_STARTED);
+        return Boolean(current) && current !== before;
+      });
+
+      assert.notOk(
+        (mockMatrixUtils.getDashboardState() as any).onboardingMinimized,
+        'the save has not landed',
+      );
+      assert.dom(GET_STARTED).exists();
+      assert
+        .dom('[data-test-get-started-step]')
+        .doesNotExist('the steps show minimized');
+    } finally {
+      matrixService.updateDashboardState = update;
+      save.fulfill();
+      await minimized;
+    }
+
+    assert.true(
+      (mockMatrixUtils.getDashboardState() as any).onboardingMinimized,
+    );
+    assert.dom('[data-test-get-started-step]').doesNotExist();
+  });
+
+  test('steps stored open show from the first paint at login, without moving the focus or announcing anything', async function (assert) {
+    mockMatrixUtils.setStoredDashboardState({
+      onboardingOpen: true,
+      onboardingMinimized: true,
+    });
+    // How the steps showed at each render that had the button.
+    let paints: string[] = [];
+    let observer = new MutationObserver(() => {
+      if (!document.querySelector(BUTTON)) {
+        return;
+      }
+      paints.push(
+        document.querySelector('[data-test-get-started-step]')
+          ? 'expanded'
+          : document.querySelector(GET_STARTED)
+            ? 'minimized'
+            : 'closed',
+      );
+    });
+    observer.observe(document.querySelector('#ember-testing')!, {
+      childList: true,
+      subtree: true,
+    });
+    try {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor(BUTTON);
+    } finally {
+      observer.disconnect();
+    }
+
+    assert.deepEqual(
+      [...new Set(paints)],
+      ['minimized'],
+      'no render shows the steps any other way first',
+    );
+    assert.dom(BUTTON).hasAttribute('aria-expanded', 'true');
+    assert.dom(BUTTON).isNotFocused();
+    assert.notOk(
+      find(GET_STARTED)!.contains(document.activeElement),
+      'nothing in the steps takes the focus',
+    );
+    assert.dom('[data-test-get-started-error-announcement]').hasNoText();
+  });
+
+  test('a change made in another tab shows once the dashboard renders again, and a dismissal at once', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
+    await settled();
+    assert
+      .dom(GET_STARTED)
+      .exists('closed elsewhere, the steps stay open here meanwhile');
+
+    await rerenderGetStarted();
+    assert.dom(GET_STARTED).doesNotExist();
+
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+      onboardingOpen: true,
+      onboardingMinimized: true,
+    });
+    await settled();
+    assert
+      .dom(GET_STARTED)
+      .doesNotExist('opened elsewhere, the steps stay closed here meanwhile');
+    assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+
+    await rerenderGetStarted();
+    assert.dom(GET_STARTED).exists();
+    assert.dom('[data-test-get-started-step]').doesNotExist();
+
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+      onboardingDismissed: true,
+    });
+    await settled();
+    assert
+      .dom(GET_STARTED)
+      .doesNotExist('a dismissal elsewhere closes restored steps at once');
+
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+      onboardingDismissed: false,
+    });
+    await settled();
+    assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+    assert
+      .dom(GET_STARTED)
+      .doesNotExist('an undo made elsewhere leaves them closed');
+  });
+
+  test('after Dismiss and Undo, the steps are closed when the dashboard renders again, and open expanded', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+    await click(TOGGLE);
+
+    await click('[data-test-get-started-dismiss]');
+    let stored = mockMatrixUtils.getDashboardState() as any;
+    assert.notOk(stored.onboardingOpen, 'Dismiss clears the open steps');
+    assert.notOk(stored.onboardingMinimized, 'and their minimized state');
+
+    await click('[data-test-get-started-undo-dismiss]');
+    await rerenderGetStarted();
     assert.dom(GET_STARTED).doesNotExist();
     assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
 
     await openSteps();
-    assert.strictEqual(stepDone('open-card'), 'true');
+    assert.dom('[data-test-get-started-step]').exists({ count: 3 });
+  });
+
+  test('a dismissal already stored wins over a choice saved after it', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+    // Another tab's dismissal has reached the account, but not this tab.
+    mockMatrixUtils.setStoredDashboardState({ onboardingDismissed: true });
+
+    await click(TOGGLE);
+    let stored = mockMatrixUtils.getDashboardState() as any;
+    assert.true(stored.onboardingDismissed, 'the dismissal stands');
+    assert.notOk(stored.onboardingOpen, 'the steps are not saved open over it');
+    assert.notOk(stored.onboardingMinimized);
+    assert.dom(GET_STARTED).doesNotExist('the dismissal closes the steps');
+  });
+
+  test('a choice that fails to save keeps the steps as the user left them without an error, and the stored state shows the next time the dashboard renders', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+    mockMatrixUtils.setDashboardStateWriteError(new Error('offline'));
+
+    await click(TOGGLE);
+    assert
+      .dom('[data-test-get-started-step]')
+      .doesNotExist('the steps stay minimized');
+    assert.dom(TOGGLE).hasAttribute('aria-expanded', 'false');
+    assert
+      .dom('[data-test-get-started-dismiss-error]')
+      .doesNotExist('no error shows');
+    assert
+      .dom('[data-test-get-started-error-announcement]')
+      .hasNoText('nothing is announced');
+
+    mockMatrixUtils.setDashboardStateWriteError();
+    await rerenderGetStarted();
+    assert
+      .dom('[data-test-get-started-step]')
+      .exists({ count: 3 }, 'the stored state shows: open and expanded');
   });
 
   test('opening a card and publishing a workspace tick their steps', async function (assert) {
@@ -599,8 +831,8 @@ module('Acceptance | dashboard get started', function (hooks) {
     await operatorModeState().openWorkspace(realmURL);
     await settled();
     operatorModeState().workspaceChooserOpened = true;
-    await waitFor('[data-test-dashboard-greeting]');
-    await openSteps();
+    // The steps come back open, as the user left them.
+    await waitFor('[data-test-get-started-action="ask-ai"]');
     await click('[data-test-get-started-action="ask-ai"]');
 
     assert
@@ -623,8 +855,8 @@ module('Acceptance | dashboard get started', function (hooks) {
     await operatorModeState().openWorkspace(realmURL);
     await settled();
     operatorModeState().workspaceChooserOpened = true;
-    await waitFor('[data-test-dashboard-greeting]');
-    await openSteps();
+    // The steps come back open, as the user left them.
+    await waitFor('[data-test-get-started-action="ask-ai"]');
     await click('[data-test-get-started-action="ask-ai"]');
 
     assert
@@ -644,8 +876,8 @@ module('Acceptance | dashboard get started', function (hooks) {
     await operatorModeState().openWorkspace(realmURL);
     await settled();
     operatorModeState().workspaceChooserOpened = true;
-    await waitFor('[data-test-dashboard-greeting]');
-    await openSteps();
+    // The steps come back open, as the user left them.
+    await waitFor('[data-test-get-started-action="ask-ai"]');
     await click('[data-test-get-started-action="ask-ai"]');
 
     let matrixService = getService('matrix-service') as MatrixService;

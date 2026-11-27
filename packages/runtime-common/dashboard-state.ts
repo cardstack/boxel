@@ -11,6 +11,10 @@ export type DashboardAgent = (typeof DASHBOARD_AGENTS)[number];
 
 export interface AppBoxelDashboardContent {
   onboardingDismissed?: boolean;
+  // Whether the user left Get started's steps open, and folded to their
+  // progress line. Absent means closed, and expanded.
+  onboardingOpen?: boolean;
+  onboardingMinimized?: boolean;
   // The agent the Agents section shows setup for.
   agent?: DashboardAgent;
   // How many setup steps the user has copied, per agent. Nothing can see the
@@ -31,6 +35,12 @@ export function parseDashboardContent(
   let parsed: AppBoxelDashboardContent = {};
   if (typeof content.onboardingDismissed === 'boolean') {
     parsed.onboardingDismissed = content.onboardingDismissed;
+  }
+  if (typeof content.onboardingOpen === 'boolean') {
+    parsed.onboardingOpen = content.onboardingOpen;
+  }
+  if (typeof content.onboardingMinimized === 'boolean') {
+    parsed.onboardingMinimized = content.onboardingMinimized;
   }
   if (typeof content.openedCard === 'boolean') {
     parsed.openedCard = content.openedCard;

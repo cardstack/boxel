@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { waitForPromise } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
@@ -103,8 +104,9 @@ function countOf<T>(values: T[], value: T) {
 
 // The dashboard's onboarding checklist. Every tick is read from state the
 // host already keeps. A button in the page's header opens and closes
-// the list; it starts closed. Only Dismiss hides both, even once every step
-// is done, so the user can come back to a step and do it again.
+// the list, which shows as the user last left it, closed until they first
+// open it and again after a dismissal. Only Dismiss hides both, even once
+// every step is done, so the user can come back to a step and do it again.
 export default class GetStarted extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
@@ -143,7 +145,7 @@ export default class GetStarted extends Component<Signature> {
     super(owner, args);
     this.loadTask.perform().catch((error: unknown) => {
       if (!didCancel(error)) {
-        log.warn(`waiting for Get started's signals failed: ${error}`);
+        log.warn(`loading Get started failed: ${error}`);
       }
     });
   }
@@ -153,15 +155,55 @@ export default class GetStarted extends Component<Signature> {
   // made, so they need no wait. The rest have no loaded state of their own:
   // login reads the dashboard state, the realm list and its info before it
   // starts the sync, and the AI sessions are listed once the sync's first
-  // pass is processed.
+  // pass is processed. The list is restored with them, so it shows as the
+  // user left it from its first paint.
   private loadTask = task(async () => {
-    await this.aiAssistantPanelService.waitForSessionRooms();
+    try {
+      await this.aiAssistantPanelService.waitForSessionRooms();
+    } catch (error) {
+      if (didCancel(error)) {
+        throw error;
+      }
+      // A failed wait still shows the list, with whatever ticks can be
+      // read, rather than hiding it for the rest of the session.
+      log.warn(`waiting for Get started's signals failed: ${error}`);
+    }
+    this.restoreSteps();
   });
 
-  // A failed wait still shows the list, with whatever ticks can be read,
-  // rather than hiding it for the rest of the session.
   private get isLoaded() {
-    return Boolean(this.loadTask.lastSuccessful || this.loadTask.lastErrored);
+    return Boolean(this.loadTask.lastSuccessful);
+  }
+
+  // Read once, so a change made in another tab or browser shows the next
+  // time the dashboard renders, rather than opening or closing the list
+  // under the user.
+  private restoreSteps() {
+    let { onboardingOpen, onboardingMinimized } =
+      this.matrixService.getStartedSteps;
+    if (onboardingOpen) {
+      this.openedIn = this.dismissalEpoch;
+      this.isExpanded = !onboardingMinimized;
+    }
+  }
+
+  // Kept on the account for the next time the dashboard renders, here or in
+  // another browser. Closed, the list keeps no minimized state, since the
+  // header's button always opens it expanded. A failed save is only logged:
+  // the list shows as the user left it until the dashboard renders again,
+  // which shows the stored state.
+  private saveSteps() {
+    let isOpen = this.isOpen;
+    let saving = this.matrixService
+      .saveGetStartedSteps({
+        onboardingOpen: isOpen || undefined,
+        onboardingMinimized: (isOpen && !this.isExpanded) || undefined,
+      })
+      .catch((error: unknown) => {
+        log.warn(`saving Get started's open steps failed: ${error}`);
+      });
+    // Nothing awaits it, so tests' settled() waits on it here.
+    waitForPromise(saving);
   }
 
   // Read many times a render; aiSessionRooms walks and sorts every room.
@@ -245,10 +287,12 @@ export default class GetStarted extends Component<Signature> {
     }
     this.openedIn = this.isOpen ? undefined : this.dismissalEpoch;
     this.isExpanded = true;
+    this.saveSteps();
   }
 
   @action private toggleExpanded() {
     this.isExpanded = !this.isExpanded;
+    this.saveSteps();
   }
 
   private get nextStep() {
@@ -306,9 +350,14 @@ export default class GetStarted extends Component<Signature> {
     let epoch = this.dismissalEpoch;
     this.failure = undefined;
     try {
+      // Undone, here or elsewhere, the list is closed the next time the
+      // dashboard renders.
       await this.matrixService.updateDashboardState({
         onboardingDismissed: true,
+        onboardingOpen: undefined,
+        onboardingMinimized: undefined,
       });
+      this.matrixService.dropPendingGetStartedSteps();
     } catch (error) {
       log.warn(`dismissing Get started failed: ${error}`);
       // Shown only where the user still is. Once they've closed the list,
@@ -333,8 +382,12 @@ export default class GetStarted extends Component<Signature> {
     this.failure = undefined;
     this.openedIn = epoch + 1;
     try {
+      // The steps come back closed the next time the dashboard renders,
+      // even if a dismissal from an older version left them stored open.
       await this.matrixService.updateDashboardState({
         onboardingDismissed: false,
+        onboardingOpen: undefined,
+        onboardingMinimized: undefined,
       });
     } catch (error) {
       log.warn(`undoing the dismissal of Get started failed: ${error}`);
