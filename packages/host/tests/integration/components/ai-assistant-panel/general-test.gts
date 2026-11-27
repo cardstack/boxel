@@ -1095,6 +1095,9 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     );
 
     await waitFor('[data-test-ai-assistant-toast]');
+    assert
+      .dom('[data-test-ai-assistant-toast]')
+      .doesNotHaveAttribute('inert', 'the shown toast can be reached');
     // Hovering over the toast prevents it from disappearing
     await triggerEvent('[data-test-ai-assistant-toast]', 'mouseenter');
     assert

@@ -34,8 +34,11 @@ const AUTO_HIDE_MS = 3000;
 
 export default class AiAssistantToast extends Component<Signature> {
   <template>
+    {{! Opacity and height hide it only from sight, so inert keeps a screen
+    reader, Tab and the pointer out of it while it is hidden. }}
     <div
       class='ai-assistant-toast {{if this.isVisible "visible"}}'
+      inert={{unless this.isVisible true}}
       data-test-ai-assistant-toast={{this.isVisible}}
       {{on 'mouseenter' this.blockResetStateValue}}
       {{on 'mouseleave' this.unBlockResetStateValue}}
@@ -53,7 +56,6 @@ export default class AiAssistantToast extends Component<Signature> {
           {{on 'click' this.closeToast}}
           class='toast-close-button'
           aria-label='close toast'
-          tabindex={{unless this.isVisible '-1'}}
           data-test-close-toast
         />
       </header>
@@ -65,7 +67,6 @@ export default class AiAssistantToast extends Component<Signature> {
         @size='extra-small'
         class='view-in-chat-button'
         {{on 'click' this.viewInChat}}
-        tabindex={{unless this.isVisible '-1'}}
         data-test-ai-assistant-toast-button
       >
         View in chat

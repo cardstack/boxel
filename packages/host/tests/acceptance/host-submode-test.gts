@@ -968,6 +968,10 @@ module('Acceptance | host submode', function (hooks) {
         ),
       );
       assert.dom('[data-test-ai-assistant-toast]').doesNotExist();
+      let toast = find(
+        '[data-test-ai-assistant-toast-content]',
+      )!.parentElement!;
+      assert.true(toast.inert, 'a screen reader cannot reach the hidden reply');
     });
 
     module('with the dashboard open over host submode', function () {
