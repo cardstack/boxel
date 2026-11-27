@@ -1,4 +1,4 @@
-// Seed scripts: cards and JSON files an evaluation starts from, built in code
+// Seed scripts: cards and files an evaluation starts from, built in code
 // when a run starts instead of committed under eval-realm/. An EvaluationCard names one
 // in `seedScript`; the runner copies its contents into the test workspace
 // with the evaluation's own initial cards and files.
@@ -7,12 +7,14 @@ import type { CardDocument } from '../realm-api.ts';
 
 import { apiOrdersSeed } from './api-orders.ts';
 import { bulkRecordsSeed } from './bulk-records.ts';
+import { houseplantsSeed } from './houseplants.ts';
 
 export interface EvaluationSeed {
   // Card documents by path from the realm root, e.g.
-  // `bulk-operations/store/Product/<slug>.json`, and plain JSON files that
-  // are data rather than cards, such as a saved API response.
-  contents: Record<string, CardDocument | JsonFile>;
+  // `bulk-operations/store/Product/<slug>.json`, plain JSON files that
+  // are data rather than cards, such as a saved API response, and text
+  // files such as a CSV, given as the string written to the file.
+  contents: Record<string, CardDocument | JsonFile | string>;
   // Card paths from the realm root, without `.json`, added to the
   // evaluation's fields of the same name. They live here, not as links on
   // the EvaluationCard, because these cards never exist in the workspace the
@@ -29,6 +31,7 @@ export type JsonFile = Record<string, unknown>;
 const SEEDS: Record<string, () => EvaluationSeed> = {
   'api-orders': apiOrdersSeed,
   'bulk-records': bulkRecordsSeed,
+  houseplants: houseplantsSeed,
 };
 
 export function evaluationSeed(name: string): EvaluationSeed {

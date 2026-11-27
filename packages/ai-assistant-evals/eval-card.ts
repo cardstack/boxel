@@ -294,7 +294,9 @@ export async function loadEvaluationBundle(
         : {},
     ).map(([path, doc]) => [
       path,
-      new TextEncoder().encode(`${JSON.stringify(doc, null, 2)}\n`),
+      new TextEncoder().encode(
+        typeof doc === 'string' ? doc : `${JSON.stringify(doc, null, 2)}\n`,
+      ),
     ]),
   );
 

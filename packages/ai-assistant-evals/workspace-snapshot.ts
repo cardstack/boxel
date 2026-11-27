@@ -17,7 +17,7 @@ import {
 
 // Bytes worth reading. A card definition or an instance is small; a binary
 // upload is not, and nothing in the criteria turns on one.
-const TEXT_FILE = /\.(gts|ts|js|json|md|css|txt|hbs)$/i;
+const TEXT_FILE = /\.(gts|ts|js|json|md|css|txt|hbs|html|csv)$/i;
 const MAX_FILE_BYTES = 200_000;
 
 export interface WorkspaceSnapshot {

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "I made `enchantment/cafe-menu.html` by hand for my caf\u00e9, and it's a pain to update. Turn it into a Boxel app: every dish should be its own card I can edit, and a menu card should show them by section and look like my page. Show me the menu. Don't ask me any follow-up questions; decide the details yourself.",
+      "followUpPrompts": [
+        "We've added a Shakshuka to Breakfast: eggs baked in spiced tomato and pepper sauce, with sourdough, $14, vegetarian. And the Iced Matcha is sold out for now. Show sold-out dishes greyed out with a \"Sold out\" label instead of hiding them. Show me the menu again."
+      ],
+      "successCriteria": "Task A (turn the page into an app):\n\nA1. A dish definition with a name, a description, a price that is a number (not a string such as \"$9.00\"), a section and the dietary tags; and a menu definition that holds the dishes with `linksToMany` or a query. The section is a field (a string, an enum or a link), not one card class per section.\n\nA2. Every dish on the page exists as a dish instance: all 13 (5 Breakfast, 4 Lunch, 4 Drinks), each with its name, description, price and tags as `enchantment/cafe-menu.html` gives them. No dish is missing, added or merged, and no price or tag is wrong. The caf\u00e9's name, address and opening hours are on the menu instance.\n\nA3. The menu shows the dishes grouped by section, in the page's order (Breakfast, Lunch, Drinks), with each dish's price and tags. It is open on screen with no error boundary.\n\nA4. The dish data lives in the instances, not in the template: no dish name or price is written into a `.gts` file. `enchantment/cafe-menu.html` is unchanged.\n\nTask B (edit the live app):\n\nB1. A new Shakshuka dish instance exists in Breakfast with a description, a price of 14 and the vegetarian tag, and the menu shows it. No other dish instance was deleted or recreated.\n\nB2. Sold out is a field on the dish (for example a boolean), set on the Iced Matcha only. The menu still shows the Iced Matcha, greyed out and labelled \"Sold out\", and every other dish as before.\n\nB3. The definitions were edited in place (a `run-realm-code` call with `realm.fs.replace`, or a read and a rewrite of the same file). There is no second dish or menu definition. The menu is open on screen again with no error boundary.\n\nZ. Every tool call applied or was repaired by the model, the assistant did not ask a question or wait for confirmation before acting, and the whole flow took at most 24 turns.\n\nNot pass/fail, quality only: how far the menu keeps the page's look (its cream, deep green and terracotta palette, the Fraunces and Work Sans fonts, the dotted rules between dishes) through a theme or theme variables rather than hex values copied into scoped CSS. Compare a screenshot of the menu with the page.",
+      "cardInfo": {
+        "name": "Enchantment: static menu page to a menu app",
+        "summary": "The workspace starts with one static file, a caf\u00e9's hand-made menu page (`enchantment/cafe-menu.html`) with 13 dishes in three sections. The first prompt asks to turn it into a Boxel app, a card per dish and a menu card that groups them by section and looks like the page. The second prompt adds a dish and marks one sold out. This eval tests whether the selected models can upgrade a static asset into cards and instances faithfully, then edit the result as a live app.",
+        "notes": "The judge compares the dish instances with the seed page, dish by dish. Keeping the page's look moves the quality score only; it is not a pass/fail criterion.",
+        "cardThumbnailURL": null
+      },
+      "secondsPerPrompt": 450
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../enchantment/cafe-menu.html"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

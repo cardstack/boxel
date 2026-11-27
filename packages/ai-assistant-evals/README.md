@@ -62,7 +62,7 @@ endpoint is the URL.
 - **EvaluationReport**: one per session, with a query-backed `results` table
   and the total cost.
 
-Fifteen evaluations ship. `hello-world` is the smallest build there is, one
+Thirty-three evaluations ship. `hello-world` is the smallest build there is, one
 definition and one instance shown on screen — the one to start from, and the
 one to reach for when checking that a change did not break the basics.
 `linkedin-profile-computed-edit-restyle` is the step up: one definition with a
@@ -113,6 +113,17 @@ script writes, with string prices and four payment statuses. It grades whether
 the assistant reshapes the data with `realm.transform` rather than a
 JavaScript loop in the script, and whether the totals are exact to the cent.
 
+The two `enchant-*` evaluations start from a static file in an otherwise empty
+workspace and ask the assistant to upgrade it into a Boxel app, then edit the
+app in a follow-up prompt. `enchant-static-menu-page` turns a café's hand-made
+HTML menu (`eval-realm/enchantment/cafe-menu.html`, 13 dishes in three
+sections) into a card per dish and a menu card, then adds a dish and marks one
+sold out; the judge checks every dish against the page, and how far the menu
+keeps the page's look counts toward quality only. `enchant-csv-plant-tracker`
+turns a plant-care spreadsheet, which its seed script writes as a CSV, into a
+card per plant with a computed next-watering date and a dashboard of the plants
+due, then records two waterings and adds a plant.
+
 Three evaluations test the assistant as a guide to Boxel rather than a
 builder. Each asks five questions in one session, with a Project card open,
 and is conversation-only (`expectsNoWrites`): `concierge-questions` (where
@@ -154,11 +165,15 @@ the prompt. A set too large to keep as fixtures comes from a seed script
 instead: a module in `eval-seeds/`, registered in `eval-seeds/index.ts`, that
 builds card documents by path from the realm root, the way host tests hand a
 realm its `contents`, and names which of them are initial, prompt and
-expected changed cards. The evaluation names it in `seedScript`. The runner
-builds the cards when a run starts and copies them in with the rest, and the
-run's `evaluation.json` records them as the seeds the judge compares against.
-A seed script never uses a random source: criteria quote its counts and
-values, so every run must start from the same bytes.
+expected changed cards. A path may also hold a string, written to the file as
+it is, for a text file such as a CSV. The evaluation names it in `seedScript`.
+The runner builds the cards when a run starts and copies them in with the
+rest, and the run's `evaluation.json` records them as the seeds the judge
+compares against. A seed script never uses a random source: criteria quote its
+counts and values, so every run must start from the same bytes. The one
+exception is a date the criteria state relative to the run day, such as the
+`houseplants` seed's last-watered dates, a fixed number of days before the
+day the run starts.
 
 A skill change that targets a core use case adds an evaluation that shows the
 problem it fixes; the `skill-change-eval` skill in `.claude/skills` covers how.

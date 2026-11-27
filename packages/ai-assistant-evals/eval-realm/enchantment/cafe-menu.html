@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Little Fig Café — Menu</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Work+Sans:wght@400;500&display=swap"
+    />
+    <style>
+      body {
+        margin: 0;
+        background: #f6efe3;
+        color: #2b2420;
+        font-family: 'Work Sans', sans-serif;
+        line-height: 1.5;
+      }
+      .page {
+        max-width: 46rem;
+        margin: 0 auto;
+        padding: 3rem 1.5rem 4rem;
+      }
+      header {
+        text-align: center;
+        border-bottom: 2px solid #2f4a3a;
+        padding-bottom: 1.5rem;
+        margin-bottom: 2rem;
+      }
+      h1 {
+        font-family: 'Fraunces', serif;
+        font-weight: 700;
+        font-size: 2.75rem;
+        color: #2f4a3a;
+        margin: 0;
+      }
+      .details {
+        margin: 0.5rem 0 0;
+        font-size: 0.9rem;
+        color: #6b5d52;
+      }
+      h2 {
+        font-family: 'Fraunces', serif;
+        font-weight: 500;
+        font-size: 1.6rem;
+        color: #c8643b;
+        margin: 2.5rem 0 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .dish {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: 1rem;
+        padding: 0.75rem 0;
+        border-bottom: 1px dotted #c9b9a6;
+      }
+      .dish h3 {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 500;
+      }
+      .dish p {
+        grid-column: 1 / -1;
+        margin: 0.25rem 0 0;
+        font-size: 0.9rem;
+        color: #6b5d52;
+      }
+      .price {
+        font-family: 'Fraunces', serif;
+        font-weight: 700;
+        color: #2f4a3a;
+      }
+      .tag {
+        display: inline-block;
+        margin-left: 0.4rem;
+        padding: 0 0.4rem;
+        border-radius: 0.25rem;
+        background: #2f4a3a;
+        color: #f6efe3;
+        font-size: 0.7rem;
+        font-weight: 500;
+        vertical-align: middle;
+      }
+      footer {
+        margin-top: 3rem;
+        font-size: 0.8rem;
+        color: #6b5d52;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <h1>Little Fig Café</h1>
+        <p class="details">214 Alder Lane, Millbrook</p>
+        <p class="details">Open Tuesday to Sunday, 7:30 am – 3:00 pm</p>
+      </header>
+
+      <section>
+        <h2>Breakfast</h2>
+        <div class="dish">
+          <h3>Sourdough &amp; Whipped Ricotta <span class="tag">V</span></h3>
+          <span class="price">$9.00</span>
+          <p>
+            Toasted house sourdough, whipped ricotta, wildflower honey, cracked
+            pepper.
+          </p>
+        </div>
+        <div class="dish">
+          <h3>
+            Buckwheat Pancakes <span class="tag">V</span
+            ><span class="tag">GF</span>
+          </h3>
+          <span class="price">$13.00</span>
+          <p>
+            Three buckwheat pancakes, mixed berries, maple syrup, crème fraîche.
+          </p>
+        </div>
+        <div class="dish">
+          <h3>
+            Green Breakfast Bowl <span class="tag">V</span
+            ><span class="tag">GF</span>
+          </h3>
+          <span class="price">$14.00</span>
+          <p>Kale, quinoa, avocado, pickled shallots and a soft-boiled egg.</p>
+        </div>
+        <div class="dish">
+          <h3>Smoked Salmon Bagel</h3>
+          <span class="price">$15.00</span>
+          <p>
+            Sesame bagel, smoked salmon, dill cream cheese, capers, red onion.
+          </p>
+        </div>
+        <div class="dish">
+          <h3>Overnight Oats <span class="tag">VG</span></h3>
+          <span class="price">$8.00</span>
+          <p>
+            Oats soaked in oat milk with chia, topped with mango and toasted
+            coconut.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Lunch</h2>
+        <div class="dish">
+          <h3>Roast Squash &amp; Farro Salad <span class="tag">VG</span></h3>
+          <span class="price">$14.00</span>
+          <p>
+            Roast butternut squash, farro, rocket, pomegranate, tahini dressing.
+          </p>
+        </div>
+        <div class="dish">
+          <h3>Grilled Chicken Sandwich</h3>
+          <span class="price">$15.00</span>
+          <p>
+            Grilled chicken, basil pesto, roasted peppers and mozzarella on
+            ciabatta.
+          </p>
+        </div>
+        <div class="dish">
+          <h3>Mushroom &amp; Gruyère Toastie <span class="tag">V</span></h3>
+          <span class="price">$13.00</span>
+          <p>Thyme-roasted mushrooms and Gruyère, pressed in sourdough.</p>
+        </div>
+        <div class="dish">
+          <h3>Lentil &amp; Tomato Soup <span class="tag">VG</span></h3>
+          <span class="price">$11.00</span>
+          <p>
+            Red lentils, tomato and cumin, served with a slice of sourdough.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Drinks</h2>
+        <div class="dish">
+          <h3>Flat White <span class="tag">V</span></h3>
+          <span class="price">$4.50</span>
+          <p>Double ristretto with steamed whole milk. Oat milk on request.</p>
+        </div>
+        <div class="dish">
+          <h3>Iced Matcha <span class="tag">VG</span></h3>
+          <span class="price">$5.50</span>
+          <p>Ceremonial-grade matcha over ice with oat milk.</p>
+        </div>
+        <div class="dish">
+          <h3>
+            Fresh Orange Juice <span class="tag">VG</span
+            ><span class="tag">GF</span>
+          </h3>
+          <span class="price">$5.00</span>
+          <p>Squeezed to order.</p>
+        </div>
+        <div class="dish">
+          <h3>Chai Latte <span class="tag">V</span></h3>
+          <span class="price">$5.00</span>
+          <p>House-spiced chai with steamed milk.</p>
+        </div>
+      </section>
+
+      <footer>
+        V vegetarian · VG vegan · GF gluten-free. Please tell us about any
+        allergies.
+      </footer>
+    </div>
+  </body>
+</html>
