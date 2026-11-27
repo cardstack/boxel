@@ -189,6 +189,119 @@ export function assertList(
   return items;
 }
 
+// The hover rules in the scoped styles of the component that rendered the
+// element at `selector`, by the devices they apply to. A tap on a touch screen
+// leaves `:hover` on what it touched, so a hover rule that applies on any
+// device sticks after a tap; one inside `@media (hover: hover)` applies only
+// where the device can hover. The element must be one the component renders
+// itself, not through `...attributes`, so it carries only that component's
+// scope.
+function scopedHoverRules(selector: string): {
+  onAnyDevice: string[];
+  onlyWhereHoverable: string[];
+} {
+  let element = find(selector);
+  if (!element) {
+    throw new Error(`no element at ${selector}`);
+  }
+  let scopes = element
+    .getAttributeNames()
+    .filter((name) => name.startsWith('data-scopedcss-'));
+  if (scopes.length !== 1) {
+    throw new Error(
+      `${selector} carries ${scopes.length} scoped CSS attributes, not one`,
+    );
+  }
+  let scope = `[${scopes[0]}`;
+  let found = {
+    onAnyDevice: [] as string[],
+    onlyWhereHoverable: [] as string[],
+  };
+  // A rule nested in a style rule shares its parent's scope, and its hover.
+  let visit = (
+    rules: Iterable<CSSRule>,
+    canHover: boolean,
+    inScope: boolean,
+    onHover: boolean,
+  ) => {
+    for (let rule of rules) {
+      // Ahead of the grouping rules: a style rule is one, so it can nest.
+      if (rule instanceof CSSStyleRule) {
+        let scoped = inScope || rule.selectorText.includes(scope);
+        let hovered = onHover || rule.selectorText.includes(':hover');
+        if (scoped && hovered && rule.style.length > 0) {
+          (canHover ? found.onlyWhereHoverable : found.onAnyDevice).push(
+            rule.selectorText,
+          );
+        }
+        visit(rule.cssRules, canHover, scoped, hovered);
+      } else if (rule instanceof CSSNestedDeclarations) {
+        // Bare declarations in a rule nested in a style rule, such as an
+        // `@media` block.
+        if (inScope && onHover && rule.style.length > 0) {
+          (canHover ? found.onlyWhereHoverable : found.onAnyDevice).push(
+            rule.cssText,
+          );
+        }
+      } else if (rule instanceof CSSMediaRule) {
+        let hoverOnly = canHover || isHoverOnly(rule.media);
+        visit(rule.cssRules, hoverOnly, inScope, onHover);
+      } else if (rule instanceof CSSGroupingRule) {
+        visit(rule.cssRules, canHover, inScope, onHover);
+      }
+    }
+  };
+  for (let sheet of document.styleSheets) {
+    visit(rulesOf(sheet), false, false, false);
+  }
+  return found;
+}
+
+function rulesOf(sheet: CSSStyleSheet): Iterable<CSSRule> {
+  try {
+    return sheet.cssRules;
+  } catch {
+    return []; // a cross-origin stylesheet
+  }
+}
+
+// Whether a media list applies only where the device can hover: each of its
+// queries requires `(hover: hover)`, alongside any other conditions. Only that
+// literal form counts, so another way of writing it fails the test rather
+// than passing it.
+function isHoverOnly(media: MediaList): boolean {
+  let queries = [...media];
+  return (
+    queries.length > 0 &&
+    queries.every(
+      (query) =>
+        !query.startsWith('not ') &&
+        query.split(' and ').includes('(hover: hover)'),
+    )
+  );
+}
+
+// Asserts the component that rendered the element at `selector` has hover
+// effects in its own styles, and only where the device can hover, so a tap on
+// a touch screen leaves none of them behind. The styles of the components it
+// renders aren't read.
+export function assertHoverOnlyWhereHoverable(
+  assert: Assert,
+  selector: string,
+  label: string,
+) {
+  let { onAnyDevice, onlyWhereHoverable } = scopedHoverRules(selector);
+  assert.deepEqual(
+    onAnyDevice,
+    [],
+    `${label}: no hover effect on a device that can't hover`,
+  );
+  assert.true(
+    onlyWhereHoverable.length > 0,
+    `${label}: hover effects where the device can hover`,
+  );
+}
+
 export function sectionOrder() {
   return findAll('[data-test-dashboard-section]').map((section) =>
     section.getAttribute('data-test-dashboard-section'),

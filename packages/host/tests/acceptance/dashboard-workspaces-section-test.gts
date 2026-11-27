@@ -24,6 +24,7 @@ import {
 } from '../helpers';
 import {
   realmURL,
+  assertHoverOnlyWhereHoverable,
   assertList,
   clickScopeOption,
   markHosted,
@@ -598,6 +599,15 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
       assert
         .dom('[data-test-dashboard]')
         .exists('choosing a site does not open the workspace');
+    });
+
+    test("a workspace's own styles apply hover effects only where the device can hover", async function (assert) {
+      await visitDashboard(assert, 2);
+      assertHoverOnlyWhereHoverable(
+        assert,
+        `${ROWS} [data-test-workspace-button]`,
+        'a workspace',
+      );
     });
 
     test("a row's button is described by its full visibility, its update time and its address", async function (assert) {
