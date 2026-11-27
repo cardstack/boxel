@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 import {
   logger,
   passInvalidatesExecutables,
+  invalidationsMayChangeHostRoutes,
   isCardResource,
   jobIdentity,
   Deferred,
@@ -1710,15 +1711,12 @@ export class IndexRunner {
   async #readHostRouteTypes(
     fullRealm: boolean,
   ): Promise<HostRouteTypeReads | undefined> {
-    let invalidations = this.batch.invalidations;
-    let realmConfigHrefs = new Set([
-      realmConfigHrefFor(this.#realmURL),
-      realmConfigCardURL(this.#realmURL).href,
-    ]);
     if (
       !fullRealm &&
-      !invalidations.some((href) => realmConfigHrefs.has(href)) &&
-      !passInvalidatesExecutables(invalidations)
+      !invalidationsMayChangeHostRoutes(
+        this.#realmURL,
+        this.batch.invalidations,
+      )
     ) {
       return undefined;
     }
