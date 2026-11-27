@@ -14,11 +14,11 @@ interface Walk {
   defaultIndex(): number;
 }
 
-// The dashboard's keyboard cursor: one item in the walk of workspaces and
-// catalogs. It rests on an item from the moment the dashboard opens, focused
-// when in view, so Enter works at once. Its ring is the keyboard's: Tab or
-// the first arrow key shows it without moving it, and a pointer press hides
-// it again.
+// The dashboard's keyboard cursor: one item in the walk of workspaces, the
+// catalog shelf's stories and catalogs. It rests on an item from the moment
+// the dashboard opens, focused when in view, so Enter works at once. Its ring
+// is the keyboard's: Tab or the first arrow key shows it without moving it,
+// and a pointer press hides it again.
 // Left and Right step through the walk; Up and Down move to the nearest item
 // in the row above or below, whatever the layout.
 export default class KeyboardCursor {
@@ -64,14 +64,15 @@ export default class KeyboardCursor {
     this.keyboardEngaged = false;
   };
 
-  // Focus anywhere in an item, its star or menu included, moves the cursor
-  // there, so the ring never marks one item while another has focus.
+  // Focus anywhere in an item, a tile's star or menu or a story's buttons
+  // included, moves the cursor there, so the ring never marks one item while
+  // another has focus.
   onFocusIn = (event: Event) => {
     let target = event.target as HTMLElement;
     let item =
       target.closest<HTMLElement>('[data-nav-index]') ??
       target
-        .closest('[data-workspace-tile]')
+        .closest('[data-workspace-tile], [data-catalog-story]')
         ?.querySelector<HTMLElement>('[data-nav-index]');
     if (!item) {
       return;
@@ -117,7 +118,8 @@ export default class KeyboardCursor {
       }
       return;
     }
-    // An item's own controls (star, menu, site link) handle their own keys.
+    // An item's own controls (star, menu, site link, a story's Try it and
+    // Details) handle their own keys.
     if (!(event.target as HTMLElement).closest('[data-nav-index]')) {
       return;
     }

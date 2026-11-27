@@ -45,6 +45,7 @@ import Agents from './agents';
 import AgentsFlyout from './agents-flyout';
 import ArchivedWorkspace from './archived-workspace';
 import CatalogSection from './catalog-section';
+import { CatalogShelfStories } from './catalog-shelf';
 import GetStarted from './get-started';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
@@ -68,6 +69,9 @@ interface Signature {
   Args: {
     // Each section registers its entry in the section rail here.
     sections: DashboardSections;
+    // The catalog realm whose index card curates the catalog shelf. Without
+    // one there is no shelf.
+    catalogRealmURL: string | null;
   };
 }
 
@@ -402,8 +406,13 @@ export default class Dashboard extends Component<Signature> {
     return this.scope !== 'hosted';
   }
 
+  private shelf = new CatalogShelfStories(this, () =>
+    this.isCatalogShelfShown ? this.args.catalogRealmURL : null,
+  );
+
   // Where each part of the keyboard cursor's walk starts, in page order:
-  // Favorites, New Workspace, the recent tiles, the rows shown, and Catalogs.
+  // Favorites, New Workspace, the recent tiles, the rows shown, the catalog
+  // shelf's stories, and Catalogs.
   private get addWorkspaceNavIndex() {
     return this.favoritesCount;
   }
@@ -416,8 +425,12 @@ export default class Dashboard extends Component<Signature> {
     return this.recentNavBase + this.recentRealmIdentifiers.length;
   }
 
-  private get catalogNavBase() {
+  private get shelfNavBase() {
     return this.rowsNavBase + this.visibleRowRealmIdentifiers.length;
+  }
+
+  private get catalogNavBase() {
+    return this.shelfNavBase + this.shelf.stories.length;
   }
 
   // What each `[data-nav-index]` shows, in page order. A workspace that is
@@ -429,6 +442,7 @@ export default class Dashboard extends Component<Signature> {
       ...(this.isAddWorkspaceShown ? ['new-workspace'] : []),
       ...this.recentRealmIdentifiers.map((url) => `workspace:${url}`),
       ...this.visibleRowRealmIdentifiers.map((url) => `workspace:${url}`),
+      ...this.shelf.stories.map((story) => `story:${story.id}`),
       ...this.filteredCatalogRealmIdentifiers.map((url) => `catalog:${url}`),
     ];
   }
@@ -457,9 +471,9 @@ export default class Dashboard extends Component<Signature> {
   }
 
   // The workspace the dashboard opened over, otherwise the first favorite or
-  // workspace. The cursor takes focus on open when it is in view, so it never
-  // starts on New Workspace while anything else is shown: the first Enter
-  // would create a workspace.
+  // workspace, then the first catalog tile or story. The cursor takes focus on
+  // open when it is in view, so it never starts on New Workspace while
+  // anything else is shown: the first Enter would create a workspace.
   private get defaultSelectedIndex() {
     let returnIndex = this.returnNavIndex;
     if (returnIndex !== undefined) {
@@ -473,6 +487,9 @@ export default class Dashboard extends Component<Signature> {
     }
     if (this.renderedCatalogCount > 0) {
       return this.catalogNavBase;
+    }
+    if (this.shelf.stories.length > 0) {
+      return this.shelfNavBase;
     }
     return 0;
   }
@@ -874,7 +891,8 @@ export default class Dashboard extends Component<Signature> {
           <CatalogSection
             @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
             @emptyMessage={{this.catalogEmptyMessage}}
-            @showShelf={{this.isCatalogShelfShown}}
+            @shelf={{this.shelf}}
+            @shelfNavBase={{this.shelfNavBase}}
             @navBase={{this.catalogNavBase}}
             @cursor={{this.cursor}}
             {{@sections.register this.catalogsSection}}

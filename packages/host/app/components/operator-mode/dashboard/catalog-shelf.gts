@@ -1,12 +1,17 @@
-import { fn } from '@ember/helper';
+import { associateDestroyableChild } from '@ember/destroyable';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
+import { getOwner, setOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { Button } from '@cardstack/pretui/components/button';
+import { add, and, eq } from '@cardstack/pretui/helpers';
+
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   resolveRRIReference,
@@ -17,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import SearchResults from '@cardstack/host/components/search/search-results';
+import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
 import {
   getSearchEntriesResource,
   type SearchEntriesResource,
@@ -33,6 +39,8 @@ import {
   type Story,
 } from './catalog-stories';
 import fitPage from './fit-page';
+
+import type KeyboardCursor from './keyboard-cursor';
 
 // A story's art is the listing's example card, laid out as a page this many
 // design pixels wide and zoomed into the frame.
@@ -55,22 +63,85 @@ const LISTING_TYPE = {
 // Hosted is switched off) starts from them. Untracked: it only remembers.
 const lastAnswers = new Map<string, Story[]>();
 
-interface Signature {
-  Element: HTMLElement;
-  Args: {
-    // The catalog realm whose index card curates the shelf.
-    realmURL: string;
-  };
-}
-
-// The catalog told as stories: four tinted cards, each a listing with its
-// example card as art. The catalog's index card names the listings that
-// lead (`featured`); other listings follow. Everything comes from the index:
-// sparse-fieldset searches for the listings and prerendered HTML for the
-// art, so no catalog card code loads on the dashboard.
-export default class CatalogShelf extends Component<Signature> {
+// The shelf's stories. The catalog's index card names the listings that lead
+// (`featured`); other listings follow. The dashboard loads them, not the
+// shelf: its keyboard cursor steps through the stories, so it has to know them
+// in the same render the shelf draws them in. Nothing is searched while
+// there's no catalog to show, as when Hosted hides the shelf.
+export class CatalogShelfStories {
   @service declare private network: NetworkService;
-  @service declare private operatorModeStateService: OperatorModeStateService;
+
+  private index: SearchEntriesResource;
+  private featured: SearchEntriesResource;
+  private others: SearchEntriesResource;
+
+  // Destroyed with `parent`, which ends its searches.
+  constructor(
+    parent: object,
+    // The catalog realm whose index card curates the shelf, while the shelf
+    // is shown.
+    private getRealmURL: () => string | null,
+  ) {
+    let owner = getOwner(parent);
+    if (!owner) {
+      throw new Error('CatalogShelfStories needs a parent with an owner');
+    }
+    setOwner(this, owner);
+    associateDestroyableChild(parent, this);
+    this.index = getSearchEntriesResource(
+      this,
+      (): SearchEntryWireQuery | undefined => {
+        let realmURL = this.getRealmURL();
+        return realmURL
+          ? {
+              realms: [realmURL],
+              cardUrls: [`${realmURL}index.json`],
+              scope: 'cards',
+              fields: { entry: ['item.featured'] },
+            }
+          : undefined;
+      },
+    );
+    this.featured = getSearchEntriesResource(
+      this,
+      (): SearchEntryWireQuery | undefined => {
+        let realmURL = this.getRealmURL();
+        return realmURL && this.featuredCardUrls.length
+          ? {
+              realms: [realmURL],
+              cardUrls: this.featuredCardUrls,
+              scope: 'cards',
+              fields: { entry: LISTING_FIELDS },
+            }
+          : undefined;
+      },
+    );
+    this.others = getSearchEntriesResource(
+      this,
+      (): SearchEntryWireQuery | undefined => {
+        let realmURL = this.getRealmURL();
+        return realmURL
+          ? {
+              realms: [realmURL],
+              filter: { 'item.on': LISTING_TYPE },
+              page: { number: 0, size: OTHER_LISTINGS_FETCHED },
+              scope: 'cards',
+              fields: { entry: LISTING_FIELDS },
+            }
+          : undefined;
+      },
+    );
+  }
+
+  // Every render of the catalogs section reads this, shelf or no shelf, so it
+  // is where the searches end once there's no catalog.
+  get realmURL(): string | null {
+    let realmURL = this.getRealmURL();
+    if (!realmURL) {
+      this.endSearches();
+    }
+    return realmURL;
+  }
 
   // Search results and links name cards by URL, by prefix-form identifier,
   // or relative to the card that links them; comparing them needs one form.
@@ -84,23 +155,17 @@ export default class CatalogShelf extends Component<Signature> {
     }
   };
 
-  private toListingEntry = (entry: {
+  toListingEntry = (entry: {
     id: string;
     item?: ListingEntry['item'];
-  }): ListingEntry => ({
-    id: this.resolve(trimJsonExtension(entry.id), this.args.realmURL),
-    item: entry.item,
-  });
-
-  private index = getSearchEntriesResource(
-    this,
-    (): SearchEntryWireQuery => ({
-      realms: [this.args.realmURL],
-      cardUrls: [`${this.args.realmURL}index.json`],
-      scope: 'cards',
-      fields: { entry: ['item.featured'] },
-    }),
-  );
+  }): ListingEntry => {
+    let id = trimJsonExtension(entry.id);
+    let realmURL = this.getRealmURL();
+    return {
+      id: realmURL ? this.resolve(id, realmURL) : id,
+      item: entry.item,
+    };
+  };
 
   @cached
   private get featuredIds(): string[] {
@@ -114,30 +179,6 @@ export default class CatalogShelf extends Component<Signature> {
   private get featuredCardUrls(): string[] {
     return this.featuredIds.map((id) => `${id}.json`);
   }
-
-  private featured = getSearchEntriesResource(
-    this,
-    (): SearchEntryWireQuery | undefined =>
-      this.featuredCardUrls.length
-        ? {
-            realms: [this.args.realmURL],
-            cardUrls: this.featuredCardUrls,
-            scope: 'cards',
-            fields: { entry: LISTING_FIELDS },
-          }
-        : undefined,
-  );
-
-  private others = getSearchEntriesResource(
-    this,
-    (): SearchEntryWireQuery => ({
-      realms: [this.args.realmURL],
-      filter: { 'item.on': LISTING_TYPE },
-      page: { number: 0, size: OTHER_LISTINGS_FETCHED },
-      scope: 'cards',
-      fields: { entry: LISTING_FIELDS },
-    }),
-  );
 
   // Whether every search has answered for what it asks now. The featured
   // listings are asked for only once the index card answers, so without this
@@ -162,10 +203,26 @@ export default class CatalogShelf extends Component<Signature> {
     );
   }
 
+  // A search takes its current query only when it is read. With no catalog
+  // that query is none, which cancels the search and ends its subscription
+  // to the realm, so a shelf Hosted hides doesn't keep searching. This class
+  // reads the catalog from `getRealmURL`; `realmURL`, which calls this, is for
+  // the catalogs section.
+  private endSearches() {
+    for (let search of [this.index, this.featured, this.others]) {
+      search.isLoading;
+    }
+  }
+
+  // The stories the shelf shows, and the keyboard cursor steps through.
   @cached
-  private get stories(): Story[] {
+  get stories(): Story[] {
+    let realmURL = this.getRealmURL();
+    if (!realmURL) {
+      return [];
+    }
     if (!this.isAnswered) {
-      return lastAnswers.get(this.args.realmURL) ?? [];
+      return lastAnswers.get(realmURL) ?? [];
     }
     let stories = storiesFrom({
       featuredIds: this.featuredIds,
@@ -173,28 +230,51 @@ export default class CatalogShelf extends Component<Signature> {
       others: this.others.entries.map(this.toListingEntry),
       resolve: this.resolve,
     });
-    lastAnswers.set(this.args.realmURL, stories);
+    lastAnswers.set(realmURL, stories);
     return stories;
   }
 
   // Until the first answer, the shelf holds its place, so Workspaces below
   // it doesn't move down when the stories arrive.
-  private get isPending() {
-    return !this.isAnswered && this.stories.length === 0;
+  get isPending() {
+    return (
+      Boolean(this.getRealmURL()) &&
+      !this.isAnswered &&
+      this.stories.length === 0
+    );
   }
+}
+
+interface Signature {
+  Element: HTMLElement;
+  Args: {
+    stories: CatalogShelfStories;
+    // Where the stories start in the keyboard cursor's walk.
+    navBase: number;
+    cursor: KeyboardCursor;
+  };
+}
+
+// The catalog told as stories: four tinted cards, each a listing with its
+// example card as art. Everything comes from the index: sparse-fieldset
+// searches for the listings and prerendered HTML for the art, so no catalog
+// card code loads on the dashboard.
+export default class CatalogShelf extends Component<Signature> {
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   // One search for every story's art: the examples' prerendered isolated
   // HTML, and nothing else, so an example without HTML yet never renders
   // live.
   private get artQuery(): SearchEntryWireQuery | undefined {
-    let exampleIds = this.stories
+    let realmURL = this.args.stories.realmURL;
+    let exampleIds = this.args.stories.stories
       .map((story) => story.exampleId)
       .filter((id): id is string => Boolean(id));
-    if (exampleIds.length === 0) {
+    if (!realmURL || exampleIds.length === 0) {
       return undefined;
     }
     return {
-      realms: [this.args.realmURL],
+      realms: [realmURL],
       cardUrls: exampleIds.map((id) => `${id}.json`),
       scope: 'cards',
       filter: { eq: { htmlQuery: { eq: { format: 'isolated' } } } },
@@ -210,7 +290,7 @@ export default class CatalogShelf extends Component<Signature> {
       ? entries.find(
           (entry) =>
             entry.html?.html != null &&
-            this.toListingEntry(entry).id === exampleId,
+            this.args.stories.toListingEntry(entry).id === exampleId,
         )
       : undefined;
 
@@ -223,11 +303,14 @@ export default class CatalogShelf extends Component<Signature> {
   }
 
   @action private async openCatalog() {
-    await this.operatorModeStateService.openWorkspace(this.args.realmURL);
+    let realmURL = this.args.stories.realmURL;
+    if (realmURL) {
+      await this.operatorModeStateService.openWorkspace(realmURL);
+    }
   }
 
   <template>
-    {{#if this.stories.length}}
+    {{#if @stories.stories.length}}
       <div class='catalog-shelf' data-test-catalog-shelf ...attributes>
         <SearchResults
           @query={{this.artQuery}}
@@ -236,25 +319,42 @@ export default class CatalogShelf extends Component<Signature> {
           as |art|
         >
           <ul class='stories' aria-label='From the catalog'>
-            {{#each this.stories key='id' as |story i|}}
-              {{#let (this.artFor art.entries story.exampleId) as |artEntry|}}
+            {{#each @stories.stories key='id' as |story i|}}
+              {{#let
+                (this.artFor art.entries story.exampleId)
+                (add @navBase i)
+                (eq @cursor.currentIndex (add @navBase i))
+                as |artEntry navIndex isSelected|
+              }}
                 {{! Each story is a scheme island on its own paper, so its
                     text and buttons read that scheme's tokens. }}
                 <li
-                  class='story tint-{{story.tint}}'
+                  class={{cn
+                    'story'
+                    (concat 'tint-' story.tint)
+                    is-selected=(and isSelected @cursor.isRingShown)
+                  }}
                   data-theme={{story.scheme}}
+                  data-catalog-story
                   data-test-catalog-story={{story.id}}
+                  data-test-catalog-story-selected={{if isSelected story.name}}
+                  data-test-catalog-story-ring={{if
+                    (and isSelected @cursor.isRingShown)
+                    story.name
+                  }}
                 >
                   <p class='eyebrow'>{{story.eyebrow}}</p>
                   {{! The headline's button stretches over the story, so a
                       click anywhere on it opens the listing; the actions sit
-                      above it. }}
+                      above it. It is the story's stop in the keyboard walk. }}
                   <h3 class='headline'>
                     <button
                       id={{this.headlineId i}}
                       type='button'
                       class='story-open'
+                      data-nav-index={{navIndex}}
                       {{on 'click' (fn this.open story.id)}}
+                      {{focusWhenSelected isSelected scrollOnOpen='never'}}
                       data-test-catalog-story-open
                     ><span class='headline-text'>{{story.name}}</span></button>
                   </h3>
@@ -317,7 +417,7 @@ export default class CatalogShelf extends Component<Signature> {
           data-test-catalog-see-all
         >See the full catalog <span aria-hidden='true'>→</span></Button>
       </div>
-    {{else if this.isPending}}
+    {{else if @stories.isPending}}
       {{! The stories' metrics with nothing in them. }}
       <div
         class='catalog-shelf'
@@ -406,11 +506,15 @@ export default class CatalogShelf extends Component<Signature> {
           opacity: 1;
         }
       }
-      /* Keeps the hover ring off the keyboard ring. */
+      /* Keeps the hover ring off the keyboard ring. The :not(.is-pending) matches
+         the hover rule's specificity, so this rule wins by coming later. */
+      .story:not(.is-pending).is-selected::after,
       .story:has(.story-open:focus-visible)::after {
         opacity: 0;
       }
-      /* The story draws the keyboard ring around the whole card. */
+      /* The story draws the keyboard ring around the whole card, for the
+         keyboard cursor as for Tab. */
+      .story.is-selected,
       .story:has(.story-open:focus-visible) {
         box-shadow: var(--dashboard-ring), var(--shadow-md);
       }
@@ -484,9 +588,11 @@ export default class CatalogShelf extends Component<Signature> {
         letter-spacing: -0.015em;
       }
       /* Its hit area covers the story; the actions sit above it. */
+      /* Full width, so Up and Down measure from the story's middle, not the
+         middle of its headline. */
       .story-open {
         display: block;
-        max-width: 100%;
+        width: 100%;
         padding: 0;
         border: 0;
         background-color: transparent;
