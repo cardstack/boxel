@@ -27,6 +27,13 @@ export {
 export { setQuiet, isQuiet } from './src/lib/cli-log.ts';
 
 export {
+  AiCreditsNotAllowedError,
+  OAUTH_REFUSALS,
+} from './src/lib/oauth-refusals.ts';
+
+export { OAuthConnectionEndedError } from './src/lib/oauth-login.ts';
+
+export {
   runRealmQunit,
   runTestsForRealm,
   type RunRealmQunitOptions,

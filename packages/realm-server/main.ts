@@ -4,6 +4,7 @@ import './lib/wtfnode-on-signal.ts';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
 import {
   readAuthorizationLimit,
+  readDeviceCodeLimit,
   readTokenLimit,
   readNewClientLimit,
   readOAuthProviderConfig,
@@ -78,6 +79,7 @@ import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
 import { publishedMountOf } from './lib/published-realm.ts';
 import { createPolicyWriteAuditor } from './lib/policy-share-audit.ts';
 import { setKeyLimitNoticeSender } from './lib/key-limits.ts';
+import { setKeyApprovalNoticeSender } from './lib/automation-key-approval-notices.ts';
 import { createSendEvent } from '@cardstack/runtime-common/send-event';
 import { realmPolicyPointer } from './lib/realm-policy-pointer.ts';
 import { probeIntervalFromEnv } from './lib/key-grant-rejection.ts';
@@ -513,6 +515,9 @@ const oauthAuthorizationLimit = oauthProvider
   ? readAuthorizationLimit(process.env)
   : undefined;
 const oauthTokenLimit = oauthProvider ? readTokenLimit(process.env) : undefined;
+const oauthDeviceCodeLimit = oauthProvider
+  ? readDeviceCodeLimit(process.env)
+  : undefined;
 
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
@@ -887,6 +892,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // they have open shows that one is waiting.
   let sendKeyNoticeEvent = createSendEvent({ matrixClient, dbAdapter });
   setKeyLimitNoticeSender(sendKeyNoticeEvent);
+  setKeyApprovalNoticeSender(sendKeyNoticeEvent);
 
   // One for every realm this process serves: a policy card in one realm can
   // govern another, so the audit of a write looks across all of them.
@@ -1074,6 +1080,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           oauthUnconnectedClientCap,
           oauthAuthorizationLimit,
           oauthTokenLimit,
+          oauthDeviceCodeLimit,
         }
       : {}),
   });

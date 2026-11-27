@@ -28,6 +28,9 @@ import { Switch } from './components/switch';
 import { TokenInput } from './components/token-input';
 import type { ScaleStops } from './internal/design-tools';
 
+const SOURCE =
+  '<PanelSection @title="Subject"><PanelSection @title="Person" @depth={{1}}>…';
+
 // ── Real scales, palettes and vocabularies ───────────────────────────────
 // Full and common half stops, as printed on a lens barrel. The gaps are
 // deliberately non-uniform — that is the whole reason @steps exists.
@@ -237,7 +240,7 @@ class InspectorDemo extends Component {
     <FreestyleUsage
       @name='Inspector (composed)'
       @description="The territory doing the job it was ported for, checked against a real property panel rather than a placeholder. Panel supplies the @variant='inspector' shell (flush body so section hairlines run edge to edge, pinned header/footer, its own container context); PanelSection groups and now nests via @depth; PropertyRow carries label, hint, mixed, modified and reset; and the control slot takes whatever the property needs — a stepped f-stop ScrubInput, a Select, a named ColorPalette, a Switch, a TokenInput. Fifteen row shapes, four structural components, no bespoke row type. Every row is keyboard-complete: Tab reaches each control, arrows step (whole stops on a scale), Shift/Alt change the rate, Home/End jump to the ends."
-      @source='<PanelSection @title="Subject"><PanelSection @title="Person" @depth={{1}}>…'
+      @source={{SOURCE}}
     >
       <:example>
         <div class='pretui-inspector-demo'>

@@ -8,6 +8,9 @@ import { PropertySheet } from './property-sheet';
 import type { ValueOf, ValueSpec } from './value-input';
 import { BLEND_OPTIONS } from '../demo-design-value';
 
+const SOURCE =
+  '<PropertySheet @specs={{this.specs}} @values={{this.values}} @onChange={{this.change}} />';
+
 const SHEET_SPECS: ValueSpec[] = [
   { key: 'name', kind: 'text', label: 'Name', placeholder: 'Untitled' },
   { key: 'visible', kind: 'toggle', label: 'Visible' },
@@ -70,7 +73,7 @@ class PropertySheetUsage extends Component {
     <FreestyleUsage
       @name='PropertySheet'
       @description='A property panel rendered from data. The point is not brevity — it is that a panel defined as ValueSpec[] can come from a card schema, a plugin manifest, or a diffing multi-selection, and still get every affordance the hand-written rows have: labels wired to controls, hints wired to aria-describedby, mixed state as text, a reset where a value differs from its default, and the container-query fold.'
-      @source='<PropertySheet @specs={{this.specs}} @values={{this.values}} @onChange={{this.change}} />'
+      @source={{SOURCE}}
     >
       <:example>
         <div class='pretui-sheet-demo'>

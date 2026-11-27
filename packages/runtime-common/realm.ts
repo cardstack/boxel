@@ -229,6 +229,7 @@ import { automationTouchedBy } from './automation-index-hook.ts';
 import {
   automationsInRealm,
   followKeyApprovals,
+  type AutomationReporters,
   type KeyApprovalFollow,
 } from './automations.ts';
 import {
@@ -260,6 +261,7 @@ import {
   automationVersion,
   type AutomationKeyApprovals,
   type AutomationVersion,
+  type AwaitedKeyApproval,
 } from './automation-key-approval.ts';
 import {
   endsRunOnCredential,
@@ -10038,9 +10040,18 @@ export class Realm {
       // new content up on their next load rather than reset their loader
       // mid-session (see `fromScratchAnnounces`).
       let realmEvents = isNewIndex;
-      let promise = this.#realmIndexUpdater.fullIndex(priority, {
-        realmEvents,
-      });
+      // Renders during the pass can read and cache answers from a realm with
+      // no index yet, such as the route tree before realm.json is indexed,
+      // so the pass ends by dropping this realm's index caches, as
+      // `fullIndex()` does. Only the local caches: the index job already
+      // sends realm_index_updated to every replica when it swaps the index,
+      // but that notification reaches no one where the database adapter has
+      // no notify (the browser's SQLite realm), and this process must not
+      // depend on it to stop serving what it cached during the pass.
+      // `fullIndex` here never rejects: it logs a failed pass.
+      let promise = this.#realmIndexUpdater
+        .fullIndex(priority, { realmEvents })
+        .then(() => this.clearRealmIndexCaches());
       if (isNewIndex) {
         // we only await the full indexing at boot if this is a brand new
         // index, so this event follows the pass
@@ -15622,6 +15633,18 @@ export class Realm {
     }
     for (let automationId of automationIds) {
       try {
+        // Whom the approvals wait on, as the check answered it; undefined
+        // when the automation wasn't checked.
+        let awaiting: AwaitedKeyApproval[] | undefined;
+        // Whom the notices it wrote are to be told, once it commits.
+        let noticed: string[] = [];
+        let reporters: AutomationReporters = reportChanges
+          ? {
+              reportRunChange: (runId) => this.reportRunChange(runId),
+              reportAutomationChange: (automation) =>
+                this.reportAutomationChange(automation),
+            }
+          : {};
         let result = await followKeyApprovals(
           this.#dbAdapter,
           automationId,
@@ -15640,21 +15663,31 @@ export class Realm {
               declaration: read.declaration,
               payer: automation.payer,
             });
+            awaiting = approvals?.awaiting ?? (approvals ? [] : undefined);
             return approvals
               ? { approved: approvals.approved, declaration: read.declaration }
               : undefined;
           },
-          reportChanges
-            ? {
-                reportRunChange: (runId) => this.reportRunChange(runId),
-                reportAutomationChange: (automation) =>
-                  this.reportAutomationChange(automation),
-              }
-            : {},
+          {
+            ...reporters,
+            inTransaction: async (txQuery, done) => {
+              noticed =
+                (await this.#callApi?.writeKeyApprovalNoticesIn?.(txQuery, {
+                  automationId,
+                  automationURL: this.#virtualNetwork.toURLHref(automationId),
+                  realmURL: this.url,
+                  state: done?.automation.state,
+                  awaiting,
+                })) ?? [];
+            },
+          },
         );
         if (result) {
           followed.set(automationId, result);
         }
+        // The people the automation waits on, besides its payer, each have a
+        // notice while it waits, written in the follow's own transaction.
+        this.#callApi?.tellKeyApprovalNoticesChanged?.(noticed);
       } catch (e: any) {
         this.#log.warn(
           `couldn't follow the key approvals of automation ${automationId}: ${e?.message ?? e}`,
@@ -22319,6 +22352,7 @@ export class Realm {
       viewer: await this.#statusViewer(requestContext),
       listInstances: (typeKey) =>
         this.#realmIndexQueryEngine.instanceSourcesOfType(typeKey),
+      credentialNotices: this.#callApi?.automationCredentialNotices,
     });
     return createResponse({
       body: JSON.stringify(answer.document),
@@ -22389,8 +22423,13 @@ export class Realm {
     // Loaded on first use: only a realm server answers it with a row, and
     // the schedule code it reads stays out of every bundle that imports the
     // realm.
-    let { answerAutomationStatus, automationRef, AUTOMATION_STATUS_PARAM } =
-      await import('./automation-status.ts');
+    let {
+      answerAutomationStatus,
+      automationRef,
+      AUTOMATION_STATUS_PARAM,
+      AUTOMATION_STATUS_KEY_APPROVALS_PARAM,
+    } = await import('./automation-status.ts');
+    let searchParams = new URL(request.url).searchParams;
     let answer = await answerAutomationStatus({
       dbAdapter: this.#dbAdapter,
       realmURL: new URL(this.url),
@@ -22402,10 +22441,18 @@ export class Realm {
         this.#virtualNetwork,
       ),
       viewer: await this.#statusViewer(requestContext),
-      automation: new URL(request.url).searchParams.get(
-        AUTOMATION_STATUS_PARAM,
-      ),
+      automation: searchParams.get(AUTOMATION_STATUS_PARAM),
       readInstance: (url) => this.#realmIndexQueryEngine.instanceSource(url),
+      ...(searchParams.get(AUTOMATION_STATUS_KEY_APPROVALS_PARAM) === 'true'
+        ? {
+            checkKeyApprovals: (args: {
+              automationId: string;
+              declaration: AutomationDeclaration;
+              payer: string;
+            }) => this.checkAutomationKeyApprovals(args),
+          }
+        : {}),
+      credentialNotices: this.#callApi?.automationCredentialNotices,
     });
     if (answer.status !== 200) {
       return createResponse({

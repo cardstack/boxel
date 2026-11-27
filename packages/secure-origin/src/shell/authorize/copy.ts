@@ -17,3 +17,10 @@ export function renewalLine(renewing: boolean): string | undefined {
     ? undefined
     : 'The connection ends 60 minutes after you allow it. You’ll need to connect again after that.';
 }
+
+// Where consent tells the user they can end the connection later. Every
+// connection is listed on the Connected apps page however long it lasts, so
+// consent says it whether or not the connection is kept for 30 days. It is
+// text only: a link would take the browser away from the flow.
+export const CONNECTED_APPS_LINE =
+  'You can disconnect it any time in Connected apps.';

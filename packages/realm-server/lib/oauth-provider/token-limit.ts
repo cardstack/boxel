@@ -41,6 +41,11 @@
 // that, so a grant whose limit is kept spent can't put off the reuse that
 // ends it. Either does so only from the client it was issued to, and a code
 // only with its verifier and its redirect URI, as in the library.
+//
+// An admitted exchange of a code issued to a pre-registered app on the user's
+// computer also compares the caller's network with the one whose browser
+// finished the flow (`network-binding.ts`), for the library's `token issued`
+// line to report. Nothing is refused by it.
 
 import { createHash, timingSafeEqual } from 'crypto';
 import { parse as parseQuery } from 'node:querystring';
@@ -65,7 +70,18 @@ import {
 } from './caller-limit.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { endGrant } from './grants.ts';
-import { sha256Hex } from './objects.ts';
+import {
+  callerNetwork,
+  compareNetworks,
+  noteNetworkMatch,
+  type NetworkMatch,
+} from './network-binding.ts';
+import { deviceCodeForPoll, findFinishNetwork, sha256Hex } from './objects.ts';
+import {
+  DEVICE_CODE_GRANT_TYPE,
+  PRE_REGISTERED_CLIENTS,
+  type PreRegisteredClients,
+} from './pre-registered-clients.ts';
 import { presentedRefreshToken } from './tokens.ts';
 
 const log = logger('boxel:oauth-provider');
@@ -75,6 +91,12 @@ export const OAUTH_TOKEN_RATE_LIMIT_VAR = 'BOXEL_OAUTH_TOKEN_RATE_LIMIT';
 // The largest token request read: a code or refresh token and a few short
 // parameters fit many times over.
 export const MAX_BODY_BYTES = 8 * 1024;
+
+// How often an app may poll for a device code's outcome (RFC 8628 §3.5): one
+// poll each `DEVICE_CODE_POLL_INTERVAL_SECONDS` (`provider.ts`), with one more
+// held in reserve so a poll that arrives a little early isn't refused. A poll
+// past that is answered `slow_down`, and the app waits longer.
+const DEVICE_CODE_POLLS = Object.freeze({ requests: 2, windowSeconds: 10 });
 
 export interface TokenLimit {
   perGrant: AnonymousRateLimit;
@@ -165,14 +187,17 @@ export function tokenHandler({
   rateLimitStore,
   limit,
   alert = failureAlert(limit),
+  preRegistered = PRE_REGISTERED_CLIENTS,
 }: {
   provider: Provider;
   dbAdapter: DBAdapter;
   rateLimitStore: RateLimitStore;
   limit: TokenLimit;
   alert?: CallerLimitAlert;
+  preRegistered?: PreRegisteredClients;
 }): Koa.Middleware {
   let perGrant = tokenBucket(limit.perGrant);
+  let devicePolls = tokenBucket(DEVICE_CODE_POLLS);
 
   return async function handleToken(ctxt, next) {
     let charge = (answer: Answer) =>
@@ -195,7 +220,32 @@ export function tokenHandler({
     };
 
     let exchange = await grantOfExchange(dbAdapter, form);
-    if (exchange) {
+    if (exchange && 'pendingDeviceCode' in exchange) {
+      // A poll for a device code nobody has decided yet. It names a code
+      // the provider issued to this client, so it counts against that code,
+      // never as a failure: an app polls every few seconds for up to ten
+      // minutes, from one address.
+      let taken = await rateLimitStore.take(
+        counterKey('oauth-token-device-code', exchange.pendingDeviceCode),
+        devicePolls,
+      );
+      if (!taken.admitted) {
+        if (isRateLimitUnavailable(taken)) {
+          return refuse(
+            answer,
+            ctxt,
+            { reason: 'unavailable' },
+            'grant',
+            'token',
+          );
+        }
+        log.info(`token refused: slow_down, client ${param('client_id')}`);
+        return answer(400, {
+          error: 'slow_down',
+          error_description: 'poll for the device code less often',
+        });
+      }
+    } else if (exchange) {
       let taken = await rateLimitStore.take(
         counterKey('oauth-token-grant', exchange.grantId),
         perGrant,
@@ -218,6 +268,16 @@ export function tokenHandler({
             : { reason: 'limited', retryAfterSeconds: taken.retryAfterSeconds },
           'grant',
           'token',
+        );
+      }
+      if (
+        exchange.what === 'code' &&
+        !exchange.reused &&
+        preRegistered.get(param('client_id')!)?.place === 'this-computer'
+      ) {
+        noteNetworkMatch(
+          ctxt.req,
+          await exchangeNetworkMatch(dbAdapter, exchange.grantId, ctxt),
         );
       }
     } else if (!(await charge(answer))) {
@@ -266,11 +326,20 @@ export async function allowClientOrigin(
 // `redirect_uri` still names its grant, since the library fills in the
 // client's one registered redirect URI, when it has only one, and Boxel
 // doesn't look up the client.
+//
+// A device code poll names the code's grant once the user allowed it. Before
+// that, it names the code itself, as `pendingDeviceCode` (its hash), which
+// the poll counts against instead.
 async function grantOfExchange(
   dbAdapter: DBAdapter,
   { param, named }: Form,
 ): Promise<
-  | { grantId: string; reused: boolean; what: 'code' | 'refresh token' }
+  | {
+      grantId: string;
+      reused: boolean;
+      what: 'code' | 'refresh token' | 'device code';
+    }
+  | { pendingDeviceCode: string }
   | undefined
 > {
   let clientId = param('client_id');
@@ -308,6 +377,19 @@ async function grantOfExchange(
       ? { grantId: row.grant_id, reused: row.reused, what: 'code' }
       : undefined;
   }
+  if (grantType === DEVICE_CODE_GRANT_TYPE) {
+    let code = param('device_code');
+    if (!code) {
+      return undefined;
+    }
+    let found = await deviceCodeForPoll(dbAdapter, code);
+    if (!found || found.clientId !== clientId) {
+      return undefined;
+    }
+    return found.grantId
+      ? { grantId: found.grantId, reused: found.consumed, what: 'device code' }
+      : { pendingDeviceCode: found.key };
+  }
   if (grantType === 'refresh_token') {
     let token = param('refresh_token');
     if (!token) {
@@ -323,6 +405,31 @@ async function grantOfExchange(
       : undefined;
   }
   return undefined;
+}
+
+// How the network of a code exchange compares with the network whose browser
+// finished the flow. Only the exchange's log line reads the outcome, so a
+// failure to read the record is logged and the exchange goes on, as
+// `unknown`.
+async function exchangeNetworkMatch(
+  dbAdapter: DBAdapter,
+  grantId: string,
+  ctxt: Koa.Context,
+): Promise<NetworkMatch> {
+  let finished;
+  try {
+    finished = await findFinishNetwork(dbAdapter, grantId);
+  } catch (error) {
+    log.error(
+      `failed to read a flow's network: ${
+        error instanceof Error ? error.message : 'unknown error'
+      }`,
+    );
+  }
+  return compareNetworks(
+    finished,
+    callerNetwork(ctxt.req.headers[CLIENT_IP_HEADER]),
+  );
 }
 
 // The library's PKCE check (`helpers/pkce.js`), as a test rather than a
@@ -431,6 +538,8 @@ export interface Form {
   param: FormParam;
   // Whether the body names a parameter at all, with any value.
   named: (name: string) => boolean;
+  // Every parameter the body names.
+  names: () => string[];
 }
 
 // Reads a request's form-encoded body with `node:querystring`, as the library
@@ -455,14 +564,19 @@ export async function readForm({
   ctxt: Koa.Context;
   provider: Provider;
   charge: (answer: Answer) => Promise<boolean>;
-  endpoint: 'token' | 'revocation';
+  endpoint: 'token' | 'revocation' | 'device authorization';
 }): Promise<Form | undefined> {
   if (
     !provider
       .createContext(ctxt.req, ctxt.res)
       .is('application/x-www-form-urlencoded')
   ) {
-    return { body: undefined, param: () => undefined, named: () => false };
+    return {
+      body: undefined,
+      param: () => undefined,
+      named: () => false,
+      names: () => [],
+    };
   }
   let body: string;
   try {
@@ -485,6 +599,7 @@ export async function readForm({
       return typeof value === 'string' && value !== '' ? value : undefined;
     },
     named: (name) => Object.hasOwn(params, name),
+    names: () => Object.keys(params),
   };
 }
 

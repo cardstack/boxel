@@ -2,9 +2,15 @@ import type RealmServerService from '../services/realm-server';
 
 // The notices the realm server keeps for the user about their keys: policy
 // notices, for a workspace's policy that opened one of their shares to people
-// who aren't signed in, and limit notices, for a share's or key's use reaching
-// its high-water mark or budget.
-const NOTICE_LISTINGS = ['_key-policy-notices', '_key-limit-notices'];
+// who aren't signed in; limit notices, for a share's or key's use reaching
+// its high-water mark or budget; and key approval notices, for an automation
+// that waits for the user to approve its use of their key, or to share a key
+// into a workspace they administer.
+const NOTICE_LISTINGS = [
+  '_key-policy-notices',
+  '_key-limit-notices',
+  '_key-approval-notices',
+];
 
 // How many of those notices the user hasn't seen yet. The notices are shown,
 // and marked read, on the secure origin's key page. The app reads only the

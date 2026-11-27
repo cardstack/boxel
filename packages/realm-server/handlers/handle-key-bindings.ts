@@ -41,6 +41,7 @@ import {
   automationsWaitingForKeyApproval,
   followAutomationKeyApprovals,
   followEndedKeyApprovals,
+  reportKeyApprovalChanges,
 } from '../lib/automation-key-approvals.ts';
 import { getAutomation } from '@cardstack/runtime-common/automations';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
@@ -271,10 +272,24 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
       realmServerAutomationChangeReporter(args),
       affected,
     );
-    await followAutomationKeyApprovals(
+    let followed = await followAutomationKeyApprovals(
       args,
       realmURL,
       await automationsWaitingForKeyApproval(args.dbAdapter, realmURL, args),
+    );
+    // A confirmation changes the key approvals the realm's automations show
+    // whether or not an automation's state moved (one approval of several
+    // landing, a binding approved again after a change), so the realm's
+    // direct writers are told of each automation not reported above.
+    await reportKeyApprovalChanges(
+      args,
+      [realmURL.href],
+      new Set([
+        ...affected.map((a) => a.automationId),
+        ...[...followed]
+          .filter(([, { kind }]) => kind !== 'unchanged')
+          .map(([id]) => id),
+      ]),
     );
     await sendJSON(ctxt, 201, {
       data: approved.map((a) => serializeApproved(args.virtualNetwork, a)),

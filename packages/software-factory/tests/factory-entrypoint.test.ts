@@ -288,6 +288,65 @@ module('factory-entrypoint', function (hooks) {
     });
   });
 
+  test('runFactoryEntrypoint rejects the OpenRouter passthrough on an OAuth profile that may not spend AI credits, before any side effects', async function (assert) {
+    cleanupProfile = installTestProfile({
+      username: 'testuser',
+      matrixUrl: 'https://matrix.example.test/',
+      realmServerUrl: 'https://realms.example.test/',
+      password: 'unused',
+      oauth: { scope: 'boxel:read boxel:write' },
+    });
+    let ownKey = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+    let bootstrapCalled = false;
+    let createSeedCalled = false;
+    let fetched = false;
+
+    try {
+      await assert.rejects(
+        runFactoryEntrypoint(
+          {
+            briefUrl,
+            targetRealm,
+            realmServerUrl: null,
+            agent: 'openrouter',
+          },
+          {
+            bootstrapTargetRealm: async () => {
+              bootstrapCalled = true;
+              return bootstrappedTargetRealm;
+            },
+            createSeed: async () => {
+              createSeedCalled = true;
+              return mockSeedResult;
+            },
+            runIssueLoop: async () => ({
+              outcome: 'all_issues_done' as const,
+              outerCycles: 0,
+              issueResults: [],
+            }),
+            fetch: async () => {
+              fetched = true;
+              return new Response('{}', {
+                status: 200,
+                headers: { 'content-type': SupportedMimeType.JSON },
+              });
+            },
+          },
+        ),
+        /boxel profile add --oauth --allow-ai-credits/,
+      );
+    } finally {
+      if (ownKey !== undefined) {
+        process.env.OPENROUTER_API_KEY = ownKey;
+      }
+    }
+
+    assert.false(fetched, 'the brief is never fetched');
+    assert.false(bootstrapCalled, 'the target realm is never bootstrapped');
+    assert.false(createSeedCalled, 'no seed issue is created');
+  });
+
   test('runFactoryEntrypoint rejects --agent codex before any side effects', async function (assert) {
     useTestProfile();
     let createSeedCalled = false;

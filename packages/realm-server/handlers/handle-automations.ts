@@ -22,6 +22,7 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  automationsInRealm,
   cancelAutomationRunFor,
   getAutomation,
   pauseAutomation,
@@ -51,6 +52,8 @@ import {
   type RunLogLevel,
 } from '@cardstack/runtime-common/automation-run-log';
 import { admitPayer } from '@cardstack/runtime-common/automation-admission';
+import { automationNotices } from '@cardstack/runtime-common/automation-notices';
+import { automationCredentialNotices } from '../lib/automation-credential-notices.ts';
 import { startResumedAIBatchFollowUps } from '@cardstack/runtime-common/ai-batch-follow-ups';
 import {
   confirmationOf,
@@ -60,6 +63,7 @@ import {
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   AUTOMATION_ESTIMATE_RESOURCE_TYPE,
+  AUTOMATION_NOTICE_RESOURCE_TYPE,
   AUTOMATION_RESOURCE_TYPE,
   AUTOMATION_ROUTE_AUTOMATION_PARAM,
   AUTOMATION_ROUTE_PATH_PARAM,
@@ -91,6 +95,11 @@ import { buildAdmitPayerSpending } from '../lib/automation-spending.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
 import { namedToViewer } from '../lib/named-users.ts';
 import { followAutomationKeyApprovals } from '../lib/automation-key-approvals.ts';
+import {
+  followKeyApprovalNotices,
+  keyApprovalNoticeRecipients,
+  tellKeyApprovalNoticesChanged,
+} from '../lib/automation-key-approval-notices.ts';
 import { exactMeteredCredits } from '../lib/metered-charge.ts';
 import { currentPricing } from '../lib/pricing.ts';
 import {
@@ -622,6 +631,65 @@ async function estimateFor(
   });
 }
 
+// How many realms `GET /_automation-notices` reads at once.
+const NOTICE_REALMS_AT_ONCE = 4;
+
+// `GET /_automation-notices`: the session's own user's automation notices
+// across every realm they write directly, which the app's badges count (see
+// `automation-notices.ts`). The realms come from the user's own permission
+// rows, each checked as every other automation route checks it, so a
+// wildcard row, a policy grant or a bot account never lists one.
+export function handleAutomationNotices(args: CreateRoutesArgs): Handler {
+  return automationHandler(async (ctxt) => {
+    let caller = callerOf(ctxt);
+    let realmURLs = (
+      (await query(args.dbAdapter, [
+        'SELECT realm_url FROM realm_user_permissions WHERE username =',
+        param(caller),
+        'AND write ORDER BY realm_url',
+      ])) as { realm_url: string }[]
+    ).map(({ realm_url }) => realm_url);
+    // Realms are read a few at a time, so a person who writes many realms
+    // directly holds a few of the database's connections, not one per realm.
+    let noticesIn = async (realmURL: string) => {
+      if (
+        !(await isDirectWriter(
+          args.dbAdapter,
+          new URL(realmURL),
+          caller,
+          args.matrixClient.serverName,
+        ))
+      ) {
+        return [];
+      }
+      let rows = await automationsInRealm(
+        args.dbAdapter,
+        ri(args.virtualNetwork.unresolveURL(realmURL)),
+      );
+      let notices = await automationNotices(args.dbAdapter, rows, {
+        viewer: caller,
+        credentialNotices: (run) =>
+          automationCredentialNotices(args.dbAdapter, run),
+      });
+      return [...notices]
+        .filter(([, notice]) => notice.forViewer)
+        .map(([automationId, notice]) => ({
+          type: AUTOMATION_NOTICE_RESOURCE_TYPE,
+          id: args.virtualNetwork.toURLHref(automationId),
+          attributes: { realm: realmURL, ...notice },
+        }));
+    };
+    let data: Awaited<ReturnType<typeof noticesIn>> = [];
+    for (let i = 0; i < realmURLs.length; i += NOTICE_REALMS_AT_ONCE) {
+      let batch = await Promise.all(
+        realmURLs.slice(i, i + NOTICE_REALMS_AT_ONCE).map(noticesIn),
+      );
+      data.push(...batch.flat());
+    }
+    await sendJSON(ctxt, 200, { data, meta: { total: data.length } });
+  });
+}
+
 // `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>`: what
 // switching the automation on is likely to cost a month, the monthly credit
 // cap the card sets, which a switch-on agrees to, and its key approvals
@@ -849,6 +917,16 @@ export function handleAutomationPause(args: CreateRoutesArgs): Handler {
       { automationId, user: caller },
       actorOptions(args),
     );
+    if (change.ok) {
+      // A paused automation waits on nobody, so its key approval notices
+      // end; a resume checks its approvals again.
+      await followKeyApprovalNotices(args.dbAdapter, {
+        automationId,
+        automationURL: args.virtualNetwork.toURLHref(automationId),
+        realmURL: args.virtualNetwork.toURLHref(change.automation.realm),
+        awaiting: undefined,
+      });
+    }
     await answerChange(ctxt, args, change, caller);
   });
 }
@@ -929,6 +1007,16 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
       },
       actorOptions(args),
     );
+    if (change.ok && change.automation.state === 'waiting-for-key-approval') {
+      // As at switch-on: the resumed row is checked once more, which also
+      // records the notices of the people its approvals wait on.
+      let followed = (
+        await followAutomationKeyApprovals(args, realmURL, [automationId])
+      ).get(automationId);
+      if (followed) {
+        change = { ok: true, automation: followed.automation };
+      }
+    }
     if (change.ok) {
       await startHeldFollowUps(args, automationId);
     }
@@ -985,11 +1073,19 @@ async function startHeldFollowUps(
 export function handleAutomationRemove(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let { caller, automationId } = await automationRequest(ctxt, args);
+    let noticed = await keyApprovalNoticeRecipients(
+      args.dbAdapter,
+      automationId,
+    );
     let change = await removeAutomation(
       args.dbAdapter,
       { automationId, user: caller },
       actorOptions(args),
     );
+    if (change.ok) {
+      // Removing the row ended its key approval notices.
+      tellKeyApprovalNoticesChanged(noticed);
+    }
     await answerChange(ctxt, args, change, caller);
   });
 }

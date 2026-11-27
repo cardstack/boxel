@@ -188,6 +188,10 @@ type Answer = { status: number; attributes?: Record<string, unknown> };
 module('Acceptance | automation view', function (hooks) {
   let answer: Answer;
   let asked: string[];
+  let askedKeyApprovals: boolean[];
+  // While set, a status read that asks for key approvals waits on it, as a
+  // slow key check does.
+  let holdKeyedReads: Promise<void> | undefined;
   let realm: Realm;
 
   setupApplicationTest(hooks);
@@ -234,6 +238,8 @@ module('Acceptance | automation view', function (hooks) {
     // route answers; by default, that the viewer isn't a direct writer.
     answer = { status: 200 };
     asked = [];
+    askedKeyApprovals = [];
+    holdKeyedReads = undefined;
     getService('network').virtualNetwork.mount(
       async (request: Request) => {
         let url = new URL(request.url);
@@ -241,6 +247,11 @@ module('Acceptance | automation view', function (hooks) {
           return null;
         }
         asked.push(url.searchParams.get('automation') ?? '');
+        let keyed = url.searchParams.get('keyApprovals') === 'true';
+        askedKeyApprovals.push(keyed);
+        if (keyed && holdKeyedReads) {
+          await holdKeyedReads;
+        }
         if (answer.status !== 200) {
           return new Response(JSON.stringify({ errors: [] }), {
             status: answer.status,
@@ -254,7 +265,10 @@ module('Acceptance | automation view', function (hooks) {
                   data: {
                     type: 'automation-status',
                     id: AUTOMATION,
-                    attributes: answer.attributes,
+                    // The route checks key approvals only when asked.
+                    attributes: keyed
+                      ? answer.attributes
+                      : { ...answer.attributes, keyApprovals: undefined },
                   },
                   meta: { directWriter: true },
                 }
@@ -1157,7 +1171,7 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'paused', pauseReason: 'payer-lost-access' },
         'Paused',
-        'The payer is no longer a realm administrator, so Boxel paused the automation. Boxel runs nothing until a realm administrator resumes the automation and becomes the new payer.',
+        'The payer’s account can no longer pay for runs, so Boxel paused the automation. Boxel runs nothing until a realm administrator resumes the automation and becomes the new payer.',
       ],
       [
         {
@@ -1189,7 +1203,7 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'waiting-for-credits', pauseReason: null },
         'Waiting for credits',
-        'The payer has no credits left, so Boxel holds every run. Boxel runs the automation again once the payer adds credits.',
+        'The payer has no credits left, so Boxel has paused every run. Boxel runs the automation again once the payer adds credits.',
       ],
       [
         {
@@ -1476,6 +1490,12 @@ module('Acceptance | automation view', function (hooks) {
       timeout: 10000,
     });
     assert.dom('[data-test-automation-fitted-next]').doesNotExist();
+    assert
+      .dom('[data-test-automation-fitted-paused]')
+      .hasText(
+        'Paused by a realm administrator',
+        'the fitted view says why Boxel paused the automation',
+      );
   });
 
   test('a direct writer gets a way into the Automations console from the isolated, embedded and fitted views', async function (assert) {
@@ -2328,6 +2348,157 @@ module('Acceptance | automation view', function (hooks) {
           },
           { prepend: true },
         );
+      });
+
+      module('notices', function () {
+        function notice(attributes: Record<string, unknown>) {
+          return {
+            audience: 'payer',
+            forViewer: true,
+            run: null,
+            operation: null,
+            credential: null,
+            ...attributes,
+          };
+        }
+
+        test('a notice about a run says what happened and what fixes it, and Show the run opens the run', async function (assert) {
+          list([
+            run('older'),
+            run('failed', {
+              state: 'error',
+              errorReason: 'script-error',
+              errorMessage: 'Cannot read the import file',
+            }),
+          ]);
+          answer = {
+            status: 200,
+            attributes: {
+              ...ACTIVE,
+              state: 'paused',
+              pauseReason: 'repeated-failures',
+              notice: notice({
+                reason: 'repeated-failures',
+                run: {
+                  runId: 'failed',
+                  reason: 'script-error',
+                  message: 'Cannot read the import file',
+                  finishedAt: '2030-01-01T08:31:00.000Z',
+                },
+              }),
+            },
+          };
+          await openIsolated();
+          await waitFor('[data-test-automation-notice="repeated-failures"]', {
+            timeout: 10000,
+          });
+          assert
+            .dom('[data-test-automation-notice]')
+            .containsText(
+              'Boxel paused Nightly import after the automation’s runs failed several times in a row.',
+            );
+          assert
+            .dom('[data-test-automation-notice-fix]')
+            .hasText(
+              'The payer should fix what the runs fail on, check the fix with a Preview, and then resume the automation.',
+            );
+          assert
+            .dom('[data-test-automation-notice-error]')
+            .hasText('Cannot read the import file');
+          assert
+            .dom('[data-test-automation-notice-action]')
+            .doesNotExist('a fix on the card itself opens no secure window');
+          assert
+            .dom(
+              '[data-test-automation-runs-section] [data-test-pretui-section-toggle]',
+            )
+            .hasAttribute('aria-expanded', 'false', 'Runs is closed');
+
+          await click('[data-test-automation-notice-show-run="failed"]');
+          await waitFor('[data-test-automation-run-detail]', {
+            timeout: 10000,
+          });
+          assert
+            .dom('[data-test-automation-run="failed"]')
+            .exists('the Runs section opens on the run');
+          let opened = document
+            .querySelector('[data-test-automation-run-detail]')
+            ?.closest('li');
+          assert.ok(
+            opened?.querySelector('[data-test-automation-run="failed"]'),
+            'the run the notice is about is the run opened',
+          );
+        });
+
+        test('a key approval notice opens the secure window’s approve page on the automation itself', async function (assert) {
+          let windowOpen = stubWindowOpen(windowMock);
+          answer = {
+            status: 200,
+            attributes: {
+              ...ACTIVE,
+              state: 'waiting-for-key-approval',
+              notice: notice({
+                reason: 'binding-needs-reapproval',
+                run: {
+                  runId: 'refused',
+                  reason: 'binding-needs-reapproval',
+                  message: 'The declared operation "fetch" was refused',
+                  finishedAt: '2030-01-01T08:31:00.000Z',
+                },
+                operation: {
+                  name: 'fetch',
+                  module: `${testRealmURL}weather`,
+                  typeName: 'Weather',
+                },
+              }),
+            },
+          };
+          await openIsolated();
+          await waitFor('[data-test-automation-notice-action="approve"]', {
+            timeout: 10000,
+          });
+          assert
+            .dom('[data-test-automation-notice]')
+            .containsText(
+              'Boxel didn’t start a run of Nightly import because the operation “fetch” now sends a different request than the one the payer approved.',
+            );
+          await click('[data-test-automation-notice-action="approve"]');
+          assert.strictEqual(
+            windowOpen.calls.length,
+            1,
+            'the secure window opens',
+          );
+          let opened = new URL(windowOpen.calls[0].url);
+          assert.true(
+            opened.pathname.endsWith('/approve'),
+            'on the approve page',
+          );
+          let fragment = new URLSearchParams(opened.hash.slice(1));
+          assert.strictEqual(
+            fragment.get('automation'),
+            AUTOMATION,
+            'for the automation itself, which approving ends the wait',
+          );
+          assert.strictEqual(fragment.get('operation'), null);
+        });
+
+        test('a notice for someone else shows no notice', async function (assert) {
+          answer = {
+            status: 200,
+            attributes: {
+              ...ACTIVE,
+              state: 'waiting-for-credits',
+              viewerIsPayer: false,
+              notice: notice({
+                reason: 'waiting-for-credits',
+                forViewer: false,
+              }),
+            },
+          };
+          await openIsolated();
+          await waitForStatus();
+          assert.dom('[data-test-automation-notice]').doesNotExist();
+        });
       });
 
       function line(
@@ -3535,6 +3706,468 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('dialog[open] [data-test-automation-switch-on-screen]')
         .exists('the screen stays open');
+    });
+  });
+  module('key approvals', function (hooks) {
+    let opened: string[];
+
+    hooks.beforeEach(function () {
+      opened = [];
+      let secureWindow = getService('secure-window');
+      secureWindow.open = (url: string) => {
+        opened.push(url);
+        return 'opened';
+      };
+    });
+
+    const INBOX_MODULE = `${testRealmURL}inbox`;
+    const ME = '@testuser:localhost';
+    const COLLEAGUE = '@colleague:localhost';
+
+    function operationWith(operation: string, slots: object[]) {
+      return {
+        operation,
+        targetType: { module: INBOX_MODULE, name: 'Inbox' },
+        state: 'missing',
+        slots,
+      };
+    }
+
+    function withApprovals(
+      operations: object[],
+      { approved = false, state = 'waiting-for-key-approval' } = {},
+    ) {
+      return {
+        ...ACTIVE,
+        state,
+        nextRun: null,
+        keyApprovals: { approved, operations },
+      };
+    }
+
+    // The fragment of the secure window URL the view opened, as a record,
+    // leaving out the one line of reason the window shows, which every
+    // opening carries.
+    function openedFor(url: string) {
+      let { reason, ...fragment } = Object.fromEntries(
+        new URLSearchParams(new URL(url).hash.slice(1)),
+      );
+      return reason ? fragment : { ...fragment, reason: 'missing' };
+    }
+
+    function slotText(slot: string) {
+      return text(`[data-test-automation-key-approval-slot="${slot}"]`);
+    }
+
+    test('the isolated view asks for key approvals, and the fitted view does not', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      await openIsolated();
+      await waitForStatus();
+      assert.true(
+        askedKeyApprovals.every(Boolean),
+        'every status read of the isolated view asks for key approvals',
+      );
+      await openFormat('fitted');
+      await settled();
+      // Code mode renders the isolated view before the fitted format is
+      // picked, so only the fitted view's own reads count from here: an
+      // `automation` event makes it read again.
+      askedKeyApprovals = [];
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(testRealmURL, ME),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'automation',
+          automation: AUTOMATION,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+      await waitUntil(() => askedKeyApprovals.length > 0, { timeout: 10000 });
+      assert.false(
+        askedKeyApprovals.some(Boolean),
+        'the fitted view, which lists in the console, checks no approvals',
+      );
+    });
+
+    test('all approved: each key names its owner and when the owner approved the automation', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: withApprovals(
+          [
+            {
+              ...operationWith('list', [
+                {
+                  slot: 'userKey',
+                  kind: 'userKey',
+                  state: 'approved',
+                  key: { name: 'Vendor key' },
+                  viewerIsKeyOwner: true,
+                  keyOwner: ME,
+                  approvedAt: '2030-01-01T09:00:00.000Z',
+                },
+              ]),
+              state: 'approved',
+            },
+            {
+              ...operationWith('shared', [
+                {
+                  slot: 'apiKey',
+                  kind: 'apiKey',
+                  state: 'approved',
+                  share: { id: 'share-1', label: 'Team vendor' },
+                  viewerIsKeyOwner: false,
+                  keyOwner: COLLEAGUE,
+                  approvedAt: '2030-01-02T09:00:00.000Z',
+                },
+              ]),
+              state: 'approved',
+            },
+          ],
+          { approved: true, state: 'active' },
+        ),
+      };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approvals]', { timeout: 10000 });
+      assert
+        .dom('[data-test-automation-key-approval-state="approved"]')
+        .exists({ count: 2 });
+      assert.true(
+        slotText('userKey')?.includes(
+          'You approved the automation’s use of the key “Vendor key”.',
+        ),
+        slotText('userKey'),
+      );
+      assert.true(
+        slotText('apiKey')?.includes(
+          `${COLLEAGUE} approved the automation’s use of the shared key “Team vendor”.`,
+        ),
+        slotText('apiKey'),
+      );
+      assert
+        .dom('[data-test-automation-key-approval-since]')
+        .exists({ count: 2 });
+      assert.dom('[data-test-automation-key-approval-fix]').doesNotExist();
+    });
+
+    test('waiting on the viewer: the approve button opens the secure window for the automation', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: withApprovals([
+          operationWith('list', [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'waiting',
+              viewerIsKeyOwner: true,
+              keyOwner: ME,
+              fix: 'approve',
+            },
+          ]),
+        ]),
+      };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approval-fix="approve"]', {
+        timeout: 10000,
+      });
+      assert.true(
+        slotText('userKey')?.includes(
+          'You need to approve the automation’s use of the key.',
+        ),
+        slotText('userKey'),
+      );
+      await click('[data-test-automation-key-approval-fix="approve"]');
+      await waitUntil(() => opened.length > 0, { timeout: 10000 });
+      assert.true(opened[0].includes('/approve'), opened[0]);
+      assert.deepEqual(openedFor(opened[0]), { automation: AUTOMATION });
+    });
+
+    test('waiting on someone else: the row names who acts, only under ADR 011, and offers no link', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: withApprovals([
+          operationWith('shared', [
+            {
+              slot: 'apiKey',
+              kind: 'apiKey',
+              state: 'waiting',
+              share: { id: 'share-1', label: 'Team vendor' },
+              viewerIsKeyOwner: false,
+              keyOwner: COLLEAGUE,
+              actor: 'key-owner',
+            },
+          ]),
+          operationWith('list', [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'waiting',
+              viewerIsKeyOwner: false,
+              keyOwner: null,
+              actor: 'key-owner',
+            },
+          ]),
+        ]),
+      };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approvals]', { timeout: 10000 });
+      assert.true(
+        slotText('apiKey')?.includes(
+          `${COLLEAGUE} needs to approve the automation’s use of the shared key “Team vendor”.`,
+        ),
+        slotText('apiKey'),
+      );
+      assert.true(
+        slotText('userKey')?.includes(
+          'The key’s owner needs to approve the automation’s use of the key.',
+        ),
+        'a key owner the viewer shares no realm grant with goes unnamed',
+      );
+      assert.dom('[data-test-automation-key-approval-fix]').doesNotExist();
+    });
+
+    test('needs reapproval, a suspended share, a rejected key and no share each link to the page that fixes them', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: withApprovals([
+          operationWith('list', [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'needs-reapproval',
+              key: { name: 'Vendor key' },
+              viewerIsKeyOwner: true,
+              keyOwner: ME,
+              fix: 'review-changes',
+            },
+          ]),
+          operationWith('shared', [
+            {
+              slot: 'apiKey',
+              kind: 'apiKey',
+              state: 'share-suspended',
+              share: {
+                id: 'share-1',
+                label: 'Team vendor',
+                suspensionReason: 'owner-lost-write',
+              },
+              viewerIsKeyOwner: false,
+              keyOwner: COLLEAGUE,
+              fix: 'swap-key',
+            },
+          ]),
+          operationWith('rejected', [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'key-rejected',
+              key: { name: 'Old key' },
+              viewerIsKeyOwner: true,
+              keyOwner: ME,
+              approvedAt: '2030-01-01T09:00:00.000Z',
+              fix: 'replace-key',
+            },
+          ]),
+          operationWith('unshared', [
+            {
+              slot: 'apiKey',
+              kind: 'apiKey',
+              state: 'no-share',
+              viewerIsKeyOwner: false,
+              keyOwner: null,
+              fix: 'share-key',
+            },
+          ]),
+        ]),
+      };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approvals]', { timeout: 10000 });
+      let expected: [string, string, Record<string, string>][] = [
+        [
+          'review-changes',
+          '/review-changes',
+          {
+            module: INBOX_MODULE,
+            name: 'Inbox',
+            realm: testRealmURL,
+            operation: 'list',
+          },
+        ],
+        ['swap-key', '/swap-key', { realm: testRealmURL, share: 'share-1' }],
+        [
+          'replace-key',
+          '/replace-key',
+          {
+            module: INBOX_MODULE,
+            name: 'Inbox',
+            realm: testRealmURL,
+            operation: 'rejected',
+          },
+        ],
+        ['share-key', '/share-key', { realm: testRealmURL }],
+      ];
+      for (let [fix, page, fragment] of expected) {
+        opened = [];
+        await click(`[data-test-automation-key-approval-fix="${fix}"]`);
+        await waitUntil(() => opened.length > 0, { timeout: 10000 });
+        assert.true(opened[0].includes(page), `${fix}: ${opened[0]}`);
+        assert.deepEqual(openedFor(opened[0]), fragment, fix);
+      }
+      for (let state of [
+        'needs-reapproval',
+        'share-suspended',
+        'key-rejected',
+        'no-share',
+      ]) {
+        assert
+          .dom(`[data-test-automation-key-approval-state="${state}"]`)
+          .exists(state);
+      }
+      assert
+        .dom('[data-test-automation-key-approval="shared"]')
+        .includesText(
+          'Boxel suspended the shared key “Team vendor” because the key’s owner is no longer a realm administrator. A realm administrator needs to replace the shared key with another key.',
+        );
+    });
+
+    test('a run’s event during the key check doesn’t drop the check', async function (assert) {
+      let waitingSlot = {
+        slot: 'userKey',
+        kind: 'userKey',
+        state: 'waiting',
+        viewerIsKeyOwner: true,
+        keyOwner: ME,
+        fix: 'approve',
+      };
+      answer = {
+        status: 200,
+        attributes: withApprovals([operationWith('list', [waitingSlot])]),
+      };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approval-state="waiting"]', {
+        timeout: 10000,
+      });
+
+      function simulate(content: Record<string, unknown>) {
+        mockMatrixUtils.simulateRemoteMessage(
+          mockMatrixUtils.getRoomIdForRealmAndUser(testRealmURL, ME),
+          testRealmInfo.realmUserId!,
+          { automation: AUTOMATION, realmURL: testRealmURL, ...content },
+          { type: APP_BOXEL_REALM_EVENT_TYPE },
+        );
+      }
+
+      // The approval lands; the key check it sets off is slow.
+      answer = {
+        status: 200,
+        attributes: withApprovals(
+          [
+            {
+              ...operationWith('list', [
+                {
+                  ...waitingSlot,
+                  state: 'approved',
+                  fix: undefined,
+                  approvedAt: '2030-01-01T09:00:00.000Z',
+                },
+              ]),
+              state: 'approved',
+            },
+          ],
+          { approved: true, state: 'active' },
+        ),
+      };
+      let release!: () => void;
+      holdKeyedReads = new Promise<void>((resolve) => (release = resolve));
+      try {
+        let before = askedKeyApprovals.length;
+        simulate({ eventName: 'automation' });
+        await waitUntil(() => askedKeyApprovals.length > before, {
+          timeout: 10000,
+        });
+        // A run moves while the key check is still out: its read replaces
+        // the keyed one, so it has to make the check itself.
+        simulate({
+          eventName: 'job',
+          runId: 'run-live',
+          state: 'running',
+          step: 'script',
+          milestone: null,
+        });
+        await waitUntil(() => askedKeyApprovals.length > before + 1, {
+          timeout: 10000,
+        });
+        assert.true(
+          askedKeyApprovals[askedKeyApprovals.length - 1],
+          'the run’s read makes the key check the read it replaced still owed',
+        );
+      } finally {
+        holdKeyedReads = undefined;
+        release();
+      }
+      await waitFor('[data-test-automation-key-approval-state="approved"]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-key-approval-state="waiting"]')
+        .doesNotExist();
+    });
+
+    test('an approval that lands updates the section without a reload', async function (assert) {
+      let waiting = withApprovals([
+        operationWith('list', [
+          {
+            slot: 'userKey',
+            kind: 'userKey',
+            state: 'waiting',
+            viewerIsKeyOwner: true,
+            keyOwner: ME,
+            fix: 'approve',
+          },
+        ]),
+      ]);
+      answer = { status: 200, attributes: waiting };
+      await openIsolated();
+      await waitFor('[data-test-automation-key-approval-state="waiting"]', {
+        timeout: 10000,
+      });
+
+      answer = {
+        status: 200,
+        attributes: withApprovals(
+          [
+            {
+              ...operationWith('list', [
+                {
+                  slot: 'userKey',
+                  kind: 'userKey',
+                  state: 'approved',
+                  viewerIsKeyOwner: true,
+                  keyOwner: ME,
+                  approvedAt: '2030-01-01T09:00:00.000Z',
+                },
+              ]),
+              state: 'approved',
+            },
+          ],
+          { approved: true, state: 'active' },
+        ),
+      };
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(testRealmURL, ME),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'automation',
+          automation: AUTOMATION,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+      await waitFor('[data-test-automation-key-approval-state="approved"]', {
+        timeout: 10000,
+      });
+      assert.dom('[data-test-automation-key-approval-fix]').doesNotExist();
+      assert.dom('[data-test-automation-state="On"]').exists();
     });
   });
 });

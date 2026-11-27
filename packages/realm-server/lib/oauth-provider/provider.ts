@@ -20,6 +20,7 @@ import {
   authorizationHandler,
   keepAuthorizationErrorsOnBoxelsPage,
   DEFAULT_AUTHORIZATION_LIMIT,
+  devicePageURL,
   errorDetailsHandler,
   errorReturnHandler,
   interactionHandler,
@@ -29,12 +30,19 @@ import {
 } from './authorization.ts';
 import { OAuthProviderConfigError } from './config.ts';
 import {
+  DEFAULT_DEVICE_CODE_LIMIT,
+  deviceAuthorizationHandler,
+  deviceHandlers,
+  type DeviceCodeLimit,
+} from './device.ts';
+import {
   consentDecisionHandler,
   consentDetailsHandler,
   type AccountContactLookup,
 } from './consent.ts';
 import type { OAuthProviderConfig } from './config.ts';
 import { finishHandler, resumeHandler, userExists } from './finish.ts';
+import { networkMatchOf } from './network-binding.ts';
 import {
   NON_RENEWING_GRANT_TTL_SECONDS,
   readGrantTerms,
@@ -54,6 +62,7 @@ import {
 } from './new-client-limit.ts';
 import { CONFIRMATION_CODE_PARAM } from '@cardstack/secure-origin/security/confirmation-code.js';
 import {
+  DEVICE_CODE_GRANT_TYPE,
   libraryClients,
   PRE_REGISTERED_CLIENTS,
   type PreRegisteredClients,
@@ -90,6 +99,12 @@ export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
 export const OAUTH_REGISTRATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/reg`;
 export const OAUTH_TOKEN_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/token`;
 export const OAUTH_REVOCATION_PATH = `${OAUTH_TOKEN_PATH}/revocation`;
+// Device sign-in (RFC 8628): where an app asks for a device code. The page the
+// user enters its user code on is the secure origin's `device` page, never a
+// route here (`device.ts`).
+export const OAUTH_DEVICE_AUTHORIZATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/device/auth`;
+// The library's own page for entering a user code, which is never served.
+const OAUTH_CODE_VERIFICATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/device`;
 
 // The fields discovery copies from the library's document. That document
 // also lists every endpoint it mounts, `jwks_uri`, and OpenID Connect
@@ -129,7 +144,11 @@ const DISCOVERY_FIELDS = [
   'authorization_response_iss_parameter_supported',
   'client_id_metadata_document_supported',
 ] as const;
-const GRANT_TYPES_SERVED = ['authorization_code', 'refresh_token'];
+const GRANT_TYPES_SERVED = [
+  'authorization_code',
+  'refresh_token',
+  DEVICE_CODE_GRANT_TYPE,
+];
 
 // How long the library keeps a flow's interaction, and its own session: long
 // enough for a person to sign in and consent, and no longer. The session never
@@ -139,6 +158,13 @@ const SESSION_TTL_SECONDS = 10 * 60;
 // How long an authorization code lasts: long enough for an app to exchange
 // it straight away.
 const AUTHORIZATION_CODE_TTL_SECONDS = 60;
+// How long a device code, and the user code that decides it, lasts: long
+// enough to open the `device` page on another device and sign in, and short,
+// since a user code is short by design (ADR 021 §2).
+export const DEVICE_CODE_TTL_SECONDS = 10 * 60;
+// How often an app may poll for a device code's outcome, in seconds (RFC 8628
+// §3.2). Polling faster is answered `slow_down` (`token-limit.ts`).
+export const DEVICE_CODE_POLL_INTERVAL_SECONDS = 5;
 // How long an access token lasts (ADR 021 §1.9): short on a grant that
 // renews, since its client can refresh, and as long as the grant itself on
 // one that doesn't. Never past its grant's expiry.
@@ -172,6 +198,14 @@ export interface OAuthProviderService {
   handleResume: Koa.Middleware;
   handleErrorDetails: Koa.Middleware;
   handleErrorReturn: Koa.Middleware;
+  // Device sign-in's start, before the library (`device.ts`).
+  handleDeviceAuthorization: Koa.Middleware;
+  // The `device` page's lookup and decision, behind the same check as
+  // consent.
+  deviceHandlers(deps: ConsentRouteDeps): {
+    handleDeviceLookup: Koa.Middleware;
+    handleDeviceDecision: Koa.Middleware;
+  };
   // Consent's details and decision. They verify the secure window's session
   // and look up its account, which the realm server's routes supply.
   consentHandlers(deps: ConsentRouteDeps): {
@@ -212,6 +246,7 @@ export function startOAuthProvider({
   unconnectedClientCap = DEFAULT_UNCONNECTED_CLIENT_CAP,
   authorizationLimit = DEFAULT_AUTHORIZATION_LIMIT,
   tokenLimit = DEFAULT_TOKEN_LIMIT,
+  deviceCodeLimit = DEFAULT_DEVICE_CODE_LIMIT,
   rateLimitStore = new DBRateLimitStore(dbAdapter),
   testOnlyResources,
   testOnlyDocumentOrigins,
@@ -226,6 +261,7 @@ export function startOAuthProvider({
   unconnectedClientCap?: number;
   authorizationLimit?: CallerLimit;
   tokenLimit?: TokenLimit;
+  deviceCodeLimit?: DeviceCodeLimit;
   rateLimitStore?: RateLimitStore;
   testOnlyResources?: readonly OAuthResourceDefinition[];
   // See `clientMetadataDocuments`.
@@ -265,6 +301,7 @@ export function startOAuthProvider({
   let provider = createOAuthProvider({
     issuer,
     config,
+    deviceVerificationURI: devicePageURL(secureOriginURL).href,
     registry,
     preRegistered,
     adapter: oauthProviderAdapter(dbAdapter, {
@@ -310,6 +347,7 @@ export function startOAuthProvider({
       rateLimitStore,
       limit: tokenLimit,
       alert: tokenFailureAlert,
+      preRegistered,
     }),
     handleRevocation: revocationHandler({
       provider,
@@ -318,8 +356,32 @@ export function startOAuthProvider({
       limit: tokenLimit,
       alert: tokenFailureAlert,
     }),
+    handleDeviceAuthorization: deviceAuthorizationHandler({
+      provider,
+      registry,
+      preRegistered,
+      rateLimitStore,
+      limit: authorizationLimit,
+    }),
+    deviceHandlers: ({ realmSecretSeed, accountContact }) =>
+      deviceHandlers({
+        provider,
+        registry,
+        preRegistered,
+        dbAdapter,
+        rateLimitStore,
+        limit: deviceCodeLimit,
+        secureOriginURL,
+        realmSecretSeed,
+        accountContact,
+      }),
     handleInteraction: interactionHandler({ secureOriginURL }),
-    handleFinish: finishHandler({ provider, dbAdapter, secureOriginURL }),
+    handleFinish: finishHandler({
+      provider,
+      dbAdapter,
+      secureOriginURL,
+      preRegistered,
+    }),
     handleResume: resumeHandler({ provider }),
     handleErrorDetails: errorDetailsHandler({
       provider,
@@ -374,6 +436,7 @@ export function startOAuthProvider({
 export function createOAuthProvider({
   issuer,
   config,
+  deviceVerificationURI,
   registry,
   adapter,
   renderError,
@@ -384,6 +447,8 @@ export function createOAuthProvider({
 }: {
   issuer: string;
   config: OAuthProviderConfig;
+  // The secure origin's `device` page, which a device code's answer names.
+  deviceVerificationURI: string;
   registry: readonly OAuthResource[];
   // Boxel's own apps, which the library finds before any stored client.
   preRegistered?: PreRegisteredClients;
@@ -490,6 +555,7 @@ export function createOAuthProvider({
       Interaction: INTERACTION_TTL_SECONDS,
       Session: SESSION_TTL_SECONDS,
       AuthorizationCode: AUTHORIZATION_CODE_TTL_SECONDS,
+      DeviceCode: DEVICE_CODE_TTL_SECONDS,
       AccessToken: (ctx: KoaContextWithOIDC) => {
         let terms = exchangeTerms.get(ctx);
         if (!terms) {
@@ -559,9 +625,9 @@ export function createOAuthProvider({
       authorization: OAUTH_AUTHORIZATION_PATH,
       backchannel_authentication: `${OAUTH_PROVIDER_PATH_PREFIX}/backchannel`,
       challenge: `${OAUTH_PROVIDER_PATH_PREFIX}/challenge`,
-      code_verification: `${OAUTH_PROVIDER_PATH_PREFIX}/device`,
+      code_verification: OAUTH_CODE_VERIFICATION_PATH,
       credential: `${OAUTH_PROVIDER_PATH_PREFIX}/credential`,
-      device_authorization: `${OAUTH_PROVIDER_PATH_PREFIX}/device/auth`,
+      device_authorization: OAUTH_DEVICE_AUTHORIZATION_PATH,
       end_session: `${OAUTH_PROVIDER_PATH_PREFIX}/session/end`,
       introspection: `${OAUTH_PROVIDER_PATH_PREFIX}/token/introspection`,
       jwks: `${OAUTH_PROVIDER_PATH_PREFIX}/jwks`,
@@ -649,8 +715,23 @@ export function createOAuthProvider({
           token: { clientId?: string },
         ) => token.clientId === client.clientId,
       },
-      // Off: nothing serves it.
-      deviceFlow: { enabled: false },
+      // Device sign-in (RFC 8628), for a pre-registered client only, which
+      // Boxel checks before the library sees the request (`device.ts`). The
+      // user code is two groups of four consonants, the confirmation code's
+      // alphabet. The library's pages for entering and confirming a code are
+      // never served: the secure origin's `device` page replaces them, and
+      // Boxel's own routes decide the code. Should the library ever reach
+      // one, it fails rather than render a page on the realm server's
+      // origin. Nothing about the app's computer is kept with the code.
+      deviceFlow: {
+        enabled: true,
+        charset: 'base-20',
+        mask: '****-****',
+        deviceInfo: () => ({}),
+        userCodeInputSource: neverServed,
+        userCodeConfirmSource: neverServed,
+        successSource: neverServed,
+      },
       // No ID tokens or OpenID claims: the provider is not an OpenID provider.
       userinfo: { enabled: false },
       jwtUserinfo: { enabled: false },
@@ -724,16 +805,45 @@ export function createOAuthProvider({
       document.revocation_endpoint = `${issuer}${OAUTH_REVOCATION_PATH}`;
       document.revocation_endpoint_auth_methods_supported = ['none'];
       document.registration_endpoint = `${issuer}${OAUTH_REGISTRATION_PATH}`;
+      document.device_authorization_endpoint = `${issuer}${OAUTH_DEVICE_AUTHORIZATION_PATH}`;
       ctx.body = document;
     }
   });
 
+  // A device code's answer names the secure origin's `device` page, where the
+  // user types the user code, never the library's own page on this origin,
+  // and says how often to poll. It offers no address with the user code
+  // already in it (`verification_uri_complete`): that is the link someone
+  // would send a victim to approve their sign-in (RFC 8628 §5.4), so the user
+  // always types the code their own terminal shows.
+  provider.use(async (ctx, next) => {
+    await next();
+    if (
+      ctx.oidc?.route === 'device_authorization' &&
+      ctx.status === 200 &&
+      isRecord(ctx.body)
+    ) {
+      let { verification_uri_complete: _complete, ...body } = ctx.body;
+      ctx.body = {
+        ...body,
+        verification_uri: deviceVerificationURI,
+        interval: DEVICE_CODE_POLL_INTERVAL_SECONDS,
+      };
+    }
+  });
+
   // The token endpoint's outcomes, by fixed labels: never a code, token or
-  // verifier. A refused request is named by its OAuth error code alone.
+  // verifier. A refused request is named by its OAuth error code alone. A
+  // code exchange by a pre-registered app on the user's computer adds how its
+  // network compares with the one that finished the flow
+  // (`network-binding.ts`), never either network.
   provider.on('grant.success', (ctx: KoaContextWithOIDC) => {
     let refresh = ctx.oidc.params?.grant_type === 'refresh_token';
+    let network = refresh ? undefined : networkMatchOf(ctx.req);
     log.info(
-      `token ${refresh ? 'refreshed' : 'issued'}: client ${ctx.oidc.client?.clientId}`,
+      `token ${refresh ? 'refreshed' : 'issued'}: client ${ctx.oidc.client?.clientId}${
+        network ? `, network ${network}` : ''
+      }`,
     );
   });
   provider.on(
@@ -812,6 +922,14 @@ function alwaysPromptingPolicy() {
       );
   }
   return policy;
+}
+
+// The library's own device pages, which Boxel never serves: the route that
+// would render them isn't registered (`serve.ts`).
+async function neverServed(): Promise<never> {
+  throw new Error(
+    `the OAuth provider's own device pages are never served: the secure origin's device page replaces them`,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

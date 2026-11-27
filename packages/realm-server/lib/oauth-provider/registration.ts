@@ -58,6 +58,11 @@ const ALLOWED_FIELDS = [
   'scope',
 ] as const;
 
+const REGISTRABLE_GRANT_TYPES: ReadonlySet<unknown> = new Set([
+  'authorization_code',
+  'refresh_token',
+]);
+
 export type RegistrationCheck =
   | { allowed: true; registration: Record<string, unknown> }
   | {
@@ -124,6 +129,21 @@ export function checkRegistration(
     return refuse(
       'invalid_client_metadata',
       'response_types must be ["code"]: this provider serves only the authorization code flow',
+    );
+  }
+  // Only Boxel's own apps may use device sign-in (ADR 021 §1.4), and no
+  // other grant is served, so a registration may ask only for these.
+  let grantTypes = body.grant_types;
+  if (
+    grantTypes !== undefined &&
+    !(
+      Array.isArray(grantTypes) &&
+      grantTypes.every((grantType) => REGISTRABLE_GRANT_TYPES.has(grantType))
+    )
+  ) {
+    return refuse(
+      'invalid_client_metadata',
+      'grant_types may list only authorization_code and refresh_token',
     );
   }
   if (body.scope !== undefined && typeof body.scope !== 'string') {

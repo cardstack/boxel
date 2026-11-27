@@ -41,6 +41,14 @@ export const AUTOMATION_RUN_REPORT_PATH = '/_automation-run-report';
 export const AUTOMATION_PREVIEW_FILE_PATH = '/_automation-preview-file';
 export const AUTOMATION_STORAGE_PATH = '/_automation-storage';
 
+// `GET /_automation-notices`: every automation notice for the session's own
+// user, across the realms the user writes directly, for the app's badges.
+// Each resource's `id` is the automation card's URL, and its attributes are
+// the realm's URL (`realm`) and the notice (`AutomationNotice` in
+// `automation-notices.ts`). Only notices the user is someone they are for
+// are listed; `meta.total` counts them.
+export const AUTOMATION_NOTICES_PATH = '/_automation-notices';
+
 // The query parameters of the GET routes: `GET /_automation-switch-on`, which
 // answers the estimate the switch-on screen shows, and the console's reads.
 export const AUTOMATION_ROUTE_REALM_PARAM = 'realm';
@@ -54,6 +62,7 @@ export const AUTOMATION_ESTIMATE_RESOURCE_TYPE = 'automation-estimate';
 export const AUTOMATION_RUN_REPORT_RESOURCE_TYPE = 'automation-run-report';
 export const AUTOMATION_STORAGE_RESOURCE_TYPE = 'automation-storage';
 export const AUTOMATION_RUN_LOG_RESOURCE_TYPE = 'automation-run-log';
+export const AUTOMATION_NOTICE_RESOURCE_TYPE = 'automation-notice';
 
 // The query parameters of `GET /_automation-run-log`, besides `realm`:
 //

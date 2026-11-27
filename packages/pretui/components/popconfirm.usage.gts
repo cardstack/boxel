@@ -7,8 +7,14 @@ import { Button } from './button';
 import { Popconfirm } from './popconfirm';
 import type { PopupPlacement } from '../internal/overlay';
 
-const PC_PLACEMENTS = ['top', 'bottom', 'left', 'right', 'top-start', 'bottom-end'];
-
+const PC_PLACEMENTS = [
+  'top',
+  'bottom',
+  'left',
+  'right',
+  'top-start',
+  'bottom-end',
+];
 
 class PopconfirmUsage extends GlimmerComponent {
   @tracked placement = 'top';
@@ -39,9 +45,21 @@ class PopconfirmUsage extends GlimmerComponent {
     this.log = '—';
   };
 
+  get usage() {
+    let bits = [
+      '@title="Remove the top lot?"',
+      '@confirmLabel="Remove"',
+      '@onConfirm={{this.dropFirst}}',
+    ];
+    if (this.placement !== 'top') bits.push(`@placement="${this.placement}"`);
+    if (!this.showCancel) bits.push('@showCancel={{false}}');
+    return `<Popconfirm ${bits.join(' ')}>\n  <:trigger as |isOpen toggle|>\n    <Button {{on "click" toggle}}>Remove</Button>\n  </:trigger>\n</Popconfirm>`;
+  }
+
   <template>
     <FreestyleUsage
       @name='Popconfirm'
+      @source={{this.usage}}
       @description="Ant's inline are-you-sure, anchored to the control it guards. Reach for it when the object of the verb is the thing you just clicked and it is still on screen — deleting this row, revoking this key — because the bubble points at the object, so the question needs no noun. Reach for AlertDialog instead when the consequence is not visible from where the click happened, needs more than a line to state, spans more than one object, or is genuinely irreversible. The tell that a Popconfirm should have been an AlertDialog: you find yourself wanting a third paragraph, a checkbox, or a type-the-name-to-confirm field in it."
     >
       <:example>

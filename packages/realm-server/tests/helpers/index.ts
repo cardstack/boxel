@@ -1871,6 +1871,7 @@ export async function runTestRealmServer({
   oauthUnconnectedClientCap,
   oauthAuthorizationLimit,
   oauthTokenLimit,
+  oauthDeviceCodeLimit,
   secureOriginAppOrigins,
   clientAddress,
   cardDocumentCache,
@@ -1936,6 +1937,11 @@ export async function runTestRealmServer({
   oauthTokenLimit?: ConstructorParameters<
     typeof RealmServer
   >[0]['oauthTokenLimit'];
+  // The provider's limit on entering a device sign-in's user code; omit for
+  // the production default.
+  oauthDeviceCodeLimit?: ConstructorParameters<
+    typeof RealmServer
+  >[0]['oauthDeviceCodeLimit'];
   // App origins listed for the secure origin, as `--secureOriginAppOrigin`.
   secureOriginAppOrigins?: string[];
   // How the server works out a caller's address. Omit for none in front of
@@ -2070,6 +2076,7 @@ export async function runTestRealmServer({
     ...(oauthUnconnectedClientCap ? { oauthUnconnectedClientCap } : {}),
     ...(oauthAuthorizationLimit ? { oauthAuthorizationLimit } : {}),
     ...(oauthTokenLimit ? { oauthTokenLimit } : {}),
+    ...(oauthDeviceCodeLimit ? { oauthDeviceCodeLimit } : {}),
     ...(secureOriginAppOrigins ? { secureOriginAppOrigins } : {}),
     ...(clientAddress ? { clientAddress } : {}),
     ...(matrixAdmin

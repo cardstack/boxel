@@ -1,6 +1,9 @@
 import { parseArgs as parseNodeArgs } from 'node:util';
 
-import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import {
+  AiCreditsNotAllowedError,
+  BoxelCLIClient,
+} from '@cardstack/boxel-cli/api';
 
 import {
   ControlPlaneSync,
@@ -812,6 +815,20 @@ export async function runFactoryEntrypoint(
   });
 
   let client = new BoxelCLIClient();
+
+  // The OpenRouter agent without a key of its own goes through the realm
+  // server's passthrough, which spends the user's AI credits. A profile signed
+  // in with OAuth without --allow-ai-credits can't, so that is said before
+  // anything touches the brief or the target realm.
+  let ownOpenRouterKey =
+    options.openRouterApiKey?.trim() || process.env.OPENROUTER_API_KEY?.trim();
+  if (
+    options.agent === 'openrouter' &&
+    !ownOpenRouterKey &&
+    client.canSpendAiCredits() === false
+  ) {
+    throw new AiCreditsNotAllowedError();
+  }
 
   // One source per run: a brief card (our authored content) or a GitHub
   // repo (inspired-by port — the analysis issue does the deep reading).

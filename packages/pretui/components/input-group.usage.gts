@@ -5,7 +5,14 @@ import { on } from '@ember/modifier';
 import { FreestyleUsage } from './freestyle-usage';
 import { InputGroup } from './input-group';
 
-const INPUT_GROUP_TYPES = ['text', 'email', 'password', 'number', 'search', 'url'];
+const INPUT_GROUP_TYPES = [
+  'text',
+  'email',
+  'password',
+  'number',
+  'search',
+  'url',
+];
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY'];
 
@@ -26,6 +33,15 @@ function labelOf(item: unknown): string {
 // disabled, value. Dropped upstream knobs: @validIcon/@invalidIcon (kit
 // keeps the default state icons), @inputmode/@name (splat native attrs),
 // boxel-input-group-* css vars (theme tokens own the dress).
+const COMPOSITION_SOURCE = `<InputGroup @placeholder="Amount" @onInput={{this.setValue}}>
+  <:before as |Accessories|>
+    <Accessories.Text>$</Accessories.Text>
+  </:before>
+  <:after as |Accessories|>
+    <Accessories.Button {{on "click" this.copy}}>Copy</Accessories.Button>
+  </:after>
+</InputGroup>`;
+
 class InputGroupUsage extends Component {
   typeOptions = INPUT_GROUP_TYPES;
   stateOptions = IG_STATES;
@@ -56,12 +72,7 @@ class InputGroupUsage extends Component {
     navigator.clipboard.writeText(this.shareUrl).catch(() => {});
   };
   get stateVal() {
-    return this.state as
-      | 'none'
-      | 'initial'
-      | 'valid'
-      | 'invalid'
-      | 'loading';
+    return this.state as 'none' | 'initial' | 'valid' | 'invalid' | 'loading';
   }
   // Live per-type validation so the type knob visibly bites: with the state
   // knob on 'none', a value that mismatches the chosen type paints the
@@ -205,12 +216,13 @@ class InputGroupUsage extends Component {
         />
         <Args.Yield
           @name='default'
-          @description="Yields Controls (Input / Textarea), Accessories, and {elementId} — supply your own control row; @value/@placeholder/@type are ignored when present."
+          @description='Yields Controls (Input / Textarea), Accessories, and {elementId} — supply your own control row; @value/@placeholder/@type are ignored when present.'
         />
       </:api>
     </FreestyleUsage>
     <FreestyleUsage
       @name='InputGroup compositions'
+      @source={{COMPOSITION_SOURCE}}
       @description="Composite groups through the contextual blocks — a button accessory wired to an action, a select accessory, and a multi-control default block. The select accessory's dropdown portals to boxel's wormhole, so it wears boxel default colors (accepted wart — no @renderInPlace passthrough)."
     >
       <:example>

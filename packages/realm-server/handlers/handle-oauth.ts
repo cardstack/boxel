@@ -1,3 +1,7 @@
+import {
+  realmsBoundToKey,
+  reportKeyApprovalChanges,
+} from '../lib/automation-key-approvals.ts';
 import type Koa from 'koa';
 import { fetchRealmPermissions, logger } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
@@ -230,6 +234,14 @@ export function handleCompleteConnect(args: CreateRoutesArgs): Handler {
         `completing an OAuth sign-in failed: ${e?.name ?? 'Error'}: ${e?.message ?? e}`,
       );
       outcome = { ok: false as const, error: 'failed' as const };
+    }
+    if (outcome.ok && outcome.reconnected) {
+      // A reconnect clears a rejection the automations sending the
+      // connection show.
+      await reportKeyApprovalChanges(
+        args,
+        await realmsBoundToKey(args.dbAdapter, outcome.keyId),
+      );
     }
     // A sign-in that didn't finish is an answer, not a refused request.
     await sendJSON(ctxt, outcome.ok ? 201 : 200, {

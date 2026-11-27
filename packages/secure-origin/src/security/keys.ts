@@ -524,6 +524,57 @@ export async function limitNotices(config: Config): Promise<KeyLimitNotice[]> {
   );
 }
 
+// A notice the user is owed while an automation waits for key approval on
+// them: their key serves operations the automation declares and their
+// approval of the automation is missing (`approve`), or no share in the
+// automation's workspace has a key for an operation and the user, a realm
+// administrator there, can share one (`share-a-key`). One notice per
+// automation, naming each operation it asks about and where the operation
+// sends. Listed while the automation waits.
+export interface KeyApprovalNoticeOperation {
+  operation: string;
+  targetType: { module: string; name: string };
+  destination: string;
+  ask: 'approve' | 'share-a-key';
+}
+
+export interface KeyApprovalNotice {
+  id: string;
+  // The automation's card and its workspace, as URLs.
+  automation: string;
+  realm: string;
+  // The automation card's title; null when the card has none.
+  title: string | null;
+  operations: KeyApprovalNoticeOperation[];
+  // When this page first listed it; null while it is unread, which the app
+  // counts in the badge on the user's avatar.
+  readAt: string | null;
+  createdAt: string;
+}
+
+// The user's key approval notices, newest first.
+export async function approvalNotices(
+  config: Config,
+): Promise<KeyApprovalNotice[]> {
+  return resources<KeyApprovalNotice>(
+    await authorizedRequest(config, '_key-approval-notices', { method: 'GET' }),
+  );
+}
+
+// Marks the key approval notices this page has shown read, which takes them
+// out of the app's badge. Only the secure origin's own session may.
+export async function markApprovalNoticesRead(
+  config: Config,
+  noticeIds: string[],
+): Promise<void> {
+  await authorizedRequest(config, '_key-approval-notices/read', {
+    method: 'POST',
+    body: {
+      data: noticeIds.map((id) => ({ type: 'key-approval-notice', id })),
+    },
+  });
+}
+
 // Marks the limit notices this page has shown read, which takes them out of
 // the app's badge. Only the secure origin's own session may.
 export async function markLimitNoticesRead(

@@ -10,6 +10,7 @@ import {
   getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
 import {
+  insertPermissions,
   archiveRealm,
   createAutomationRun,
   getAutomationRun,
@@ -28,6 +29,10 @@ import {
   waitForKeyApproval,
 } from '@cardstack/runtime-common/automations';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
+import type {
+  AutomationKeyApprovalStatus,
+  SlotKeyApprovalStatus,
+} from '@cardstack/runtime-common/automation-key-approval-status';
 import { MANUAL_RUN_TRIGGER } from '@cardstack/runtime-common/automation-declaration';
 import { recordAutomationRunVersion } from '@cardstack/runtime-common/automation-runs';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
@@ -73,6 +78,11 @@ import {
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
+import {
+  keyApprovalNoticeSendsSettled,
+  setKeyApprovalNoticeSender,
+} from '../lib/automation-key-approval-notices.ts';
+import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import { addUserKey, mintKeyWriteTicket } from '../lib/user-keys.ts';
@@ -134,9 +144,47 @@ const inboxModule = `
 // An automation declaring an operation whose request carries the realm's
 // shared key, so the share's key owner approves it.
 const SHARED = 'automation/shared';
+// An automation declaring two operations whose requests carry the realm's
+// shared key, on two card types.
+const SHARED_TWO = 'automation/shared-two';
+const OUTBOX = { module: `${realmURL.href}outbox`, name: 'Outbox' };
+const outboxModule = `
+  import { CardDef } from "@cardstack/base/card-api";
+  import { operation } from "@cardstack/base/operations";
+
+  export class Outbox extends CardDef {
+    @operation static post = {
+      base: 'callApi',
+      url: '${VENDOR}/echo/post',
+      headers: { authorization: 'Bearer {{apiKey}}' },
+    };
+  }
+`;
 // An automation declaring the keyed operation first, then one the Inbox
 // doesn't define.
 const KEYED_THEN_MISSING = 'automation/keyed-then-missing';
+// An automation declaring the keyed operation and the shared one, so one
+// approval can land while the other is still missing.
+const KEYED_AND_SHARED = 'automation/keyed-and-shared';
+
+// The card of the automation declaring two shared-key operations, with the
+// operations `operations` declares.
+function sharedTwoFixture(
+  operations: { type: { module: string; name: string }; names: string[] }[],
+) {
+  return automationFixture({
+    operations,
+    path: SHARED_TWO,
+    triggers: [
+      {
+        kind: 'cron',
+        label: 'daily',
+        expression: '0 9 * * *',
+        timeZone: 'UTC',
+      },
+    ],
+  });
+}
 
 // The keyed automation's card and script, as the realm starts with them.
 function keyedFixture() {
@@ -207,6 +255,25 @@ module(basename(import.meta.filename), function (hooks) {
         ],
       }),
       [`${SHARED}-script.js`]: `return 'ok';`,
+      'outbox.gts': outboxModule,
+      ...sharedTwoFixture([
+        { type: INBOX, names: ['shared'] },
+        { type: OUTBOX, names: ['post'] },
+      ]),
+      [`${SHARED_TWO}-script.js`]: `return 'ok';`,
+      ...automationFixture({
+        operations: [{ type: INBOX, names: ['list', 'shared'] }],
+        path: KEYED_AND_SHARED,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${KEYED_AND_SHARED}-script.js`]: `return 'ok';`,
       ...automationFixture({
         operations: [{ type: INBOX, names: ['list', 'nowhere'] }],
         path: KEYED_THEN_MISSING,
@@ -414,7 +481,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function keyWriteTicket(
     user: string,
-    action: 'add' | 'share' | 'delete',
+    action: 'add' | 'share' | 'delete' | 'replace',
     { keyId = null }: { keyId?: string | null } = {},
   ) {
     return (
@@ -3018,6 +3085,558 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  module('key approvals on the automation status', function (hooks) {
+    hooks.beforeEach(function () {
+      configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+    });
+    hooks.afterEach(function () {
+      resetOutbound();
+    });
+
+    // The automation's key approvals as `viewer`, a direct writer, reads
+    // them on its card's status.
+    async function statusKeyApprovals(
+      path: string,
+      viewer = OWNER,
+      { ask = true }: { ask?: boolean } = {},
+    ) {
+      let query = new URLSearchParams({ automation: cardURL(path) });
+      if (ask) {
+        query.set('keyApprovals', 'true');
+      }
+      let response = await request
+        .get(`${new URL(realm.url).pathname}_automation-status?${query}`)
+        .set('Accept', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, viewer, ['read', 'write'])}`,
+        );
+      if (response.status !== 200) {
+        throw new Error(
+          `the status answered ${response.status}: ${response.text}`,
+        );
+      }
+      return response.body.data.attributes.keyApprovals;
+    }
+
+    // Each slot of each operation, without the time it was approved.
+    function slotsOf(keyApprovals: AutomationKeyApprovalStatus): {
+      operation: string;
+      slots: (Omit<SlotKeyApprovalStatus, 'approvedAt' | 'share'> & {
+        share?: string;
+      })[];
+    }[] {
+      return keyApprovals.operations.map(({ operation, slots }) => ({
+        operation,
+        slots: slots.map(({ approvedAt: _approvedAt, share, ...slot }) => ({
+          ...slot,
+          ...(share ? { share: share.label } : {}),
+        })),
+      }));
+    }
+
+    async function approveSharedFor(path: string, version: string) {
+      let share = await shareOwnKey(WRITER);
+      let approved = await approveOperation(
+        WRITER,
+        'shared',
+        { shareId: share.id },
+        { id: cardURL(path), version },
+      );
+      if (approved.status !== 201) {
+        throw new Error(
+          `approving shared answered ${approved.status}: ${approved.text}`,
+        );
+      }
+      return share;
+    }
+
+    async function automationEventsDuring(act: () => Promise<unknown>) {
+      let sent: string[] = [];
+      let original = realm.broadcastAutomationEvent;
+      realm.broadcastAutomationEvent = async (event) => {
+        sent.push(event.automation);
+        return await original.call(realm, event);
+      };
+      try {
+        await act();
+      } finally {
+        realm.broadcastAutomationEvent = original;
+      }
+      return sent;
+    }
+
+    test('the status carries key approvals only when asked, and only for a switched-on automation', async function (assert) {
+      assert.strictEqual(
+        await statusKeyApprovals(KEYED),
+        undefined,
+        'an automation that is off has no payer to check approvals for',
+      );
+      await switchOn(OWNER, KEYED);
+      assert.strictEqual(
+        await statusKeyApprovals(KEYED, OWNER, { ask: false }),
+        undefined,
+        'a status read that does not ask checks nothing',
+      );
+      assert.false((await statusKeyApprovals(KEYED)).approved);
+    });
+
+    test('every key approved: each slot names its key and when its owner approved the automation', async function (assert) {
+      let shown = (await switchOn(OWNER, KEYED)).body.meta.keyApprovals;
+      let key = await addKey(OWNER, 'Vendor key');
+      let approved = await approveOperation(
+        OWNER,
+        'list',
+        { keyId: key.id },
+        { id: cardURL(KEYED), version: shown.version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      await reachesState(KEYED, 'active');
+      let keyApprovals = await statusKeyApprovals(KEYED);
+      assert.true(keyApprovals.approved);
+      assert.deepEqual(slotsOf(keyApprovals), [
+        {
+          operation: 'list',
+          slots: [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'approved',
+              key: { name: 'Vendor key' },
+              viewerIsKeyOwner: true,
+              keyOwner: OWNER,
+            },
+          ],
+        },
+      ]);
+      let [{ updated_at }] = await dbAdapter.execute(
+        `SELECT updated_at FROM automation_key_approvals WHERE automation_id = $1`,
+        { bind: [automationId(KEYED)] },
+      );
+      assert.strictEqual(
+        keyApprovals.operations[0].slots[0].approvedAt,
+        new Date(updated_at as string).toISOString(),
+        'the slot says when the key’s owner approved the automation',
+      );
+      assert.deepEqual(
+        slotsOf(await statusKeyApprovals(KEYED, WRITER))[0].slots[0],
+        {
+          slot: 'userKey',
+          kind: 'userKey',
+          state: 'approved',
+          viewerIsKeyOwner: false,
+          keyOwner: OWNER,
+        },
+        'a personal key’s name is shown to its owner alone',
+      );
+    });
+
+    test('an approval waiting on the viewer links the viewer to the approve page', async function (assert) {
+      await switchOn(OWNER, KEYED);
+      assert.deepEqual(slotsOf(await statusKeyApprovals(KEYED)), [
+        {
+          operation: 'list',
+          slots: [
+            {
+              slot: 'userKey',
+              kind: 'userKey',
+              state: 'waiting',
+              viewerIsKeyOwner: true,
+              keyOwner: OWNER,
+              fix: 'approve',
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('an approval waiting on someone else names who acts, and links only the key’s owner', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      assert.deepEqual(
+        slotsOf(await statusKeyApprovals(SHARED, OWNER)),
+        [
+          {
+            operation: 'shared',
+            slots: [
+              {
+                slot: 'apiKey',
+                kind: 'apiKey',
+                state: 'waiting',
+                viewerIsKeyOwner: false,
+                keyOwner: WRITER,
+                actor: 'key-owner',
+              },
+            ],
+          },
+        ],
+        'the payer is told the share’s owner approves, and gets no link',
+      );
+      assert.deepEqual(
+        slotsOf(await statusKeyApprovals(SHARED, WRITER))[0].slots[0],
+        {
+          slot: 'apiKey',
+          kind: 'apiKey',
+          state: 'waiting',
+          viewerIsKeyOwner: true,
+          keyOwner: WRITER,
+          fix: 'approve',
+        },
+        'the share’s owner gets the approve link',
+      );
+    });
+
+    test('an approved share names the share and its owner', async function (assert) {
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      let sent = await automationEventsDuring(() =>
+        approveSharedFor(SHARED, shown.version),
+      );
+      assert.deepEqual(
+        sent.filter((id) => id === automationId(SHARED)),
+        [automationId(SHARED)],
+        'an approval that makes the automation active is reported once',
+      );
+      await reachesState(SHARED, 'active');
+      assert.deepEqual(slotsOf(await statusKeyApprovals(SHARED)), [
+        {
+          operation: 'shared',
+          slots: [
+            {
+              slot: 'apiKey',
+              kind: 'apiKey',
+              state: 'approved',
+              share: 'Vendor automation-routes-writer',
+              viewerIsKeyOwner: false,
+              keyOwner: WRITER,
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('a binding that needs reapproval links its key’s owner to review the changes', async function (assert) {
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      await approveSharedFor(SHARED, shown.version);
+      await dbAdapter.execute(
+        `UPDATE key_bindings SET state = 'needs-reapproval' WHERE realm_url = $1 AND operation_name = 'shared'`,
+        { bind: [realmURL.href] },
+      );
+      let [ownerView] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.deepEqual(
+        [ownerView.slots[0].state, ownerView.slots[0].actor],
+        ['needs-reapproval', 'key-owner'],
+      );
+      let [writerView] = slotsOf(await statusKeyApprovals(SHARED, WRITER));
+      assert.deepEqual(
+        [writerView.slots[0].state, writerView.slots[0].fix],
+        ['needs-reapproval', 'review-changes'],
+      );
+    });
+
+    test('a suspended share links any realm administrator to swap a key in', async function (assert) {
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      let share = await approveSharedFor(SHARED, shown.version);
+      let sent = await automationEventsDuring(async () => {
+        let suspended = await request
+          .post(`/_key-shares/${share.id}/suspend`)
+          .set('Authorization', auth(OWNER));
+        assert.strictEqual(suspended.status, 200, suspended.text);
+      });
+      assert.deepEqual(
+        sent.filter((id) => id === automationId(SHARED)),
+        [automationId(SHARED)],
+        'suspending the share tells the realm’s direct writers once',
+      );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.deepEqual(
+        [slots[0].state, slots[0].share, slots[0].fix],
+        ['share-suspended', 'Vendor automation-routes-writer', 'swap-key'],
+      );
+      let [full] = (await statusKeyApprovals(SHARED, OWNER)).operations;
+      assert.deepEqual(
+        full.slots[0].share,
+        {
+          id: share.id,
+          label: 'Vendor automation-routes-writer',
+          suspensionReason: 'suspended-by-writer',
+          suspendedBy: OWNER,
+          suspendedByViewer: true,
+        },
+        'the slot says why the share is suspended, and who suspended it',
+      );
+    });
+
+    test('a rejected key keeps its approval and links its owner to replace the key', async function (assert) {
+      let shown = (await switchOn(OWNER, KEYED)).body.meta.keyApprovals;
+      let key = await addKey(OWNER);
+      let approved = await approveOperation(
+        OWNER,
+        'list',
+        { keyId: key.id },
+        { id: cardURL(KEYED), version: shown.version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      await dbAdapter.execute(
+        `UPDATE user_key_grants SET state = 'rejected', rejected_at = now(), last_probe_at = now() WHERE key_id = $1`,
+        { bind: [key.id] },
+      );
+      let keyApprovals = await statusKeyApprovals(KEYED);
+      let [slot] = keyApprovals.operations[0].slots;
+      assert.deepEqual(
+        [slot.state, slot.fix, typeof slot.approvedAt],
+        ['key-rejected', 'replace-key', 'string'],
+      );
+      assert.true(
+        keyApprovals.approved,
+        'a rejected key ends no approval, so the automation is still approved',
+      );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(KEYED, WRITER));
+      assert.deepEqual(
+        [slots[0].state, slots[0].fix, slots[0].actor, slots[0].keyOwner],
+        ['key-rejected', undefined, 'key-owner', OWNER],
+        'another realm administrator is told the key’s owner replaces the key',
+      );
+    });
+
+    test('an {{apiKey}} slot with no share links any realm administrator to share a key', async function (assert) {
+      await switchOn(OWNER, SHARED);
+      assert.deepEqual(slotsOf(await statusKeyApprovals(SHARED)), [
+        {
+          operation: 'shared',
+          slots: [
+            {
+              slot: 'apiKey',
+              kind: 'apiKey',
+              state: 'no-share',
+              viewerIsKeyOwner: false,
+              keyOwner: null,
+              fix: 'share-key',
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('sharing a key tells the realm’s direct writers, and the slot then waits on the share’s owner', async function (assert) {
+      await switchOn(OWNER, SHARED);
+      await shareOwnKey(WRITER);
+      let key = await addKey(OWNER, 'second');
+      let routeSent = await automationEventsDuring(async () => {
+        let shared = await request
+          .post('/_key-shares')
+          .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+          .set('Origin', secureOriginURL.origin)
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'key-share',
+              attributes: {
+                realm: realmURL.href,
+                keyId: key.id,
+                label: 'Owner vendor',
+              },
+            },
+            meta: {
+              ticket: await keyWriteTicket(OWNER, 'share', { keyId: key.id }),
+            },
+          });
+        assert.strictEqual(shared.status, 201, shared.text);
+      });
+      assert.deepEqual(
+        routeSent.filter((id) => id === automationId(SHARED)),
+        [automationId(SHARED)],
+        'sharing a key through the route tells the realm’s direct writers once',
+      );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.deepEqual(
+        [
+          slots[0].state,
+          slots[0].keyOwner,
+          slots[0].viewerIsKeyOwner,
+          slots[0].fix,
+          slots[0].actor,
+        ],
+        ['waiting', null, true, 'approve', undefined],
+        'with shares of two people, no one owner is named, and the viewer who owns one approves',
+      );
+    });
+
+    test('a share of a sign-in app is no share an automation can send', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      await dbAdapter.execute(
+        `INSERT INTO oauth_clients (key_id, client_id, grant_type, token_url, authorize_url, token_auth) VALUES ($1, 'sign-in', 'authorization_code', $2, $3, 'client_secret_post')`,
+        { bind: [share.keyId!, `${VENDOR}/token`, `${VENDOR}/authorize`] },
+      );
+      await switchOn(OWNER, SHARED);
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, WRITER));
+      assert.deepEqual(
+        [slots[0].state, slots[0].fix],
+        ['no-share', 'share-key'],
+        'the app’s owner is offered no approval the approve page has nothing for',
+      );
+    });
+
+    test('a share whose key doesn’t fit the slot is no share the slot can use', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      // The share's key is good only at another API host than the one the
+      // operation calls, so the approve page offers the share for nothing.
+      await dbAdapter.execute(
+        `INSERT INTO oauth_clients (key_id, client_id, grant_type, token_url, token_auth, api_hosts) VALUES ($1, 'elsewhere', 'client_credentials', $2, 'client_secret_post', ARRAY['api.github.com'])`,
+        { bind: [share.keyId!, `${VENDOR}/token`] },
+      );
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      assert.deepEqual(
+        shown.operations.map(
+          ({ missing }: { missing: { canApprove: string }[] }) =>
+            missing.map(({ canApprove }) => canApprove),
+        ),
+        [['nobody-yet']],
+        'the switch-on screen finds nobody who can approve the slot',
+      );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, WRITER));
+      assert.deepEqual(
+        [slots[0].state, slots[0].fix],
+        ['no-share', 'share-key'],
+        'the section offers the share’s owner no approval the approve page can’t give',
+      );
+    });
+
+    test('resuming a suspended share tells the realm’s direct writers of an automation the suspension left active', async function (assert) {
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      let share = await approveSharedFor(SHARED, shown.version);
+      await reachesState(SHARED, 'active');
+      let suspended = await request
+        .post(`/_key-shares/${share.id}/suspend`)
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(suspended.status, 200, suspended.text);
+      let ticket = (
+        await mintKeyWriteTicket(dbAdapter, OWNER, {
+          action: 'resume',
+          keyId: null,
+          realmURL: null,
+          shareId: share.id,
+        })
+      ).ticket;
+      let sent = await automationEventsDuring(async () => {
+        let resumed = await request
+          .post(`/_key-shares/${share.id}/resume`)
+          .set('Authorization', auth(OWNER))
+          .set('Content-Type', 'application/json')
+          .send({ meta: { ticket } });
+        assert.strictEqual(resumed.status, 200, resumed.text);
+      });
+      assert.deepEqual(
+        sent.filter((id) => id === automationId(SHARED)),
+        [automationId(SHARED)],
+        'resuming the share tells the realm’s direct writers once',
+      );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED));
+      assert.strictEqual(slots[0].state, 'approved');
+    });
+
+    test('replacing a key tells the direct writers of each realm whose bindings use the key', async function (assert) {
+      let shown = (await switchOn(OWNER, KEYED)).body.meta.keyApprovals;
+      let key = await addKey(OWNER);
+      let approved = await approveOperation(
+        OWNER,
+        'list',
+        { keyId: key.id },
+        { id: cardURL(KEYED), version: shown.version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      let sent = await automationEventsDuring(async () => {
+        let replaced = await request
+          .patch(`/_user-keys/${key.id}`)
+          .set('Authorization', auth(OWNER))
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'user-key',
+              id: key.id,
+              attributes: { value: 'sk-replaced-routes-key' },
+            },
+            meta: {
+              ticket: await keyWriteTicket(OWNER, 'replace', { keyId: key.id }),
+            },
+          });
+        assert.strictEqual(replaced.status, 200, replaced.text);
+      });
+      assert.deepEqual(
+        sent.filter((id) => id === automationId(KEYED)),
+        [automationId(KEYED)],
+        'replacing the key tells the realm’s direct writers once',
+      );
+    });
+
+    test('a key’s owner who shares no realm grant with the viewer is not named (ADR 011)', async function (assert) {
+      let shown = (await switchOn(OWNER, SHARED)).body.meta.keyApprovals;
+      await approveSharedFor(SHARED, shown.version);
+      // The share's owner leaves this realm, so the two share no realm at
+      // all.
+      await dbAdapter.execute(
+        `DELETE FROM realm_user_permissions WHERE username = $1 AND realm_url = $2`,
+        { bind: [WRITER, realm.url] },
+      );
+      let [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.deepEqual(
+        [slots[0].share, slots[0].viewerIsKeyOwner, slots[0].keyOwner],
+        ['Vendor automation-routes-writer', false, null],
+        'the viewer learns which share the slot sends, not whose key it holds',
+      );
+
+      // A share's owner is named as the realm's key-share listings name
+      // them: a grant naming both of them in another realm isn't enough.
+      await insertPermissions(
+        dbAdapter,
+        new URL('http://127.0.0.1:4444/automation-routes-elsewhere/'),
+        { [WRITER]: ['read'], [OWNER]: ['read'] },
+      );
+      [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.strictEqual(slots[0].keyOwner, null);
+      await insertPermissions(dbAdapter, realmURL, { [WRITER]: ['read'] });
+      [{ slots }] = slotsOf(await statusKeyApprovals(SHARED, OWNER));
+      assert.strictEqual(
+        slots[0].keyOwner,
+        WRITER,
+        'a row of the automation’s realm naming the share’s owner names them',
+      );
+    });
+
+    test('an approval that lands while another is still missing tells the realm’s direct writers', async function (assert) {
+      let shown = (await switchOn(OWNER, KEYED_AND_SHARED)).body.meta
+        .keyApprovals;
+      let key = await addKey(OWNER);
+      let sent = await automationEventsDuring(async () => {
+        let approved = await approveOperation(
+          OWNER,
+          'list',
+          { keyId: key.id },
+          { id: cardURL(KEYED_AND_SHARED), version: shown.version },
+        );
+        assert.strictEqual(approved.status, 201, approved.text);
+      });
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(KEYED_AND_SHARED)))?.state,
+        'waiting-for-key-approval',
+        'the shared operation still waits',
+      );
+      assert.deepEqual(
+        sent.filter((id) => id === automationId(KEYED_AND_SHARED)),
+        [automationId(KEYED_AND_SHARED)],
+        `one automation event names the automation: ${JSON.stringify(sent)}`,
+      );
+      assert.deepEqual(
+        slotsOf(await statusKeyApprovals(KEYED_AND_SHARED)).map(
+          ({ operation, slots }) => [operation, slots[0].state],
+        ),
+        [
+          ['list', 'approved'],
+          ['shared', 'no-share'],
+        ],
+      );
+    });
+  });
+
   module('admitting the payer a resume makes', function (hooks) {
     hooks.beforeEach(function () {
       configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
@@ -4045,6 +4664,425 @@ module(basename(import.meta.filename), function (hooks) {
         let response = await post(path, OWNER, { click: randomUUID() });
         assert.strictEqual(response.status, 409, `${path}: ${response.text}`);
       }
+    });
+  });
+
+  module('key approval notices', function (hooks) {
+    // Each recipient the notices told their key notices changed, in order.
+    let told: string[];
+
+    hooks.beforeEach(function () {
+      configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+      told = [];
+      setKeyApprovalNoticeSender(async (user, eventType) => {
+        if (eventType === KEY_NOTICES_UPDATED_EVENT_TYPE) {
+          told.push(user);
+        }
+      });
+    });
+    hooks.afterEach(async function () {
+      await keyApprovalNoticeSendsSettled();
+      setKeyApprovalNoticeSender(undefined);
+      resetOutbound();
+    });
+
+    // The user's key approval notices, as the app and the key page read them.
+    async function noticesOf(user: string) {
+      let response = await request
+        .get('/_key-approval-notices')
+        .set('Authorization', auth(user))
+        .set('Accept', 'application/vnd.api+json');
+      if (response.status !== 200) {
+        throw new Error(
+          `the notices answered ${response.status}: ${response.text}`,
+        );
+      }
+      return response.body as {
+        data: { id: string; attributes: Record<string, any> }[];
+        meta: { unread: number };
+      };
+    }
+
+    async function markRead(
+      user: string,
+      ids: string[],
+      authorization?: string,
+    ) {
+      return await request
+        .post('/_key-approval-notices/read')
+        .set(
+          'Authorization',
+          authorization ?? (await secureSessionAuth(dbAdapter, user)),
+        )
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: ids.map((id) => ({ type: 'key-approval-notice', id })),
+        });
+    }
+
+    // Who was told, once every send so far has settled.
+    async function toldSoFar() {
+      await keyApprovalNoticeSendsSettled();
+      return [...new Set(told)].sort();
+    }
+
+    // Shares a key of `user`'s own into the realm through the route the
+    // secure window and the CLI use.
+    async function shareThroughRoute(user: string) {
+      let key = await addKey(user);
+      return await request
+        .post('/_key-shares')
+        .set('Authorization', await secureSessionAuth(dbAdapter, user))
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'key-share',
+            attributes: {
+              realm: realmURL.href,
+              keyId: key.id,
+              label: 'Vendor via the route',
+            },
+          },
+          meta: {
+            ticket: await keyWriteTicket(user, 'share', { keyId: key.id }),
+          },
+        });
+    }
+
+    const SHARED_OPERATION = {
+      operation: 'shared',
+      targetType: INBOX,
+      destination: `${VENDOR}/echo/shared`,
+    };
+
+    test('switching on an automation that waits on another key owner records a notice for that owner, counted in the badge', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+
+      let { data, meta } = await noticesOf(WRITER);
+      assert.strictEqual(meta.unread, 1, 'the badge counts the notice');
+      assert.strictEqual(data.length, 1);
+      let [{ attributes }] = data;
+      assert.strictEqual(attributes.automation, cardURL(SHARED));
+      assert.strictEqual(attributes.realm, realm.url);
+      assert.strictEqual(
+        attributes.title,
+        'Test automation',
+        'the notice names the card by its indexed title',
+      );
+      assert.deepEqual(attributes.operations, [
+        { ...SHARED_OPERATION, ask: 'approve' },
+      ]);
+      assert.strictEqual(attributes.readAt, null);
+      assert.deepEqual(await toldSoFar(), [WRITER]);
+
+      let payer = await noticesOf(OWNER);
+      assert.deepEqual(payer.data, [], 'the payer gets no key-owner notice');
+      assert.strictEqual(payer.meta.unread, 0);
+    });
+
+    test('an automation whose only missing approval is the payer’s records no notice', async function (assert) {
+      await switchOn(OWNER, KEYED);
+      await reachesState(KEYED, 'waiting-for-key-approval');
+      for (let user of [OWNER, WRITER]) {
+        assert.deepEqual((await noticesOf(user)).data, [], user);
+      }
+      assert.deepEqual(await toldSoFar(), []);
+    });
+
+    test('the key page marks a notice read, and only a secure-origin session may', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      let [{ id }] = (await noticesOf(WRITER)).data;
+
+      let refused = await markRead(WRITER, [id], auth(WRITER));
+      assert.strictEqual(refused.status, 403, refused.text);
+      assert.strictEqual((await noticesOf(WRITER)).meta.unread, 1);
+
+      let marked = await markRead(WRITER, [id]);
+      assert.strictEqual(marked.status, 200, marked.text);
+      assert.deepEqual(marked.body.meta, { marked: 1, unread: 0 });
+      let { data, meta } = await noticesOf(WRITER);
+      assert.strictEqual(meta.unread, 0);
+      assert.strictEqual(data.length, 1, 'a read notice is still listed');
+      assert.strictEqual(typeof data[0].attributes.readAt, 'string');
+
+      let other = await markRead(OWNER, [id]);
+      assert.strictEqual(
+        other.body.meta.marked,
+        0,
+        'another user’s notice is passed over',
+      );
+    });
+
+    test('checking the automation again keeps one notice per owner, and its read mark', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      let [{ id }] = (await noticesOf(WRITER)).data;
+      await markRead(WRITER, [id]);
+      await toldSoFar();
+      told = [];
+
+      await realm.followAutomationKeyApprovals([automationId(SHARED)]);
+      await realm.followAutomationKeyApprovals([automationId(SHARED)]);
+
+      let { data, meta } = await noticesOf(WRITER);
+      assert.deepEqual(
+        data.map((notice) => notice.id),
+        [id],
+        'one notice per owner per automation',
+      );
+      assert.strictEqual(meta.unread, 0, 'the notice stays read');
+      assert.deepEqual(
+        await toldSoFar(),
+        [],
+        'an unchanged notice tells nobody',
+      );
+    });
+
+    test('an {{apiKey}} slot no share in the realm fills asks the realm’s direct writers to share a key', async function (assert) {
+      await switchOn(OWNER, SHARED);
+
+      let { data, meta } = await noticesOf(WRITER);
+      assert.strictEqual(meta.unread, 1);
+      assert.deepEqual(data[0].attributes.operations, [
+        { ...SHARED_OPERATION, ask: 'share-a-key' },
+      ]);
+      assert.deepEqual(
+        (await noticesOf(READER)).data,
+        [],
+        'a reader is not asked',
+      );
+      assert.deepEqual(
+        (await noticesOf(OWNER)).data,
+        [],
+        'the payer is not asked',
+      );
+      assert.deepEqual(await toldSoFar(), [WRITER]);
+    });
+
+    test('sharing a key into the realm turns the ask to share a key into an ask to approve', async function (assert) {
+      await switchOn(OWNER, SHARED);
+      let [before] = (await noticesOf(WRITER)).data;
+      await markRead(WRITER, [before.id]);
+      await toldSoFar();
+      told = [];
+
+      let shared = await shareThroughRoute(WRITER);
+      assert.strictEqual(shared.status, 201, shared.text);
+
+      let { data, meta } = await noticesOf(WRITER);
+      assert.deepEqual(data[0].attributes.operations, [
+        { ...SHARED_OPERATION, ask: 'approve' },
+      ]);
+      assert.strictEqual(
+        meta.unread,
+        1,
+        'a notice asking about something new is unread again',
+      );
+      assert.deepEqual(await toldSoFar(), [WRITER]);
+    });
+
+    test('resuming an automation into waiting for key approval records the notice again', async function (assert) {
+      await fund(OWNER);
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      let paused = await post(
+        AUTOMATION_PAUSE_PATH,
+        OWNER,
+        {},
+        { id: cardURL(SHARED) },
+      );
+      assert.strictEqual(paused.status, 200, paused.text);
+      assert.deepEqual((await noticesOf(WRITER)).data, []);
+      await toldSoFar();
+      told = [];
+
+      let resumed = await resume(OWNER, SHARED);
+      assert.strictEqual(resumed.status, 200, resumed.text);
+      assert.strictEqual(
+        resumed.body.data.attributes.state,
+        'waiting-for-key-approval',
+      );
+
+      let { data, meta } = await noticesOf(WRITER);
+      assert.deepEqual(
+        data.map(({ attributes }) => attributes.operations),
+        [[{ ...SHARED_OPERATION, ask: 'approve' }]],
+      );
+      assert.strictEqual(meta.unread, 1);
+      assert.deepEqual(await toldSoFar(), [WRITER]);
+    });
+
+    test('a key owner who no longer writes the realm stops seeing the notice', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      assert.strictEqual((await noticesOf(WRITER)).data.length, 1);
+
+      await dbAdapter.execute(
+        `DELETE FROM realm_user_permissions WHERE username = $1 AND realm_url = $2`,
+        { bind: [WRITER, realm.url] },
+      );
+
+      let { data, meta } = await noticesOf(WRITER);
+      assert.deepEqual(data, [], 'nothing of the realm is listed');
+      assert.strictEqual(meta.unread, 0, 'nor counted');
+    });
+
+    test('a suspended share asks its owner for nothing, since no approval lifts a suspension', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      let { version } = await keyApprovalsOf(SHARED);
+      let approved = await approveOperation(
+        WRITER,
+        'shared',
+        { shareId: share.id },
+        { id: cardURL(SHARED), version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      await reachesState(SHARED, 'active');
+      let suspended = await request
+        .post(`/_key-shares/${share.id}/suspend`)
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(suspended.status, 200, suspended.text);
+      await waitForKeyApproval(dbAdapter, automationId(SHARED), {
+        payer: OWNER,
+      });
+
+      await realm.followAutomationKeyApprovals([automationId(SHARED)]);
+
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SHARED)))?.state,
+        'waiting-for-key-approval',
+      );
+      assert.deepEqual((await noticesOf(WRITER)).data, []);
+    });
+
+    test('an edit that takes one of two operations off the card narrows the notice, which stays read', async function (assert) {
+      await switchOn(OWNER, SHARED_TWO);
+      let [before] = (await noticesOf(WRITER)).data;
+      assert.deepEqual(
+        before.attributes.operations.map(
+          (o: { operation: string }) => o.operation,
+        ),
+        ['shared', 'post'],
+      );
+      await markRead(WRITER, [before.id]);
+      await toldSoFar();
+      told = [];
+
+      let edited = sharedTwoFixture([{ type: INBOX, names: ['shared'] }]);
+      await realm.write(`${SHARED_TWO}.json`, edited[`${SHARED_TWO}.json`]);
+      // Settles once the realm has checked the automations the pass touched.
+      await realm.incrementalIndexing();
+
+      let { data, meta } = await noticesOf(WRITER);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SHARED_TWO)))?.state,
+        'waiting-for-key-approval',
+        'the automation still waits',
+      );
+      assert.deepEqual(
+        data.map(({ id, attributes }) => [
+          id,
+          attributes.operations.map((o: { operation: string }) => o.operation),
+        ]),
+        [[before.id, ['shared']]],
+        'the same notice names only the remaining operation',
+      );
+      assert.strictEqual(meta.unread, 0, 'and keeps its read mark');
+      assert.deepEqual(await toldSoFar(), [WRITER]);
+    });
+
+    test('the key owner’s approval landing ends the notice', async function (assert) {
+      let share = await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      await toldSoFar();
+      told = [];
+      let { version } = await keyApprovalsOf(SHARED);
+
+      let approved = await approveOperation(
+        WRITER,
+        'shared',
+        { shareId: share.id },
+        { id: cardURL(SHARED), version },
+      );
+      assert.strictEqual(approved.status, 201, approved.text);
+      await reachesState(SHARED, 'active');
+
+      let { data, meta } = await noticesOf(WRITER);
+      assert.deepEqual(data, []);
+      assert.strictEqual(meta.unread, 0);
+      assert.deepEqual(await toldSoFar(), [WRITER]);
+    });
+
+    test('removing the automation ends the notice', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      await toldSoFar();
+      told = [];
+
+      let removed = await post(
+        AUTOMATION_REMOVE_PATH,
+        OWNER,
+        {},
+        { id: cardURL(SHARED) },
+      );
+      assert.strictEqual(removed.status, 200, removed.text);
+
+      assert.deepEqual((await noticesOf(WRITER)).data, []);
+      let [{ n }] = await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS n FROM automation_key_approval_notices WHERE automation_id = $1`,
+        { bind: [automationId(SHARED)] },
+      );
+      assert.strictEqual(n, 0, 'the row went with the automation');
+      assert.deepEqual(await toldSoFar(), [WRITER]);
+    });
+
+    test('pausing the automation ends the notice', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      await toldSoFar();
+      told = [];
+
+      let paused = await post(
+        AUTOMATION_PAUSE_PATH,
+        OWNER,
+        {},
+        { id: cardURL(SHARED) },
+      );
+      assert.strictEqual(paused.status, 200, paused.text);
+
+      assert.deepEqual((await noticesOf(WRITER)).data, []);
+      assert.deepEqual(await toldSoFar(), [WRITER]);
+    });
+
+    test('an edit that takes the operation off the card ends the notice', async function (assert) {
+      await shareOwnKey(WRITER);
+      await switchOn(OWNER, SHARED);
+      await toldSoFar();
+      told = [];
+
+      let edited = automationFixture({
+        operations: [],
+        path: SHARED,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      });
+      await realm.write(`${SHARED}.json`, edited[`${SHARED}.json`]);
+      await realm.indexing();
+      await reachesState(SHARED, 'active');
+
+      assert.deepEqual((await noticesOf(WRITER)).data, []);
+      assert.deepEqual(await toldSoFar(), [WRITER]);
     });
   });
 });

@@ -56,10 +56,17 @@ class ThinkingUsage extends GlimmerComponent {
     );
   }
 
+  get usage() {
+    let bits = ['@rows={{this.rows}}'];
+    if (this.working) bits.push('@working={{true}}');
+    bits.push(`@expanded={{${this.expanded}}}`);
+    return `<Thinking ${bits.join(' ')} />`;
+  }
   <template>
     <FreestyleUsage
       @name='Thinking'
       @description='The reasoning-trace rail. Closed it is one quiet line; open it is the ordered list of what the agent looked at, with diff counts on the rows that changed something. The shimmer on the label is the component’s only theatre and it is a deliberate one under Law 5: it encodes "this is still going" and it stops permanently the moment the settled label replaces it — a CSS background sweep, not a frame loop, landing on the plain label under prefers-reduced-motion. The elapsed time in @doneLabel is a caller string on purpose: computing it would need Date.now(), which a realm forbids, and the number belongs to the run rather than to the render. Collapsed, the panel is `inert`, so a keyboard user can never tab into rows they cannot see.'
+      @source={{this.usage}}
     >
       <:example>
         <Thinking

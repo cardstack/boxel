@@ -337,6 +337,36 @@ module('Acceptance | open the secure window', function (hooks) {
     );
   });
 
+  test('reconnecting a connection opens the connect page for that connection alone', async function (assert) {
+    let { calls } = stubWindowOpen(window);
+    await visitWeatherStation();
+    let { toolContext } = getService('tool-service');
+    let tool = new OpenSecureWindowTool(toolContext);
+    await tool.execute({ mode: 'connect', reconnect: 'key-42' });
+    assert.strictEqual(calls.length, 1);
+    let opened = new URL(calls[0].url);
+    assert.strictEqual(opened.pathname.split('/').pop(), 'connect');
+    assert.deepEqual(
+      Object.fromEntries(new URLSearchParams(opened.hash.slice(1))),
+      { reconnect: 'key-42' },
+      'the connection, never an operation or a realm',
+    );
+    await assert.rejects(
+      tool.execute({
+        mode: 'connect',
+        reconnect: 'key-42',
+        realm: testRealmURL,
+      }),
+      /names the connection \(reconnect, its key id\) alone/,
+      'a reconnect names nothing else',
+    );
+    await assert.rejects(
+      tool.execute({ mode: 'enter-key', reconnect: 'key-42' }),
+      /reconnect is for the connect mode only/,
+      'another mode takes no reconnect',
+    );
+  });
+
   test('what the window is opened for must name things it can read', async function (assert) {
     let { calls } = stubWindowOpen(window);
     await visitWeatherStation();

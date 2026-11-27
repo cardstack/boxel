@@ -25,9 +25,12 @@ import {
 } from './personal-realm.ts';
 import {
   boxelApiResource,
+  grantsSpendCredit,
   OAuthConnectionEndedError,
   refreshTokens,
+  SPEND_CREDIT_SCOPE,
 } from './oauth-login.ts';
+import { AiCreditsNotAllowedError } from './oauth-refusals.ts';
 import { promptPassword as defaultPromptPassword } from './prompt.ts';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
 import { realmFetch } from './realm-fetch.ts';
@@ -632,19 +635,25 @@ export class ProfileManager implements RealmAuthenticator {
     );
   }
 
-  async removeProfile(profileId: string): Promise<boolean> {
+  // Returns the profile that was removed: the one saved in the profiles file,
+  // which another process may have signed in again since this one loaded it,
+  // so that its sign-ins are the ones ended. Undefined when there was no such
+  // profile.
+  async removeProfile(profileId: string): Promise<Profile | undefined> {
     if (!this.config.profiles[profileId]) {
-      return false;
+      return undefined;
     }
 
+    let removed: Profile | undefined;
     this.commit((config) => {
+      removed = config.profiles[profileId] ?? removed;
       delete config.profiles[profileId];
       if (config.activeProfile === profileId) {
         const remaining = Object.keys(config.profiles);
         config.activeProfile = remaining.length > 0 ? remaining[0] : null;
       }
     });
-    return true;
+    return removed;
   }
 
   switchProfile(profileId: string): boolean {
@@ -787,6 +796,36 @@ export class ProfileManager implements RealmAuthenticator {
     const profile = targetId ? this.config.profiles[targetId] : undefined;
     if (!targetId || !profile) {
       throw new Error(NO_ACTIVE_PROFILE_ERROR);
+    }
+
+    // Another process may have signed this profile in again since this one
+    // loaded the profiles file, and signed out the token this process holds.
+    // The session it saved is taken up rather than asking for a password, as
+    // long as it is for the same Matrix server. Only the Matrix session is
+    // taken: the rest of the profile a running command acts as stays as it
+    // was.
+    let read = this.readProfilesFile();
+    let saved = read.kind === 'ok' ? read.config.profiles[targetId] : undefined;
+    if (
+      saved &&
+      !saved.oauth &&
+      saved.matrixAccessToken &&
+      saved.matrixAccessToken !== profile.matrixAccessToken &&
+      saved.matrixUrl === profile.matrixUrl
+    ) {
+      profile.matrixAccessToken = saved.matrixAccessToken;
+      profile.matrixUserId = saved.matrixUserId;
+      profile.matrixDeviceId = saved.matrixDeviceId;
+      return this.getStoredMatrixAuth(targetId);
+    }
+    // A profile removed since this process loaded the file had its token
+    // signed out on purpose. Signing in again would leave a session that no
+    // profile records.
+    if (read.kind === 'ok' && !saved) {
+      throw new Error(
+        `Profile "${targetId}" was removed, so it isn't signed in again. ` +
+          `Run \`boxel profile add -u ${targetId}\` to add it back.`,
+      );
     }
 
     if (!this.isTtyFn()) {
@@ -1096,6 +1135,38 @@ export class ProfileManager implements RealmAuthenticator {
     return find();
   }
 
+  // Whether the active profile may spend AI credits: a Matrix profile always
+  // may, and an OAuth profile when its connection holds `boxel:spend-credit`.
+  // Undefined with no active profile, or for an OAuth connection whose token
+  // endpoint reported no scopes, which leaves the realm server to decide.
+  canSpendAiCredits(): boolean | undefined {
+    let active = this.getActiveProfile();
+    if (!active) {
+      return undefined;
+    }
+    if (!active.profile.oauth) {
+      return true;
+    }
+    return grantsSpendCredit(active.profile.oauth.scope);
+  }
+
+  // Whether `input` is one of the active realm server's routes that spend AI
+  // credits: `_request-forward` and the OpenRouter passthrough.
+  spendsAiCredits(input: string | URL | Request): boolean {
+    let active = this.getActiveProfile();
+    if (!active || !this.isRealmServerOrigin(input)) {
+      return false;
+    }
+    let base = new URL(ensureTrailingSlash(active.profile.realmServerUrl))
+      .pathname;
+    let path = new URL(input instanceof Request ? input.url : String(input))
+      .pathname;
+    return (
+      path === `${base}_request-forward` ||
+      path.startsWith(`${base}_openrouter/`)
+    );
+  }
+
   // Whether `input` is on the active profile's realm server, the only origin
   // its OAuth token is sent to.
   isRealmServerOrigin(input: string | URL | Request): boolean {
@@ -1258,7 +1329,15 @@ export class ProfileManager implements RealmAuthenticator {
     init?: RequestInit,
   ): Promise<Response> {
     if (this.getActiveProfile()?.profile.oauth) {
-      return this.oauthFetch(input, init, fetch);
+      let spends = this.spendsAiCredits(input);
+      if (spends && this.canSpendAiCredits() === false) {
+        throw new AiCreditsNotAllowedError();
+      }
+      let response = await this.oauthFetch(input, init, fetch);
+      if (spends && refusedForLackOfSpendCredit(response)) {
+        throw new AiCreditsNotAllowedError();
+      }
+      return response;
     }
     let token = await this.getOrRefreshServerToken();
     let headers = this.buildHeaders(input, init, token);
@@ -1512,4 +1591,19 @@ export function resetProfileManager(): void {
  */
 export function setProfileManager(configDir: string): void {
   _instance = new ProfileManager(configDir);
+}
+
+// Whether the realm server refused a request because the OAuth connection
+// lacks `boxel:spend-credit`: a 403 whose challenge names that scope.
+function refusedForLackOfSpendCredit(response: Response): boolean {
+  if (response.status !== 403) {
+    return false;
+  }
+  let challenge = response.headers.get('www-authenticate') ?? '';
+  let scope = /scope="([^"]*)"/.exec(challenge)?.[1];
+  return (
+    /error="insufficient_scope"/.test(challenge) &&
+    scope !== undefined &&
+    scope.split(' ').includes(SPEND_CREDIT_SCOPE)
+  );
 }
