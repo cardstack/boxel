@@ -28,42 +28,82 @@ import type { PropSource } from '@cardstack/choreo';
 type Changeset = Parameters<Extract<PropSource, Function>>[1];
 type Sprite = Parameters<Extract<PropSource, Function>>[0];
 
-// The block an arrival lands under: the kept participant whose final box
-// ends closest above the arrival's top.
-const blockAbove = (sprite: Sprite, changeset: Changeset) => {
-  let top = sprite.final?.page.y;
-  if (top === undefined) {
-    return undefined;
+// The conversation's messages, in the pass, that have a place to go to.
+const STACKED = [
+  { role: 'message', type: 'kept' },
+  { role: 'message-live', type: 'kept' },
+  { role: 'message', type: 'inserted' },
+  { role: 'message-live', type: 'inserted' },
+] as const;
+
+interface Start {
+  /** the translateY the message starts at, from its new place */
+  y: number;
+  /** an arrival carried by the block above it, rather than rising alone */
+  travelling: boolean;
+}
+
+const startsByPass = new WeakMap<Changeset, Map<Sprite, Start>>();
+
+/**
+ * Where each message starts in this pass, top to bottom.
+ *
+ * A kept message starts where it was painted and takes its new size at
+ * once (translate only, so text never scales). A message that grew
+ * therefore draws its new bottom at once, and the message below it,
+ * starting where it was painted, would sit under that bottom until both
+ * landed. So no message starts above the block above it: its start is at
+ * least that block's, and on one clock the two keep their gap in every
+ * frame (ADR 013 §1.10, §1.20). A message that grew pushes the ones below
+ * down at once, as layout does, and a message that shrank lets them glide
+ * up.
+ *
+ * An arrival is fixed to the block above the same way: it starts where
+ * that block's move puts it and travels on its clock. Following, the
+ * block above starts a follow's distance lower and so does the arrival;
+ * with nothing above it moving, it rises its usual few px.
+ */
+function startsOf(changeset: Changeset): Map<Sprite, Start> {
+  let known = startsByPass.get(changeset);
+  if (known) {
+    return known;
   }
-  let above: Sprite | undefined;
-  for (let s of changeset.sprites([
-    { role: 'message', type: 'kept' },
-    { role: 'message-live', type: 'kept' },
-  ])) {
-    let bottom = s.final ? s.final.page.y + s.final.page.height : undefined;
-    if (
-      bottom !== undefined &&
-      bottom <= top + 1 &&
-      (!above || bottom > above.final!.page.y + above.final!.page.height)
-    ) {
-      above = s;
+  known = new Map();
+  let stack = changeset
+    .sprites([...STACKED])
+    .filter((s) => s.final)
+    .sort((a, b) => a.final!.page.y - b.final!.page.y);
+  let above: number | undefined;
+  for (let s of stack) {
+    let start: Start;
+    if (s.type === 'inserted') {
+      start = above
+        ? { y: above, travelling: true }
+        : { y: RISE, travelling: false };
+    } else {
+      let painted = -(s.delta?.y ?? 0);
+      start = {
+        y: above === undefined ? painted : Math.max(painted, above),
+        travelling: false,
+      };
     }
+    known.set(s, start);
+    above = start.y;
   }
-  return above;
-};
+  startsByPass.set(changeset, known);
+  return known;
+}
 
-// An arrival is fixed to the block above it (ADR 013 §1.10, §1.20): it
-// starts where that block's move puts it and travels on the same clock, so
-// the two keep their gap in every frame and can never overlap. Following,
-// the block above starts a follow's distance lower and so does the arrival;
-// with nothing above it moving, it rises its usual few px.
-const travelAbove = (sprite: Sprite, changeset: Changeset) =>
-  -(blockAbove(sprite, changeset)?.delta?.y ?? 0);
+const startOf = (sprite: Sprite, changeset: Changeset): Start =>
+  startsOf(changeset).get(sprite) ??
+  (sprite.type === 'inserted'
+    ? { y: RISE, travelling: false }
+    : { y: -(sprite.delta?.y ?? 0), travelling: false });
 
-const arriveWithBlockAbove: PropSource = (sprite, changeset) => {
-  let travel = travelAbove(sprite, changeset);
-  return [travel ? travel : RISE, 0];
-};
+const fromStart: PropSource = (sprite, changeset) => [
+  startOf(sprite, changeset).y,
+  0,
+];
 
 // Travelling with the block above, an arrival comes up from below the
 // viewport's edge with everything else, so it needs no fade, and a fade
@@ -71,7 +111,7 @@ const arriveWithBlockAbove: PropSource = (sprite, changeset) => {
 // run mid-arrival, and the new score moves the message without fading it,
 // so its opacity snapped to full over the answer above. Otherwise it fades in.
 const fadeUnlessTravelling: PropSource = (sprite, changeset) =>
-  travelAbove(sprite, changeset) ? [1, 1] : [0, 1];
+  startOf(sprite, changeset).travelling ? [1, 1] : [0, 1];
 
 interface Signature {
   Element: HTMLDivElement;
@@ -154,33 +194,34 @@ export class TranscriptMotion extends Component<Signature> {
         {{yield}}
         {{#if this.awake}}
           <c.Parallel>
-            <c.Move
-              @of={{c.moved 'message'}}
+            {{! every message on one clock, from where startsOf puts it:
+                where it was painted, but never above the block above it.
+                Translate only: a message that grew or shrank takes its new
+                size at once, so text never scales. The streaming message
+                travels with the rest, but its growth lands as it renders }}
+            <c.Tween
+              @of={{c.kept 'message'}}
+              @y={{fromStart}}
               @duration={{DURATION.move}}
               @ease={{EASE_FOLLOW}}
-              @size={{false}}
             />
-            {{! the streaming message travels with the rest when the follow
-                scrolls, on the same clock (two speeds would let neighbors
-                overlap mid-flight), but its growth lands as it renders:
-                translate only }}
-            <c.Move
-              @of={{c.moved 'message-live'}}
+            <c.Tween
+              @of={{c.kept 'message-live'}}
+              @y={{fromStart}}
               @duration={{DURATION.move}}
               @ease={{EASE_FOLLOW}}
-              @size={{false}}
             />
             <c.Tween
               @of={{c.inserted 'message-live'}}
               @opacity={{fadeUnlessTravelling}}
-              @y={{arriveWithBlockAbove}}
+              @y={{fromStart}}
               @duration={{DURATION.move}}
               @ease={{EASE_FOLLOW}}
             />
             <c.Tween
               @of={{c.inserted 'message'}}
               @opacity={{fadeUnlessTravelling}}
-              @y={{arriveWithBlockAbove}}
+              @y={{fromStart}}
               @duration={{DURATION.move}}
               @ease={{EASE_FOLLOW}}
             />
