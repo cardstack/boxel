@@ -19,6 +19,7 @@ import {
   assertList,
   clickScopeOption,
   operatorModeState,
+  overrideRealmInfo,
   pressKey,
   setupDashboardTest,
 } from '../helpers/dashboard';
@@ -435,21 +436,81 @@ module('Acceptance | dashboard archive | restore focus', function (hooks) {
     assert.dom(ARCHIVED_TOGGLE).isFocused('focus stays on Archived');
   });
 
-  test('restoring a workspace the Hosted scope hides moves focus to Archived', async function (assert) {
+  const SCOPE_ALL =
+    '[data-test-dashboard-filter] [data-test-pretui-segmented-option="all"]';
+  const SCOPE_HOSTED =
+    '[data-test-dashboard-filter] [data-test-pretui-segmented-option="hosted"]';
+
+  // Set on the realm, since archiving drops the info the host loaded and
+  // restoring loads it again.
+  function markPublished(realmURL: string) {
+    overrideRealmInfo(realmURL, {
+      lastPublishedAt: { 'https://published.example.com/': String(Date.now()) },
+    });
+  }
+
+  // Moves the keyboard cursor from Workspace C to New Workspace. Left on its
+  // default, the cursor would focus the restored workspace's tile itself.
+  async function parkCursorOnNewWorkspace(assert: Assert) {
+    let start = find('[data-test-workspace-button="Workspace C"]')!;
+    await focus(start);
+    // The first arrow key only shows the cursor's ring; the second moves it.
+    await pressKey('ArrowLeft');
+    await pressKey('ArrowLeft');
+    assert.notStrictEqual(
+      document.activeElement,
+      start,
+      'the keyboard cursor has moved off its starting item',
+    );
+  }
+
+  test('restoring a workspace the Hosted scope hides switches to All and moves focus to the workspace', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
+    // So Hosted still lists Workspace C and New Workspace for the cursor.
+    markPublished(readOnlyRealmURL);
     await archiveBothAndExpand();
     await clickScopeOption('hosted');
+    await parkCursorOnNewWorkspace(assert);
     let [first] = restoreURLs();
+    let name = NAMES[first!];
 
     await click(`[data-test-restore-workspace-btn="${first}"]`);
-    await waitUntil(() => !restoreURLs().includes(first!));
+    await waitUntil(() => focusedWorkspace() === name, {
+      timeoutMessage: `focus never reached ${name}`,
+    });
     await settled();
 
     assert
-      .dom(`[data-test-workspace-menu-trigger="${first}"]`)
-      .doesNotExist('the Hosted scope leaves the unpublished workspace out');
-    assert
-      .dom(ARCHIVED_TOGGLE)
-      .isFocused('focus moves to Archived rather than the page');
+      .dom(SCOPE_ALL)
+      .isChecked('the scope widens to All, which shows the workspace');
+    assert.strictEqual(
+      focusedWorkspace(),
+      name,
+      'focus moves to the workspace',
+    );
+  });
+
+  test('restoring a hosted workspace keeps the Hosted scope', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    markPublished(ownedRealmURL);
+    // So Hosted still lists Workspace C and New Workspace for the cursor.
+    markPublished(readOnlyRealmURL);
+    await archiveBothAndExpand();
+    let name = NAMES[ownedRealmURL];
+    await clickScopeOption('hosted');
+    await parkCursorOnNewWorkspace(assert);
+
+    await click(`[data-test-restore-workspace-btn="${ownedRealmURL}"]`);
+    await waitUntil(() => focusedWorkspace() === name, {
+      timeoutMessage: `focus never reached ${name}`,
+    });
+    await settled();
+
+    assert.dom(SCOPE_HOSTED).isChecked('the scope stays Hosted');
+    assert.strictEqual(
+      focusedWorkspace(),
+      name,
+      'focus moves to the workspace',
+    );
   });
 });

@@ -79,6 +79,12 @@ function workspaceWalkKey(realmIdentifier: string) {
   return `workspace:${realmIdentifier}`;
 }
 
+function afterRender() {
+  return new Promise<void>((resolve) =>
+    schedule('afterRender', () => resolve()),
+  );
+}
+
 const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'hosted', label: 'Hosted' },
@@ -246,8 +252,7 @@ export default class Dashboard extends Component<Signature> {
 
   // Focus fell to the page when the restored workspace's row left. Unless the
   // user has put it somewhere since, it goes to the restored workspace once
-  // that has loaded, or, when the scope hides the workspace, to the Archived
-  // toggle.
+  // that has loaded, or to the Archived toggle if the workspace isn't shown.
   private async focusRestoredWorkspace(url: string) {
     let realmIdentifier = ri(url);
     try {
@@ -258,16 +263,25 @@ export default class Dashboard extends Component<Signature> {
     } catch {
       // The workspace reports its own load failure.
     }
-    await new Promise<void>((resolve) =>
-      schedule('afterRender', () => resolve()),
-    );
+    await afterRender();
     let active = document.activeElement;
-    let container = this.dashboardElement;
-    // The cursor's container holds focus while its item is out of view.
+    // Focus the user has put somewhere stays, and so does the scope. The
+    // cursor's container holds focus while its item is out of view.
     if (
-      !container ||
-      (active && active !== document.body && active !== container)
+      !this.dashboardElement ||
+      (active && active !== document.body && active !== this.dashboardElement)
     ) {
+      return;
+    }
+    // Restoring asks for the workspace, so a scope that hides it widens to
+    // All. The re-render can hand focus to the cursor's item, so focus is
+    // taken from it below without checking again.
+    if (this.scope === 'hosted' && !this.isHosted(realmIdentifier)) {
+      this.setScope('all');
+      await afterRender();
+    }
+    let container = this.dashboardElement;
+    if (!container) {
       return;
     }
     let index = this.walkKeys.indexOf(workspaceWalkKey(realmIdentifier));
