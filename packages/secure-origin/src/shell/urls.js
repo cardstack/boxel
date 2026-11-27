@@ -83,24 +83,28 @@ export function authorizeURL(interaction) {
   return pageURL('authorize', { interaction });
 }
 
-// The authorize page a Google sign-in was started from, when it was started
-// there: the window's own sign-in for a valid OAuth flow. Undefined for any
-// other sign-in.
-export function authorizeResumeURL(resume) {
-  return resume?.client === 'window' && isInteractionId(resume.interaction)
-    ? authorizeURL(resume.interaction)
-    : undefined;
+// The OAuth page a Google sign-in was started from, when it was started on
+// one: the window's own sign-in on the authorize page for a valid OAuth flow,
+// or on the device page. Undefined for any other sign-in.
+export function oauthResumeURL(resume) {
+  if (resume?.client !== 'window') {
+    return undefined;
+  }
+  if (isInteractionId(resume.interaction)) {
+    return authorizeURL(resume.interaction);
+  }
+  return resume.page === 'device' ? pageURL('device') : undefined;
 }
 
 // The page a Google sign-in started from, rebuilt from the `resume` the window
 // kept when it sent the user to Google: the authorize page for the same OAuth
-// flow, the CLI's sign-in, for the same listener and with the same username,
+// flow, the device page, the CLI's sign-in, for the same listener and with the same username,
 // or else the window's own. The CLI keeps waiting on its listener while the
 // user starts again there.
 export function startURL(resume) {
-  let authorize = authorizeResumeURL(resume);
-  if (authorize) {
-    return authorize;
+  let oauthPage = oauthResumeURL(resume);
+  if (oauthPage) {
+    return oauthPage;
   }
   let cli = resume?.client === 'cli' ? resume.cli : undefined;
   let params = cliParams(cli, resume?.username);
