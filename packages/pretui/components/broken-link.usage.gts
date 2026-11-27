@@ -21,9 +21,17 @@ class BrokenLinkUsage extends GlimmerComponent {
   get refIdVal() {
     return this.refId || undefined;
   }
+  get usage() {
+    let bits = [];
+    if (this.label) bits.push(`@label='${this.label}'`);
+    if (this.refId) bits.push(`@refId='${this.refId}'`);
+    return `<BrokenLink${bits.length ? ' ' + bits.join(' ') : ''} />`;
+  }
+
   <template>
     <FreestyleUsage
       @name='BrokenLink'
+      @source={{this.usage}}
       @description='Placeholder shown when a card/file reference fails to resolve (deleted, moved, or no permission). Renders an identical box across failures — a link-off icon with the type/file label — and hides the diagnostics (status, message, stack, additional errors) behind a warning-triangle reveal overlay that also carries the reference URL and a copy button. Used by broken linksTo / linksToMany field values and the markdown-embed chooser.'
     >
       <:example>

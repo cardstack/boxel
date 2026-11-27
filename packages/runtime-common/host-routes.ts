@@ -24,6 +24,7 @@ import { assertQuery, type Filter } from './query.ts';
 import { isClientEvaluable } from './instance-filter-matcher.ts';
 import { RealmPaths } from './paths.ts';
 import { rri } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 import {
   DEFAULT_REDIRECT_STATUS,
   findRedirectCycles,
@@ -133,7 +134,9 @@ export interface HostRouteTypeInfo {
   // relies on a child type having the link field it inherits from its
   // parent type. `isPrimitive` is false for a link or a compound field.
   // `target` is the key of the card type a `linksTo` or `linksToMany`
-  // field points to.
+  // field points to. `isQueryBacked` is true for a link field declared with
+  // a `query`: its value comes from a search, so it can't be a nested
+  // route's parent link.
   fields: Readonly<Record<string, HostRouteTypeField>>;
 }
 
@@ -141,6 +144,7 @@ export interface HostRouteTypeField {
   type: FieldDefinition['type'];
   isPrimitive: boolean;
   target?: string;
+  isQueryBacked?: true;
 }
 
 // Builds a `HostRouteTypeInfo` from a type's indexed definition, and its
@@ -169,9 +173,13 @@ export function hostRouteTypeInfo(
       }
     }
     let isPrimitive = fieldDef.isPrimitive;
-    fields[name] = target
+    let field: HostRouteTypeField = target
       ? { type: fieldDef.type, isPrimitive, target }
       : { type: fieldDef.type, isPrimitive };
+    if (isLinkType(fieldDef.type) && fieldDef.query) {
+      field.isQueryBacked = true;
+    }
+    fields[name] = field;
   }
   let key = types[0] ?? keyFor(definition.codeRef);
   return {
@@ -183,15 +191,26 @@ export function hostRouteTypeInfo(
 }
 
 // The card types the field-match routes in `rules` name, each once, in the
-// order they first appear. A caller looks these up before it validates.
+// order they first appear, less those a route may not name
+// (`isAllowedRouteTypeModule`), whose routes are dropped without a read. A
+// caller looks these up before it validates.
 export function hostRouteTypeRefs(
   rules: readonly RawHostRoutingRule[],
+  realm: { realmURL: URL; virtualNetwork: VirtualNetwork },
 ): ResolvedCodeRef[] {
   let refs = new Map<string, ResolvedCodeRef>();
   let visit = (list: readonly RawHostRoutingRule[]) => {
     for (let rule of list) {
       let ref = asCodeRef(rule.type);
-      if (ref && !refs.has(typeLookupKey(ref))) {
+      if (
+        ref &&
+        isAllowedRouteTypeModule(
+          ref.module,
+          realm.realmURL,
+          realm.virtualNetwork,
+        ) &&
+        !refs.has(typeLookupKey(ref))
+      ) {
         refs.set(typeLookupKey(ref), ref);
       }
       if (rule.routes) {
@@ -201,6 +220,31 @@ export function hostRouteTypeRefs(
   };
   visit(rules);
   return [...refs.values()];
+}
+
+// Whether a field-match route may name a type from `module`: a module of the
+// routing realm itself, or of a realm the server maps by prefix (the base
+// realm, the catalog), in either spelling. Told from the module's address
+// alone. The validated routes are public, and a type in any other realm, a
+// user's workspace, is one a visitor may not be able to read.
+export function isAllowedRouteTypeModule(
+  module: string,
+  realmURL: URL,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  if (virtualNetwork.isRegisteredPrefix(module)) {
+    return true;
+  }
+  let url: URL;
+  try {
+    url = virtualNetwork.toURL(module);
+  } catch {
+    return false;
+  }
+  return (
+    new RealmPaths(realmURL).inRealm(url) ||
+    virtualNetwork.isRegisteredPrefix(virtualNetwork.unresolveURL(url.href))
+  );
 }
 
 // The key `hostRouteTypeRefs` dedupes on. A caller may key its lookup on it.
@@ -363,6 +407,9 @@ export type HostRouteWarningCode =
   | 'card-pattern-missing-param'
   // `type` isn't a code ref.
   | 'invalid-type'
+  // `type` is in a realm other than this one that the server doesn't map by
+  // prefix: another user's workspace (`isAllowedRouteTypeModule`).
+  | 'type-outside-realm'
   // `type` isn't a card type the index knows.
   | 'not-card-type'
   // The definition of `type` couldn't be read when the realm was indexed:
@@ -394,7 +441,11 @@ export type HostRouteWarningCode =
   // A nested route whose cards get no address from the card alone: only
   // the parent's card holds the link, and the type has no route of its
   // own. The route is kept.
-  | 'no-address-from-one-card';
+  | 'no-address-from-one-card'
+  // A nested route whose `parent` names a query-backed link on the one card
+  // type validation can read. The other route's card may store a link of
+  // that name. The route is kept.
+  | 'query-backed-parent-link';
 
 export interface HostRouteWarning {
   code: HostRouteWarningCode;
@@ -499,6 +550,9 @@ export interface ValidateHostRoutesOptions {
   // The URL the realm is served at, ending with `/`. A fixed route's card
   // must be in it.
   realmURL: URL;
+  // Tells a module of a realm the server maps by prefix, which a
+  // field-match route may name a type from (`isAllowedRouteTypeModule`).
+  virtualNetwork: VirtualNetwork;
   // The definition of a type a field-match route names. `undefined` when
   // there is no such type; `'unavailable'` when its definition couldn't be
   // read, which drops its routes like any other invalid route.
@@ -596,7 +650,7 @@ class Validator {
     parent: ParentContext | undefined,
   ): HostRoute | undefined {
     let parentRoute = parent?.route;
-    let displayPath = joinPaths(
+    let displayPath = joinRoutingPaths(
       parentRoute?.fullPath ?? '/',
       typeof rule.path === 'string' ? rule.path : '',
     );
@@ -728,7 +782,7 @@ class Validator {
       position,
       name,
       path,
-      fullPath: joinPaths(parentRoute?.fullPath ?? '/', path),
+      fullPath: joinRoutingPaths(parentRoute?.fullPath ?? '/', path),
       paramNames: [
         ...(parentRoute?.paramNames ?? []),
         ...(pattern?.paramNames ?? []),
@@ -877,7 +931,19 @@ class Validator {
           card.paramNames.includes(n),
         );
         if (!isBlank(rule.parent) || !embedsParent) {
-          let link = this.resolveParentLink(rule.parent, undefined, parent!);
+          let link = this.resolveParentLink(
+            rule.parent,
+            undefined,
+            parent!,
+            (message) =>
+              this.warn(
+                'query-backed-parent-link',
+                message,
+                position,
+                displayPath,
+                false,
+              ),
+          );
           if (typeof link === 'string') {
             return drop('invalid-parent-link', link);
           }
@@ -898,6 +964,18 @@ class Validator {
       let type = asCodeRef(rule.type);
       if (!type) {
         return drop('invalid-type', 'type must name a module and an export');
+      }
+      if (
+        !isAllowedRouteTypeModule(
+          type.module,
+          this.options.realmURL,
+          this.options.virtualNetwork,
+        )
+      ) {
+        return drop(
+          'type-outside-realm',
+          `type ${type.name} from ${type.module} is in another workspace; use a type from this workspace, the base realm or the catalog`,
+        );
       }
       let found = this.options.lookupType(type);
       if (found === 'unavailable') {
@@ -927,7 +1005,19 @@ class Validator {
       }
       let parentLink: HostRouteParentLink | undefined;
       if (parentIsDynamic) {
-        let link = this.resolveParentLink(rule.parent, typeInfo, parent!);
+        let link = this.resolveParentLink(
+          rule.parent,
+          typeInfo,
+          parent!,
+          (message) =>
+            this.warn(
+              'query-backed-parent-link',
+              message,
+              position,
+              displayPath,
+              false,
+            ),
+        );
         if (typeof link === 'string') {
           return drop('invalid-parent-link', link);
         }
@@ -1026,11 +1116,13 @@ class Validator {
   }
 
   // The link between a dynamic child route and its dynamic parent route,
-  // named or inferred, or a warning.
+  // named or inferred, or a warning that drops the route. `warnKept` gives a
+  // warning for a route that is kept.
   private resolveParentLink(
     rawParent: unknown,
     childType: HostRouteTypeInfo | undefined,
     parent: ParentContext,
+    warnKept: (message: string) => void,
   ): HostRouteParentLink | string {
     let parentType = parent.typeInfo;
     let named =
@@ -1043,14 +1135,24 @@ class Validator {
     if (!childType || !parentType) {
       if (named) {
         // Only one side's type is known, at most. The field is on the child
-        // when the child's type has it as a link: a link from the child to
-        // its parent is the one each card can be addressed by. When only the
-        // parent's type is known, a link field of that name on it doesn't
-        // show which card holds the link, since the child's card may have a
-        // field of that name too, so it is left for the resolver to read on
+        // when the child's type has it as a stored link: a link from the
+        // child to its parent is the one each card can be addressed by.
+        // Otherwise a field of that name on the known type doesn't show which
+        // card holds the link, since the other route's card may have a field
+        // of that name too, so it is left for the resolver to read on
         // whichever card has it, as is a field the known type doesn't have.
-        let field = childType?.fields[named];
-        if (field && isLinkType(field.type)) {
+        // A query-backed link on the known type can't be the one read, so
+        // the route is kept with a warning that only the other card's link
+        // can serve it.
+        let known = childType ?? parentType;
+        let field = known?.fields[named];
+        if (field && isLinkType(field.type) && field.isQueryBacked) {
+          warnKept(
+            `parent ${named} is a query-backed link on ${
+              childType ? "this route's" : "the parent route's"
+            } card type, which is not read as a parent link; the route serves a card only when the other route's card stores a link named ${named}`,
+          );
+        } else if (childType && field && isLinkType(field.type)) {
           return {
             field: named,
             side: 'child',
@@ -1062,7 +1164,17 @@ class Validator {
       }
       return "parent must name the link field that connects this route's card to its parent route's card: a card id template has no type to infer it from";
     }
-    let candidates = linkCandidates(childType, parentType);
+    let all = linkCandidates(childType, parentType);
+    // A query-backed link has no stored value: reading a card runs its
+    // query, and the result stops at a page limit. Membership is read from
+    // the stored links on the two loaded cards, with no search, so a
+    // query-backed link is never inferred, and it can't be named either.
+    // Only the route's own type is read here. A field-match search also
+    // returns cards of its subtypes, and a subtype can declare a field of
+    // the same name as stored or as query-backed.
+    let candidates = all
+      .filter((c) => !c.isQueryBacked)
+      .map(({ isQueryBacked: _, ...link }) => link);
     if (named) {
       let matching = candidates.filter((c) => c.field === named);
       if (matching.length === 1) {
@@ -1071,13 +1183,20 @@ class Validator {
       if (matching.length > 1) {
         return `parent ${named} is ambiguous: both cards have a link field ${named} to the other`;
       }
+      if (all.some((c) => c.field === named)) {
+        return queryBackedParent(named);
+      }
       return `parent ${named} is not a linksTo or linksToMany field connecting the two routes' card types`;
     }
     if (candidates.length === 1) {
       return { ...candidates[0]!, inferred: true };
     }
     if (candidates.length === 0) {
-      return "No linksTo or linksToMany field connects this route's card type to its parent route's card type";
+      return all.length > 0
+        ? `No stored linksTo or linksToMany field connects this route's card type to its parent route's card type; a query-backed link (${all
+            .map((c) => `${c.side}.${c.field}`)
+            .join(', ')}) can't be a parent link`
+        : "No linksTo or linksToMany field connects this route's card type to its parent route's card type";
     }
     return `parent is required: more than one link connects the two card types (${candidates
       .map((c) => `${c.side === 'child' ? 'child' : 'parent'}.${c.field}`)
@@ -1276,7 +1395,7 @@ class Validator {
   ): void {
     for (let [index, rule] of (rules ?? []).entries()) {
       let childPosition = [...position, index];
-      let path = joinPaths(
+      let path = joinRoutingPaths(
         parentPath,
         typeof rule.path === 'string' ? rule.path : '',
       );
@@ -1302,6 +1421,10 @@ class Validator {
   }
 }
 
+function queryBackedParent(field: string): string {
+  return `parent ${field} is a query-backed link: its value comes from a search that stops at a page limit, and a parent link is read on the loaded cards with no search; name a stored linksTo or linksToMany field instead`;
+}
+
 // The link fields that connect a child route's type and its parent route's
 // type, in either direction. A field that connects them both ways (the two
 // types are the same, or one descends from the other) counts once: a
@@ -1314,11 +1437,13 @@ function linkCandidates(
   field: string;
   side: 'child' | 'parent';
   kind: 'linksTo' | 'linksToMany';
+  isQueryBacked: boolean;
 }[] {
   let out: {
     field: string;
     side: 'child' | 'parent';
     kind: 'linksTo' | 'linksToMany';
+    isQueryBacked: boolean;
   }[] = [];
   // When one type is, or descends from, the other, a field with the same
   // name and definition on both is the one field, inherited.
@@ -1329,7 +1454,8 @@ function linkCandidates(
   let sameField = (field: string, def: HostRouteTypeField, other: Fields) =>
     related &&
     other[field]?.type === def.type &&
-    other[field]?.target === def.target;
+    other[field]?.target === def.target &&
+    !!other[field]?.isQueryBacked === !!def.isQueryBacked;
   for (let [field, def] of Object.entries(childType.fields)) {
     if (!isLinkType(def.type) || !def.target) {
       continue;
@@ -1344,7 +1470,12 @@ function linkCandidates(
         sameField(field, def, parentType.fields)
       )
     ) {
-      out.push({ field, side: 'child', kind: def.type });
+      out.push({
+        field,
+        side: 'child',
+        kind: def.type,
+        isQueryBacked: !!def.isQueryBacked,
+      });
     }
   }
   for (let [field, def] of Object.entries(parentType.fields)) {
@@ -1361,7 +1492,12 @@ function linkCandidates(
         sameField(field, def, childType.fields)
       )
     ) {
-      out.push({ field, side: 'parent', kind: def.type });
+      out.push({
+        field,
+        side: 'parent',
+        kind: def.type,
+        isQueryBacked: !!def.isQueryBacked,
+      });
     }
   }
   return out;
@@ -1399,7 +1535,9 @@ function walk(
   }
 }
 
-function joinPaths(parentFullPath: string, path: string): string {
+// The full path of a route, from its parent's full path and its own path,
+// which is relative to the parent's.
+export function joinRoutingPaths(parentFullPath: string, path: string): string {
   let own = normalizeRoutingPath(path);
   if (parentFullPath === '/') {
     return own;

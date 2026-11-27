@@ -40,10 +40,14 @@ class WorkItemUsage extends GlimmerComponent {
   get tierVal() {
     return this.tier as 'step' | 'action' | 'run';
   }
+  get usage() {
+    return `<WorkItem @tier='${this.tier}' @state='${this.state}' @verb='${this.verb}' @title='${this.title}' />`;
+  }
   <template>
     <FreestyleUsage
       @name='WorkItem'
       @description='The agentic work row at three densities (step / action / run) across the full state machine. Color never carries state alone — every state renders status text; the magenta attention treatment is reserved for "a human must act now".'
+      @source={{this.usage}}
     >
       <:example>
         <WorkItem

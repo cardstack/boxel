@@ -328,12 +328,26 @@ module(basename(import.meta.filename), function () {
     });
 
     test("the billable call's timing line carries the request's correlation id and splits its time", async function (assert) {
+      const upstreamDelayMs = 50;
+      let stubWaitedMs: number | undefined;
       const mockFetch = sinon.stub(global, 'fetch');
       mockFetch.callsFake(async (input: string | URL | Request) => {
         const url = typeof input === 'string' ? input : input.toString();
         if (url.includes('/chat/completions')) {
           // Long enough that the upstream stage is measurably the largest.
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          // The server times the stage with Date.now(), so wait on that
+          // clock: a setTimeout of 50 ms can fire after about 49.2 ms,
+          // because libuv counts whole milliseconds, and Date.now() can then
+          // read 49. The stub is entered after the server notes the stage's
+          // start, so 50 ms on Date.now() here means at least 50 there.
+          let enteredAt = Date.now();
+          let until = enteredAt + upstreamDelayMs;
+          while (Date.now() < until) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, until - Date.now()),
+            );
+          }
+          stubWaitedMs = Date.now() - enteredAt;
           return new Response(
             JSON.stringify({
               id: 'gen-timing',
@@ -396,7 +410,10 @@ module(basename(import.meta.filename), function () {
           return value;
         };
         let requestMs = ms('requestMs');
-        assert.true(ms('upstreamMs') >= 50, `the upstream stage: ${line}`);
+        assert.true(
+          ms('upstreamMs') >= upstreamDelayMs,
+          `the upstream stage (the stub waited ${stubWaitedMs} ms on Date.now()): ${line}`,
+        );
         assert.true(
           requestMs >= ms('totalMs'),
           `the request's time includes the call's: ${line}`,

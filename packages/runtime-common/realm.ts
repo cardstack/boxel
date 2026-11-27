@@ -229,6 +229,7 @@ import { automationTouchedBy } from './automation-index-hook.ts';
 import {
   automationsInRealm,
   followKeyApprovals,
+  type AutomationReporters,
   type KeyApprovalFollow,
 } from './automations.ts';
 import {
@@ -260,6 +261,7 @@ import {
   automationVersion,
   type AutomationKeyApprovals,
   type AutomationVersion,
+  type AwaitedKeyApproval,
 } from './automation-key-approval.ts';
 import {
   endsRunOnCredential,
@@ -753,8 +755,16 @@ import {
   admitsRoute,
   isOAuthAccessTokenShaped,
   realmPermissionCeiling,
+  type OAuthLookupResult,
   type RealmOAuthResource,
 } from './oauth-route-admission.ts';
+import {
+  oauthTabPermissionCeiling,
+  oauthTabTokenContext,
+  oauthTabTokenOf,
+  oauthTabTokenSecret,
+  type OAuthTabPurpose,
+} from './oauth-tab-token.ts';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -1971,6 +1981,63 @@ export async function notifyRealmIndexUpdated(
       `notify ${REALM_INDEX_UPDATED_CHANNEL} failed for ${realmURL}: ${String(err)}`,
     );
   }
+}
+
+// The realm route the worker asks, once an index pass over the realm has
+// landed and its index hook has synced the realm's automations, to check
+// their key approvals in full, which the worker can't do, as it reads no
+// operation definitions. After a from-scratch pass it is a `POST` with no
+// body, and the realm checks every automation in it
+// (`Realm.followAutomationKeyApprovalsAfterFromScratchPass`). After an
+// incremental pass the body names the automations the pass touched
+// (`FollowAutomationKeyApprovalsRequest`), and the realm checks those
+// (`Realm.followAutomationKeyApprovalsAfterWorkerPass`). Either way it answers
+// 202 once the check has started, without waiting for it: the pass's job
+// holds the realm's exclusive index lane, so its writers would wait behind
+// the check's definition lookups. `Realm.incrementalIndexing()` holds the
+// check until it settles. Like every `POST`, it takes a caller the realm ACL
+// grants write, which includes the realm's own user (the worker asks as it);
+// it doesn't ask `isDirectWriter`, which counts no bot account.
+export const FOLLOW_AUTOMATION_KEY_APPROVALS_PATH =
+  '/_follow-automation-key-approvals';
+
+// The body of `FOLLOW_AUTOMATION_KEY_APPROVALS_PATH` after an incremental
+// pass.
+export interface FollowAutomationKeyApprovalsRequest {
+  // The automations the pass touched, by id: at least one, as an empty list
+  // is refused.
+  automationIds: string[];
+  // False when the writes behind the pass asked for no realm events: the
+  // check moves the rows all the same, and reports nothing. Absent, it
+  // reports.
+  reportChanges?: boolean;
+}
+
+function parseFollowAutomationKeyApprovalsRequest(
+  body: string,
+): FollowAutomationKeyApprovalsRequest | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return undefined;
+  }
+  let { automationIds, reportChanges } = parsed as Record<string, unknown>;
+  if (
+    !Array.isArray(automationIds) ||
+    automationIds.length === 0 ||
+    !automationIds.every((id) => typeof id === 'string') ||
+    (reportChanges !== undefined && typeof reportChanges !== 'boolean')
+  ) {
+    return undefined;
+  }
+  return {
+    automationIds,
+    ...(reportChanges !== undefined ? { reportChanges } : {}),
+  };
 }
 
 // Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
@@ -3205,12 +3272,14 @@ export type RequestContext = {
   // request was judged as: the user its grant is for, read with that user's
   // permissions, and never more than its scopes allow in a realm
   // (`permissionCeiling`). Its token was removed from the request once it
-  // was checked.
+  // was checked. A tab token (`oauth-tab-token.ts`) gives the same caller,
+  // naming the work its tab does as `tabPurpose`.
   oauthCaller?: {
     user: string;
     clientId: string;
     scopes: readonly string[];
     permissionCeiling: 'read' | 'write' | undefined;
+    tabPurpose?: OAuthTabPurpose;
   };
   // Set for a dispatch made from inside the realm-server process (a worker's
   // or definition lookup's in-process fetch), which never reaches the realm
@@ -4140,6 +4209,15 @@ export class Realm {
         RUN_STATE_PATH,
         SupportedMimeType.JSONAPI,
         this.runState.bind(this),
+        ACL_ONLY,
+      )
+      // The worker's request, after an index pass over this realm, to check
+      // its automations' key approvals in full. Answered on the realm ACL
+      // alone: it runs only what the realm's own follow would.
+      .post(
+        FOLLOW_AUTOMATION_KEY_APPROVALS_PATH,
+        SupportedMimeType.JSONAPI,
+        this.followAutomationKeyApprovalsOnRequest.bind(this),
         ACL_ONLY,
       )
       // The operations envelope, under the media type that carries its
@@ -12856,6 +12934,9 @@ export class Realm {
         realmURL: this.url,
         realmUsername: await this.getRealmOwnerUserId(),
         runAs: reader,
+        // No OAuth caller reaches this route (ADR 021 §1.3): it is no Boxel
+        // API route.
+        oauth: null,
         cardId: entryKey.sourceURL,
         sourceKind,
         format: spec.format,
@@ -13794,13 +13875,13 @@ export class Realm {
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}): ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e?.constructor?.name === 'JsonWebTokenError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}): ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
@@ -14084,33 +14165,64 @@ export class Realm {
       return notInHeader();
     }
     let header = request.headers.get('Authorization') ?? '';
-    let bearer = /^Bearer[ ]+(\S+)[ ]*$/i.exec(header)?.[1];
-    if (header && !(bearer && isOAuthAccessTokenShaped(bearer))) {
-      return undefined;
-    }
-    // A token in a form-encoded body is refused as one in the query string
-    // is, whatever the header carries, as the realm server's controllers do.
-    if (
-      (request.headers.get('content-type') ?? '')
-        .split(';')[0]
-        .trim()
-        .toLowerCase() === 'application/x-www-form-urlencoded'
-    ) {
-      let body = await readFormBody(request);
-      if (body === undefined) {
+    // A tab token is judged as the OAuth caller whose grant it names, after
+    // the same grant checks an access token gets. One this realm can't admit
+    // (minted by another realm server or for another realm, expired, or whose
+    // grant is gone or unknown here) is no credential here, and is judged as
+    // any session that doesn't verify is: a realm anyone may read answers it
+    // as it answers nobody, and any other refuses it. A tab reads realms on
+    // other servers, such as the base realm, with the same tokens, and no
+    // client stands behind it to restart an OAuth flow on a refusal.
+    let tabToken = oauthTabTokenOf(header);
+    let tabPurpose: OAuthTabPurpose | undefined;
+    let result: OAuthLookupResult;
+    if (tabToken) {
+      let verified = this.#verifyOAuthTabToken(request, tabToken);
+      if (!verified) {
+        return undefined;
+      }
+      tabPurpose = verified.purpose;
+      result = await oauth.resolveGrant({
+        grantId: verified.grantId,
+        user: verified.user,
+        scopes: verified.scopes,
+      });
+      if (!result.ok) {
         this.#log.info(
-          `request refused for ${request.method} ${maskLoggedURL(request.url)}: form body too large to read`,
+          `OAuth tab token not accepted for ${request.method} ${maskLoggedURL(request.url)}, judged as a session: its grant was refused`,
         );
-        return refuse(413, 'invalid_request');
+        return undefined;
       }
-      if (new URLSearchParams(body).has('access_token')) {
-        return notInHeader();
+    } else {
+      let bearer = /^Bearer[ ]+(\S+)[ ]*$/i.exec(header)?.[1];
+      if (header && !(bearer && isOAuthAccessTokenShaped(bearer))) {
+        return undefined;
       }
+      // A token in a form-encoded body is refused as one in the query string
+      // is, whatever the header carries, as the realm server's controllers
+      // do.
+      if (
+        (request.headers.get('content-type') ?? '')
+          .split(';')[0]
+          .trim()
+          .toLowerCase() === 'application/x-www-form-urlencoded'
+      ) {
+        let body = await readFormBody(request);
+        if (body === undefined) {
+          this.#log.info(
+            `request refused for ${request.method} ${maskLoggedURL(request.url)}: form body too large to read`,
+          );
+          return refuse(413, 'invalid_request');
+        }
+        if (new URLSearchParams(body).has('access_token')) {
+          return notInHeader();
+        }
+      }
+      if (!bearer) {
+        return undefined;
+      }
+      result = await oauth.resolve(bearer);
     }
-    if (!bearer) {
-      return undefined;
-    }
-    let result = await oauth.resolve(bearer);
     if (!result.ok) {
       return refuse(
         401,
@@ -14119,7 +14231,7 @@ export class Realm {
       );
     }
     let { caller } = result;
-    let described = `${request.method} ${maskLoggedURL(request.url)}, client ${caller.clientId}`;
+    let described = `${request.method} ${maskLoggedURL(request.url)}, client ${caller.clientId}${tabPurpose ? `, ${tabPurpose} tab token` : ''}`;
     let admitted = dispatch.route
       ? admitsRoute(oauth.scopes, caller, { on: 'realm', ...dispatch.route })
       : { admitted: false as const, scopes: [] as string[] };
@@ -14149,8 +14261,12 @@ export class Realm {
     // The scopes are a ceiling on what the realm requires of the caller,
     // over and above the route map, so a route the map admits can't be
     // reached for more than the token allows. Nothing admits administering
-    // the realm.
-    let permissionCeiling = realmPermissionCeiling(oauth.scopes, caller.scopes);
+    // the realm. A tab token is held to its work's ceiling too: a capture's
+    // only reads.
+    let scopeCeiling = realmPermissionCeiling(oauth.scopes, caller.scopes);
+    let permissionCeiling = tabPurpose
+      ? oauthTabPermissionCeiling(scopeCeiling, tabPurpose)
+      : scopeCeiling;
     if (
       requiredPermission === 'administer' ||
       !permissionCeiling ||
@@ -14192,9 +14308,64 @@ export class Realm {
       clientId: caller.clientId,
       scopes: caller.scopes,
       permissionCeiling,
+      ...(tabPurpose ? { tabPurpose } : {}),
     };
     request.headers.delete('Authorization');
     return undefined;
+  }
+
+  // What a tab token presented to this realm says, when it verifies under the
+  // tab-token key, within its expiry, and was minted for this realm;
+  // otherwise undefined, with the reason logged, and the request is judged as
+  // one with a session that doesn't verify. Its grant is the caller's to
+  // check.
+  #verifyOAuthTabToken(
+    request: Request,
+    token: string,
+  ):
+    | {
+        user: string;
+        grantId: string;
+        scopes: string[];
+        purpose: OAuthTabPurpose;
+      }
+    | undefined {
+    let described = `${request.method} ${maskLoggedURL(request.url)}`;
+    let claims: TokenClaims & { iat: number; exp: number };
+    try {
+      claims = this.#adapter.verifyJWT(
+        token,
+        oauthTabTokenSecret(this.#realmSecretSeed),
+      );
+    } catch (e: any) {
+      this.#log.info(
+        `OAuth tab token not accepted for ${described}, judged as a session: ${e?.constructor?.name === 'TokenExpiredError' ? 'expired' : 'did not verify'}`,
+      );
+      return undefined;
+    }
+    let context = oauthTabTokenContext(claims);
+    if (!context) {
+      this.#log.info(
+        `OAuth tab token not accepted for ${described}, judged as a session: malformed`,
+      );
+      return undefined;
+    }
+    let realmURL = this.#sameRealmSpelling(this.url);
+    if (
+      realmURL === undefined ||
+      this.#sameRealmSpelling(context.realm) !== realmURL
+    ) {
+      this.#log.info(
+        `OAuth tab token not accepted for ${described}, judged as a session: minted for another realm`,
+      );
+      return undefined;
+    }
+    return {
+      user: context.user,
+      grantId: context.grantId,
+      scopes: context.scopes,
+      purpose: context.purpose,
+    };
   }
 
   // The realm ACL's decision for an OAuth caller (`#admitOAuthToken`): the
@@ -15453,6 +15624,18 @@ export class Realm {
     }
     for (let automationId of automationIds) {
       try {
+        // Whom the approvals wait on, as the check answered it; undefined
+        // when the automation wasn't checked.
+        let awaiting: AwaitedKeyApproval[] | undefined;
+        // Whom the notices it wrote are to be told, once it commits.
+        let noticed: string[] = [];
+        let reporters: AutomationReporters = reportChanges
+          ? {
+              reportRunChange: (runId) => this.reportRunChange(runId),
+              reportAutomationChange: (automation) =>
+                this.reportAutomationChange(automation),
+            }
+          : {};
         let result = await followKeyApprovals(
           this.#dbAdapter,
           automationId,
@@ -15471,21 +15654,31 @@ export class Realm {
               declaration: read.declaration,
               payer: automation.payer,
             });
+            awaiting = approvals?.awaiting ?? (approvals ? [] : undefined);
             return approvals
               ? { approved: approvals.approved, declaration: read.declaration }
               : undefined;
           },
-          reportChanges
-            ? {
-                reportRunChange: (runId) => this.reportRunChange(runId),
-                reportAutomationChange: (automation) =>
-                  this.reportAutomationChange(automation),
-              }
-            : {},
+          {
+            ...reporters,
+            inTransaction: async (txQuery, done) => {
+              noticed =
+                (await this.#callApi?.writeKeyApprovalNoticesIn?.(txQuery, {
+                  automationId,
+                  automationURL: this.#virtualNetwork.toURLHref(automationId),
+                  realmURL: this.url,
+                  state: done?.automation.state,
+                  awaiting,
+                })) ?? [];
+            },
+          },
         );
         if (result) {
           followed.set(automationId, result);
         }
+        // The people the automation waits on, besides its payer, each have a
+        // notice while it waits, written in the follow's own transaction.
+        this.#callApi?.tellKeyApprovalNoticesChanged?.(noticed);
       } catch (e: any) {
         this.#log.warn(
           `couldn't follow the key approvals of automation ${automationId}: ${e?.message ?? e}`,
@@ -15564,6 +15757,150 @@ export class Realm {
         `couldn't follow the key approvals of the automations an index pass touched in ${this.url}: ${e?.message ?? e}`,
       );
     }
+  }
+
+  // Once a from-scratch pass over this realm has landed, follows the key
+  // approvals of every automation in the realm that isn't paused, as an
+  // incremental pass this realm starts does for the automations it touched.
+  // A from-scratch pass rebuilds the whole realm, so it can be the first to
+  // index an edit made while no realm server watched the files. The worker
+  // that ran the pass asks for this whoever started it
+  // (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`), and the request mounts the realm
+  // on whichever realm server it reaches, so a realm no server had mounted is
+  // followed too. Each automation's follow locks its row, so a follow racing
+  // another one of the same automation takes its turn and finds the row in
+  // step.
+  //
+  // It reports what it moved, as the worker's index hook in the same pass
+  // does: a from-scratch pass that announces nothing (a boot's reindex of an
+  // existing index) withholds only the index events that reset open tabs'
+  // loaders. No read it makes waits on this realm's indexing: a definition
+  // lookup reads a realm this server mounts as the prerender user, whose
+  // requests skip the read-your-writes gate. Never rejects: a failure is
+  // logged.
+  async followAutomationKeyApprovalsAfterFromScratchPass(): Promise<void> {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !this.#callApi?.checkAutomationKeyApprovals
+    ) {
+      return;
+    }
+    try {
+      let automations = (
+        await automationsInRealm(
+          this.#dbAdapter,
+          ri(this.#virtualNetwork.unresolveURL(this.url)),
+        )
+      ).filter(({ state }) => state !== 'paused');
+      if (automations.length === 0) {
+        return;
+      }
+      await this.followAutomationKeyApprovals(
+        automations.map(({ automationId }) => automationId),
+      );
+    } catch (e: any) {
+      this.#log.warn(
+        `couldn't follow the key approvals of the automations in ${this.url} after a from-scratch index pass: ${e?.message ?? e}`,
+      );
+    }
+  }
+
+  // Once an incremental pass has landed, follows the key approvals of the
+  // automations it touched that are in this realm and aren't paused. The
+  // worker that ran the pass asks for this after every pass whose hook synced
+  // an automation (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`, naming them), and
+  // the request mounts the realm on whichever realm server it reaches. That
+  // covers a pass no realm awaits (one the worker enqueues on its own, such
+  // as the prerender reconcile's retry or a commit's follow-up), which can be
+  // the first to index an edit made while no realm server watched the files,
+  // and a pass whose realm server stopped before it landed. A pass this realm
+  // awaits is also followed by the realm itself
+  // (`#followAutomationKeyApprovalsAfterPass`); each automation's follow
+  // locks its row, so the second takes its turn, finds the row in step, and
+  // moves and reports nothing.
+  //
+  // `reportChanges` is false when the writes behind the pass asked for no
+  // realm events. The follow is held in `#automationFollowsAfterPass`, so
+  // `incrementalIndexing()` waits for it. Never rejects: a failure is logged.
+  async followAutomationKeyApprovalsAfterWorkerPass(
+    automationIds: readonly string[],
+    { reportChanges }: { reportChanges: boolean },
+  ): Promise<void> {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !this.#callApi?.checkAutomationKeyApprovals ||
+      automationIds.length === 0
+    ) {
+      return;
+    }
+    let tracked = (async () => {
+      try {
+        let touched = new Set(automationIds);
+        let automations = (
+          await automationsInRealm(
+            this.#dbAdapter,
+            ri(this.#virtualNetwork.unresolveURL(this.url)),
+          )
+        ).filter(
+          ({ automationId, state }) =>
+            state !== 'paused' && touched.has(automationId),
+        );
+        if (automations.length === 0) {
+          return;
+        }
+        await this.followAutomationKeyApprovals(
+          automations.map(({ automationId }) => automationId),
+          { reportChanges },
+        );
+      } catch (e: any) {
+        this.#log.warn(
+          `couldn't follow the key approvals of the automations a worker's index pass touched in ${this.url}: ${e?.message ?? e}`,
+        );
+      }
+    })();
+    this.#automationFollowsAfterPass.add(tracked);
+    try {
+      await tracked;
+    } finally {
+      this.#automationFollowsAfterPass.delete(tracked);
+    }
+  }
+
+  private async followAutomationKeyApprovalsOnRequest(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let body = (await request.text()).trim();
+    if (body) {
+      let touched = parseFollowAutomationKeyApprovalsRequest(body);
+      if (!touched) {
+        return badRequest({
+          message: `the body of ${FOLLOW_AUTOMATION_KEY_APPROVALS_PATH} names no automations as { automationIds: string[] (at least one), reportChanges?: boolean }`,
+          requestContext,
+        });
+      }
+      // Held in `#automationFollowsAfterPass` from here, so
+      // `incrementalIndexing()` waits for it; it never rejects.
+      void this.followAutomationKeyApprovalsAfterWorkerPass(
+        touched.automationIds,
+        { reportChanges: touched.reportChanges !== false },
+      );
+      return createResponse({
+        body: null,
+        init: { status: 202 },
+        requestContext,
+      });
+    }
+    let tracked = this.followAutomationKeyApprovalsAfterFromScratchPass();
+    this.#automationFollowsAfterPass.add(tracked);
+    void tracked.finally(() =>
+      this.#automationFollowsAfterPass.delete(tracked),
+    );
+    return createResponse({
+      body: null,
+      init: { status: 202 },
+      requestContext,
+    });
   }
 
   // The automation's version with `payer` as its payer, its card read as
@@ -20982,8 +21319,13 @@ export class Realm {
           // embedding card's own prerendered HTML, which that card's own
           // declarations govern — and a render served a row data-only would
           // draw the row from its data under the realm's authority, baking in
-          // the same content its markup holds.
-          ...(duringPrerender ? {} : { unshareableFormats }),
+          // the same content its markup holds. An OAuth caller's search is
+          // never such a render, whatever it says: a tab token's tab runs
+          // code its caller chose and answers them with what it draws, and
+          // an access token's caller sets their own headers.
+          ...(duringPrerender && !requestContext.oauthCaller
+            ? {}
+            : { unshareableFormats }),
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget live search off (408) rather than run it to
@@ -22001,6 +22343,7 @@ export class Realm {
       viewer: await this.#statusViewer(requestContext),
       listInstances: (typeKey) =>
         this.#realmIndexQueryEngine.instanceSourcesOfType(typeKey),
+      credentialNotices: this.#callApi?.automationCredentialNotices,
     });
     return createResponse({
       body: JSON.stringify(answer.document),
@@ -22071,8 +22414,13 @@ export class Realm {
     // Loaded on first use: only a realm server answers it with a row, and
     // the schedule code it reads stays out of every bundle that imports the
     // realm.
-    let { answerAutomationStatus, automationRef, AUTOMATION_STATUS_PARAM } =
-      await import('./automation-status.ts');
+    let {
+      answerAutomationStatus,
+      automationRef,
+      AUTOMATION_STATUS_PARAM,
+      AUTOMATION_STATUS_KEY_APPROVALS_PARAM,
+    } = await import('./automation-status.ts');
+    let searchParams = new URL(request.url).searchParams;
     let answer = await answerAutomationStatus({
       dbAdapter: this.#dbAdapter,
       realmURL: new URL(this.url),
@@ -22084,10 +22432,18 @@ export class Realm {
         this.#virtualNetwork,
       ),
       viewer: await this.#statusViewer(requestContext),
-      automation: new URL(request.url).searchParams.get(
-        AUTOMATION_STATUS_PARAM,
-      ),
+      automation: searchParams.get(AUTOMATION_STATUS_PARAM),
       readInstance: (url) => this.#realmIndexQueryEngine.instanceSource(url),
+      ...(searchParams.get(AUTOMATION_STATUS_KEY_APPROVALS_PARAM) === 'true'
+        ? {
+            checkKeyApprovals: (args: {
+              automationId: string;
+              declaration: AutomationDeclaration;
+              payer: string;
+            }) => this.checkAutomationKeyApprovals(args),
+          }
+        : {}),
+      credentialNotices: this.#callApi?.automationCredentialNotices,
     });
     if (answer.status !== 200) {
       return createResponse({
@@ -22640,11 +22996,17 @@ export class Realm {
     // dropped as `type-unavailable` until the realm is indexed again, and an
     // index of realm.json is started to store the tree: nothing else may
     // index this realm for a long time.
-    if (hostRouteTypeRefs(rules).length > 0) {
+    if (
+      hostRouteTypeRefs(rules, {
+        realmURL: new URL(this.url),
+        virtualNetwork: this.#virtualNetwork,
+      }).length > 0
+    ) {
       this.#indexRealmConfigForHostRoutes();
     }
     return validateHostRoutes(rules, {
       realmURL: new URL(this.url),
+      virtualNetwork: this.#virtualNetwork,
       lookupType: () => 'unavailable',
     });
   }

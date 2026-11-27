@@ -37,10 +37,21 @@ class DescriptionsUsage extends Component {
     { label: 'Cupping note', value: (LOTS[0] as Lot).note, span: 'fill' },
   ];
 
+  get usage() {
+    let bits = ['@items={{this.items}}'];
+    if (this.columns !== 3) bits.push(`@columns={{${this.columns}}}`);
+    if (this.bordered) bits.push('@bordered={{true}}');
+    if (this.layout !== 'horizontal') bits.push(`@layout='${this.layout}'`);
+    if (this.size !== 'm') bits.push(`@size='${this.size}'`);
+    if (this.colon) bits.push('@colon={{true}}');
+    return `<Descriptions ${bits.join(' ')} @title='Lot record' />`;
+  }
+
   <template>
     <FreestyleUsage
       @name='Descriptions'
       @slug='descriptions'
+      @source={{this.usage}}
       @description='The read-only record display: label/value pairs in an N-column grid that folds to stacked. It is not RecordDetail (that is the editing machine) and not KeyValue (that is the plain two-column dl, which stays exactly what it is).'
     >
       <:example>

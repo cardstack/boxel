@@ -33,6 +33,7 @@ import { codeRefOf, secureClientOf } from './handle-user-key-grants.ts';
 import {
   approvalBatch,
   bindingNames,
+  type ApprovalBatchRequest,
   type BindingNames,
 } from '../lib/key-binding-batch.ts';
 import { findRealm } from '../lib/realm-routing.ts';
@@ -40,6 +41,7 @@ import {
   automationsWaitingForKeyApproval,
   followAutomationKeyApprovals,
   followEndedKeyApprovals,
+  reportKeyApprovalChanges,
 } from '../lib/automation-key-approvals.ts';
 import { getAutomation } from '@cardstack/runtime-common/automations';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
@@ -270,10 +272,24 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
       realmServerAutomationChangeReporter(args),
       affected,
     );
-    await followAutomationKeyApprovals(
+    let followed = await followAutomationKeyApprovals(
       args,
       realmURL,
       await automationsWaitingForKeyApproval(args.dbAdapter, realmURL, args),
+    );
+    // A confirmation changes the key approvals the realm's automations show
+    // whether or not an automation's state moved (one approval of several
+    // landing, a binding approved again after a change), so the realm's
+    // direct writers are told of each automation not reported above.
+    await reportKeyApprovalChanges(
+      args,
+      [realmURL.href],
+      new Set([
+        ...affected.map((a) => a.automationId),
+        ...[...followed]
+          .filter(([, { kind }]) => kind !== 'unchanged')
+          .map(([id]) => id),
+      ]),
     );
     await sendJSON(ctxt, 201, {
       data: approved.map((a) => serializeApproved(args.virtualNetwork, a)),
@@ -473,6 +489,7 @@ export function handlePreviewKeyBindings(args: CreateRoutesArgs): Handler {
 
 const BATCH_ATTRIBUTES = new Set([
   'target',
+  'automation',
   'review',
   'interactive',
   'operations',
@@ -485,7 +502,11 @@ const BATCH_ATTRIBUTES = new Set([
 // approval covers when it covers only some, which the keys offered for each
 // slot then weigh alone. Answers every operation on the card's definition that needs
 // the caller's approval, grouped by destination, with the caller's keys and
-// shares a slot can take. Asked with a session signed in on the secure
+// shares a slot can take. In place of `target`, `automation` names a
+// switched-on automation by its card, and the batch is every operation the
+// automation declares whose key approval is the caller's to give, with the
+// automation's version, which the confirmation names back
+// (`AutomationBatchRequest`). Asked with a session signed in on the secure
 // origin: the window's own, or the CLI's (`boxel keys approve`).
 export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
   let { dbAdapter, definitionLookup, virtualNetwork, realms, reconciler } =
@@ -540,9 +561,41 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
     ) {
       throw new UserKeyError(400, 'operations is a list of operation names');
     }
-    let { target } = validateContextRequest({ target: attributes.target });
-    if (!target) {
-      throw new UserKeyError(400, 'a batch is asked for on a card or type');
+    let { automation } = attributes;
+    let request: ApprovalBatchRequest;
+    if (automation !== undefined) {
+      if (
+        attributes.target !== undefined ||
+        review !== undefined ||
+        interactive !== undefined
+      ) {
+        throw new UserKeyError(
+          400,
+          "an automation's batch names the automation card as automation, with no target, review or interactive",
+        );
+      }
+      let card = validateContextRequest({
+        target: { kind: 'instance', url: automation },
+      }).target as { url: string };
+      request = {
+        automation: card.url,
+        ...(operations !== undefined
+          ? { operations: operations as string[] }
+          : {}),
+      };
+    } else {
+      let { target } = validateContextRequest({ target: attributes.target });
+      if (!target) {
+        throw new UserKeyError(400, 'a batch is asked for on a card or type');
+      }
+      request = {
+        target,
+        review: review === true,
+        interactive: interactive === true,
+        ...(operations !== undefined
+          ? { operations: operations as string[] }
+          : {}),
+      };
     }
     let batch = await approvalBatch(
       {
@@ -553,14 +606,7 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
         virtualNetwork,
       },
       user,
-      {
-        target,
-        review: review === true,
-        interactive: interactive === true,
-        ...(operations !== undefined
-          ? { operations: operations as string[] }
-          : {}),
-      },
+      request,
     );
     await sendJSON(ctxt, 200, {
       data: {

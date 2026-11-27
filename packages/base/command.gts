@@ -278,6 +278,12 @@ export class OpenSecureWindowInput extends CardDef {
   @field realm = contains(StringField);
   @field share = contains(StringField);
   @field operation = contains(StringField);
+  // The `approve` mode's automation card: the window approves every key
+  // approval the switched-on automation is missing that the user can give.
+  @field automation = contains(StringField);
+  // The `connect` mode's connection to sign in again: the key id of one of
+  // the user's connections that its service no longer accepts.
+  @field reconnect = contains(StringField);
   @field reason = contains(StringField);
 }
 
@@ -758,6 +764,11 @@ export class RunRealmCodeResult extends CardDef {
   @field createdWorkspaces = containsMany(StringField);
   // URLs of the workspaces the script deleted with `realm.workspaces.delete`.
   @field deletedWorkspaces = containsMany(StringField);
+  // What the script's `realm.automations` calls started or switched on, in
+  // order, one line each, such as `Started a Preview of <card>, run <id>`
+  // or `Switched on <card> (active)`. Each spends, and stays done when the
+  // run fails later.
+  @field automationActions = containsMany(StringField);
   // The `realm.index` calls the script made, in order, such as `reindex` or
   // `invalidate <paths>`. The realm server does the indexing after each call.
   @field indexActions = containsMany(StringField);
@@ -798,6 +809,7 @@ export class RunRealmCodeResult extends CardDef {
       !this.scriptFixes?.length &&
       !this.createdWorkspaces?.length &&
       !this.deletedWorkspaces?.length &&
+      !this.automationActions?.length &&
       !this.failedUiActions.length &&
       !this.showError
     );
@@ -838,6 +850,12 @@ export class RunRealmCodeResult extends CardDef {
             <span class='glyph' aria-hidden='true'>−</span>
             <span class='text'>Deleted workspace
               <span class='path'>{{url}}</span></span>
+          </div>
+        {{/each}}
+        {{#each @model.automationActions as |line|}}
+          <div class='line' data-test-realm-code-automation-action>
+            <span class='glyph done' aria-hidden='true'>✓</span>
+            <span class='text'>{{line}}</span>
           </div>
         {{/each}}
         {{#each @model.failedUiActions as |uiAction|}}
@@ -1513,6 +1531,48 @@ export class UnpublishRealmResult extends CardDef {
   @field publishedRealmURL = contains(StringField);
   @field status = contains(StringField);
   @field error = contains(StringField);
+}
+
+// A host URL is an address that serves a realm besides the realm's own URL.
+// The mount-host-url tool builds the address from 'kind' and 'name'.
+export class MountHostURLInput extends CardDef {
+  @field realmURL = contains(StringField, {
+    description:
+      'URL of the realm to mount, e.g. "https://example.com/user/my-realm/".',
+  });
+  @field kind = contains(StringField, {
+    description:
+      'The kind of address: "boxel-space" (the address in the Boxel Space of the realm owner), "site-name" (a subdomain of the Boxel site domain) or "custom-domain" (a domain the deployment routes to the realm).',
+  });
+  @field name = contains(StringField, {
+    description:
+      'For "site-name", the subdomain, e.g. "my-site". The tool claims the site name for the realm when the caller has no claim on it. For "custom-domain", the hostname, e.g. "www.example.com". Not used for "boxel-space".',
+  });
+}
+
+// 'hostURLId' rather than 'id' because CardDef already has 'id' as the
+// identifier of the instance.
+export class MountHostURLResult extends CardDef {
+  @field hostURLId = contains(StringField);
+  @field url = contains(StringField);
+  @field kind = contains(StringField);
+  @field isCanonical = contains(BooleanField);
+}
+
+export class UnmountHostURLInput extends CardDef {
+  @field realmURL = contains(StringField, {
+    description: 'URL of the realm that is mounted at the host URL.',
+  });
+  @field url = contains(StringField, {
+    description:
+      'The host URL to unmount, e.g. "https://my-site.example.com/". The scheme is optional.',
+  });
+}
+
+// 'status' is 'unmounted'. A refusal throws an error and gives no result.
+export class UnmountHostURLResult extends CardDef {
+  @field url = contains(StringField);
+  @field status = contains(StringField);
 }
 
 export class GetPublishedRealmsInput extends CardDef {

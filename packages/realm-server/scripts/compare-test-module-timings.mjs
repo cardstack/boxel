@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-env node */
 
 // Compares tests/test-module-timings.json at two points in history and says
 // which test files the suite's time went to. The file is the shard-timings

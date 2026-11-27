@@ -7,6 +7,9 @@ import { Button } from './button';
 import { Composer } from './composer';
 import type { ComposerAttachment } from './composer';
 
+const SOURCE =
+  '<Composer @mode={{this.mode}} @onModeChange={{this.setMode}} @attachments={{this.attachments}} @onSend={{this.send}} @onStop={{this.stop}} />';
+
 // ── Composer ─────────────────────────────────────────────────────────────
 const ATTACHMENTS: ComposerAttachment[] = [
   { id: 'a1', label: 'Slow Bloom Coffee · Menu', auto: true },
@@ -46,6 +49,7 @@ class ComposerUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='Composer'
+      @source={{SOURCE}}
       @description='The prompt bar, carrying the four things a bare textarea cannot: the context the agent will actually see, the mode that decides whether it may write, a note stating that mode’s consequence, and a hint that tells the truth while a run is in flight. The field grows with its content through a CSS grid replica — no measurement, no resize observer, no timer. Enter sends and Shift+Enter inserts a newline (Mod+Enter always sends, whichever way you set @submitOnEnter). The hint is deliberately NOT a `placeholder` attribute: a placeholder doubles as the accessible name, so the field would lose its name the moment you typed, and this hint changes with the mode and the queue — the worst possible candidate for a name. `aria-label` names the field permanently and the hint is aria-hidden beside it.'
     >
       <:example>

@@ -6,6 +6,9 @@ import { AlertDialog } from './alert-dialog';
 import { Button } from './button';
 import { FreestyleUsage } from './freestyle-usage';
 
+const SOURCE =
+  '<AlertDialog @title="Delete 47 records?" @description="…" @confirmLabel="Delete records" @onConfirm={{this.confirmed}}><:trigger as |isOpen toggle|>…</:trigger></AlertDialog>';
+
 // ── AlertDialog ──────────────────────────────────────────────────────────
 
 class AlertDialogUsage extends GlimmerComponent {
@@ -21,6 +24,7 @@ class AlertDialogUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='AlertDialog'
+      @source={{SOURCE}}
       @description='The destructive confirm, composed from Dialog. Four things separate it from a Dialog and each is a decision rather than a style: it is always modal, an outside click never dismisses it, focus starts on Cancel, and its role is alertdialog so assistive tech is told this interrupts rather than presents. Cancel is FIRST in DOM order, which means the native dialog focusing steps land on the safe choice with no focus() call at all — the platform does the work. Escape is taken in the capture phase, so a host page that also listens for Escape cannot make one keypress mean two things.'
     >
       <:example>

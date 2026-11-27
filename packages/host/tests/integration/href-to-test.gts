@@ -8,6 +8,7 @@ import { module, test } from 'qunit';
 import {
   DURING_PRERENDER_HEADER,
   validateHostRoutes,
+  VirtualNetwork,
   type HostRoute,
   type HostRouteTypeInfo,
   type RawHostRoutingRule,
@@ -75,6 +76,7 @@ const RULES: RawHostRoutingRule[] = [
 function validatedRoutes(): readonly HostRoute[] {
   let { routes, warnings } = validateHostRoutes(RULES, {
     realmURL: new URL(testRealmURL),
+    virtualNetwork: new VirtualNetwork(),
     lookupType: (type) => TYPES[type.name],
   });
   let dropped = warnings.filter((w) => w.dropped);

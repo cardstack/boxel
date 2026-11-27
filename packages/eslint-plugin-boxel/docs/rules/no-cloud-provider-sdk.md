@@ -1,4 +1,6 @@
-# Disallow loading a cloud provider SDK outside the modules that adapt it, by static import, re-export, dynamic `import()`, or `require()` (`@cardstack/boxel/no-cloud-provider-sdk`)
+# @cardstack/boxel/no-cloud-provider-sdk
+
+📝 Disallow loading a cloud provider SDK outside the modules that adapt it, by static import, re-export, dynamic `import()`, or `require()`.
 
 <!-- end auto-generated rule header -->
 

@@ -221,6 +221,12 @@ export class EvaluationCard extends CardDef {
   // only, for an evaluation of what the assistant does when an operation is
   // refused "Interactive use not approved".
   @field automationApprovals = containsMany(AutomationApprovalField);
+  // The runner confirms each automation gate the assistant's script waits
+  // on (a Preview, a Run now or a switch-on), as the person clicking Confirm
+  // after saying yes in the chat. Off, a gate ends the run like any other
+  // call that waits for approval, which is what an evaluation of a refusal
+  // wants.
+  @field confirmAutomations = contains(BooleanField);
   // A conversation-only evaluation, graded on what the assistant says and
   // which tools it calls: the run passes when every prompt was sent and
   // nothing was written, and no card has to render. Writing anything fails

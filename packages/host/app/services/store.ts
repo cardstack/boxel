@@ -139,6 +139,7 @@ import {
   withTimersBlocked,
 } from '../utils/render-timer-stub';
 
+import type { SearchResource } from '../resources/search';
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
 import type ClientTelemetryService from './client-telemetry';
@@ -153,7 +154,6 @@ import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type ToolService from './tool-service';
-import type { SearchResource } from '../resources/search';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';

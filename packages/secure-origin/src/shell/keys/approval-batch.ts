@@ -23,6 +23,8 @@ import {
 export interface SlotChoice {
   slot: string;
   kind: 'userKey' | 'apiKey';
+  // In an automation's batch: the card type the slot is on.
+  card?: string;
   options: SlotOption[];
 }
 
@@ -77,7 +79,12 @@ export function slotChoices(
       (a, b) =>
         b.covers.length - a.covers.length || a.name.localeCompare(b.name),
     );
-    choices.push({ slot: slot.slot, kind, options });
+    choices.push({
+      slot: slot.slot,
+      kind,
+      options,
+      ...(slot.card ? { card: slot.card } : {}),
+    });
   }
   return choices;
 }
@@ -94,9 +101,11 @@ export function tickedOperationNames(
 ): string[] | undefined {
   let operations = batch.groups.flatMap((g) => g.operations);
   let names = new Set(
-    operations.filter((o) => ticked.has(operationKey(o))).map((o) => o.name),
+    operations
+      .filter((o) => ticked.has(operationKey(o)))
+      .map((o) => o.key ?? o.name),
   );
-  if (names.size === 0 || operations.every((o) => names.has(o.name))) {
+  if (names.size === 0 || operations.every((o) => names.has(o.key ?? o.name))) {
     return undefined;
   }
   return [...names];
@@ -231,6 +240,9 @@ export function newGrants(
 // How an operation is named among the batch's: its name, and the card it is
 // approved for when it is approved per instance.
 export function operationKey(operation: BatchOperation): string {
+  if (operation.key) {
+    return operation.key;
+  }
   return operation.instance
     ? `${operation.name} ${operation.instance}`
     : operation.name;
@@ -333,7 +345,9 @@ export function approvalOf(
     group.operations
       .filter((o) => ticked.has(operationKey(o)))
       .map((o) => ({
-        codeRef: { module: batch.card.module, name: batch.card.exportName },
+        codeRef: o.card
+          ? { module: o.card.module, name: o.card.exportName }
+          : { module: batch.card.module, name: batch.card.exportName },
         operation: o.name,
         ...(o.instance ? { instance: o.instance } : {}),
         expectedDestination: group.destination.href,
@@ -342,7 +356,7 @@ export function approvalOf(
             let kind = choices.find((c) => c.slot === s.slot)!.kind;
             let id = chosen[s.slot]!;
             return [
-              s.slot,
+              s.token ?? s.slot,
               kind === 'userKey'
                 ? { keyId: id, expectedFingerprint: s.fingerprint }
                 : { shareId: id, expectedFingerprint: s.fingerprint },
@@ -399,7 +413,10 @@ export function batchFor(
 // automations (only operations approved for automations already), or every slot
 // that needs approving was last approved for interactive use. Either way it
 // is only where the choice starts: the confirmation says what interactive use
-// allows before anything is approved.
+// allows before anything is approved. An automation's batch starts on
+// automations only, since the automation's scheduled runs are what the user
+// approves, unless a slot was last approved for interactive use, which
+// approving for automations only would take away.
 export function initialUse(
   batch: ApprovalBatch,
   {
@@ -413,6 +430,11 @@ export function initialUse(
     needed.every(
       (s) => s.approved !== undefined && s.approved.interactive === interactive,
     );
+  if (batch.automation) {
+    return needed.some((s) => s.approved?.interactive)
+      ? 'interactive'
+      : 'automations';
+  }
   if (!cli) {
     return lastApprovedFor(false) ? 'automations' : 'interactive';
   }
@@ -514,7 +536,14 @@ export function sharesForVisitors(
 // caps.
 export function anonymousConfirmation(
   shares: ({ label: string } & AnonymousCaps)[],
+  // For an automation's approval, the display names of the card types the
+  // calls are on, which a person opens to make them; a card's page says
+  // "this card".
+  cardTypes?: string[],
 ): string {
+  let opens = cardTypes?.length
+    ? `a ${listOf(cardTypes, 'or')} card`
+    : 'this card';
   let capped = shares.flatMap((share) => {
     let caps = anonymousCapsPhrase(share, { short: true });
     return caps ? [{ label: share.label, caps }] : [];
@@ -525,7 +554,7 @@ export function anonymousConfirmation(
       : shares.length === 1
         ? anonymousCapsClause(shares[0])
         : `, up to each key’s anonymous caps (${capped.map((s) => `${s.label}: ${s.caps}`).join(', ')})`;
-  return `Anyone on the internet who opens this card, including people who aren’t signed in, can make these calls with ${shares.length === 1 ? 'this key' : 'these keys'}${caps}.`;
+  return `Anyone on the internet who opens ${opens}, including people who aren’t signed in, can make these calls with ${shares.length === 1 ? 'this key' : 'these keys'}${caps}.`;
 }
 
 // A daily budget as typed: a whole number of calls, at least one.
@@ -538,4 +567,11 @@ export function parseDailyBudget(
   }
   let budget = Number(trimmed);
   return budget >= 1 && budget <= 2_147_483_647 ? budget : undefined;
+}
+
+// "A", "A or B", "A, B or C".
+function listOf(items: string[], type: 'or' | 'and'): string {
+  return new Intl.ListFormat('en', {
+    type: type === 'or' ? 'disjunction' : 'conjunction',
+  }).format(items);
 }

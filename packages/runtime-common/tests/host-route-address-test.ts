@@ -53,6 +53,7 @@ const postType = { module: POST_MODULE, name: 'Post' } as ResolvedCodeRef;
 function routesFor(rules: RawHostRoutingRule[]): readonly HostRoute[] {
   let { routes, warnings } = validateHostRoutes(rules, {
     realmURL: new URL(REALM),
+    virtualNetwork: new VirtualNetwork(),
     lookupType: (type) => (type.name === 'Post' ? POST : undefined),
   });
   if (warnings.length > 0) {

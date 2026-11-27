@@ -117,6 +117,19 @@ module('Unit | secure-window', function () {
     });
   });
 
+  test("approving an automation's keys names the automation card alone", function (assert) {
+    let url = secureWindowURL({
+      mode: 'approve',
+      automation: `${REALM}Automation/nightly`,
+      reason: 'To turn on the automation',
+    });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('approve'));
+    assert.deepEqual(fragmentOf(url), {
+      automation: `${REALM}Automation/nightly`,
+      reason: 'To turn on the automation',
+    });
+  });
+
   test('reviewing changes names the operation on a card type, its module, export and realm', function (assert) {
     let url = secureWindowURL({
       mode: 'review-changes',

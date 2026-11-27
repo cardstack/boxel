@@ -65,6 +65,7 @@ module(basename(import.meta.filename), function () {
         'automation-tick',
         'capture',
         'capture-card',
+        'capture-oauth',
         'daily-credit-grant',
         'from-scratch-index',
         'full-reindex',

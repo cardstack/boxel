@@ -4,6 +4,8 @@ import {
   jobIdentity,
   notifyAllFileChanges,
   notifyRealmIndexUpdated,
+  FOLLOW_AUTOMATION_KEY_APPROVALS_PATH,
+  type FollowAutomationKeyApprovalsRequest,
   incrementalCompletionThatFits,
   userIdFromUsername,
   fetchUserPermissions,
@@ -40,7 +42,10 @@ import {
   withRunIndexingRetries,
   type RunIndexing,
 } from '../run-indexing.ts';
-import { syncAutomationsAfterIndex } from '../automation-index-hook.ts';
+import {
+  syncAutomationsAfterIndex,
+  type AutomationSyncOutcome,
+} from '../automation-index-hook.ts';
 import { taskAutomationChangeReporter } from '../automation-change-events.ts';
 import { taskRunChangeReporter } from '../automation-run-events.ts';
 
@@ -839,7 +844,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     await notifyRealmIndexUpdated(dbAdapter, args.realmURL);
     // The pass rebuilt the whole realm, so every automation in it follows
     // its card.
-    await syncAutomationsAfterPass(log, jobInfo, {
+    let synced = await syncAutomationsAfterPass(log, jobInfo, {
       dbAdapter,
       definitionLookup,
       virtualNetwork,
@@ -857,6 +862,20 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
         log,
       }),
     });
+    // The realm checks the automations' key approvals in full, which the
+    // hook can't, as the worker reads no operation definitions. It hears of
+    // the pass from here whoever started it, a reindex no realm awaits
+    // included. It isn't asked when the hook left nothing to check (every
+    // automation paused or just removed), since asking mounts the realm. A
+    // failed sync still asks, as the hook can't say what state its row is in.
+    let followable = [...synced.values()].some(
+      (outcome) =>
+        outcome.kind === 'failed' ||
+        (outcome.kind !== 'removed' && outcome.automation.state !== 'paused'),
+    );
+    if (followable) {
+      await followAutomationKeyApprovalsInRealm(log, jobInfo, _fetch, realmURL);
+    }
     reportStatus(args.jobInfo, 'finish');
     let queueClaim = queueClaimOf(jobInfo);
     return {
@@ -1082,7 +1101,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
     }
     // A deleted card's row is gone from the index, so the pass's changes are
     // named alongside what it visited.
-    await syncAutomationsAfterPass(log, jobInfo, {
+    let synced = await syncAutomationsAfterPass(log, jobInfo, {
       dbAdapter,
       definitionLookup,
       virtualNetwork,
@@ -1101,6 +1120,32 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         log,
       }),
     });
+    // The hook can't check the automations' key approvals in full, as the
+    // worker reads no operation definitions, so the pass asks the realm to,
+    // whoever started it: a pass no realm awaits (the prerender reconcile's
+    // retry, a commit's follow-up) has nobody else to check it, and a realm
+    // awaiting the pass may have stopped before it landed. The realm answers
+    // at once and checks beside the pass. A paused automation, or one the
+    // pass removed, has nothing to check.
+    let touchedAutomations = [...synced]
+      .filter(
+        ([, outcome]) =>
+          outcome.kind === 'failed' ||
+          (outcome.kind !== 'removed' && outcome.automation.state !== 'paused'),
+      )
+      .map(([automationId]) => automationId);
+    if (touchedAutomations.length > 0) {
+      await followAutomationKeyApprovalsInRealm(
+        log,
+        jobInfo,
+        _fetch,
+        realmURL,
+        {
+          automationIds: touchedAutomations,
+          reportChanges: args.realmEvents !== false,
+        },
+      );
+    }
     let chargedRunIndexing: RunIndexing | undefined;
     if (runIndexing) {
       // The run's indexing so far, with this pass's: the worker process was
@@ -1197,12 +1242,13 @@ function realmFileReader(
 // The automation card's index hook, run once the pass has committed. The index
 // is already committed, so a failure here is logged, naming the automation
 // when one automation's sync failed, and leaves the job a success: the next
-// pass over the card syncs its automation again.
+// pass over the card syncs its automation again. Returns what it did to each
+// automation it synced: nothing when the whole sync failed.
 async function syncAutomationsAfterPass(
   log: TaskArgs['log'],
   jobInfo: JobInfo | undefined,
   args: Parameters<typeof syncAutomationsAfterIndex>[0],
-): Promise<void> {
+): Promise<Map<string, AutomationSyncOutcome>> {
   try {
     let synced = await syncAutomationsAfterIndex(args);
     for (let [automationId, result] of synced) {
@@ -1218,9 +1264,58 @@ async function syncAutomationsAfterPass(
         );
       }
     }
+    return synced;
   } catch (e) {
     log.warn(
       `${jobIdentity(jobInfo)} failed to sync automations with their cards in ${args.realmURL}: ${(e as Error)?.message}`,
+    );
+    return new Map();
+  }
+}
+
+// How long an index pass waits for the realm to take its request to check
+// the automations' key approvals. The realm answers once the check has
+// started, so this covers reaching a realm server and its mounting the realm;
+// the job holds the realm's index lane while it waits.
+const FOLLOW_AUTOMATION_KEY_APPROVALS_TIMEOUT_MS = 10_000;
+
+// Asks the realm to check the key approvals of its automations in full
+// (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`): every one in it, or only those
+// `touched` names, as the realm's own user, through
+// the pass's fetch. The request reaches one realm server, which mounts the
+// realm if it hasn't. The index is already committed, so a refusal or failure
+// is logged and leaves the job a success: an automation then stays as the
+// hook left it until the next pass over it, an approval landing, or its next
+// run's admission.
+async function followAutomationKeyApprovalsInRealm(
+  log: TaskArgs['log'],
+  jobInfo: JobInfo | undefined,
+  _fetch: typeof globalThis.fetch,
+  realmURL: string,
+  touched?: FollowAutomationKeyApprovalsRequest,
+): Promise<void> {
+  let url = new URL(
+    FOLLOW_AUTOMATION_KEY_APPROVALS_PATH.replace(/^\//, ''),
+    realmURL,
+  ).href;
+  try {
+    let response = await _fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        ...(touched ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(touched ? { body: JSON.stringify(touched) } : {}),
+      signal: AbortSignal.timeout(FOLLOW_AUTOMATION_KEY_APPROVALS_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      log.warn(
+        `${jobIdentity(jobInfo)} the realm ${realmURL} refused to check its automations' key approvals: ${response.status} ${await response.text()}`,
+      );
+    }
+  } catch (e) {
+    log.warn(
+      `${jobIdentity(jobInfo)} couldn't ask the realm ${realmURL} to check its automations' key approvals: ${(e as Error)?.message}`,
     );
   }
 }

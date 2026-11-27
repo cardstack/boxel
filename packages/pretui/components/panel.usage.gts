@@ -15,9 +15,14 @@ class PanelUsage extends GlimmerComponent {
   @tracked eyebrow = 'container';
   setTitle = (v: string) => (this.title = v);
   setEyebrow = (v: string) => (this.eyebrow = v);
+  get usage() {
+    return `<Panel @title="${this.title}" @eyebrow="${this.eyebrow}">\n  <:default>…</:default>\n  <:status>Saved just now</:status>\n  <:actions>…</:actions>\n</Panel>`;
+  }
+
   <template>
     <FreestyleUsage
       @name='Panel'
+      @source={{this.usage}}
       @description='A wrapper container for a card: the panel surface with standard padding, an optional title header, and the status/actions footer — the merged successor to Container and CardContainer.'
     >
       <:example>

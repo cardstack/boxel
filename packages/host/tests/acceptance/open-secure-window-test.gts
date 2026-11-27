@@ -299,6 +299,74 @@ module('Acceptance | open the secure window', function (hooks) {
     );
   });
 
+  test("approving an automation's keys opens the window for the automation card alone", async function (assert) {
+    let { calls } = stubWindowOpen(window);
+    await visitWeatherStation();
+    let { toolContext } = getService('tool-service');
+    let tool = new OpenSecureWindowTool(toolContext);
+    let automation = `${testRealmURL}Automation/nightly`;
+    await tool.execute({ mode: 'approve', automation });
+    assert.strictEqual(calls.length, 1);
+    let opened = new URL(calls[0].url);
+    assert.strictEqual(opened.pathname.split('/').pop(), 'approve');
+    assert.strictEqual(opened.search, '');
+    assert.deepEqual(
+      Object.fromEntries(new URLSearchParams(opened.hash.slice(1))),
+      { automation },
+      'the automation card, never its operations',
+    );
+    await assert.rejects(
+      tool.execute({
+        mode: 'approve',
+        automation,
+        cardId: `${testRealmURL}WeatherStation/home`,
+        operation: OPERATION,
+      }),
+      /names the automation card \(automation\) alone/,
+      'an automation approval names nothing else',
+    );
+    await assert.rejects(
+      tool.execute({ mode: 'review-changes', automation }),
+      /automation is for the approve mode only/,
+      'another mode takes no automation',
+    );
+    await assert.rejects(
+      tool.execute({ mode: 'approve', automation: 'javascript:alert(1)' }),
+      /automation must be a URL or a prefix-form id/,
+      'an automation that is not a URL',
+    );
+  });
+
+  test('reconnecting a connection opens the connect page for that connection alone', async function (assert) {
+    let { calls } = stubWindowOpen(window);
+    await visitWeatherStation();
+    let { toolContext } = getService('tool-service');
+    let tool = new OpenSecureWindowTool(toolContext);
+    await tool.execute({ mode: 'connect', reconnect: 'key-42' });
+    assert.strictEqual(calls.length, 1);
+    let opened = new URL(calls[0].url);
+    assert.strictEqual(opened.pathname.split('/').pop(), 'connect');
+    assert.deepEqual(
+      Object.fromEntries(new URLSearchParams(opened.hash.slice(1))),
+      { reconnect: 'key-42' },
+      'the connection, never an operation or a realm',
+    );
+    await assert.rejects(
+      tool.execute({
+        mode: 'connect',
+        reconnect: 'key-42',
+        realm: testRealmURL,
+      }),
+      /names the connection \(reconnect, its key id\) alone/,
+      'a reconnect names nothing else',
+    );
+    await assert.rejects(
+      tool.execute({ mode: 'enter-key', reconnect: 'key-42' }),
+      /reconnect is for the connect mode only/,
+      'another mode takes no reconnect',
+    );
+  });
+
   test('what the window is opened for must name things it can read', async function (assert) {
     let { calls } = stubWindowOpen(window);
     await visitWeatherStation();

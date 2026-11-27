@@ -63,7 +63,7 @@
     "ember-source": "catalog:",
     "ember-template-imports": "^4.4.0",
     "ember-template-lint": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
     "qunit": "catalog:",

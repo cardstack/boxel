@@ -35,9 +35,19 @@ class AvatarUsage extends GlimmerComponent {
   get hueVal() {
     return this.hue || undefined;
   }
+  get usage() {
+    let bits = [`@name='${this.name}'`];
+    if (this.src) bits.push(`@src='${this.src}'`);
+    if (this.hue) bits.push(`@hue='${this.hue}'`);
+    if (this.size !== 24) bits.push(`@size={{${this.size}}}`);
+    if (this.shape !== 'circle') bits.push(`@shape='${this.shape}'`);
+    return `<Avatar ${bits.join(' ')} />`;
+  }
+
   <template>
     <FreestyleUsage
       @name='Avatar'
+      @source={{this.usage}}
       @description="An avatar component that displays a user's initials on a colored background."
     >
       <:example>

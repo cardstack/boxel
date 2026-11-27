@@ -5,6 +5,9 @@ import { FreestyleUsage } from './freestyle-usage';
 import { Transfer } from './transfer';
 import type { PickerRecord } from '../internal/forms-picker';
 
+const SOURCE =
+  '<Transfer @options={{this.columns}} @value={{this.value}} @label=\'Report columns\' @onValueChange={{this.setValue}} />';
+
 const COLUMNS: PickerRecord[] = [
   { id: 'lot', label: 'Lot', meta: 'a0X…' },
   { id: 'tea', label: 'Tea', meta: 'name' },
@@ -23,7 +26,7 @@ class TransferUsage extends Component {
     <FreestyleUsage
       @name='Transfer'
       @description='DuelingPicklist under the Ant name: two lists with move buttons, where the order of the right-hand list is the value. Import it when a port already says Transfer; the component and its writeup are DuelingPicklist.'
-      @source="<Transfer @options={{this.columns}} @value={{this.value}} @label='Report columns' @onValueChange={{this.setValue}} />"
+      @source={{SOURCE}}
     >
       <:example>
         <Transfer

@@ -15,6 +15,15 @@ const SWATCHES: InteractiveInputOption[] = [
   { value: '#E3474C', label: 'Vermilion', swatch: '#E3474C' },
 ];
 
+const SOURCE = `<InteractiveInput
+  @prompt="Which accent should the callout use?"
+  @options={{this.options}}
+  @value={{this.value}}
+  @onValueChange={{this.setValue}}
+  @onRerun={{this.rerun}}
+  @answered={{this.answered}}
+/>`;
+
 class InteractiveInputUsage extends GlimmerComponent {
   @tracked value = '#C3FC33';
   @tracked answered = false;
@@ -27,6 +36,7 @@ class InteractiveInputUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='InteractiveInput'
+      @source={{SOURCE}}
       @description='The agent cannot continue until it has a value, and the whole point of the pattern is that it asks with a TYPED picker rather than free text: the answer is one of a known set, so the reader chooses instead of spelling. Answering does not resume anything — it arms an explicit "Re-run with #C3FC33", because a value that silently restarts a run is a value you cannot review. The picker is a real fieldset of native radios, which is where the arrow keys, Home/End, the grouped announcement and the :checked styling hook all come from; the swatch-div original had none of them. While the request is live the block wears the reserved attention hue, and the moment it settles it gives that hue back.'
     >
       <:example>

@@ -15,10 +15,10 @@ import {
   type RenderableSearchEntry,
 } from '../../resources/renderable-search-entries';
 
-import type { HydrationMode } from './hydratable-card';
 import type { SearchEntriesResource } from '../../resources/search-entries';
 
 import type StoreService from '../../services/store';
+import type { HydrationMode } from './hydratable-card';
 
 // The card-facing signature plus one host-only, optional extra: the search
 // sheet hands in a service-owned search resource so its results survive the

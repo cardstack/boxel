@@ -49,23 +49,27 @@ import SendAiAssistantMessageTool from '@cardstack/host/tools/send-ai-assistant-
 
 import HostBaseTool from '../lib/host-base-tool';
 import LimitedSet from '../lib/limited-set';
+import {
+  isAutomationStartCall,
+  type AutomationConfirmation,
+} from '../lib/realm-runner/automations';
 import { runDeliveryId } from '../lib/run-delivery';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
   isAutoExecutableTool,
 } from '../lib/tool-auto-execute';
 
+import type MessageTool from '../lib/matrix-classes/message-tool';
+import type { RealmFileEdit } from '../lib/realm-runner/edits';
+import type { RoomResource } from '../resources/room';
+import type { ScriptAsk } from '../tools/run-realm-code';
+import type { EntrySummary } from '../tools/search-entries';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type StoreService from './store';
-import type MessageTool from '../lib/matrix-classes/message-tool';
-import type { RealmFileEdit } from '../lib/realm-runner/edits';
-import type { RoomResource } from '../resources/room';
-import type { ScriptAsk } from '../tools/run-realm-code';
-import type { EntrySummary } from '../tools/search-entries';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
@@ -460,6 +464,28 @@ export default class ToolService extends Service {
     });
   }
 
+  // What the reader confirmed at a script's gate for each automation call
+  // the script names (the card, its triggers and its monthly cap, as Boxel
+  // read them for the gate), by tool request. The run reads it once, and
+  // starts or switches on only what the reader confirmed.
+  private automationConfirmations = new Map<string, AutomationConfirmation[]>();
+
+  confirmAutomations(
+    toolRequestId: string,
+    confirmations: AutomationConfirmation[],
+  ) {
+    this.automationConfirmations.set(toolRequestId, confirmations);
+  }
+
+  // The confirmations a run of the call gets, once: a later run of the same
+  // call, such as a retry, gets none and is refused until the reader
+  // confirms again.
+  takeAutomationConfirmations(toolRequestId: string): AutomationConfirmation[] {
+    let confirmations = this.automationConfirmations.get(toolRequestId) ?? [];
+    this.automationConfirmations.delete(toolRequestId);
+    return confirmations;
+  }
+
   // Click-required calls the reader allowed for the rest of a session, by
   // room: "Always for this session" on a script's gate. Kept for the tab.
   private alwaysAllowed = new TrackedMap<string, Set<string>>();
@@ -468,10 +494,16 @@ export default class ToolService extends Service {
     return this.alwaysAllowed.get(roomId)?.has(call) ?? false;
   }
 
+  // A call that starts an automation run or switches one on is never
+  // allowed for the session: each one spends on a card the person confirms
+  // at that call's own gate.
   allowAlways(roomId: string, calls: string[]) {
     this.alwaysAllowed.set(
       roomId,
-      new Set([...(this.alwaysAllowed.get(roomId) ?? []), ...calls]),
+      new Set([
+        ...(this.alwaysAllowed.get(roomId) ?? []),
+        ...calls.filter((call) => !isAutomationStartCall(call)),
+      ]),
     );
   }
 
@@ -1642,6 +1674,12 @@ export default class ToolService extends Service {
                 extendTimeout(this.#scriptAskMaxMs);
                 return this.askFromScript(requestId, request);
               };
+              (
+                toolToRun as {
+                  confirmedAutomations?: AutomationConfirmation[];
+                }
+              ).confirmedAutomations =
+                this.takeAutomationConfirmations(requestId);
               let stoppable = toolToRun as { stop?: () => void };
               if (typeof stoppable.stop === 'function') {
                 this.stoppableTools.set(requestId, {

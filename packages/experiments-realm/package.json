@@ -26,7 +26,7 @@
     "ember-modifier": "^4.1.0",
     "ember-template-lint": "catalog:",
     "eslint": "catalog:",
-    "eslint-plugin-import": "catalog:",
+    "eslint-plugin-import-x": "catalog:",
     "lodash-es": "catalog:",
     "tracked-built-ins": "catalog:"
   },

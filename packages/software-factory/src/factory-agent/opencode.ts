@@ -789,7 +789,6 @@ async function waitForSessionIdle(
   let lastHeartbeat = Date.now();
   let lastHeartbeatUpdated: number | undefined;
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     if (Date.now() - started > MAX_WAIT_MS) {
       throw new Error(

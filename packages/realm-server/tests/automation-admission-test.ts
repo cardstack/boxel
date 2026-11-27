@@ -29,7 +29,9 @@ import {
   CachingDefinitionLookup,
   type AutomationRun,
   type AutomationScriptOutcome,
+  type Job,
   type JobInfo,
+  type QueuePublisher,
   type Prerenderer,
   type Realm,
   type ReportAutomationChange,
@@ -44,6 +46,7 @@ import {
   readAutomationDeclaration,
 } from '@cardstack/runtime-common/automation-declaration';
 import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
+import { startResumedAIBatchFollowUps } from '@cardstack/runtime-common/ai-batch-follow-ups';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
 import { versionKeyOf } from '@cardstack/runtime-common/automation-key-approval';
 import { automationCreditsSince } from '@cardstack/runtime-common/automation-spend';
@@ -52,12 +55,14 @@ import {
   pauseAutomation,
   readAutomationFailures,
   removeAutomation,
+  resumeAutomation,
   setAutomationWaitingForCredits,
   switchOnAutomation,
 } from '@cardstack/runtime-common/automations';
 import { internalKeyFor } from '@cardstack/runtime-common';
 import {
   ROOMY_AUTOMATION_CAPS,
+  admitAnyPayer,
   ensureTestUser,
   realmSecretSeed,
   createJWT,
@@ -232,9 +237,8 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
-  // Switches the automation at `path` on for `payer`, from its card as
-  // indexed.
-  async function switchOn(path: string, payer = OWNER) {
+  // The automation at `path` as its card is indexed.
+  async function declarationOf(path: string) {
     let id = automationId(path);
     let card = await realm.realmIndexQueryEngine.instanceSource(
       new URL(`${realm.url}${path}`),
@@ -258,13 +262,19 @@ module(basename(import.meta.filename), function (hooks) {
     if (!read.ok) {
       throw new Error(`the card doesn't read: ${JSON.stringify(read)}`);
     }
+    return read.declaration;
+  }
+
+  // Switches the automation at `path` on for `payer`, from its card as
+  // indexed.
+  async function switchOn(path: string, payer = OWNER) {
     let switched = await switchOnAutomation(
       dbAdapter,
       {
-        automationId: id,
+        automationId: automationId(path),
         realm: ri(realm.url),
         user: payer,
-        declaration: read.declaration,
+        declaration: await declarationOf(path),
       },
       { matrixServerName: 'localhost', virtualNetwork },
     );
@@ -424,6 +434,29 @@ module(basename(import.meta.filename), function (hooks) {
 
   // Asserts that the run ended at admission with `reason`, before its tab
   // was asked anything.
+  // The follow-up was refused for `reason`, which paused its automation, and
+  // the pause held it: it never ran, and its batch waits for a resume.
+  async function assertHeldFor(
+    assert: Assert,
+    run: AutomationRun,
+    result: Awaited<ReturnType<typeof attempt>>,
+    calls: RunCommandArgs[],
+    reason: string,
+  ) {
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    assert.strictEqual(calls.length, 0, 'the script never ran');
+    assert.deepEqual(
+      (await admissionLines(run.id)).map((line) => line.data?.reason),
+      [reason],
+      'the run’s log says admission held it, and why',
+    );
+    let [batch] = await query(dbAdapter, [
+      'SELECT follow_up_held_at FROM ai_batches WHERE batch_id =',
+      param(run.slot),
+    ]);
+    assert.notStrictEqual(batch.follow_up_held_at, null);
+  }
+
   async function assertRefused(
     assert: Assert,
     run: AutomationRun,
@@ -747,25 +780,52 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
-  test('a batch’s follow-up runs while its automation is paused, and is held to the submitting run’s authority', async function (assert) {
+  test('a batch’s follow-up is held while its automation is paused, and acts on the submitting run’s authority until a resume', async function (assert) {
     let automation = await switchOn(CLEAN);
     let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    let followUp = await batchFollowUp(submitting);
     await pauseAutomation(
       dbAdapter,
       { automationId: automationId(CLEAN), user: OWNER },
       { matrixServerName: 'localhost', virtualNetwork },
     );
-    let followUp = await batchFollowUp(submitting);
-    let result = await attempt(followUp, { triggerKind: 'batch' });
     assert.strictEqual(
-      result.state,
-      'complete',
-      'the batch’s results are read, though the automation is paused',
+      (await getAutomationRun(dbAdapter, followUp.id))?.state,
+      'pending',
+      'the pause keeps the follow-up',
     );
 
-    // Revoked after the submitting run started but before the follow-up was
-    // enqueued: the follow-up still acts on the authority the submitting run
-    // had, so it is refused.
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(followUp, { triggerKind: 'batch', calls });
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    assert.strictEqual(calls.length, 0, 'the script never ran');
+    let held = await getAutomationRun(dbAdapter, followUp.id);
+    assert.deepEqual(
+      {
+        state: held?.state,
+        startedAt: held?.startedAt,
+        admittedAt: held?.admittedAt,
+      },
+      { state: 'pending', startedAt: null, admittedAt: null },
+      'admission holds the follow-up rather than ending it',
+    );
+    let [batch] = await query(dbAdapter, [
+      'SELECT follow_up_held_at FROM ai_batches WHERE batch_id =',
+      param(followUp.slot),
+    ]);
+    assert.notStrictEqual(batch.follow_up_held_at, null);
+    assert.deepEqual(
+      (await admissionLines(followUp.id)).map((line) => line.data?.reason),
+      ['automation-paused'],
+      'the run’s log says admission held it, and why',
+    );
+
+    // Not paused: the follow-up acts on the authority its submitting run
+    // had, so a revocation after that run started refuses it.
+    await query(dbAdapter, [
+      "UPDATE automations SET state = 'active', pause_reason = NULL, paused_by = NULL WHERE automation_id =",
+      param(automationId(CLEAN)),
+    ]);
     let submittedAt = Math.floor(Date.parse(submitting.createdAt) / 1000);
     assert.true(submittedAt >= automation.scheduledSince);
     let late = await batchFollowUp(submitting);
@@ -776,9 +836,200 @@ module(basename(import.meta.filename), function (hooks) {
       param(late.id),
     ]);
     await revokeSessionsAt(OWNER, submittedAt + 60);
-    let calls: RunCommandArgs[] = [];
+    calls = [];
     result = await attempt(late, { triggerKind: 'batch', calls });
-    await assertRefused(assert, late, result, calls, 'session-revoked');
+    // The payer's revocation pauses the automation, and the pause holds the
+    // follow-up rather than ending it.
+    await assertHeldFor(assert, late, result, calls, 'session-revoked');
+  });
+
+  test('a held follow-up acts as, and is billed to, the direct writer who resumed, on their authority from the resume', async function (assert) {
+    await switchOn(CLEAN);
+    let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    let followUp = await batchFollowUp(submitting);
+    let options = { matrixServerName: 'localhost', virtualNetwork };
+    await pauseAutomation(
+      dbAdapter,
+      { automationId: automationId(CLEAN), user: OWNER },
+      options,
+    );
+    // The submitter's sessions are revoked during the pause, and the
+    // writer's before the resume: neither strands the batch's results.
+    let pausedAt = Math.floor(Date.now() / 1000);
+    await revokeSessionsAt(OWNER, pausedAt);
+    await revokeSessionsAt(WRITER, pausedAt - 60);
+    let resumed = await resumeAutomation(
+      dbAdapter,
+      {
+        automationId: automationId(CLEAN),
+        user: WRITER,
+        declaration: await declarationOf(CLEAN),
+        admit: admitAnyPayer,
+      },
+      { ...options, now: pausedAt + 1 },
+    );
+    assert.true(resumed.ok);
+    let [batch] = await query(dbAdapter, [
+      'SELECT acts_as, follow_up_acts_as, follow_up_resumed_at FROM ai_batches WHERE batch_id =',
+      param(followUp.slot),
+    ]);
+    assert.strictEqual(
+      batch.acts_as,
+      OWNER,
+      'the batch stays billed to the submitting run’s identity',
+    );
+    assert.strictEqual(batch.follow_up_acts_as, WRITER);
+    // The resume starts the held follow-up at once, acting as the writer.
+    let published: unknown[] = [];
+    let started = await startResumedAIBatchFollowUps(
+      dbAdapter,
+      automationId(CLEAN),
+      {
+        queue: {
+          publish: async (args: unknown) => {
+            published.push(args);
+            return { id: published.length } as unknown as Job<any>;
+          },
+          destroy: async () => {},
+        } as unknown as QueuePublisher,
+        virtualNetwork,
+      },
+    );
+    assert.deepEqual(
+      started.map((outcome) => outcome.kind),
+      ['resumed'],
+      'the held follow-up is enqueued again',
+    );
+    assert.strictEqual(published.length, 1);
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, followUp.id))?.actsAs,
+      WRITER,
+    );
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(
+      (await getAutomationRun(dbAdapter, followUp.id))!,
+      { triggerKind: 'batch', calls },
+    );
+    assert.strictEqual(result.state, 'complete');
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(
+      calls[0].userId,
+      WRITER,
+      'the follow-up’s tab acts as whoever resumed',
+    );
+
+    // A revocation after the resume refuses it.
+    let again = await batchFollowUp(submitting);
+    await query(dbAdapter, [
+      'UPDATE ai_batches SET follow_up_acts_as =',
+      param(WRITER),
+      ', follow_up_resumed_at = to_timestamp(',
+      param(pausedAt + 1),
+      ') WHERE batch_id =',
+      param(again.slot),
+    ]);
+    await query(dbAdapter, [
+      'UPDATE automation_runs SET acts_as =',
+      param(WRITER),
+      'WHERE id =',
+      param(again.id),
+    ]);
+    await revokeSessionsAt(WRITER, pausedAt + 60);
+    calls = [];
+    result = await attempt((await getAutomationRun(dbAdapter, again.id))!, {
+      triggerKind: 'batch',
+      calls,
+    });
+    await assertHeldFor(assert, again, result, calls, 'session-revoked');
+  });
+
+  test('a follow-up whose batch a resume gave another identity is held, so it starts again acting as them', async function (assert) {
+    await switchOn(CLEAN);
+    let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    let followUp = await batchFollowUp(submitting);
+    // A resume by the writer landed after a job enqueued before the pause
+    // read the run row acting as the owner.
+    await query(dbAdapter, [
+      'UPDATE ai_batches SET follow_up_acts_as =',
+      param(WRITER),
+      ', follow_up_resumed_at = now() WHERE batch_id =',
+      param(followUp.slot),
+    ]);
+
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(followUp, { triggerKind: 'batch', calls });
+
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    assert.strictEqual(calls.length, 0, 'the script never ran as the owner');
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, followUp.id))?.state,
+      'pending',
+    );
+    assert.deepEqual(
+      (await admissionLines(followUp.id)).map((line) => line.data?.reason),
+      ['follow-up-identity-changed'],
+    );
+  });
+
+  test('a follow-up refused because its payer lost access is held by the pause that refusal makes, not ended', async function (assert) {
+    let automation = await switchOn(CLEAN);
+    let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    let followUp = await batchFollowUp(submitting);
+    await revokeSessionsAt(OWNER, automation.scheduledSince + 60);
+
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(followUp, { triggerKind: 'batch', calls });
+
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    assert.strictEqual(calls.length, 0, 'the script never ran');
+    let paused = await getAutomation(dbAdapter, automationId(CLEAN));
+    assert.deepEqual(
+      [paused?.state, paused?.pauseReason],
+      ['paused', 'payer-lost-access'],
+    );
+    let [batch] = await query(dbAdapter, [
+      'SELECT follow_up_run_id, follow_up_held_at FROM ai_batches WHERE batch_id =',
+      param(followUp.slot),
+    ]);
+    assert.notStrictEqual(batch.follow_up_held_at, null, 'the batch is held');
+    let current = (await getAutomationRun(
+      dbAdapter,
+      String(batch.follow_up_run_id),
+    ))!;
+    assert.deepEqual(
+      [current.slot, current.state],
+      [followUp.slot, 'pending'],
+      'a pending follow-up of the batch waits for a resume',
+    );
+  });
+
+  test('a follow-up whose key approval ended is held by the wait it starts, not ended', async function (assert) {
+    await switchOn(CLEAN);
+    let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    let followUp = await batchFollowUp(submitting);
+
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(followUp, {
+      triggerKind: 'batch',
+      calls,
+      realmAdmission: () =>
+        admissionAnswer({
+          code: 'key-approval-ended',
+          detail: 'the approval no longer matches',
+        }),
+    });
+
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    assert.strictEqual(calls.length, 0, 'the script never ran');
+    assert.strictEqual(
+      (await getAutomation(dbAdapter, automationId(CLEAN)))?.state,
+      'waiting-for-key-approval',
+    );
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, followUp.id))?.state,
+      'pending',
+      'the follow-up waits with the automation',
+    );
   });
 
   test('a script that doesn’t parse is refused before it runs', async function (assert) {
@@ -905,6 +1156,20 @@ module(basename(import.meta.filename), function (hooks) {
         }),
     });
     await assertRefused(assert, run, result, calls, 'binding-not-approved');
+    let [line] = await admissionLines(run.id);
+    assert.deepEqual(
+      {
+        operation: line?.data?.operation,
+        targetModule: line?.data?.targetModule,
+        targetName: line?.data?.targetName,
+      },
+      {
+        operation: 'list',
+        targetModule: INBOX.module,
+        targetName: INBOX.name,
+      },
+      'the admission line names the operation refused and the type it is declared on, which a notice links its fix to',
+    );
     assert.strictEqual(
       (await getAutomation(dbAdapter, automationId(NEEDS_APPROVAL)))?.state,
       'active',

@@ -959,7 +959,7 @@ export default class Dashboard extends Component<Signature> {
           calc(-1 * var(--dashboard-gutter-start));
         background-color: color-mix(
           in oklch,
-          var(--boxel-800) 55%,
+          var(--host-dashboard-background) 55%,
           transparent
         );
         backdrop-filter: blur(1.125rem) saturate(140%);
@@ -1053,7 +1053,7 @@ export default class Dashboard extends Component<Signature> {
         /* Both knobs set, so a touch screen keeps this size too. */
         --pretui-seg-h: var(--dashboard-head-control-height);
         --pretui-seg-px: var(--boxel-sp-sm);
-        --inset: var(--boxel-800);
+        --inset: var(--host-dashboard-background);
         --border: var(--boxel-light-10);
         --border-strong: var(--boxel-light-25);
         --card: var(--boxel-dark);
@@ -1157,7 +1157,7 @@ export default class Dashboard extends Component<Signature> {
         background-image: linear-gradient(
           to bottom,
           transparent,
-          var(--boxel-800) 72%
+          var(--host-dashboard-background) 72%
         );
         pointer-events: none;
       }

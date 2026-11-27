@@ -30,15 +30,23 @@ const DEFAULT_PROGRESS_POLL_INTERVAL_MS = 1000;
 export class RealmOperationError extends Error {
   readonly status?: number;
   readonly body?: string;
+  // The response's `Retry-After` header, when the server sent one.
+  readonly retryAfter?: string;
 
   constructor(
     message: string,
-    options?: { status?: number; body?: string; cause?: unknown },
+    options?: {
+      status?: number;
+      body?: string;
+      retryAfter?: string;
+      cause?: unknown;
+    },
   ) {
     super(message);
     this.name = 'RealmOperationError';
     this.status = options?.status;
     this.body = options?.body;
+    this.retryAfter = options?.retryAfter;
     if (options?.cause !== undefined) {
       (this as { cause?: unknown }).cause = options.cause;
     }
@@ -248,6 +256,310 @@ export const checkDomainAvailability: RealmOperation<
   }
 
   return (await response.json()) as DomainAvailability;
+};
+
+// --- host URLs -------------------------------------------------------------
+
+// A host URL is an address a realm is served at besides its own URL. The
+// endpoints under `/_host-urls` list, mount, unmount and mark one canonical.
+// See `packages/realm-server/handlers/handle-host-urls.ts`. Only an
+// administrator of the realm can use them.
+
+export type HostURLKind = 'boxel-space' | 'site-name' | 'custom-domain';
+
+export interface HostURL {
+  id: string;
+  realmURL: string;
+  url: string;
+  kind: HostURLKind;
+  isCanonical: boolean;
+}
+
+export interface HostURLList {
+  hostURLs: HostURL[];
+  // The Boxel Space URL the realm can be mounted at, in the Space of the
+  // realm owner. Absent when the realm has no owner or the server has no
+  // Boxel Space domain.
+  boxelSpaceURL?: string;
+}
+
+interface HostURLResource {
+  type: 'host-url';
+  id: string;
+  attributes: {
+    realmURL: string;
+    url: string;
+    kind: HostURLKind;
+    isCanonical: boolean;
+  };
+}
+
+// The reason that a realm-server refusal gives. The server sends a refusal as
+// `{"errors": [...]}`, where each error is a string or a JSON:API error
+// object. A body that is not such a document is the reason itself.
+export function refusalReason(body: string): string {
+  try {
+    let errors: unknown = JSON.parse(body)?.errors;
+    if (Array.isArray(errors)) {
+      let reasons = errors
+        .map((error) =>
+          typeof error === 'string' ? error : (error?.detail ?? error?.title),
+        )
+        .filter(
+          (reason): reason is string =>
+            typeof reason === 'string' && reason.length > 0,
+        );
+      if (reasons.length > 0) {
+        return reasons.join('; ');
+      }
+    }
+  } catch {
+    // The body is not JSON, so the body is the reason.
+  }
+  return body || 'The request failed';
+}
+
+// Sends a request to a host URL or site name endpoint. A refusal throws a
+// `RealmOperationError`. Its message is the reason the server gives.
+async function hostURLRequest(
+  client: RealmClient,
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  let response = await client.authedFetch(url, {
+    ...init,
+    headers: { Accept: JSONAPI_MIME, 'Content-Type': JSON_MIME },
+  });
+  if (!response.ok) {
+    let body = await safeReadResponseText(response);
+    throw new RealmOperationError(truncate(refusalReason(body), 1000), {
+      status: response.status,
+      body,
+      retryAfter: response.headers.get('Retry-After') ?? undefined,
+    });
+  }
+  return response;
+}
+
+function hostURLFromResource({ id, attributes }: HostURLResource): HostURL {
+  return {
+    id,
+    realmURL: attributes.realmURL,
+    url: attributes.url,
+    kind: attributes.kind,
+    isCanonical: attributes.isCanonical,
+  };
+}
+
+function hostURLEndpoint(client: RealmClient, id?: string): string {
+  let base = `${client.realmServerURL}_host-urls`;
+  return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
+}
+
+export interface ListHostURLsInput {
+  realmURL: string;
+}
+
+// Lists the host URLs of a realm with `GET /_host-urls?realm=`.
+export const listHostURLs: RealmOperation<
+  ListHostURLsInput,
+  HostURLList
+> = async (client, input) => {
+  let url = new URL(hostURLEndpoint(client));
+  url.searchParams.set('realm', ensureTrailingSlash(input.realmURL));
+  let response = await hostURLRequest(client, url.href, { method: 'GET' });
+  let json = (await response.json()) as {
+    data?: HostURLResource[];
+    meta?: { boxelSpaceURL?: unknown };
+  };
+  let boxelSpaceURL = json.meta?.boxelSpaceURL;
+  return {
+    hostURLs: (json.data ?? []).map(hostURLFromResource),
+    ...(typeof boxelSpaceURL === 'string' ? { boxelSpaceURL } : {}),
+  };
+};
+
+export interface HostURLHomePage {
+  homeCardId?: string;
+  // Set when the realm's root redirects, so it serves no home page.
+  redirectTo?: string;
+  homeCardReadable: boolean;
+  homeCardStatus?: number;
+  unloadableModules: { url: string; status: number }[];
+  // A mount refuses a realm unless this is true.
+  anonymousCanView: boolean;
+}
+
+export interface CheckHostURLHomePageInput {
+  realmURL: string;
+}
+
+// Asks whether a visitor who isn't signed in can view the realm's home page,
+// with `GET /_host-urls/home-page-check?realm=`. The server refuses to mount a
+// realm whose home page such a visitor can't view.
+export const checkHostURLHomePage: RealmOperation<
+  CheckHostURLHomePageInput,
+  HostURLHomePage
+> = async (client, input) => {
+  let url = new URL(`${hostURLEndpoint(client)}/home-page-check`);
+  url.searchParams.set('realm', ensureTrailingSlash(input.realmURL));
+  let response = await hostURLRequest(client, url.href, { method: 'GET' });
+  let json = (await response.json()) as {
+    data: { attributes: HostURLHomePage };
+  };
+  return json.data.attributes;
+};
+
+export interface MountHostURLInput {
+  realmURL: string;
+  url: string;
+}
+
+// Mounts a realm at a host URL with `POST /_host-urls`. The server gets the
+// kind of host URL from the URL. The first host URL of a realm is canonical.
+export const mountHostURL: RealmOperation<MountHostURLInput, HostURL> = async (
+  client,
+  input,
+) => {
+  let response = await hostURLRequest(client, hostURLEndpoint(client), {
+    method: 'POST',
+    body: JSON.stringify({
+      data: {
+        type: 'host-url',
+        attributes: {
+          realmURL: ensureTrailingSlash(input.realmURL),
+          url: input.url,
+        },
+      },
+    }),
+  });
+  let json = (await response.json()) as { data: HostURLResource };
+  return hostURLFromResource(json.data);
+};
+
+export interface HostURLIdInput {
+  id: string;
+}
+
+// Marks a host URL canonical with `PATCH /_host-urls/:id`. The host URL that
+// was canonical before stops being canonical.
+export const setCanonicalHostURL: RealmOperation<
+  HostURLIdInput,
+  HostURL
+> = async (client, input) => {
+  let response = await hostURLRequest(
+    client,
+    hostURLEndpoint(client, input.id),
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        data: {
+          type: 'host-url',
+          id: input.id,
+          attributes: { isCanonical: true },
+        },
+      }),
+    },
+  );
+  let json = (await response.json()) as { data: HostURLResource };
+  return hostURLFromResource(json.data);
+};
+
+// Unmounts a host URL with `DELETE /_host-urls/:id`. The server refuses to
+// remove the canonical host URL while the realm has other host URLs.
+export const unmountHostURL: RealmOperation<HostURLIdInput, void> = async (
+  client,
+  input,
+) => {
+  await hostURLRequest(client, hostURLEndpoint(client, input.id), {
+    method: 'DELETE',
+  });
+};
+
+// --- site names ------------------------------------------------------------
+
+// A site name that a user claimed for a realm. A realm can be mounted at a
+// site name only after the name is claimed.
+export interface ClaimedSiteName {
+  id: string;
+  hostname: string;
+  sourceRealmURL: string;
+}
+
+interface ClaimedDomainResource {
+  type: 'claimed-domain';
+  id: string;
+  attributes: { hostname: string; sourceRealmURL: string };
+}
+
+function claimedSiteNameFromResource({
+  id,
+  attributes,
+}: ClaimedDomainResource): ClaimedSiteName {
+  return {
+    id,
+    hostname: attributes.hostname,
+    sourceRealmURL: attributes.sourceRealmURL,
+  };
+}
+
+export interface FetchClaimedSiteNameInput {
+  realmURL: string;
+}
+
+// The site name that the caller claimed for a realm, from
+// `GET /_boxel-claimed-domains?source_realm_url=`. Undefined when the server
+// answers 404. The server does this when the caller has no claim for the
+// realm.
+export const fetchClaimedSiteName: RealmOperation<
+  FetchClaimedSiteNameInput,
+  ClaimedSiteName | undefined
+> = async (client, input) => {
+  let url = new URL(`${client.realmServerURL}_boxel-claimed-domains`);
+  url.searchParams.set('source_realm_url', ensureTrailingSlash(input.realmURL));
+  let response: Response;
+  try {
+    response = await hostURLRequest(client, url.href, { method: 'GET' });
+  } catch (error) {
+    if (error instanceof RealmOperationError && error.status === 404) {
+      return undefined;
+    }
+    throw error;
+  }
+  let json = (await response.json()) as { data: ClaimedDomainResource };
+  return claimedSiteNameFromResource(json.data);
+};
+
+export interface ClaimSiteNameInput {
+  realmURL: string;
+  // The hostname of the site name, for example `mango.boxel.site`.
+  hostname: string;
+}
+
+// Claims a site name for a realm with `POST /_boxel-claimed-domains`. The
+// server refuses a name that has a claim already.
+export const claimSiteName: RealmOperation<
+  ClaimSiteNameInput,
+  ClaimedSiteName
+> = async (client, input) => {
+  let response = await hostURLRequest(
+    client,
+    `${client.realmServerURL}_boxel-claimed-domains`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        data: {
+          type: 'claimed-domain',
+          attributes: {
+            source_realm_url: ensureTrailingSlash(input.realmURL),
+            hostname: input.hostname,
+          },
+        },
+      }),
+    },
+  );
+  let json = (await response.json()) as { data: ClaimedDomainResource };
+  return claimedSiteNameFromResource(json.data);
 };
 
 // --- fetchPublishabilityReport ---------------------------------------------

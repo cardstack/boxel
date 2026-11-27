@@ -65,6 +65,7 @@ import {
 } from './lib/metered-charge.ts';
 import { deleteExpiredOAuthProviderRows } from './lib/oauth-provider/cleanup.ts';
 import { buildMintRunToken } from './lib/run-token.ts';
+import { buildCreateOAuthTabAuth } from './lib/oauth-tab-token.ts';
 import { aiBatchSettlementFor } from './lib/ai-batch-settle.ts';
 import { buildAutomationAdmissionChecks } from './lib/automation-admission-checks.ts';
 
@@ -190,6 +191,9 @@ let createPrerenderAuth = buildCreatePrerenderAuth(
   undefined,
   (realm) => virtualNetwork.toURL(realm),
 );
+let createOAuthTabAuth = buildCreateOAuthTabAuth(REALM_SECRET_SEED, {
+  resolveRealmURL: (realm) => virtualNetwork.toURL(realm),
+});
 let autoMigrate = migrateDB || undefined;
 
 (async () => {
@@ -285,6 +289,7 @@ let autoMigrate = migrateDB || undefined;
     queuePublisher: new PgQueuePublisher(dbAdapter),
     prerenderer,
     createPrerenderAuth,
+    createOAuthTabAuth,
     mintRunToken: buildMintRunToken(REALM_SECRET_SEED),
     // An automation run's admission asks the Matrix server whether the
     // account the run acts as can still sign in, with the admin credentials
