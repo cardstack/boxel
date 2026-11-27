@@ -45,7 +45,7 @@ import Agents from './agents';
 import AgentsFlyout from './agents-flyout';
 import ArchivedWorkspace from './archived-workspace';
 import CatalogSection from './catalog-section';
-import GetStarted from './get-started';
+import GetStarted, { showsStepsOnLoad } from './get-started';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
 import { realmListFlyout } from './realm-list-flyout';
@@ -523,9 +523,22 @@ export default class Dashboard extends Component<Signature> {
     ),
   };
 
+  @tracked private isGetStartedLoaded = false;
+
+  @action private setGetStartedLoaded() {
+    this.isGetStartedLoaded = true;
+  }
+
+  // Get started's steps, when they show on load, show once their ticks can be
+  // read, which can be after the walk has rendered, and push it down.
+  private get isGetStartedSettling() {
+    return !this.isGetStartedLoaded && showsStepsOnLoad(this.matrixService);
+  }
+
   private cursor = new KeyboardCursor({
     keys: () => this.walkKeys,
     defaultIndex: () => this.defaultSelectedIndex,
+    isSettling: () => this.isGetStartedSettling,
   });
 
   <template>
@@ -575,7 +588,10 @@ export default class Dashboard extends Component<Signature> {
           </div>
 
           {{! Get started's steps open right below the header. }}
-          <GetStarted @showAgents={{this.showAgents}}>
+          <GetStarted
+            @showAgents={{this.showAgents}}
+            @onLoad={{this.setGetStartedLoaded}}
+          >
             <:head as |getStarted|>
               <header class='page-head'>
                 <div class='greeting-line'>

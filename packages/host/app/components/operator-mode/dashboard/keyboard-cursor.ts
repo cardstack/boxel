@@ -12,10 +12,13 @@ interface Walk {
   keys(): string[];
   // Where the cursor rests before the user moves it.
   defaultIndex(): number;
+  // Whether content still to show above the walk will push it down, as Get
+  // started's steps do when they show after the walk.
+  isSettling(): boolean;
 }
 
 // The dashboard's keyboard cursor: one item in the walk of workspaces and
-// catalogs. It rests on an item from the moment the dashboard opens, focused
+// catalogs. It rests on an item from the moment the walk settles, focused
 // when in view, so Enter works at once. Its ring is the keyboard's: Tab or
 // the first arrow key shows it without moving it, and a pointer press hides
 // it again.
@@ -28,13 +31,22 @@ export default class KeyboardCursor {
 
   constructor(private walk: Walk) {}
 
+  // The item the cursor marks, which takes focus as it gets the mark. Until
+  // the user moves the cursor, it marks none while the walk is settling:
+  // whether the item it opens on is in view, and so takes focus, is known
+  // only once nothing more will push it down.
+  @cached
+  get currentIndex(): number | undefined {
+    return this.selected || !this.walk.isSettling() ? this.index : undefined;
+  }
+
   // Follows the selected item when the walk changes without a keypress, as
   // when favoriting one adds a desk ahead of it. An item that left the walk,
   // as when Hosted hides it, gives way to whatever now holds its place.
-  // Every item reads it, so it is cached, and the default is only worked out
-  // when nothing is selected.
+  // Every item reads it through `currentIndex`, so it is cached, and the
+  // default is only worked out when nothing is selected.
   @cached
-  get currentIndex() {
+  private get index() {
     let keys = this.walk.keys();
     if (keys.length === 0) {
       return 0;
@@ -85,7 +97,8 @@ export default class KeyboardCursor {
     // write then would trip the backtracking-rerender assertion. A control
     // inside the default item is recorded all the same, since only the user
     // focuses those; otherwise favoriting it would move the default, and the
-    // cursor with it.
+    // cursor with it. While the walk settles nothing is marked, so focus the
+    // user moves to an item marks it.
     if (index !== this.currentIndex || (!this.selected && target !== item)) {
       this.select(index);
     }
@@ -106,7 +119,7 @@ export default class KeyboardCursor {
     // once the user has scrolled to it, rather than opening an item nothing
     // marks yet.
     if (event.target === container) {
-      let item = this.itemAt(container, this.currentIndex);
+      let item = this.itemAt(container, this.index);
       if (
         event.key.startsWith('Arrow') ||
         (event.key === 'Enter' && item && !isOffScreen(item))
@@ -123,24 +136,24 @@ export default class KeyboardCursor {
     }
     if (!this.keyboardEngaged && event.key.startsWith('Arrow')) {
       event.preventDefault();
-      this.showCursor(this.itemAt(container, this.currentIndex));
+      this.showCursor(this.itemAt(container, this.index));
       return;
     }
     switch (event.key) {
       case 'ArrowRight':
         event.preventDefault();
-        this.select(Math.min(this.currentIndex + 1, count - 1));
+        this.select(Math.min(this.index + 1, count - 1));
         break;
       case 'ArrowLeft':
         event.preventDefault();
-        this.select(Math.max(this.currentIndex - 1, 0));
+        this.select(Math.max(this.index - 1, 0));
         break;
       case 'ArrowDown':
       case 'ArrowUp': {
         event.preventDefault();
         let index = nearestNavIndexInRow(
           container,
-          this.currentIndex,
+          this.index,
           event.key === 'ArrowDown' ? 1 : -1,
         );
         if (index !== undefined) {
@@ -153,7 +166,7 @@ export default class KeyboardCursor {
         // New Workspace opens a modal whose Create button listens for Enter
         // on the document; this keystroke must not reach it.
         event.stopPropagation();
-        this.itemAt(container, this.currentIndex)?.click();
+        this.itemAt(container, this.index)?.click();
         break;
     }
   };
