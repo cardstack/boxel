@@ -27,6 +27,7 @@ scope:
   - packages/host/app/utils/auth-service-worker-registration.ts
   - packages/host/public/auth-service-worker.js
   - packages/realm-server/prerender/affinity.ts
+  - packages/realm-server/prerender/auth.ts
   - packages/realm-server/prerender/page-pool.ts
   - packages/realm-server/prerender/render-runner.ts
   - packages/postgres/migrations/*oauth-provider*
@@ -221,7 +222,10 @@ A session the realm server mints in process for work a route starts, such as
 publishing a realm, is not an exchange when it never reaches the caller, nor
 any code the caller chose, and acts only for that work. A route that runs code
 the caller chose, such as running a command or capturing a card, MUST hand
-that code no credential but tab tokens, and MUST NOT be mapped otherwise.
+that code no credential but tab tokens, and MUST NOT be mapped otherwise. A
+realm's own render of code a caller may have written, such as indexing it,
+MUST hold only read-only render sessions in a tab that never changes hands
+(ADR 051).
 
 A tab token names the user and the OAuth grant, never the OAuth token or its
 hash. It MUST be signed under a key no other verifier accepts, and MUST expire

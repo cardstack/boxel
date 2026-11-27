@@ -326,8 +326,9 @@ export class RenderRunner {
   }
 
   // Drops the auth kept for every affinity not in `liveAffinityKeys`. A key
-  // can lose its last tab without being disposed (a steal moves it away), and
-  // its auth would otherwise stay for the life of the process.
+  // can lose its last tab without being disposed through here (an eviction
+  // or a retired wedged tab), and its auth would otherwise stay for the life
+  // of the process.
   pruneAuthCache(liveAffinityKeys: Set<string>) {
     for (let affinityKey of [...this.#lastAuthByAffinity.keys()]) {
       if (!liveAffinityKeys.has(affinityKey)) {
@@ -1839,7 +1840,7 @@ export class RenderRunner {
         };
         if (runHtmlSteps) {
           reproduceLog.debug(
-            `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${nonce}/${optionsSegment}/html/isolated/0 with boxel-session = ${auth}`,
+            `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${nonce}/${optionsSegment}/html/isolated/0 (with sessions from \`boxel realm-server render-token\`)`,
           );
         }
 

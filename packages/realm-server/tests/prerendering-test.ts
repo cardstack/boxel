@@ -529,11 +529,8 @@ module(basename(import.meta.filename), function () {
       // states a visit can leave behind is pinned here.
       //
       // The module's `afterEach` disposes the affinity, and the wait below
-      // settles the refill that dispose kicked off. Both are needed: a
-      // `getPage` that finds no standby falls through to the cross-affinity
-      // steal, which hands back another affinity's warm tab and still reports
-      // `reused: false`, so `pool.reused` alone cannot say the page is new and
-      // the first assertion would read a real drop as a cold page.
+      // settles the refill that dispose kicked off, so the first visit
+      // commandeers a fresh standby at once rather than parking for one.
       await prerenderer.warmStandbys();
       const cardURL = `${realmURL}1`;
       let visit = (loaderEpoch: string) =>
@@ -5629,14 +5626,8 @@ module(basename(import.meta.filename), function () {
           }),
         ]);
         // `disposeAffinity` only KICKS standby refill — it doesn't await
-        // it. If the next test claims a tab before that kick produces a
-        // standby AND `#ensureStandbyPool`'s awaited retry also can't
-        // produce one, `#selectEntryForAffinity` falls through to the
-        // cross-affinity-steal escape hatch and reassigns an idle tab
-        // from another realm — keeping the donor's `pageId`. The
-        // "distinct pages per realm" test then sees `r1.pool.pageId ===
-        // r2.pool.pageId` and fails. Waiting here makes the next
-        // affinity-pooling test deterministic on the standby path.
+        // it. Waiting here lets the next affinity-pooling test commandeer
+        // a ready standby rather than park for one.
         await prerenderer.warmStandbys();
       };
 
@@ -7053,14 +7044,10 @@ module(basename(import.meta.filename), function () {
             url: testCardURL2,
             auth: auth(),
           });
-          // When this fails it's almost always the cross-affinity-steal
-          // fallback in `#selectEntryForAffinity` — `pageId` is equal
-          // because realm2's `getPage` repurposed realm1's idle tab
-          // when `#ensureStandbyPool` couldn't conjure a standby. Dump
-          // both call's `tabStartupMs` / `tabQueueMs` (a steal returns
-          // `tabStartupMs=0`, the standby path is non-zero) and the
-          // live queue snapshot so the CI log shows where the standby
-          // pool was when the race fired.
+          // A tab never moves to another affinity, so realm2's render gets
+          // a fresh standby. Dump both call's `tabStartupMs` / `tabQueueMs`
+          // and the live queue snapshot so the CI log shows where the
+          // standby pool was if this ever fails.
           let queueSnapshot = prerenderer.getQueueDepthSnapshot();
           assert.notStrictEqual(
             r1.pool.pageId,
@@ -7084,20 +7071,11 @@ module(basename(import.meta.filename), function () {
           // `desiredStandbyCount` caps at 1 once any tab is active, so a
           // fire-and-forget refill kicked off by the previous acquisition
           // may not have produced a real standby by the time the next
-          // sequential acquisition runs. With `queue='file'` (the path
-          // every `prerenderCard` takes) the entryList-empty branch in
-          // `#selectEntryForAffinity` skips its `ensureStandbyPool` await
-          // whenever a refill is in flight (`creatingStandbys` already
-          // counts toward `currentStandbyCount`), and the caller falls
-          // through to cross-affinity-steal. That steal repurposes a
-          // donor tab and KEEPS the donor's `pageId` — see the warning
-          // log around `#selectEntryForAffinity`'s reassign path. A
-          // chain of steals (A→B, B→C, C→A) makes `firstA.pageId ===
-          // secondA.pageId` and trips the eviction assertion below.
-          // Awaiting `warmStandbys` between phases blocks until any
-          // in-flight standby creation AND any LRU eviction kicked by
-          // the post-acquire refill have settled, so the next call
-          // commandeers a fresh standby instead of stealing.
+          // sequential acquisition runs, and that acquisition would park
+          // for it. Awaiting `warmStandbys` between phases blocks until any
+          // in-flight standby creation AND any LRU eviction kicked by the
+          // post-acquire refill have settled, so the next call commandeers
+          // a fresh standby at once.
           let firstA = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL1,
@@ -7139,11 +7117,9 @@ module(basename(import.meta.filename), function () {
           });
           let secondAWaits = secondA.timings.waits;
           // Snapshot the live pool state at the assertion site so that
-          // if the flake recurs the YAML failure block names the donor
-          // affinity, the in-flight standby count, and per-call wait
-          // shape (`tabStartupMs=0` signals a steal; non-zero signals
-          // the standby path). Without this the only hint a reviewer
-          // gets is two identical UUIDs and no provenance.
+          // if it ever fails the YAML failure block names the in-flight
+          // standby count and per-call wait shape. Without this the only
+          // hint a reviewer gets is two identical UUIDs and no provenance.
           let queueSnapshot = prerenderer.getQueueDepthSnapshot();
           let diagnostics =
             `firstA.pageId=${firstA.pool.pageId} ` +
@@ -7985,7 +7961,7 @@ module(basename(import.meta.filename), function () {
           }
         });
 
-        test('queued cross-realm requests realign the tab per request', async function (assert) {
+        test('a queued cross-realm request waits for a tab of its own realm', async function (assert) {
           let { pool } = makeStubPagePool({ maxPages: 1 });
           await pool.warmStandbys();
 
@@ -8022,7 +7998,17 @@ module(basename(import.meta.filename), function () {
           );
           assert.true(
             pool.getWarmAffinities().includes('realm-b'),
-            'tab realigned to realm-b when queued request starts',
+            'realm-b has a tab when its queued request starts',
+          );
+          assert.notStrictEqual(
+            third.pageId,
+            first.pageId,
+            "realm-b's request does not run on realm-a's tab",
+          );
+          assert.notStrictEqual(
+            third.pageId,
+            blocker.pageId,
+            "realm-b's request does not run on realm-c's tab",
           );
           third.release();
 
@@ -8067,7 +8053,7 @@ module(basename(import.meta.filename), function () {
           }
         });
 
-        test('queues same-realm request when tab is transitioning', async function (assert) {
+        test("a cross-realm request never takes another realm's tab, busy or freed", async function (assert) {
           let { pool } = makeStubPagePool({
             maxPages: 1,
             disableStandbyRefill: true,
@@ -8078,46 +8064,31 @@ module(basename(import.meta.filename), function () {
 
             let first = await pool.getPage('realm-a');
 
-            let crossResolved = false;
             let sameResolved = false;
-            let crossPromise = pool.getPage('realm-b').then((lease) => {
-              crossResolved = true;
-              return lease;
-            });
+            let crossPromise = pool.getPage('realm-b');
             let samePromise = pool.getPage('realm-a').then((lease) => {
               sameResolved = true;
               return lease;
             });
 
-            await new Promise((resolve) => setTimeout(resolve, 5));
-            assert.false(
-              crossResolved,
-              'cross-realm request waits for the busy tab',
+            await assert.rejects(
+              crossPromise,
+              /No standby page available for prerender/,
+              'the cross-realm request finds no tab it may take',
             );
-            assert.false(
-              sameResolved,
-              'same-realm request queues even while transitioning',
-            );
+            assert.false(sameResolved, 'the same-realm request queues');
 
             first.release();
-
-            let cross = await crossPromise;
-            assert.strictEqual(
-              cross.pageId,
-              first.pageId,
-              'cross-realm request uses the existing tab',
-            );
-            cross.release();
 
             let same = await samePromise;
             assert.strictEqual(
               same.pageId,
               first.pageId,
-              'same-realm request uses the same tab',
+              'the same-realm request uses the same tab',
             );
             assert.false(
               pool.getWarmAffinities().includes('realm-b'),
-              'tab realigned back to realm-a after same-realm request',
+              "the tab is still realm-a's",
             );
             same.release();
           } finally {

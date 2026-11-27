@@ -471,18 +471,18 @@ module(basename(import.meta.filename), function () {
     // distinct realm affinities saturates on per-affinity tab ownership,
     // not concurrent render count. With more affinities than `#maxPages`
     // tabs, an arriving affinity finds no tab of its own and no ready
-    // standby, and the tabs it could steal are idle (the render
+    // standby, and the other affinities' tabs are idle (the render
     // semaphore reads un-saturated). These tests pin down that
     // `#selectEntryForAffinity` treats that state as a trigger to expand
-    // the live cap rather than silently cross-affinity-stealing at a
-    // pinned MIN.
+    // the live cap rather than leave the caller waiting at a pinned MIN.
     //
     // `disableStandbyRefill: true` is load-bearing here: it keeps the
     // render semaphore idle (no held slots) while still exhausting tabs,
     // which isolates the affinity-exhaustion trigger from the render-
-    // semaphore-fullness one. The production path (refill enabled) spawns
-    // a fresh tab after expanding; the full no-steal flow runs under the
-    // real-Chrome integration tests in `prerendering-test.ts`.
+    // semaphore-fullness one. It also means nothing makes the fresh tab the
+    // lifted cap leaves room for, so the caller throws once the cap is
+    // lifted, since a tab never moves to another affinity. The production
+    // path (refill enabled) spawns a fresh tab after expanding.
     test('tab/affinity exhaustion expands the cap even when the render semaphore is idle', async function (assert) {
       await withEnv(
         {
@@ -523,10 +523,16 @@ module(basename(import.meta.filename), function () {
 
           // A third, brand-new affinity arrives with no warm tab, no
           // orphan, and no ready standby. The acquire-time hook sees an
-          // idle semaphore and does nothing; the old behaviour would
-          // cross-affinity-steal with the cap pinned at MIN. The fix
-          // lifts the cap instead.
-          let c = await pool.getPage('realm-c');
+          // idle semaphore and does nothing; selection lifts the cap.
+          let c = await pool.getPage('realm-c').catch((e: Error) => e);
+          assert.true(
+            c instanceof Error,
+            'with the refill off, nothing makes the tab',
+          );
+          assert.true(
+            /No standby page available/.test((c as Error).message),
+            'the caller is told there is no tab',
+          );
           assert.strictEqual(
             pool.currentMaxPages,
             3,
@@ -537,7 +543,6 @@ module(basename(import.meta.filename), function () {
             3,
             'render semaphore tracks the new cap',
           );
-          c.release();
         },
       );
     });
@@ -567,12 +572,15 @@ module(basename(import.meta.filename), function () {
 
           // Each subsequent brand-new affinity lifts the cap by one
           // until it reaches maxBurstPages; past that, expansion is a
-          // no-op and the steal path takes over without further growth.
+          // no-op. With the refill off nothing makes their tabs, so each
+          // caller throws once it has lifted the cap.
           let trajectory: number[] = [];
           for (let key of ['realm-c', 'realm-d', 'realm-e']) {
-            let held = await pool.getPage(key);
+            await pool.getPage(key).then(
+              (held) => held.release(),
+              () => undefined,
+            );
             trajectory.push(pool.currentMaxPages);
-            held.release();
           }
           assert.deepEqual(
             trajectory,

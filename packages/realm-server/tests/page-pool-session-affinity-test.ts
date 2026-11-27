@@ -5,7 +5,6 @@ import { PagePool } from '../prerender/page-pool.ts';
 import {
   fromAffinityKey,
   isAffinityOfRealm,
-  isOAuthTabAffinityKey,
   isRealmAuthorityAffinityKey,
   isRunAffinityKey,
   realmAffinityKeyOf,
@@ -18,10 +17,10 @@ import { buildCreateOAuthTabAuth } from '../lib/oauth-tab-token.ts';
 import type { AutomationRun } from '@cardstack/runtime-common';
 
 // A render hands its tab its sessions through localStorage, which belongs to
-// the tab's BrowserContext. A context must therefore only ever carry one
-// render session: a realm affinity is split by the sessions its render
-// carries, and a tab is never stolen out of a context that still has another
-// tab in it.
+// the tab's BrowserContext, and runs code its realm holds, which can leave a
+// timer in the page. A context must therefore only ever carry one render
+// session: a realm affinity is split by the sessions its render carries, and
+// a tab never moves to another affinity.
 
 const REALM = 'http://localhost:4202/test/';
 const REALM_KEY = `realm:${REALM}`;
@@ -310,12 +309,6 @@ module(basename(import.meta.filename), function (hooks) {
         affinityValue: USER_1,
         session: 'oauth:grant-1',
       });
-      assert.true(isOAuthTabAffinityKey(key));
-      assert.true(isOAuthTabAffinityKey(userKey));
-      for (let auth of [realmAuthorityAuth, user1Auth, anonymousAuth]) {
-        assert.false(isOAuthTabAffinityKey(realmKeyFor(auth)));
-      }
-      assert.false(isOAuthTabAffinityKey(realmKeyFor(runAuth(USER_1))));
     });
 
     test('a tab token beside any other session is unreadable', function (assert) {
@@ -352,73 +345,88 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
-  // With no standby left and the pool at its ceiling, a render takes an idle
-  // tab of another affinity (see the steal tests below). An OAuth app's tab is
-  // never on either side of that: its page may hold a timer the app's code
-  // left, and a tab it took would hold what another render left.
-  test("a render never takes an OAuth app's idle tab, even with no standby left", async function (assert) {
-    let pool = makePool({
-      maxPages: 2,
-      browserManager: makeBrowserStub(),
-      disableStandbyRefill: true,
-    });
-    await pool.warmStandbys();
-    let oauthKey = realmKeyFor(oauthTabAuth(USER_1));
-    let busy = await pool.getPage('A');
-    let oauthTab = await pool.getPage(oauthKey);
-    oauthTab.release();
+  // A tab never moves to another affinity: its page may hold a timer code
+  // from an earlier render left, which would read what the next render hands
+  // it, and a tab taken from another affinity would hold what that
+  // affinity's renders left.
+  for (let [idleName, idleAuth, takerName, takerAuth] of [
+    [
+      'an index render',
+      () => realmAuthorityAuth,
+      "a user's render",
+      () => user1Auth,
+    ],
+    [
+      "a user's render",
+      () => user1Auth,
+      'an index render',
+      () => realmAuthorityAuth,
+    ],
+    [
+      "an OAuth app's render",
+      () => oauthTabAuth(USER_1),
+      "the user's render",
+      () => user1Auth,
+    ],
+    [
+      "the user's render",
+      () => user1Auth,
+      "an OAuth app's render",
+      () => oauthTabAuth(USER_1),
+    ],
+    [
+      "another realm owner's index render",
+      () => otherOwnerAuthorityAuth,
+      'an index render',
+      () => realmAuthorityAuth,
+    ],
+  ] as [string, () => string, string, () => string][]) {
+    test(`${takerName} never takes the idle tab of ${idleName}, even with no standby left`, async function (assert) {
+      let pool = makePool({
+        maxPages: 2,
+        browserManager: makeBrowserStub(),
+        disableStandbyRefill: true,
+      });
+      await pool.warmStandbys();
+      let idleKey = realmKeyFor(idleAuth());
+      let busy = await pool.getPage('A');
+      let idle = await pool.getPage(idleKey);
+      idle.release();
 
-    // With only the OAuth app's idle tab to take, the user's render waits
-    // for a tab it may take rather than taking that one.
-    let userTook: string | undefined;
-    let userLease = pool.getPage(realmKeyFor(user1Auth)).then((lease) => {
-      userTook = lease.pageId;
-      return lease;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    assert.strictEqual(userTook, undefined, "the user's render is waiting");
-    assert.true(
-      pool.getWarmAffinities().includes(oauthKey),
-      "the OAuth app's tab is still its own",
-    );
-
-    busy.release();
-    let user = await userLease;
-    assert.strictEqual(
-      user.pageId,
-      busy.pageId,
-      'it takes the idle tab it may take once there is one',
-    );
-    assert.notStrictEqual(user.pageId, oauthTab.pageId);
-    user.release();
-  });
-
-  test("an OAuth app's render never takes another affinity's idle tab, even with no standby left", async function (assert) {
-    let pool = makePool({
-      maxPages: 2,
-      browserManager: makeBrowserStub(),
-      disableStandbyRefill: true,
-    });
-    await pool.warmStandbys();
-    let userKey = realmKeyFor(user1Auth);
-    let busy = await pool.getPage('A');
-    let userTab = await pool.getPage(userKey);
-    userTab.release();
-
-    try {
-      let oauth = await pool.getPage(realmKeyFor(oauthTabAuth(USER_1)));
-      oauth.release();
-      assert.ok(false, `the OAuth app's render took tab ${oauth.pageId}`);
-    } catch (e: any) {
+      try {
+        let taken = await pool.getPage(realmKeyFor(takerAuth()));
+        taken.release();
+        assert.ok(false, `${takerName} took tab ${taken.pageId}`);
+      } catch (e: any) {
+        assert.true(
+          /No standby page available/.test(e.message),
+          `${takerName} finds no tab it may take: ${e.message}`,
+        );
+      }
       assert.true(
-        /No standby page available/.test(e.message),
-        `the OAuth app's render finds no tab it may take: ${e.message}`,
+        pool.getWarmAffinities().includes(idleKey),
+        `the idle tab is still ${idleName}'s`,
       );
-    }
-    assert.true(
-      pool.getWarmAffinities().includes(userKey),
-      "the user's tab is still the user's",
+      busy.release();
+    });
+  }
+
+  test("at the pool's ceiling, a render waits for a fresh standby rather than take another affinity's idle tab", async function (assert) {
+    let pool = makePool({ maxPages: 2, browserManager: makeBrowserStub() });
+    await pool.warmStandbys();
+    let busy = await pool.getPage(realmKeyFor(realmAuthorityAuth));
+    let idle = await pool.getPage(realmKeyFor(otherOwnerAuthorityAuth));
+    idle.release();
+
+    let user = await pool.getPage(realmKeyFor(user1Auth));
+    assert.notStrictEqual(user.pageId, idle.pageId, 'not the idle tab');
+    assert.notStrictEqual(user.pageId, busy.pageId, 'not the busy tab');
+    assert.notStrictEqual(
+      (user.page as any).browserContext(),
+      (idle.page as any).browserContext(),
+      'a BrowserContext of its own',
     );
+    user.release();
     busy.release();
   });
 
@@ -472,60 +480,6 @@ module(basename(import.meta.filename), function (hooks) {
     );
     user.release();
     otherUser.release();
-  });
-
-  test('a cross-affinity steal does not take a tab whose BrowserContext has another tab in it', async function (assert) {
-    // Both tabs of affinity A live in one BrowserContext. With no standby
-    // left, a render of another affinity may only steal an idle tab, and
-    // A's idle tab shares its storage with A's busy one.
-    let pool = makePool({
-      maxPages: 2,
-      browserManager: makeBrowserStub({ sharedContexts: 2 }),
-      disableStandbyRefill: true,
-    });
-    await pool.warmStandbys();
-    let aBusy = await pool.getPage('A');
-    let aIdle = await pool.getPage('A');
-    assert.strictEqual(
-      (aIdle.page as any).browserContext(),
-      (aBusy.page as any).browserContext(),
-      "A's two tabs share a BrowserContext",
-    );
-    aIdle.release();
-
-    try {
-      let b = await pool.getPage('B');
-      b.release();
-      assert.ok(false, `B took tab ${b.pageId}`);
-    } catch (e: any) {
-      assert.true(
-        /No standby page available/.test(e.message),
-        `B finds no tab it may take: ${e.message}`,
-      );
-    }
-    assert.deepEqual(
-      pool.getWarmAffinities(),
-      ['A'],
-      "both tabs are still A's",
-    );
-    aBusy.release();
-  });
-
-  test('a cross-affinity steal takes an idle tab that is alone in its BrowserContext', async function (assert) {
-    let pool = makePool({
-      maxPages: 2,
-      browserManager: makeBrowserStub(),
-      disableStandbyRefill: true,
-    });
-    await pool.warmStandbys();
-    let aBusy = await pool.getPage('A');
-    let aIdle = await pool.getPage('A');
-    aIdle.release();
-
-    let b = await pool.getPage('B');
-    assert.strictEqual(b.pageId, aIdle.pageId, "B took A's idle tab");
-    b.release();
-    aBusy.release();
   });
 
   test("a realm's sessions share one file-admission cap, and a module render under realm authority still gets a tab", async function (assert) {

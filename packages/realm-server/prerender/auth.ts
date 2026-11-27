@@ -1,10 +1,13 @@
 import {
   ensureTrailingSlash,
   logger,
+  renderSessionSecret,
   VirtualNetwork,
   type PrerenderAuthOptions,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
+import { INCREMENTAL_INDEX_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/jobs/indexing';
+import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
 import { createJWT } from '../jwt.ts';
 
 const log = logger('prerenderer');
@@ -16,6 +19,12 @@ const log = logger('prerenderer');
 // VirtualNetwork resolves ids: it parses a URL-form id and refuses a
 // prefix-form one.
 //
+// With `realmAuthority`, each token is a render session
+// (`runtime-common/render-session.ts`): read-only, signed under its own key,
+// and good for as long as the longest job that renders under it. Without it,
+// each is an ordinary session for the user, as the realm's own sign-in would
+// hand them.
+//
 // A realm whose URL cannot be determined gets no token and a warning. The
 // permission map includes every public realm, so one unmapped id (a stale
 // public row, or a realm the worker was not given a mapping for) would
@@ -24,6 +33,10 @@ export function buildCreatePrerenderAuth(
   secretSeed: string,
   realmServerURL?: string,
   resolveRealmURL?: (realm: string) => URL,
+  {
+    renderSessionLifetimeSeconds:
+      lifetimeSeconds = renderSessionLifetimeSeconds,
+  }: { renderSessionLifetimeSeconds?: () => number } = {},
 ) {
   let normalizedServerURL = realmServerURL
     ? ensureTrailingSlash(realmServerURL)
@@ -61,19 +74,38 @@ export function buildCreatePrerenderAuth(
       if (!resolvedRealmServerURL) {
         continue;
       }
-      sessions[realmURL] = createJWT(
-        {
-          user: userId,
-          realm: realmURL,
-          permissions: realmPermissions,
-          sessionRoom: '',
-          realmServerURL: resolvedRealmServerURL,
-          ...(opts?.realmAuthority ? { realmAuthority: true as const } : {}),
-        },
-        '1d',
-        secretSeed,
-      );
+      let claims = {
+        user: userId,
+        realm: realmURL,
+        // Only what the host reads to decide what it shows. A realm judges a
+        // render session by the user's read alone.
+        permissions: realmPermissions,
+        sessionRoom: '',
+        realmServerURL: resolvedRealmServerURL,
+      };
+      sessions[realmURL] = opts?.realmAuthority
+        ? createJWT(
+            {
+              ...claims,
+              realmAuthority: true,
+              renderSession: { scope: 'owner-read-set' },
+            },
+            lifetimeSeconds(),
+            renderSessionSecret(secretSeed),
+          )
+        : createJWT(claims, '1d', secretSeed);
     }
     return JSON.stringify(sessions);
   };
+}
+
+// How long a render session lasts: the longest an indexing or HTML render job
+// may run before it is given up on, which every job that mints one renders
+// within, plus five minutes for the job to start rendering. A job retried
+// after that mints its sessions again.
+export function renderSessionLifetimeSeconds(): number {
+  return (
+    Math.max(FROM_SCRATCH_JOB_TIMEOUT_SEC, INCREMENTAL_INDEX_JOB_TIMEOUT_SEC) +
+    5 * 60
+  );
 }

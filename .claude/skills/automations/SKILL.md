@@ -1494,9 +1494,10 @@ GET /_automation-run-log?realm=<realm URL>&run=<run id>&after=<seq>&limit=<n>&le
 
 It answers only the session's own user, and only a direct writer of `realm`,
 like the other automation routes. The session check refuses a delegated
-session and a run token with 401. The route refuses a reader and a
-realm-authority session with 403 before it looks the run up, so that refusal
-is the same whether or not the run exists. A run of another realm, or an id
+session, a run token and a render session (ADR 051) with 401. The route
+refuses a reader, and an ordinary session carrying the realm-authority claim,
+with 403 before it looks the run up, so that refusal is the same whether or
+not the run exists. A run of another realm, or an id
 that names no run, is 404. A parameter out of range is 400.
 
 The answer is one page (`readRunLogPage` in `automation-run-log.ts`):
@@ -2280,8 +2281,9 @@ realm-server routes
 types in `packages/runtime-common/automation-routes.ts`). They are not on a
 realm: each takes the realm-server session (`Authorization: Bearer <realm-server
 token>`, behind `jwtMiddleware`) and acts as that session's own user, never as
-a user a header names (ADR 006). A realm-authority session is refused (403),
-and a delegated or revoked one by the session check (401).
+a user a header names (ADR 006). An ordinary session carrying the
+realm-authority claim is refused (403), and a delegated, revoked or render
+session by the session check (401).
 
 Every request names the realm, and the route asks `isDirectWriter` of that
 realm and the caller **before it reads anything else**, so a caller who isn't

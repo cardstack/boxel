@@ -208,6 +208,12 @@ import {
   type DiagnosticSessionClaim,
 } from './diagnostic-session.ts';
 import {
+  acceptedRenderSessionClaim,
+  presentsAsRenderSession,
+  renderSessionSecret,
+  type RenderSessionClaim,
+} from './render-session.ts';
+import {
   carriesRunToken,
   runTokenOf,
   runTokenContext,
@@ -2693,6 +2699,13 @@ export interface TokenClaims {
   // authorization treats it specially. It is signed under its own key, which
   // `Realm.#verifySession` picks for a token carrying this claim.
   diagnostic?: DiagnosticSessionClaim;
+  // Set on a render session (see `render-session.ts`): the session a realm
+  // renders its own cards under, beside `realmAuthority`. It is read-only, and
+  // reads as its `user` in any realm that user may read; its `permissions` are
+  // only what the host reads to decide what it shows. It is signed under its
+  // own key, which `Realm.#verifySession` picks for a token carrying this
+  // claim.
+  renderSession?: RenderSessionClaim;
   // Set on a run token (see `run-token.ts`): the session an automation run's
   // calls carry, naming the run and the attempt it was minted for. It is
   // signed under its own key and accepted only by `Realm.handleAutomation`,
@@ -9724,14 +9737,21 @@ export class Realm {
   // to end, a capture-URL token (minted only for a reader this vouched for —
   // see `signCaptureURLs`), or a token a public realm's read path took
   // without checking it, once it passes those checks here. A delegated session
-  // reads this realm as the user it acts for. A diagnostic session and an
-  // automation run are drawn as no one: a capture outlives its request, and a
-  // capture-URL token its session, so either would carry the identity past
-  // the diagnostic session's scope or the run's row (see
-  // `RequestContext.diagnosticSession`, `RequestContext.automationRun`).
-  // Anyone else is `ANONYMOUS_RENDER`, drawn with no session at all.
+  // reads this realm as the user it acts for. A diagnostic session, an
+  // automation run and a realm-authority session (a render's) are drawn as no
+  // one: a capture outlives its request, and a capture-URL token its session,
+  // so either would carry the identity past the diagnostic session's scope or
+  // the run's row (see `RequestContext.diagnosticSession`,
+  // `RequestContext.automationRun`), and a capture a render asks for would
+  // render as its user on that user's own sessions, out of reach of the
+  // render session's read-only bound (ADR 051 §1.1). Anyone else is
+  // `ANONYMOUS_RENDER`, drawn with no session at all.
   async #captureReader(requestContext: RequestContext): Promise<string> {
-    if (requestContext.diagnosticSession || requestContext.automationRun) {
+    if (
+      requestContext.diagnosticSession ||
+      requestContext.automationRun ||
+      requestContext.realmAuthority
+    ) {
       return ANONYMOUS_RENDER;
     }
     let session = requestContext.unvouchedSession;
@@ -13669,21 +13689,29 @@ export class Realm {
       // the assumed-user tag the same client's writes carry, since writes
       // always take the main path.
       let publicAuthHeader = request.headers.get('Authorization');
-      // A diagnostic session is read-only even where the realm lets anyone
-      // write, so a write presented with one is refused rather than answered
-      // as an anonymous one. The token's own claim decides it, before
-      // verification and before any assume-user indirection, so the refusal
-      // holds for a session that has expired too.
+      // A diagnostic session and a render session are read-only even where
+      // the realm lets anyone write, so a write presented with one is refused
+      // rather than answered as an anonymous one. The token's own claim
+      // decides it, before verification and before any assume-user
+      // indirection, so the refusal holds for a session that has expired too.
       if (
         publicAuthHeader &&
-        presentsAsDiagnosticSession(publicAuthHeader.replace('Bearer ', '')) &&
         requiredPermission !== 'read' &&
         !answersWithoutCredentials
       ) {
-        warnRefusal(
-          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), a diagnostic session attempted ${requiredPermission}; diagnostic sessions are read-only`,
-        );
-        throw new AuthorizationError('Diagnostic sessions are read-only');
+        let publicTokenString = publicAuthHeader.replace('Bearer ', '');
+        if (presentsAsDiagnosticSession(publicTokenString)) {
+          warnRefusal(
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), a diagnostic session attempted ${requiredPermission}; diagnostic sessions are read-only`,
+          );
+          throw new AuthorizationError('Diagnostic sessions are read-only');
+        }
+        if (presentsAsRenderSession(publicTokenString)) {
+          warnRefusal(
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), a render session attempted ${requiredPermission}; render sessions are read-only`,
+          );
+          throw new AuthorizationError('Render sessions are read-only');
+        }
       }
       if (!publicAuthHeader) {
         requestContext.anonymous = true;
@@ -13711,6 +13739,10 @@ export class Realm {
           requestContext.authenticatedUser = publicToken.user;
           if (publicToken.realmAuthority) {
             requestContext.realmAuthority = true;
+          }
+          // A render session is never a principal, here as on the main path.
+          if (publicToken.renderSession) {
+            return;
           }
           requestContext.unvouchedSession = {
             user: publicToken.user,
@@ -13780,6 +13812,50 @@ export class Realm {
         await this.#admitDiagnosticSession(request, requestContext, token, {
           warnRefusal,
         });
+        return;
+      }
+
+      // A render session reads, and does nothing else, as the user it names,
+      // whatever that user may do here; it never assumes another user, and
+      // its `permissions` claim is never matched. It reads only while its user
+      // still may. The realm's own Matrix account, which a realm with no human
+      // owner renders as, reads this realm on a session minted for it, and is
+      // judged by its permissions anywhere else, since every realm on the
+      // server shares it. A read its user may not make is refused as any of
+      // that user's would be, so a search the ACL declines answers with no
+      // rows.
+      if (token.renderSession) {
+        if (!acceptedRenderSessionClaim(token)) {
+          warnRefusal(
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), render session for user ${user} is malformed`,
+          );
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+        }
+        if (requiredPermission !== 'read') {
+          warnRefusal(
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), render session for user ${user} attempted ${requiredPermission}; render sessions are read-only`,
+          );
+          throw new AuthorizationError('Render sessions are read-only');
+        }
+        let ownAccountHere =
+          user === this.#matrixClientUserId &&
+          this.#sameRealmSpelling(token.realm) ===
+            this.#sameRealmSpelling(this.url);
+        if (
+          !ownAccountHere &&
+          !(await realmPermissionChecker.can(user, 'read'))
+        ) {
+          warnRefusal(
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), render session reads as ${user}, who lacks read permission`,
+          );
+          requestContext.authenticatedUser = user;
+          throw new CoarsePermissionInsufficient(
+            'Insufficient permissions to perform this action',
+          );
+        }
+        requestContext.authenticatedUser = user;
         return;
       }
 
@@ -14423,10 +14499,10 @@ export class Realm {
     requestContext.principal = caller.user;
   }
 
-  // Verifies a session presented to this realm: a diagnostic session under its
-  // own key, any other under the realm secret seed. The token's own claim
-  // picks the key, so one that claims to be a diagnostic session and is not
-  // fails verification.
+  // Verifies a session presented to this realm: a diagnostic session or a
+  // render session under its family's own key, any other under the realm
+  // secret seed. The token's own claim picks the key, so one that claims to be
+  // of a family and is not fails verification.
   #verifySession(
     tokenString: string,
   ): TokenClaims & { iat: number; exp: number } {
@@ -14434,7 +14510,9 @@ export class Realm {
       tokenString,
       presentsAsDiagnosticSession(tokenString)
         ? diagnosticSessionSecret(this.#realmSecretSeed)
-        : this.#realmSecretSeed,
+        : presentsAsRenderSession(tokenString)
+          ? renderSessionSecret(this.#realmSecretSeed)
+          : this.#realmSecretSeed,
     );
   }
 

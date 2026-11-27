@@ -7,6 +7,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   acceptedDiagnosticClaim,
+  acceptedRenderSessionClaim,
   archivedRealmURLs,
   DIAGNOSTIC_SESSION_LOG_CHANNEL,
   ensureTrailingSlash,
@@ -19,6 +20,7 @@ import {
   registeredRealmURL,
   parseSearchRequestPayload,
   presentsAsDiagnosticSession,
+  presentsAsRenderSession,
   query,
   SearchRequestError,
   separatedByCommas,
@@ -56,6 +58,7 @@ import { verifyOAuthTabToken } from '../lib/oauth-tab-token.ts';
 import { oauthTabTokenOf } from '@cardstack/runtime-common/oauth-tab-token';
 import {
   retrieveDiagnosticSessionClaim,
+  retrieveRenderSessionClaim,
   retrieveTokenClaim,
   type RealmServerTokenClaim,
 } from '../utils/jwt.ts';
@@ -328,7 +331,12 @@ export function multiRealmAuthorization(
     } else {
       let token: Pick<
         RealmServerTokenClaim,
-        'user' | 'delegated' | 'realm' | 'diagnostic' | 'realmAuthority'
+        | 'user'
+        | 'delegated'
+        | 'realm'
+        | 'diagnostic'
+        | 'renderSession'
+        | 'realmAuthority'
       >;
       try {
         // An OAuth caller's user is the one its grant is for. Its grant's
@@ -337,11 +345,12 @@ export function multiRealmAuthorization(
         if (oauthCaller) {
           token = { user: oauthCaller.user };
         } else {
-          let session = presentsAsDiagnosticSession(
-            authorization!.replace('Bearer ', ''),
-          )
+          let presented = authorization!.replace('Bearer ', '');
+          let session = presentsAsDiagnosticSession(presented)
             ? retrieveDiagnosticSessionClaim(authorization!, realmSecretSeed)
-            : retrieveTokenClaim(authorization!, realmSecretSeed);
+            : presentsAsRenderSession(presented)
+              ? retrieveRenderSessionClaim(authorization!, realmSecretSeed)
+              : retrieveTokenClaim(authorization!, realmSecretSeed);
           if (await isSessionRevoked(dbAdapter, session.user, session.iat)) {
             throw new AuthenticationError(
               AuthenticationErrorMessages.SessionRevoked,
@@ -393,6 +402,17 @@ export function multiRealmAuthorization(
         diagnosticLog.info(
           `diagnostic session ${claim.id} read ${ctxt.method} ${ctxt.path} for realms ${realmList.join(', ')} as ${token.user}; minted for card ${claim.card}, operator note: ${JSON.stringify(claim.note)}`,
         );
+      }
+
+      // A render session reads as its user in any realm that user may read,
+      // which is what is judged below; a malformed one authenticates no one.
+      // Every endpoint here only reads.
+      if (token.renderSession && !acceptedRenderSessionClaim(token)) {
+        await sendResponseForUnauthorizedRequest(
+          ctxt,
+          AuthenticationErrorMessages.TokenInvalid,
+        );
+        return;
       }
 
       // Only the session's own claim makes a request a realm-authority

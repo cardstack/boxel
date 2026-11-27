@@ -501,60 +501,6 @@ module(basename(import.meta.filename), function (hooks) {
     result.release();
   });
 
-  test('an abort during a stolen tab’s probe leaves the donor stealable', async function (assert) {
-    // A cross-affinity steal hands out another realm's warm tab, so the
-    // probe covers it too. The steal marks the donor `transitioning` for the
-    // duration of the migration, and the probe is now the longest thing
-    // inside that window — so the abort path has to clear the mark. A
-    // stranded `transitioning` flag is permanent: it bars the tab from every
-    // future steal and from the contraction loop's idleness test.
-    for (let key of ['PRERENDER_PAGE_POOL_MIN', 'PRERENDER_PAGE_POOL_MAX']) {
-      delete process.env[key];
-    }
-    process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
-    let { pool, tabs } = makePool(5000, {
-      maxPages: 1,
-      disableStandbyRefill: true,
-    });
-    await pool.warmStandbys();
-    // 'A' takes the pool's only tab and hands it back, so it is idle and
-    // stealable but cannot be replaced by a standby.
-    let donor = await pool.getPage('A');
-    donor.release();
-    tabs[0].wedge('hang');
-
-    // 'B' is brand new: no tab of its own, no standby, no expansion budget,
-    // so selection falls through to stealing A's idle tab — and probes it.
-    let controller = new AbortController();
-    let abortTimer = setTimeout(() => controller.abort('caller went away'), 25);
-    let stolen = await pool
-      .getPage('B', 'file', { signal: controller.signal })
-      .then(
-        (page) => {
-          page.release();
-          return 'resolved';
-        },
-        (e: Error) => e.name,
-      );
-    clearTimeout(abortTimer);
-    assert.strictEqual(
-      stolen,
-      'PrerenderCancelledError',
-      'the steal was abandoned by the abort',
-    );
-
-    // The donor answers again, so a later steal has no reason to fail —
-    // unless the abandoned migration left the tab marked in transition.
-    tabs[0].wedge();
-    let next = await pool.getPage('C');
-    assert.strictEqual(
-      next.pageId,
-      donor.pageId,
-      'a later affinity could still steal the donor tab',
-    );
-    next.release();
-  });
-
   test('the gate is off at probe budget 0 — the wedged tab is handed back out', async function (assert) {
     let { pool, tabs } = makePool(0);
     let firstPageId = await warmAffinityA(pool);
