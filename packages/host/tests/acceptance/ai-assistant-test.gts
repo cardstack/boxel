@@ -3808,7 +3808,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     return find('[data-test-main-panel]')!.getBoundingClientRect().width;
   }
 
-  test('dragging the ai assistant panel wide leaves the main panel at least 320px wide, or collapses it', async function (assert) {
+  test('dragging the ai assistant panel wide stops the main panel at 320px', async function (assert) {
     widenApp();
     window.localStorage.removeItem('ai-assistant-panel-width');
     await openAssistantOnIndex();
@@ -3817,7 +3817,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     let width = mainPanelWidth();
     assert.ok(
       width >= 320,
-      `a drag that leaves the main panel wider than 320px keeps it open (${width.toFixed(1)}px)`,
+      `the main panel is at least 320px wide (${width.toFixed(1)}px)`,
     );
     assert.ok(
       width < 420,
@@ -3827,12 +3827,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await dragAssistantHandleTo(10);
     width = mainPanelWidth();
     assert.ok(
-      width < 1,
-      `a drag past 320px collapses the main panel (${width.toFixed(1)}px)`,
+      Math.abs(width - 320) < 1,
+      `a drag past 320px stops the main panel at 320px (${width.toFixed(1)}px)`,
     );
+    assert
+      .dom('[data-test-main-panel]')
+      .doesNotHaveAttribute('inert', 'the main panel is reachable');
   });
 
-  test('double-clicking the ai assistant resize handle collapses the main panel, and double-clicking again restores its width', async function (assert) {
+  test('double-clicking the ai assistant resize handle narrows the main panel to 320px', async function (assert) {
     widenApp();
     window.localStorage.removeItem('ai-assistant-panel-width');
     await openAssistantOnIndex();
@@ -3841,24 +3844,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.ok(startWidth > 400, `the main panel starts wide (${startWidth}px)`);
 
     await doubleClick('[data-test-ai-assistant-resize-handle]');
-    let collapsedWidth = mainPanelWidth();
+    let width = mainPanelWidth();
     assert.ok(
-      collapsedWidth < 1,
-      `the main panel collapses (${collapsedWidth.toFixed(1)}px)`,
+      Math.abs(width - 320) < 1,
+      `the main panel narrows to 320px (${width.toFixed(1)}px)`,
     );
     assert
       .dom('[data-test-main-panel]')
-      .hasAttribute('inert', '', 'the collapsed main panel is out of reach');
-
-    await doubleClick('[data-test-ai-assistant-resize-handle]');
-    let restoredWidth = mainPanelWidth();
-    assert.ok(
-      Math.abs(restoredWidth - startWidth) < 1,
-      `the main panel is back to ${startWidth.toFixed(1)}px (${restoredWidth.toFixed(1)}px)`,
-    );
-    assert
-      .dom('[data-test-main-panel]')
-      .doesNotHaveAttribute('inert', 'the reopened main panel is reachable');
+      .doesNotHaveAttribute('inert', 'the main panel is reachable');
   });
 
   test('a saved ai assistant panel width that would leave the main panel narrower than 320px opens it at 320px', async function (assert) {
@@ -3873,7 +3866,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
   });
 
-  test('with no saved width, a window too narrow for the ai assistant panel’s default width keeps the main panel open', async function (assert) {
+  test('with no saved width, a window too narrow for the ai assistant panel’s default width gives the main panel the rest', async function (assert) {
     // About 350px across once the test container scales it.
     testingRoot?.style.setProperty('width', '700px');
     window.localStorage.removeItem('ai-assistant-panel-width');
@@ -3887,7 +3880,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       `the app is narrower than the assistant's default width (${layoutWidth.toFixed(1)}px)`,
     );
     let width = mainPanelWidth();
-    assert.ok(width > 0, `the main panel stays open (${width.toFixed(1)}px)`);
+    assert.ok(
+      Math.abs(width - (layoutWidth - 320)) < 1,
+      `the main panel gets what the assistant's 320px leaves (${width.toFixed(1)}px)`,
+    );
     let saved = window.localStorage.getItem('ai-assistant-panel-width');
     assert.notStrictEqual(saved, null, 'the width is saved');
     assert.ok(
@@ -3918,12 +3914,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
   });
 
-  test('on a window too narrow for both panels, the ai assistant panel’s width is not saved', async function (assert) {
+  test('on a window no wider than the ai assistant panel’s minimum, the main panel is out of reach and the width is not saved', async function (assert) {
     // About 300px across once the test container scales it.
     testingRoot?.style.setProperty('width', '600px');
     window.localStorage.setItem('ai-assistant-panel-width', '40');
     await openAssistantOnIndex();
 
+    assert
+      .dom('[data-test-main-panel]')
+      .hasAttribute('inert', '', 'the 0px main panel is out of reach');
     assert.strictEqual(
       window.localStorage.getItem('ai-assistant-panel-width'),
       '40',

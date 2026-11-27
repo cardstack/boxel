@@ -145,8 +145,9 @@ export default class SubmodeLayout extends Component<Signature> {
     minWidth: 25,
   });
   @tracked private mainPanelMinWidth = 0;
-  // A collapsed main panel is 0px wide, but its controls would still take
-  // focus and reach a screen reader, so it is inert until it opens again.
+  // A window no wider than the assistant's 320px minimum leaves the main panel
+  // 0px wide, but its controls would still take focus and reach a screen
+  // reader, so it is inert while it has no width.
   @tracked private mainPanelCollapsed = false;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
@@ -184,8 +185,9 @@ export default class SubmodeLayout extends Component<Signature> {
     // layout is an array of two numbers,
     // the first number is the width of the main panel,
     // the second number is the width of the ai panel.
-    // A window too narrow for both leaves the main panel no room, so its
-    // whole-window width isn't saved over the one chosen on a wider window.
+    // A window no wider than the assistant's minimum leaves the main panel no
+    // room, so its whole-window width isn't saved over the one chosen on a
+    // wider window.
     if (layout.length === 2 && this.mainPanelMinWidth > 0) {
       window.localStorage.setItem(AiAssistantPanelWidth, String(layout[1]));
     }
@@ -205,8 +207,8 @@ export default class SubmodeLayout extends Component<Signature> {
     let aiPanelMinWidthInPixels = Math.min(320, windowWidth);
     this.aiPanelWidths.minWidth = (aiPanelMinWidthInPixels / windowWidth) * 100;
 
-    // The main panel is at least 320px wide or collapsed, so a wide assistant
-    // can't squeeze the dashboard or a stack past where its layout holds. A
+    // The main panel is at least 320px wide, so a wide assistant can't
+    // squeeze the dashboard or a stack past where its layout holds. A
     // window too narrow for both gives the assistant its minimum and the main
     // panel the rest. Like the assistant's, it holds when the panels lay out
     // and while one is dragged; narrowing the window alone doesn't apply it.
@@ -217,9 +219,10 @@ export default class SubmodeLayout extends Component<Signature> {
     this.mainPanelMinWidth = (mainPanelMinWidthInPixels / windowWidth) * 100;
   };
 
-  // The width the assistant opens at: the saved one, or else 371px. The saved
-  // width isn't tracked, so reading whether the assistant is open makes this
-  // recompute each time it opens, with the width saved since the page loaded.
+  // The width the assistant opens at: the saved one, or else 371px. Glimmer
+  // keeps this getter's reference across opens and recomputes it only when
+  // something it read has changed. The saved width isn't tracked, so reading
+  // whether the assistant is open is what makes each open read it afresh.
   private get aiPanelDefaultWidth(): number {
     let windowWidth = this.currentWindowWidth;
     if (!this.aiAssistantPanelService.isOpen || !windowWidth) {
@@ -229,15 +232,13 @@ export default class SubmodeLayout extends Component<Signature> {
     let persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth)
       ? Number(window.localStorage.getItem(AiAssistantPanelWidth))
       : undefined;
-    let defaultWidth =
-      !persistedWidth || persistedWidth < (this.aiPanelWidths.minWidth ?? 0)
-        ? standardWidth
-        : persistedWidth;
-
-    // The width is saved as a share of the window, so it can leave the main
-    // panel under 320px, which would open it collapsed, out of reach until
-    // dragged open. It opens at its minimum instead.
-    return Math.min(defaultWidth, 100 - this.mainPanelMinWidth);
+    // The width is saved as a share of the window, so on another window it can
+    // leave the main panel under 320px. The panel group then keeps the main
+    // panel at its minimum and gives the assistant the rest.
+    return !persistedWidth ||
+      persistedWidth < (this.aiPanelWidths.minWidth ?? 0)
+      ? standardWidth
+      : persistedWidth;
   }
 
   get operatorModeController(): IndexController {
@@ -522,6 +523,7 @@ export default class SubmodeLayout extends Component<Signature> {
         <ResizablePanel
           class='main-panel'
           @minSize={{this.mainPanelMinWidth}}
+          @collapsible={{false}}
           inert={{if this.mainPanelCollapsed true}}
           data-test-main-panel
         >
