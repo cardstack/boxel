@@ -446,7 +446,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Made: code exchanges (token-issued). Ended: grants ended, by reason (user disconnected it, client revoked a token, reuse, sessions-revoked). A session revocation that ends several of a user's grants counts each.",
+        "description": "Made: code and device-code exchanges (token-issued). Ended: grants ended, by reason (user disconnected it, client revoked a token, reuse, sessions-revoked). A session revocation that ends several of a user's grants counts each.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -531,7 +531,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Consent decisions on the authorize page, by outcome.",
+        "description": "Consent decisions on the authorize page and the device page, by outcome.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -594,7 +594,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Code exchanges (token-issued) by client. A metadata-document client is named by its host.",
+        "description": "Code and device-code exchanges (token-issued) by client. A metadata-document client is named by its host.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -733,7 +733,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Authorization requests refused before consent (authorization-refused), by the check that refused them. The oauth-provider skill's log table says what each reason means.",
+        "description": "Authorization and device sign-in requests refused before consent (authorization-refused), by the check that refused them, and user codes the device page refused (device-code-refused: unknown, expired or decided). The oauth-provider skill's Events section says what each reason means.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -786,6 +786,17 @@
             "legendFormat": "{{reason}}",
             "refId": "A",
             "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (reason) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"device-code-refused\" [$__interval]))",
+            "legendFormat": "device code: {{reason}}",
+            "refId": "B",
+            "queryType": "range"
           }
         ],
         "title": "Flows refused, by reason",
@@ -796,7 +807,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Code exchanges and refreshes the token endpoint refused (token-refused), by OAuth error code.",
+        "description": "Code exchanges, device-code polls and refreshes the token endpoint refused (token-refused), by OAuth error code. slow_down is a device poll faster than its interval.",
         "fieldConfig": {
           "defaults": {
             "color": {

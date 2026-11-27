@@ -299,7 +299,9 @@ limits' `network` limit), and the exchange of its code MUST compare its own
 network with that record. The record MUST expire within a few minutes of the
 finish. An exchange the provider refuses MUST NOT spend the record, so the
 exchange that follows compares against it too. The provider MUST NOT log
-either network or send it to error reporting: it logs only how they compared.
+either network or send it to error reporting: it logs how they compared, and
+MUST name a network in a log line, here or anywhere else, only by a pseudonym
+keyed with a secret only the server holds.
 
 In the device authorization grant, the user MUST enter the user code on the
 secure origin's device page, under a secure session, and see the same consent.
@@ -468,6 +470,13 @@ case can't fix it by retrying. So the comparison is logged, not enforced,
 until its outcomes show how often a real sign-in differs. The record is never
 sent to error reporting, though an error report carries the caller's address
 among its request's headers, on this route as on every other.
+
+A network's pseudonym lets the alerts on the provider's events count refusals
+and denied consents per network without the logs naming one. It is keyed
+because there are few enough IPv4 /24s to hash every one, so a plain hash
+would name the network to anyone who reads the logs. The key derives from the
+realm server's secret seed, so whoever holds the seed can still reverse a
+pseudonym by hashing every network; reading the logs is not enough.
 
 The library binds a flow to its browser only through its own cookie, which
 the secure origin's pages never send, so Boxel adds the ticket check itself.

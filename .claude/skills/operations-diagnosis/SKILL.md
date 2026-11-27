@@ -470,10 +470,12 @@ placeholder `/mcp`, which has no tools, so a request carrying one never
 reaches an operation, and writes nothing here. A resource's controller checks
 the token before any operation gate runs, so a call it refuses (401 `invalid_token`, 403
 `insufficient_scope`) still writes no line on this channel. Look for it on
-`boxel:oauth-provider`: `token refused: <reason>, resource …` or `token
-refused: insufficient scope, …`, plain-text lines found by their text (the
-`tail-logs` skill). The `oauth-provider` skill lists every line on that
-channel and how to trace an app's connection from registration to its calls.
+`boxel:oauth-provider` as a `resource-refused` event, a JSON line whose
+`reason` says why and whose `message` is the sentence (`token refused: …`),
+so a search for the text still finds it (the `tail-logs` skill). The
+`oauth-provider` skill's Events section lists every event on that channel,
+and the skill says how to trace an app's connection from registration to its
+calls.
 
 ## Related skills
 

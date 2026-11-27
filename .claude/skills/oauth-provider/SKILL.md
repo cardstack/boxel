@@ -328,17 +328,18 @@ user, grant or network only by an event's pseudonym.
 `{"channel":"boxel:oauth-provider","event":…, …fields, "message":…}`, and
 the table above gives each one's `message`.
 
-| `event`                            | Logged by                                                                                                                            | Fields                                                                    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `authorization-refused`            | `authorization refused: …`                                                                                                           | `reason`, `error`, `client`, `network`                                    |
-| `consent`                          | `consent allowed` / `consent denied`                                                                                                 | `outcome`, `client`, `user`, `network`, `renew`                           |
-| `token-issued` / `token-refreshed` | `token issued` / `token refreshed`                                                                                                   | `client`, `grant`, `networkMatch` (below)                                 |
-| `token-refused`                    | `token refused: <error>, client …` (the token endpoint)                                                                              | `error`, `client`, `network`                                              |
-| `reuse`                            | `authorization code reused`, `refresh token reused`                                                                                  | `what`, `grant`, `network` when known                                     |
-| `grant-ended`                      | `grant ended: …`                                                                                                                     | `reason`, `client`, `grant`, `user`                                       |
-| `grants-ended`                     | `grants ended: sessions-revoked, …`                                                                                                  | `reason`, `count`, `user`                                                 |
-| `resource-refused`                 | `token refused: <reason>, resource …`, route-not-mapped and insufficient-scope refusals, and a realm's refusals of a verified caller | `reason`, `resource`, and for a verified caller `client`, `grant`, `user` |
-| `rate-limit-alert`                 | a limit's alert                                                                                                                      | —                                                                         |
+| `event`                            | Logged by                                                                                                                            | Fields                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `authorization-refused`            | `authorization refused: …`, `device authorization refused: …`                                                                        | `reason`, `error`, `client`, `network`, `flow` `device` for device sign-in          |
+| `consent`                          | `consent allowed` / `consent denied`, `device consent allowed` / `device consent denied`                                             | `outcome`, `client`, `user`, `network`, `renew`, `flow` `device` for device sign-in |
+| `device-code-refused`              | `device code refused: <state>`                                                                                                       | `reason` (`unknown`, `expired`, `decided`), `user`, `network`                       |
+| `token-issued` / `token-refreshed` | `token issued` / `token refreshed`                                                                                                   | `client`, `grant`, `networkMatch` (below)                                           |
+| `token-refused`                    | `token refused: <error>, client …` (the token endpoint), `slow_down` included                                                        | `error`, `client`, `network`                                                        |
+| `reuse`                            | `authorization code reused`, `device code reused`, `refresh token reused`                                                            | `what`, `grant`, `network` when known                                               |
+| `grant-ended`                      | `grant ended: …`                                                                                                                     | `reason`, `client`, `grant`, `user`                                                 |
+| `grants-ended`                     | `grants ended: sessions-revoked, …`                                                                                                  | `reason`, `count`, `user`                                                           |
+| `resource-refused`                 | `token refused: <reason>, resource …`, route-not-mapped and insufficient-scope refusals, and a realm's refusals of a verified caller | `reason`, `resource`, and for a verified caller `client`, `grant`, `user`           |
+| `rate-limit-alert`                 | a limit's alert                                                                                                                      | —                                                                                   |
 
 `resource-refused` reasons are the lookup's (`unknown`, `expired`, `revoked`,
 `wrong-resource`) and a verified caller's (`route-not-mapped`,
@@ -365,7 +366,8 @@ SELECT id, client_id, created_at, ended_at, ended_reason FROM oauth_provider_gra
 ```
 
 Both scan the table; that is fine for an investigation, not for a
-dashboard. A `network` is an HMAC of the network the rate limits group a
+dashboard. ADR 021 §1.7 allows a network in a log line only as this keyed
+pseudonym. A `network` is an HMAC of the network the rate limits group a
 caller by (IPv4 /24, IPv6 /48), keyed from the realm server's secret seed
 (`networkPseudonym`): there are few enough /24s to hash every one, so a
 plain hash would name the network. Compare a network with the pseudonyms of
@@ -392,8 +394,10 @@ alert's description says what to do; in short:
 | OAuth provider traffic past a rate limit's alert mark | any `rate-limit-alert` in 5 minutes                                                              | Rate limits above; also in Sentry                                                                                  |
 | OAuth provider error                                  | any `OAuth provider error` line in 5 minutes                                                     | The Sentry event                                                                                                   |
 
-The thresholds are first guesses, to tune once real traffic shows what
-normal looks like. A query Loki fails to run sends the rule's
+Device sign-in's decisions are `consent` events too, and a reused device
+code is a `reuse`, so the consent, grant and reuse alerts count them with the
+authorize page's. The thresholds are first guesses, to tune once real traffic
+shows what normal looks like. A query Loki fails to run sends the rule's
 `DatasourceError` alert to the same place.
 
 ## Tracing a failed connection

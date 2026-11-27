@@ -26,6 +26,7 @@ import {
 import { logOAuthEvent, networkOf, pseudonym } from './events.ts';
 import { grantEndReasonOnRoute, TokenAdapter } from './tokens.ts';
 import { isDynamicClientId } from './dynamic-client-id.ts';
+import { DEVICE_CODE_GRANT_TYPE } from './pre-registered-clients.ts';
 
 export class OAuthProviderStorageError extends Error {
   name = 'OAuthProviderStorageError';
@@ -199,10 +200,13 @@ class GrantAdapter extends OAuthProviderAdapter {
     // The library found a spent code, or a used refresh token, before
     // Boxel's own checks did: the same reuse they record.
     if (ended && reason === 'reuse') {
+      let grantType = Provider.ctx?.oidc?.params?.grant_type;
       let what =
-        Provider.ctx?.oidc?.params?.grant_type === 'refresh_token'
+        grantType === 'refresh_token'
           ? ('refresh token' as const)
-          : ('authorization code' as const);
+          : grantType === DEVICE_CODE_GRANT_TYPE
+            ? ('device code' as const)
+            : ('authorization code' as const);
       logOAuthEvent(
         'info',
         {

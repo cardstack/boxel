@@ -487,7 +487,15 @@ export class DeviceCodeAdapter extends BearerKeyedAdapter {
       throw new errors.ExpiredToken('device code is expired');
     }
     if (row.grant_id) {
-      log.info('device code reused');
+      logOAuthEvent(
+        'info',
+        {
+          event: 'reuse',
+          what: 'device code',
+          grant: pseudonym(row.grant_id),
+        },
+        'device code reused',
+      );
       await endGrant(this.#dbAdapter, row.grant_id, 'reuse');
     }
     throw new errors.InvalidGrant('device code already consumed');

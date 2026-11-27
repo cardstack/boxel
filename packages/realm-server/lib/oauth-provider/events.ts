@@ -43,14 +43,18 @@ export type Pseudonym = string;
 
 export type OAuthProviderEvent =
   // A flow refused before consent (`authorization.ts`), by Boxel's checks
-  // or the library's.
+  // or the library's, or a device sign-in refused when it starts
+  // (`device.ts`, `flow` `device`).
   | {
       event: 'authorization-refused';
       reason: string;
       error: string;
       client: string;
       network?: Pseudonym;
+      flow?: 'device';
     }
+  // A decision on the authorize page (`consent.ts`) or the device page
+  // (`device.ts`, `flow` `device`).
   | {
       event: 'consent';
       outcome: 'allowed' | 'denied';
@@ -58,6 +62,15 @@ export type OAuthProviderEvent =
       user?: Pseudonym;
       network?: Pseudonym;
       renew: boolean;
+      flow?: 'device';
+    }
+  // A user code typed into the device page that names no pending sign-in:
+  // none was issued (`unknown`), it expired, or it was already decided.
+  | {
+      event: 'device-code-refused';
+      reason: 'unknown' | 'expired' | 'decided';
+      user?: Pseudonym;
+      network?: Pseudonym;
     }
   // A code exchange (`issued`) or refresh that succeeded. A code exchange by
   // a pre-registered app on the user's computer adds how its network compares
@@ -77,11 +90,11 @@ export type OAuthProviderEvent =
       client: string;
       network?: Pseudonym;
     }
-  // A spent code, or a used refresh token outside its grace, came back: its
-  // grant is ended (`reuse`).
+  // A spent authorization or device code, or a used refresh token outside
+  // its grace, came back: its grant is ended (`reuse`).
   | {
       event: 'reuse';
-      what: 'authorization code' | 'refresh token';
+      what: 'authorization code' | 'device code' | 'refresh token';
       grant: Pseudonym;
       network?: Pseudonym;
     }

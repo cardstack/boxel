@@ -69,6 +69,7 @@ import {
   type CallerLimit,
 } from './caller-limit.ts';
 import { browserOriginAllowed } from './client-cors.ts';
+import { clientIdForLogs } from './client-metadata-document.ts';
 import { logOAuthEvent, networkOf, pseudonym } from './events.ts';
 import { endGrant } from './grants.ts';
 import {
@@ -240,7 +241,16 @@ export function tokenHandler({
             'token',
           );
         }
-        log.info(`token refused: slow_down, client ${param('client_id')}`);
+        logOAuthEvent(
+          'info',
+          {
+            event: 'token-refused',
+            error: 'slow_down',
+            client: clientIdForLogs(param('client_id') ?? 'unknown'),
+            network: networkOf(ctxt),
+          },
+          `token refused: slow_down, client ${param('client_id')}`,
+        );
         return answer(400, {
           error: 'slow_down',
           error_description: 'poll for the device code less often',
@@ -259,9 +269,7 @@ export function tokenHandler({
             {
               event: 'reuse',
               what:
-                exchange.what === 'code'
-                  ? 'authorization code'
-                  : 'refresh token',
+                exchange.what === 'code' ? 'authorization code' : exchange.what,
               grant: pseudonym(exchange.grantId),
               network: networkOf(ctxt),
             },
