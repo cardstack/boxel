@@ -250,8 +250,10 @@ export default class PinnedCards extends Component<Signature> {
         pointer-events: auto;
         transition: transform var(--boxel-transition);
       }
-      .pin-button:hover {
-        transform: translateY(-0.25rem);
+      @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+        .pin-button:hover {
+          transform: translateY(-0.25rem);
+        }
       }
       /* Drawn in design pixels: the zoom brings it to about the dashboard
          ring's width. */
@@ -271,14 +273,6 @@ export default class PinnedCards extends Component<Signature> {
       .pin-card {
         width: 100%;
         height: 100%;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pin-button {
-          transition: none;
-        }
-        .pin-button:hover {
-          transform: none;
-        }
       }
     </style>
   </template>

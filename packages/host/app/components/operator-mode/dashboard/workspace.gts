@@ -598,7 +598,13 @@ export default class Workspace extends Component<Signature> {
         --_workspace-control-size: var(--boxel-button-xs);
         --_workspace-control-radius: var(--boxel-border-radius-sm);
         --_workspace-control-inset: 0.5rem;
-        --_workspace-glass: var(--boxel-dark-40);
+        /* Dark enough that the controls' white icons keep 3:1 contrast, and
+           the site chin's address 4.5:1, over a white wallpaper. */
+        --_workspace-glass: color-mix(
+          in oklch,
+          var(--boxel-800) 60%,
+          transparent
+        );
         --_workspace-glass-blur: blur(0.375rem);
         --_workspace-chin-height: 2.25rem;
         --_workspace-chip-height: 1.25rem;
@@ -682,8 +688,9 @@ export default class Workspace extends Component<Signature> {
       }
 
       /* The star and the menu: glass chips over the wallpaper, shown on
-         hover, on keyboard focus inside the workspace, and under the
-         cursor's ring. A favorited star stays. The button fills its chip. */
+         hover, on keyboard focus inside the workspace, under the cursor's
+         ring, and always on a touch screen, which can't hover. A
+         favorited star stays. The button fills its chip. */
       .favorite-btn,
       .menu-btn {
         --pretui-button-h: var(--_workspace-control-size);
@@ -706,7 +713,6 @@ export default class Workspace extends Component<Signature> {
       .menu-btn {
         right: var(--_workspace-control-inset);
       }
-      .workspace:hover :is(.favorite-btn, .menu-btn),
       .workspace.is-selected :is(.favorite-btn, .menu-btn),
       .workspace:has(:focus-visible:not([data-nav-index]))
         :is(.favorite-btn, .menu-btn),
@@ -716,15 +722,33 @@ export default class Workspace extends Component<Signature> {
         background-color: var(--_workspace-glass);
         backdrop-filter: var(--_workspace-glass-blur);
       }
+      @media (hover: hover) {
+        .workspace:hover :is(.favorite-btn, .menu-btn) {
+          opacity: 1;
+          background-color: var(--_workspace-glass);
+          backdrop-filter: var(--_workspace-glass-blur);
+        }
+      }
+      @media (hover: none) {
+        .workspace :is(.favorite-btn, .menu-btn) {
+          opacity: 1;
+          background-color: var(--_workspace-glass);
+          backdrop-filter: var(--_workspace-glass-blur);
+        }
+      }
       /* The icons are colored here: Pret UI's neutral button sets its own
          ink on the button, so a value inherited from the chip wouldn't
          reach them. A favorited or hovered star takes the primary color. */
       .control-icon {
         color: var(--boxel-light);
       }
-      .favorite-btn.is-favorited .control-icon,
-      .workspace .favorite-btn:hover .control-icon {
+      .favorite-btn.is-favorited .control-icon {
         color: var(--primary);
+      }
+      @media (hover: hover) {
+        .workspace .favorite-btn:hover .control-icon {
+          color: var(--primary);
+        }
       }
 
       /* Who can see the workspace: a neutral chip, so it never outweighs the
@@ -738,11 +762,6 @@ export default class Workspace extends Component<Signature> {
       .workspace.is-desk {
         --_workspace-control-size: 2.125rem;
         --_workspace-control-inset: var(--boxel-sp-sm);
-        --_workspace-glass: color-mix(
-          in oklch,
-          var(--boxel-800) 60%,
-          transparent
-        );
         --_workspace-glass-blur: blur(0.5rem);
         --_workspace-control-radius: var(--boxel-border-radius);
         gap: var(--boxel-sp-xs);
@@ -771,10 +790,12 @@ export default class Workspace extends Component<Signature> {
           inset 0 0 0 1px var(--boxel-light-25);
         transition: box-shadow var(--boxel-transition);
       }
-      .workspace.is-desk:hover .desk-surface {
-        box-shadow:
-          0 0.875rem 2rem var(--boxel-dark-30),
-          inset 0 0 0 1px var(--boxel-light-50);
+      @media (hover: hover) {
+        .workspace.is-desk:hover .desk-surface {
+          box-shadow:
+            0 0.875rem 2rem var(--boxel-dark-30),
+            inset 0 0 0 1px var(--boxel-light-50);
+        }
       }
       /* The ring shows under the keyboard cursor and on any keyboard focus,
          as when a modal hands focus back. */
@@ -822,12 +843,14 @@ export default class Workspace extends Component<Signature> {
         font: 600 var(--boxel-font);
         pointer-events: auto;
       }
-      .desk-pill:hover {
-        background-color: color-mix(
-          in oklch,
-          var(--boxel-800) 78%,
-          transparent
-        );
+      @media (hover: hover) {
+        .desk-pill:hover {
+          background-color: color-mix(
+            in oklch,
+            var(--boxel-800) 78%,
+            transparent
+          );
+        }
       }
       /* The surface draws the ring; the transparent outline stands in for
          it in forced-colors mode, which drops box-shadows. */
@@ -863,9 +886,11 @@ export default class Workspace extends Component<Signature> {
         background-color: var(--boxel-dark-50);
         transition: background-color var(--boxel-transition);
       }
-      .workspace.is-desk:hover
-        .desk-surface:has([data-pinned-collage])::before {
-        background-color: var(--boxel-dark-40);
+      @media (hover: hover) {
+        .workspace.is-desk:hover
+          .desk-surface:has([data-pinned-collage])::before {
+          background-color: var(--boxel-dark-40);
+        }
       }
       .desk-pins {
         flex: 1;
@@ -962,8 +987,10 @@ export default class Workspace extends Component<Signature> {
         border-radius: var(--dashboard-tile-radius);
         pointer-events: none;
       }
-      .workspace.is-tile:hover::after {
-        border-color: var(--boxel-light-50);
+      @media (hover: hover) {
+        .workspace.is-tile:hover::after {
+          border-color: var(--boxel-light-50);
+        }
       }
       .workspace.is-tile.is-selected::after,
       .workspace.is-tile:has(.tile-face:focus-visible)::after {
@@ -1002,12 +1029,18 @@ export default class Workspace extends Component<Signature> {
         border: none;
         border-radius: 0 0 var(--dashboard-tile-radius)
           var(--dashboard-tile-radius);
-        background-color: var(--boxel-dark-40);
+        background-color: var(--_workspace-glass);
         backdrop-filter: var(--_workspace-glass-blur);
         color: var(--boxel-light);
       }
-      .host-trigger:hover {
-        background-color: var(--boxel-dark-50);
+      @media (hover: hover) {
+        .host-trigger:hover {
+          background-color: color-mix(
+            in oklch,
+            var(--boxel-800) 78%,
+            transparent
+          );
+        }
       }
       .host-trigger:focus-visible {
         outline: 2px solid var(--ring);
@@ -1079,6 +1112,9 @@ export default class Workspace extends Component<Signature> {
         transition:
           background-color var(--boxel-transition),
           box-shadow var(--boxel-transition);
+        /* Keeps the controls' stacking inside the row, so the list's fade
+           covers them along with the rest of the row. */
+        isolation: isolate;
       }
       .workspace.is-row:has(.host-menu) {
         --_workspace-controls: 3;
@@ -1114,8 +1150,10 @@ export default class Workspace extends Component<Signature> {
       .row-thumb::before {
         opacity: 0;
       }
-      .workspace.is-row:hover .row-thumb::before {
-        opacity: 1;
+      @media (hover: hover) {
+        .workspace.is-row:hover .row-thumb::before {
+          opacity: 1;
+        }
       }
       .row-icon-tooltip {
         position: relative;
@@ -1189,11 +1227,21 @@ export default class Workspace extends Component<Signature> {
         padding: 0;
         border-radius: 50%;
       }
-      .workspace.is-row:hover .host-menu,
       .workspace.is-row.is-open .host-menu,
       .workspace.is-row.is-selected .host-menu,
       .is-row .host-menu:has(:focus-visible) {
         opacity: 1;
+      }
+      @media (hover: hover) {
+        .workspace.is-row:hover .host-menu {
+          opacity: 1;
+        }
+      }
+      /* A touch screen can't hover to reveal the globe, so there it stays. */
+      @media (hover: none) {
+        .is-row .host-menu {
+          opacity: 1;
+        }
       }
       .is-row :is(.host-trigger-url, .host-trigger-more) {
         display: none;

@@ -25,6 +25,7 @@ import {
   withholdRealmSession,
 } from '../helpers';
 import {
+  assertHoverOnlyWhereHoverable,
   realmURL,
   setupDashboardTest,
   type DashboardRealm,
@@ -188,6 +189,12 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
     assert
       .dom('[data-test-pinned-cards]')
       .exists({ count: 1 }, 'only the desk shows pins');
+  });
+
+  test("the pinned cards' own styles apply hover effects only where the device can hover", async function (assert) {
+    await visitWithFavorites([pinnedRealmURL]);
+    await waitUntil(() => findAll(DESK_PINS).length === 4);
+    assertHoverOnlyWhereHoverable(assert, DESK_PINS, 'a pinned card');
   });
 
   test('a desk leaves out a pin naming its own Workspace card, by id or by the realm URL', async function (assert) {
