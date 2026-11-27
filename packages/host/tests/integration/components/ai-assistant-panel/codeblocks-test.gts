@@ -20,8 +20,8 @@ import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   percySnapshot,
@@ -48,6 +48,10 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
+  });
+
+  hooks.afterEach(function () {
+    window.localStorage.removeItem(AiAssistantPanelWidth);
   });
 
   setupLocalIndexing(hooks);
@@ -529,6 +533,10 @@ And another code block without language specified:
   });
 
   test('handles HTML inside backticks without language name', async function (this: RenderingTestContext, assert) {
+    // The code block wraps lines that don't fit, and each wrapped part paints
+    // as a line of its own, so the text read below is the code only when the
+    // assistant is wide enough for its longest line.
+    window.localStorage.setItem(AiAssistantPanelWidth, '640');
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
     let messageWithHtmlInBackticksNoLang = `Here's some HTML inside backticks without a language name:
 

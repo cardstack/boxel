@@ -1,6 +1,10 @@
 export const CurrentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 export const NewSessionIdPersistenceKey = 'aiPanelNewSessionId';
-export const AiAssistantPanelWidth = 'ai-assistant-panel-width';
+// The AI Assistant's width in px, saved only when the user resizes it.
+export const AiAssistantPanelWidth = 'ai-assistant-panel-width-px';
+// The width as a share of the window, which older versions saved. Nothing
+// reads it, since it mixes widths the user chose with ones the app chose.
+export const LegacyAiAssistantPanelWidth = 'ai-assistant-panel-width';
 export const AiAssistantOpen = 'boxel-ai-assistant-open';
 export const CodeModePanelWidths = 'code-mode-panel-widths';
 export const CodeModePanelHeights = 'code-mode-panel-heights';
@@ -19,6 +23,7 @@ export function clearLocalStorage(storage: Storage | undefined) {
   storage?.removeItem(CurrentRoomIdPersistenceKey);
   storage?.removeItem(NewSessionIdPersistenceKey);
   storage?.removeItem(AiAssistantPanelWidth);
+  storage?.removeItem(LegacyAiAssistantPanelWidth);
   storage?.removeItem(CodeModePanelWidths);
   storage?.removeItem(CodeModePanelHeights);
   storage?.removeItem(ModuleInspectorSelections);

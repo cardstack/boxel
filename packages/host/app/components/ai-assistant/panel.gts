@@ -14,8 +14,6 @@ import { restartableTask } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 import { Velcro } from 'ember-velcro';
 
-import type { ResizeHandle } from '@cardstack/boxel-ui/components';
-
 import {
   ContextButton,
   LoadingIndicator,
@@ -43,7 +41,6 @@ import NewSessionButton from './new-session-button';
 import type MatrixService from '../../services/matrix-service';
 import type { MonacoSDK } from '../../services/monaco-service';
 import type MonacoService from '../../services/monaco-service';
-import type { WithBoundArgs } from '@glint/template';
 
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
@@ -52,10 +49,6 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     onClose: () => void;
-    resizeHandle?: WithBoundArgs<
-      typeof ResizeHandle,
-      'groupId' | 'orientation' | 'registerResizeHandle'
-    >;
     // show this room instead of the current one: the assistant board shows
     // several sessions side by side, each in a panel of its own
     roomId?: string;
@@ -85,12 +78,6 @@ export default class AiAssistantPanel extends Component<Signature> {
         data-assistant-room={{this.roomId}}
         ...attributes
       >
-        {{#if @resizeHandle}}
-          <@resizeHandle
-            class='ai-assistant-panel-resize-handle'
-            data-test-ai-assistant-resize-handle
-          />
-        {{/if}}
         <div class='panel-header-container'>
           <header class='panel-header'>
             {{! the assistant's own mark, still: the animated mark belongs to
@@ -416,18 +403,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       :deep(.arrow) {
         display: none;
       }
-      :deep(.separator-horizontal) {
-        min-width: calc(
-          var(--boxel-panel-resize-handle-width) +
-            calc(var(--boxel-sp-xxxs) * 2)
-        );
-        position: absolute;
-        left: 0;
-        height: 100%;
-      }
-      :deep(.separator-horizontal:not(:hover) > button) {
-        display: none;
-      }
       :deep(.room-actions) {
         z-index: 1;
       }
@@ -568,10 +543,6 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .session-error :deep(.intro) {
         margin-top: calc(var(--ai-assistant-panel-header-height) * 0.5);
-      }
-
-      .ai-assistant-panel-resize-handle {
-        z-index: calc(var(--host-ai-panel-z-index) + 1);
       }
 
       @keyframes ai-assistant-chat-gradient-scroll-timeline {
