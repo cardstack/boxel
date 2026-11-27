@@ -26,6 +26,13 @@ const execFileAsync = promisify(execFile);
 // the browser includes it in its deadline.
 export const BROWSER_LAUNCH_TIMEOUT_MS = 30_000;
 
+// Browser-UI WebUI surfaces a headless prerender browser never shows. See the
+// launch args below.
+const CHROME_DISABLED_UI_FEATURES = [
+  'WebUIOmniboxPopup',
+  'WebUIOmniboxAimPopup',
+].join(',');
+
 export class BrowserManager {
   #browser: Browser | null = null;
   #browserUserDataDir: string | undefined;
@@ -97,6 +104,15 @@ export class BrowserManager {
         '--allow-insecure-localhost',
       );
     }
+
+    // Chrome 157 hosts each window's omnibox popup in its own WebUI renderer
+    // (`--type=renderer --top-chrome-webui`, target
+    // `chrome://omnibox-popup.top-chrome/`), one per BrowserContext window,
+    // so every pooled context carries a renderer that serves no page. The
+    // Puppeteer this package resolves predates that and doesn't turn it off;
+    // newer Puppeteer releases disable these same features by default.
+    // Puppeteer merges this flag into its own `--disable-features` list.
+    launchArgs.push(`--disable-features=${CHROME_DISABLED_UI_FEATURES}`);
 
     let extraArgs =
       process.env.PUPPETEER_CHROME_ARGS?.split(/\s+/).filter(Boolean);
