@@ -543,6 +543,7 @@ export default class Dashboard extends Component<Signature> {
     >
       <div
         class='dashboard-scroller boxel-dark-scrollbar'
+        data-dashboard-scroller
         {{@sections.trackScroller}}
         data-test-dashboard-scroller
       >
