@@ -217,12 +217,12 @@ export default class SubmodeLayout extends Component<Signature> {
     this.mainPanelMinWidth = (mainPanelMinWidthInPixels / windowWidth) * 100;
   };
 
-  // The width the assistant opens at: the saved one, or else 371px. The panel
-  // renders only while the assistant is open, so each open creates a new one,
-  // which reads the latest saved width.
+  // The width the assistant opens at: the saved one, or else 371px. The saved
+  // width isn't tracked, so reading whether the assistant is open makes this
+  // recompute each time it opens, with the width saved since the page loaded.
   private get aiPanelDefaultWidth(): number {
     let windowWidth = this.currentWindowWidth;
-    if (!windowWidth) {
+    if (!this.aiAssistantPanelService.isOpen || !windowWidth) {
       return AI_PANEL_UNMEASURED_WIDTH_PERCENT;
     }
     let standardWidth = (Math.min(371, windowWidth) / windowWidth) * 100;
