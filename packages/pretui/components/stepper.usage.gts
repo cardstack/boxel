@@ -21,6 +21,8 @@ class StepperUsage extends Component {
   setDisabled = (v: boolean) => (this.disabled = v);
   get usage() {
     let bits = [
+      "@controlId='quantity-input'",
+      "@label='Quantity'",
       `@value={{${this.value}}}`,
       `@min={{${this.min}}}`,
       `@max={{${this.max}}}`,
@@ -28,7 +30,7 @@ class StepperUsage extends Component {
     if (this.step !== 1) bits.push(`@step={{${this.step}}}`);
     if (this.disabled) bits.push('@disabled={{true}}');
     bits.push('@onValueChange={{this.setValue}}');
-    return `<Stepper ${bits.join(' ')} />`;
+    return `<label for='quantity-input'>Quantity</label>\n<Stepper ${bits.join(' ')} />`;
   }
   <template>
     <FreestyleUsage
@@ -37,7 +39,10 @@ class StepperUsage extends Component {
       @source={{this.usage}}
     >
       <:example>
+        <label for='stepper-usage-input'>Quantity</label>
         <Stepper
+          @controlId='stepper-usage-input'
+          @label='Quantity'
           @value={{this.value}}
           @min={{this.min}}
           @max={{this.max}}
@@ -84,6 +89,18 @@ class StepperUsage extends Component {
         <Args.Number
           @name='defaultValue'
           @description='Uncontrolled seed for the internal value.'
+        />
+        <Args.String
+          @name='label'
+          @description='The field name. The buttons read Decrease <label> and Increase <label>. Name the input itself with a label wired through controlId.'
+        />
+        <Args.String
+          @name='decrementLabel'
+          @description="Replaces the − button's whole accessible name."
+        />
+        <Args.String
+          @name='incrementLabel'
+          @description="Replaces the + button's whole accessible name."
         />
         <Args.String
           @name='controlId'

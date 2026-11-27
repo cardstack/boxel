@@ -21,6 +21,11 @@ export interface StepperSignature {
     step?: number;
     disabled?: boolean;
     controlId?: string;
+    /** the field's name; the buttons read "Decrease <label>" / "Increase <label>" */
+    label?: string;
+    /** overrides the whole accessible name of the − / + button */
+    decrementLabel?: string;
+    incrementLabel?: string;
     onValueChange?: (value: number) => void;
     /** aliases — the HTML/Mantine notify, the Aria boolean spelling */
     onChange?: (value: number) => void;
@@ -46,6 +51,18 @@ export class Stepper extends Component<StepperSignature> {
   }
   get disabled() {
     return firstDefined(this.args.disabled, this.args.isDisabled) ?? false;
+  }
+  get decLabel() {
+    return (
+      this.args.decrementLabel ??
+      (this.args.label ? `Decrease ${this.args.label}` : 'Decrease')
+    );
+  }
+  get incLabel() {
+    return (
+      this.args.incrementLabel ??
+      (this.args.label ? `Increase ${this.args.label}` : 'Increase')
+    );
   }
   get decDisabled() {
     return this.disabled || this.atMin;
@@ -97,7 +114,9 @@ export class Stepper extends Component<StepperSignature> {
       <button
         type='button'
         class='pretui-stepper-btn'
-        aria-label='Decrement'
+        aria-label={{this.decLabel}}
+        tabindex='-1'
+        data-test-pretui-stepper-decrement
         disabled={{this.decDisabled}}
         {{on 'click' this.decrement}}
       >
@@ -123,7 +142,9 @@ export class Stepper extends Component<StepperSignature> {
       <button
         type='button'
         class='pretui-stepper-btn'
-        aria-label='Increment'
+        aria-label={{this.incLabel}}
+        tabindex='-1'
+        data-test-pretui-stepper-increment
         disabled={{this.incDisabled}}
         {{on 'click' this.increment}}
       >

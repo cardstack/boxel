@@ -251,7 +251,7 @@ module('Pretui | React-dialect aliases — controls', function (hooks) {
       <SearchInput @onChange={{searched.take}} data-test-alias-search />
     </template>);
     await click(
-      '[data-test-pretui-stepper] button[aria-label="Increment"]',
+      '[data-test-pretui-stepper] button[aria-label="Increase"]',
     );
     assert.strictEqual(stepped.last, 3, 'Stepper @onChange fired');
 
@@ -260,6 +260,43 @@ module('Pretui | React-dialect aliases — controls', function (hooks) {
       'boxel',
     );
     assert.strictEqual(searched.last, 'boxel', 'SearchInput @onChange fired');
+  });
+
+  test('Stepper names its buttons after the field and leaves them out of the Tab order', async function (assert) {
+    await render(
+      <template>
+        <Stepper @label='Quantity' @defaultValue={{2}} />
+        <Stepper
+          @label='Seats'
+          @incrementLabel='Add a seat'
+          @defaultValue={{1}}
+        />
+      </template>,
+    );
+    let [qty, seats] = [
+      ...document.querySelectorAll('[data-test-pretui-stepper]'),
+    ] as HTMLElement[];
+    let buttons = (el: HTMLElement) => [
+      el.querySelector('[data-test-pretui-stepper-decrement]') as HTMLElement,
+      el.querySelector('[data-test-pretui-stepper-increment]') as HTMLElement,
+    ];
+    let names = (el: HTMLElement) =>
+      buttons(el).map((b) => b.getAttribute('aria-label'));
+    assert.deepEqual(names(qty!), ['Decrease Quantity', 'Increase Quantity']);
+    assert.deepEqual(
+      names(seats!),
+      ['Decrease Seats', 'Add a seat'],
+      'a caller can override a name',
+    );
+    for (let b of buttons(qty!)) {
+      assert.strictEqual(
+        b.getAttribute('tabindex'),
+        '-1',
+        'the buttons are not Tab stops',
+      );
+    }
+    await click(buttons(qty!)[1]!);
+    assert.dom('input', qty).hasValue('3', 'the buttons still click');
   });
 
   // ── feedback ───────────────────────────────────────────────────────────
