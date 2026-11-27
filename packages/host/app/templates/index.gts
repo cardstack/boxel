@@ -309,6 +309,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
         @stackItemCardIds={{this.hostModeStateService.stackItems}}
         @removeCardFromStack={{this.removeCardFromStack}}
         @viewCard={{this.viewCard}}
+        @forceWidePrimaryCard={{true}}
         {{this.removeIsolatedMarkup}}
         {{this.followSiteLinks}}
       />

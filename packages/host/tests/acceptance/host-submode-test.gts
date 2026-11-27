@@ -38,6 +38,7 @@ import {
   visitOperatorMode,
   testRealmInfo,
   realmConfigCardJSON,
+  fixtureImageURL,
 } from '../helpers';
 
 // Per-user published-realm URL host. Standard mode: `localhost:4201`;
@@ -632,6 +633,26 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('.host-mode-content').doesNotHaveClass('is-wide');
       // The width is applied via CSS class, not inline style
       assert.dom('.host-mode-content:not(.is-wide)').exists();
+    });
+
+    test('a default width card keeps the realm background and its border', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+      await waitFor(`[data-test-host-mode-card="${testRealmURL}Person/1"]`);
+
+      assert.dom('[data-test-host-mode-content]').hasStyle({
+        'background-image': `url("${fixtureImageURL(
+          '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+        )}")`,
+      });
+      assert
+        .dom('[data-test-host-mode-primary-card]')
+        .hasStyle({ 'border-radius': '20px' });
+      assert
+        .dom('[data-test-host-mode-primary-card]')
+        .doesNotHaveStyle({ 'box-shadow': 'none' });
     });
 
     test('viewCard stacks the linked card in host submode', async function (assert) {

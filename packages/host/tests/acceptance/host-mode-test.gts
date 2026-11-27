@@ -43,7 +43,6 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   realmConfigCardJSON,
-  fixtureImageURL,
 } from '../helpers';
 import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -784,22 +783,52 @@ module('Acceptance | host mode tests', function (hooks) {
     setActiveRealms([testHostModeRealmURL]);
   });
 
-  test('visiting a default width card in host mode', async function (assert) {
+  test('a published page draws a default width card full width, with no background and no border', async function (assert) {
     await visit('/test/Pet/mango.json');
-
-    assert.dom('[data-test-host-mode-content]').hasStyle({
-      'background-image': `url("${fixtureImageURL(
-        '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-      )}")`,
-    });
 
     assert
       .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
       .exists();
-    assert.dom('[data-test-host-mode-content]').hasNoClass('is-wide');
+    assert
+      .dom('[data-test-host-mode-content]')
+      .hasStyle(
+        { 'background-image': 'none' },
+        'the realm background is not drawn',
+      );
+    assert
+      .dom('[data-test-host-mode-primary-card]')
+      .hasStyle(
+        { 'box-shadow': 'none', 'border-radius': '0px' },
+        'the card has no border and no rounded corners',
+      );
+    let content = document.querySelector<HTMLElement>(
+      '[data-test-host-mode-content]',
+    )!;
+    let card = document.querySelector<HTMLElement>(
+      '[data-test-host-mode-primary-card]',
+    )!;
+    assert.strictEqual(
+      card.offsetWidth,
+      content.clientWidth,
+      'the card spans the full width',
+    );
     assert.strictEqual(getPageTitle(), 'Mango');
 
     await percySnapshot(assert);
+
+    let stackedCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([stackedCardId]),
+    );
+    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
+    assert
+      .dom(
+        `[data-test-host-mode-stack-item="${stackedCardId}"] [data-test-host-mode-card-loaded]`,
+      )
+      .hasStyle(
+        { 'border-radius': '20px' },
+        'a card opened on top keeps its rounded corners',
+      );
   });
 
   test('visiting a full width card in host mode', async function (assert) {
