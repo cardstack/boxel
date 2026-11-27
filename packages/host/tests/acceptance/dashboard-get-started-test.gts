@@ -15,6 +15,7 @@ import { module, test } from 'qunit';
 import { Deferred } from '@cardstack/runtime-common';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
+import { isOffScreen } from '@cardstack/host/lib/workspace-list';
 import type LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -337,6 +338,45 @@ module('Acceptance | dashboard get started', function (hooks) {
       'nothing in the steps takes the focus',
     );
     assert.dom('[data-test-get-started-error-announcement]').hasNoText();
+  });
+
+  test('at login, the dashboard gives a workspace focus only once the steps stored open have pushed it down', async function (assert) {
+    mockMatrixUtils.setStoredDashboardState({ onboardingOpen: true });
+    // Whether a render focused the dashboard before the steps showed above
+    // the workspaces.
+    let focusedBeforeSteps = false;
+    let observer = new MutationObserver(() => {
+      let dashboard = document.querySelector('[data-test-dashboard]');
+      if (
+        dashboard?.contains(document.activeElement) &&
+        !document.querySelector(GET_STARTED)
+      ) {
+        focusedBeforeSteps = true;
+      }
+    });
+    observer.observe(document.querySelector('#ember-testing')!, {
+      childList: true,
+      subtree: true,
+    });
+    try {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor(GET_STARTED);
+    } finally {
+      observer.disconnect();
+    }
+
+    assert.false(
+      focusedBeforeSteps,
+      'nothing on the dashboard has focus until the steps show',
+    );
+    let workspace = find(
+      '[data-test-workspace-button="Workspace A"]',
+    ) as HTMLElement;
+    assert.strictEqual(
+      document.activeElement,
+      isOffScreen(workspace) ? find('[data-test-dashboard]') : workspace,
+      'the workspace has focus if it is still in view, and the dashboard holds it otherwise',
+    );
   });
 
   test('a change made in another tab shows once the dashboard renders again, and a dismissal at once', async function (assert) {

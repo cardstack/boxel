@@ -90,6 +90,9 @@ interface Signature {
   Args: {
     // Scrolls the dashboard to its Agents section.
     showAgents: () => void;
+    // Called once the steps' ticks are read and the steps, if the user left
+    // them open, are shown.
+    onLoad?: () => void;
   };
   Blocks: {
     // The page's header, which holds the button that opens the list. The
@@ -100,6 +103,15 @@ interface Signature {
 
 function countOf<T>(values: T[], value: T) {
   return values.filter((other) => other === value).length;
+}
+
+// Whether the steps show once Get started has loaded: the user left them
+// open and hasn't dismissed them.
+export function showsStepsOnLoad(matrixService: MatrixService) {
+  return (
+    Boolean(matrixService.getStartedSteps.onboardingOpen) &&
+    !matrixService.dashboardState.onboardingDismissed
+  );
 }
 
 // The dashboard's onboarding checklist. Every tick is read from state the
@@ -169,6 +181,7 @@ export default class GetStarted extends Component<Signature> {
       log.warn(`waiting for Get started's signals failed: ${error}`);
     }
     this.restoreSteps();
+    this.args.onLoad?.();
   });
 
   private get isLoaded() {
@@ -179,11 +192,9 @@ export default class GetStarted extends Component<Signature> {
   // time the dashboard renders, rather than opening or closing the list
   // under the user.
   private restoreSteps() {
-    let { onboardingOpen, onboardingMinimized } =
-      this.matrixService.getStartedSteps;
-    if (onboardingOpen) {
+    if (showsStepsOnLoad(this.matrixService)) {
       this.openedIn = this.dismissalEpoch;
-      this.isExpanded = !onboardingMinimized;
+      this.isExpanded = !this.matrixService.getStartedSteps.onboardingMinimized;
     }
   }
 
