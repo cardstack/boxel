@@ -2,7 +2,11 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 
 import { basename } from 'path';
-import { VirtualNetwork } from '@cardstack/runtime-common';
+import {
+  presentsAsRenderSession,
+  renderSessionSecret,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
 import { renderActorFor } from '../prerender/render-runner.ts';
 import { verifyJWT } from '../jwt.ts';
@@ -10,9 +14,16 @@ import { verifyJWT } from '../jwt.ts';
 const secretSeed = 'prerender-auth-test-seed';
 const userId = '@user:localhost';
 
+// A token's claims, verified under the key its family is signed with.
 function claimsFor(auth: string, realm: string) {
   let sessions = JSON.parse(auth) as Record<string, string>;
-  return verifyJWT(sessions[realm], secretSeed);
+  let token = sessions[realm];
+  return verifyJWT(
+    token,
+    presentsAsRenderSession(token)
+      ? renderSessionSecret(secretSeed)
+      : secretSeed,
+  );
 }
 
 module(basename(import.meta.filename), function () {
@@ -107,10 +118,20 @@ module(basename(import.meta.filename), function () {
     let authority = createPrerenderAuth(userId, permissions, {
       realmAuthority: true,
     });
+    let authoritySessions = JSON.parse(authority) as Record<string, string>;
     for (let realm of Object.keys(permissions)) {
       assert.true(
         claimsFor(authority, realm).realmAuthority,
         `the token for ${realm} says it is a realm-authority session`,
+      );
+      assert.deepEqual(
+        claimsFor(authority, realm).renderSession,
+        { scope: 'owner-read-set' },
+        `the token for ${realm} is a render session`,
+      );
+      assert.throws(
+        () => verifyJWT(authoritySessions[realm], secretSeed),
+        `the token for ${realm} is not signed with the bare seed`,
       );
     }
 
@@ -120,6 +141,11 @@ module(basename(import.meta.filename), function () {
         claimsFor(ordinary, realm).realmAuthority,
         undefined,
         `the token for ${realm} carries no claim`,
+      );
+      assert.strictEqual(
+        claimsFor(ordinary, realm).renderSession,
+        undefined,
+        `the token for ${realm} is not a render session`,
       );
     }
   });

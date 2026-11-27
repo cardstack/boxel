@@ -108,8 +108,11 @@ export function renderSessionOf(auth: string): RenderSession {
 // A render hands its tab its sessions through localStorage, which belongs
 // to the tab's BrowserContext, and an affinity's contexts serve render after
 // render: a tab is reused, a released affinity's context is kept for its next
-// visit, and a context can hold more than one of the affinity's tabs. So an
-// affinity must never hold two sessions. A realm affinity is therefore split
+// visit, and a context can hold more than one of the affinity's tabs. A tab
+// and its context never serve another affinity (the page pool never moves a
+// tab between affinities), so what one render's code leaves in a page only
+// ever meets renders of the same affinity. So an affinity must never hold two
+// sessions. A realm affinity is therefore split
 // by the sessions its render carries, `realm:<url>#<session>`: realm-authority
 // sessions are keyed by the user they were minted for, ordinary sessions by
 // their user, and an anonymous render has a key of its own. Auth that cannot
@@ -180,21 +183,6 @@ export function isRunAffinityKey(affinityKey: string): boolean {
   return (
     fromAffinityKey(affinityKey)?.session?.startsWith(RUN_SESSION_PREFIX) ===
     true
-  );
-}
-
-// Whether an affinity key is the tab of a command or capture an OAuth app
-// started, on a realm or a user affinity. Code the app chose runs there, so
-// the pool never moves such a tab, with its page and BrowserContext, to
-// another affinity, nor gives it one of another affinity's (ADR 021 §1.5): a
-// timer the app's code left in the page would read what the next render
-// hands it, and a tab the app's command takes still holds what an earlier
-// render left.
-export function isOAuthTabAffinityKey(affinityKey: string): boolean {
-  return (
-    fromAffinityKey(affinityKey)?.session?.startsWith(
-      OAUTH_TAB_SESSION_PREFIX,
-    ) === true
   );
 }
 

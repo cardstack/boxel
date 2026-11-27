@@ -2180,7 +2180,7 @@ A run whose last job failed or never ran has no charge either: check the jobs qu
     "tabQueueMs": 200,           //   └ waiting behind a same-affinity tab already rendering
     "tabStartupMs": 20,          //   └ warming a fresh tab / standby. Per-caller — only non-zero when
                                  //     `#selectEntryForAffinity` itself awaited `#ensureStandbyPool`
-                                 //     because warm-tab / orphan / commandeer / cross-affinity paths
+                                 //     because warm-tab / orphan / commandeer paths
                                  //     all missed. A `tabReused: true` row should have `tabStartupMs ≈ 0`;
                                  //     a non-trivial value on a reused-tab row is a regression and
                                  //     means the dedup'd `#ensuringStandbys` promise is leaking through
@@ -2193,10 +2193,9 @@ A run whose last job failed or never ran has no charge either: check the jobs qu
                                  //     tab until the render timeout. Cross-check the affinity's
                                  //     `unresponsiveSwaps=` count on `prerender-queue-snapshot` and the
                                  //     `unresponsive warm tab` warn line, which names the pageId and says
-                                 //     whether the evaluate hung or failed outright. Note the probed tab
-                                 //     isn't always this realm's: a cross-affinity steal borrows another
-                                 //     realm's warm tab and is probed too, so the warn line's affinity is
-                                 //     the one to chase, not necessarily the row's.
+                                 //     whether the evaluate hung or failed outright. A tab only ever
+                                 //     serves the affinity it was first handed to (ADR 051 §1.2), so the
+                                 //     warn line's affinity is the row's.
   },
   "renderElapsedMs": 71280,      // time inside withTimeout()
   "totalElapsedMs": 90000,       // launch + render (matches the timeout on errored rows)

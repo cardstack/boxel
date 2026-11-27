@@ -483,8 +483,8 @@ module(basename(import.meta.filename), function (hooks) {
     let b = await pool.getPage('B');
     await pool.warmStandbys();
     let c = await pool.getPage('C');
-    // A waiter behind every holder leaves nothing to steal, and the budget
-    // is spent, so the refill can't make a tab either.
+    // Every tab is busy with a waiter behind it, and the budget is spent, so
+    // the refill can't make a tab either.
     let waiters = ['A', 'B', 'C'].map((key) => pool.getPage(key));
 
     let settled: 'pending' | 'resolved' | 'rejected' = 'pending';

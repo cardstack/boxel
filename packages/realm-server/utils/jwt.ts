@@ -5,9 +5,11 @@ import {
 import {
   diagnosticSessionSecret,
   isSessionRevoked,
+  renderSessionSecret,
   SESSION_TOKEN_TTL,
   type DBAdapter,
   type DiagnosticSessionClaim,
+  type RenderSessionClaim,
 } from '@cardstack/runtime-common';
 import jsonwebtoken from 'jsonwebtoken';
 import { isOperatorToken } from './operator-token.ts';
@@ -30,6 +32,11 @@ export interface RealmServerTokenClaim {
   // one, so every route that reads a session with `retrieveTokenClaim` refuses
   // it on its signature.
   diagnostic?: DiagnosticSessionClaim;
+  // Carried by a render session (`TokenClaims.renderSession`), which is signed
+  // under its own key: only `retrieveRenderSessionClaim` verifies one, so
+  // every route that reads a session with `retrieveTokenClaim` refuses it on
+  // its signature.
+  renderSession?: RenderSessionClaim;
   // Carried only by a session signed in on the secure origin: the id of its
   // `secure_sessions` row. Minting a key write ticket requires it, and honours
   // it only while that row exists. `createSecureSessionJWT` is the one place
@@ -115,6 +122,19 @@ export function retrieveDiagnosticSessionClaim(
   return retrieveTokenClaim(
     authorizationString,
     diagnosticSessionSecret(secretSeed),
+  );
+}
+
+// Verifies a render session, for the federated read endpoints, which accept
+// one as the user it reads as. The caller still checks the claim
+// (`acceptedRenderSessionClaim`).
+export function retrieveRenderSessionClaim(
+  authorizationString: string,
+  secretSeed: string,
+): RealmServerTokenClaim & { iat: number; exp: number } {
+  return retrieveTokenClaim(
+    authorizationString,
+    renderSessionSecret(secretSeed),
   );
 }
 

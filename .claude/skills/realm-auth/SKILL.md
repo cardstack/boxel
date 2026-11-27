@@ -32,7 +32,8 @@ Boxel tokens are derived credentials with their own, weaker retirement story.
 | realm-server session | `POST /_server-session`                                | `{user, sessionRoom}`                                                                       | `SESSION_TOKEN_TTL` (24h), or `EXTENDED_SESSION_TOKEN_TTL` (7d) on request |
 | per-realm session    | `POST /_realm-auth`, and the realm's own session route | `{user, realm, permissions, sessionRoom, realmServerURL}`                                   | `SESSION_TOKEN_TTL`                                                        |
 | delegated            | `POST /_delegate-session`                              | same, plus `delegated: true`, `permissions: ['read']`                                       | `DELEGATED_TOKEN_TTL` (30m)                                                |
-| prerender service    | `buildCreatePrerenderAuth` (in-process)                | per-realm session shape, plus `realmAuthority: true` (see below)                            | `1d`                                                                       |
+| prerender service    | `buildCreatePrerenderAuth` (in-process)                | per-realm session shape (a person's own render)                                             | `1d`                                                                       |
+| render session       | `buildCreatePrerenderAuth` with `realmAuthority`       | per-realm session shape, plus `realmAuthority: true`, `renderSession: {scope}` (see below)  | the longest index job's time limit plus five minutes                       |
 | publish-realm        | `handle-publish-realm` (in-process)                    | per-realm session shape                                                                     | `1h`                                                                       |
 | diagnostic           | `POST /_diagnostic-render-token` (operator token)      | prerender shape, plus `diagnostic: {id, note, card, scope, realm}`, `permissions: ['read']` | `DIAGNOSTIC_SESSION_LIFETIME_SEC` (15m)                                    |
 | run token            | `mintRunToken` (in-process, one per run attempt)       | `{user, realm, run: {id, attempt, readRealms, writesCap}}`, `permissions: []`               | the run's time limit                                                       |
@@ -57,8 +58,21 @@ share).
 
 A prerender session carries `realmAuthority: true` when what it renders is kept
 and served to others — indexing, the HTML render, a module's definition render,
-skill validation, a capture that persists — and not when the result goes back
-only to whoever asked (a command, a capture answered to its requester). The
+skill validation — and not when the result goes back only to whoever asked (a
+command, a capture). Such a session is a **render session** (ADR 051;
+`packages/runtime-common/render-session.ts`): the tab runs code anyone who may
+write the realm put there, an OAuth app with `boxel:write` among them, so it
+only reads. It is signed under `renderSessionSecret(seed)`; a realm judges its
+read as the named user's (the realm's own Matrix account reads everything),
+refuses it for anything more before any assume-user indirection and without
+the permission match, and never reads its `permissions` claim, which is only
+what the host reads to decide what it shows. `multiRealmAuthorization` accepts
+it as its user; every other realm-server route refuses it on its signature, so
+it can't be exchanged at `/_realm-auth`. `renderSession.scope` is
+`owner-read-set` (any realm the user may read when it is used). It lasts as
+long as the longest index job (`renderSessionLifetimeSeconds` in
+`prerender/auth.ts`). The tab that holds it never moves to another affinity
+(ADR 051 §1.2). The
 search routes read a request as a realm-authority principal only when its
 session carries that claim. `x-boxel-during-prerender`, which a render tab
 marks every request with whatever session it holds, never makes one: it changes
@@ -101,8 +115,8 @@ route refuses it on its signature, so a tab can't reach `_realm-auth`,
 `_server-session` or a key route. Like an access token, it is
 never asked about `isSessionRevoked`: disconnecting the app or revoking the
 user's OAuth grants ends it on its next call. Its tab holds it in memory only,
-on an affinity of its own (`<key>#oauth:...`, `isOAuthTabAffinityKey`), and the
-page pool never moves such a tab to another affinity, or gives it another's.
+on an affinity of its own (`<key>#oauth:...`), and the page pool never moves
+any tab to another affinity, or gives it another's (ADR 051 §1.2).
 The tab answers its auth service worker's ask for a token with one for that
 request only (`forThisRequestOnly`), which the worker uses and doesn't keep, so
 a private realm's images draw; a run's tab gives the worker nothing.
@@ -122,13 +136,14 @@ and checks the run's row itself. The `automations` skill has how to trace one.
 
 **Every session token above is signed with `REALM_SECRET_SEED`** (the OAuth access token is no JWT, and nothing signs it) — both families,
 minted and verified with the same seed — except the diagnostic session, which is
-signed under `diagnosticSessionSecret(seed)`, the run token, signed under
+signed under `diagnosticSessionSecret(seed)`, the render session, signed under
+`renderSessionSecret(seed)`, the run token, signed under
 `runTokenSecret(seed)`, and the tab token, signed under
 `oauthTabTokenSecret(seed)`, each the seed with a family suffix.
 Because of that, every verifier that doesn't ask for one of them by name
 refuses it on its signature; a realm (`Realm.#verifySession`) and
-`multiRealmAuthorization` pick the key from the token's own `diagnostic` claim,
-and a token that claims it falsely fails verification. Don't confuse it with
+`multiRealmAuthorization` pick the key from the token's own `diagnostic` or
+`renderSession` claim, and a token that claims one falsely fails verification. Don't confuse it with
 `REALM_SERVER_SECRET_SEED`, a separate env var that signs the monitoring
 auth token and no session token.
 
@@ -177,10 +192,9 @@ in a realm it can't change what a policy admits (ADR 021 §1.6). The map in
 route refuses the token, including every key, secure-session, token-minting
 and permissions route. A route that checks a session token itself
 (`/_download-realm`, which shares `retrieveUserSessionClaim`) never calls the
-lookup and refuses it as an invalid JWT. One gap in "nothing administers": a
-`boxel:write` caller can write card and module code, and the indexer renders
-it with the realm owner's realm-authority session, which carries
-`realm-owner` (ADR 021's remediation file). Its revocation is its grant's: see
+lookup and refuses it as an invalid JWT. A `boxel:write` caller can write card
+and module code, which the indexer renders on read-only render sessions in a
+tab that never changes hands (ADR 051). Its revocation is its grant's: see
 "Revoking a user's sessions" below.
 
 ## What verification enforces
@@ -211,6 +225,15 @@ path). In order:
    checks. A diagnostic session sets `RequestContext.diagnosticSession`, and
    `#captureReader` draws such a caller as no one, so a capture or a signed
    capture URL never carries the owner's identity past the session.
+   A **render-session branch** follows the diagnostic one and also returns
+   early: the request must need `read` only (an `AuthorizationError`
+   otherwise, which no policy turns into an admission), and the user it reads
+   as must still have read, unless it is the realm's own Matrix account;
+   otherwise it is refused as that user's read would be
+   (`CoarsePermissionInsufficient`), so a declined search answers with no rows.
+   The
+   public path refuses a write presented with a render session the same way it
+   refuses a diagnostic session's.
 4. **Exact permission match**: `JSON.stringify(token.permissions?.sort()) !==
 JSON.stringify(userPermissions.sort())` → `PermissionMismatch`.
 
@@ -257,7 +280,8 @@ it names. A diagnostic session verifies only at `multiRealmAuthorization`
 (`retrieveDiagnosticSessionClaim`): a `realm`-scoped session only for a
 request naming its realm alone, an `owner-read-set` session as the owner,
 whose unreadable realms are judged as for any of the owner's sessions. Every
-`jwtMiddleware` route refuses it.
+`jwtMiddleware` route refuses it. A render session verifies only there too
+(`retrieveRenderSessionClaim`), as the user it names.
 
 Permissions and revocation state are both read **fresh from Postgres on every
 request** — no memoization — because a change made against one replica has to

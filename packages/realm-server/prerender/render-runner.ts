@@ -1839,7 +1839,7 @@ export class RenderRunner {
         };
         if (runHtmlSteps) {
           reproduceLog.debug(
-            `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${nonce}/${optionsSegment}/html/isolated/0 with boxel-session = ${auth}`,
+            `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${nonce}/${optionsSegment}/html/isolated/0 (with sessions from \`boxel realm-server render-token\`)`,
           );
         }
 

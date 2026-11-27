@@ -7,28 +7,21 @@ import { PrerenderCancelledError } from '../prerender/prerender-cancel.ts';
 // A caller with no tab of its own parks waiting for the standby refill to
 // make a fresh one. The refill is shared by every caller on the server, and
 // it can stall on a browser call that never answers (`createBrowserContext`,
-// `newPage`) or fail outright. These tests pin how long a caller waits and
-// what it does when the wait ends:
+// `newPage`) or fail outright. A tab never moves to another affinity, so a
+// caller never ends its wait by taking another affinity's tab. These tests pin
+// how a caller waits and what it does when the wait ends:
 //
-//   1. Past its steal deadline, a brand-new affinity takes an idle tab from
-//      another affinity rather than waiting out the stalled refill.
-//   2. A module sub-render past its deadline does the same, rather than
-//      parking for a release that never comes — whether its affinity is
-//      brand-new or its parent render holds the affinity's only tab. It
-//      takes only an idle tab: with every other tab busy it parks until one
-//      frees, since a busy tab may be held by the render it is blocking.
-//   3. The deadline holds across the re-selections a caller parks between,
-//      so a caller woken by a release once its deadline has passed takes the
-//      freed tab at once.
-//   4. A caller's abort rejects its wait at once, while the refill runs on
+//   1. Past its standby deadline, a brand-new affinity, or a module
+//      sub-render whose parent holds its affinity's only tab, keeps waiting
+//      on a stalled refill, and takes the fresh standby it makes; never
+//      another affinity's tab, idle, busy or freed.
+//   2. A caller's abort rejects its wait at once, while the refill runs on
 //      and hands its standby to a caller that is still waiting.
-//   5. A waiting caller takes each standby the moment it is created, not
+//   3. A waiting caller takes each standby the moment it is created, not
 //      when the refill pass that made it settles, and a caller that misses
-//      one keeps waiting for the next rather than stealing.
-//   6. A refill that fails ends the wait, and the caller throws, even while
-//      other waiting callers keep the refill running. A module sub-render
-//      first takes an idle tab of another affinity if there is one, and
-//      never queues on a busy tab.
+//      one keeps waiting for the next.
+//   4. A refill that fails ends the wait, and the caller throws, even while
+//      other waiting callers keep the refill running.
 
 interface Gate {
   promise: Promise<void>;
@@ -218,7 +211,19 @@ module(basename(import.meta.filename), function (hooks) {
     return pool;
   }
 
-  test('a brand-new affinity steals an idle tab once its wait on a stalled refill runs out', async function (assert) {
+  // Whether `promise` is still pending after `ms`.
+  async function stillPending(promise: Promise<unknown>, ms = 300) {
+    let outcome = await within(
+      promise.then(
+        () => 'settled',
+        () => 'settled',
+      ),
+      ms,
+    );
+    return outcome === 'timeout';
+  }
+
+  test("a brand-new affinity keeps waiting on a stalled refill past its deadline, rather than take another affinity's idle tab", async function (assert) {
     assert.timeout(10_000);
     // The first two standbys are made; the third hangs in
     // `createBrowserContext`, so the refill never settles.
@@ -235,55 +240,25 @@ module(basename(import.meta.filename), function (hooks) {
     let b = settled(await within(pool.getPage('B')), "B's standby");
     b.release();
 
-    let startedAt = Date.now();
-    let c = settled(await within(pool.getPage('C')), "C's tab");
-    let elapsedMs = Date.now() - startedAt;
+    let pending = pool.getPage('C');
+    assert.true(
+      await stillPending(pending),
+      'C is still waiting, with A and B idle',
+    );
+    gate.open();
+    let c = settled(await within(pending), "C's standby");
     c.release();
-    assert.true(
+    assert.false(
       [a.pageId, b.pageId].includes(c.pageId),
-      'C took an idle tab from another affinity',
+      'C took the fresh standby, not an idle tab of another affinity',
     );
     assert.true(
-      elapsedMs < 1000,
-      `C waited about one refill budget, not on the refill (${elapsedMs}ms)`,
-    );
-    assert.true(
-      c.waits.tabStartupMs >= 40,
+      c.waits.tabStartupMs >= 250,
       'the refill wait C paid is reported as tab startup',
     );
   });
 
-  test('a brand-new module sub-render steals an idle tab instead of parking behind a stalled refill', async function (assert) {
-    assert.timeout(10_000);
-    let stub = makeBrowserStub();
-    let pool = makePool({
-      maxPages: 2,
-      browserManager: stub.browserManager,
-      gate: stub.gate,
-      standbyRefillWaitMs: 50,
-    });
-
-    let a = await pool.getPage('A');
-    a.release();
-    let b = await pool.getPage('B');
-    b.release();
-    await pool.warmStandbys();
-
-    // C takes the warm standby, and the refill that follows hangs. A and B
-    // are idle throughout, so no release will ever wake a parked caller.
-    stub.hangNext();
-    let c = await pool.getPage('C');
-    c.release();
-
-    let d = settled(await within(pool.getPage('D', 'module')), "D's tab");
-    d.release();
-    assert.true(
-      [a.pageId, b.pageId, c.pageId].includes(d.pageId),
-      'D took an idle tab from another affinity',
-    );
-  });
-
-  test('a brand-new module sub-render past a stalled refill never queues on a busy tab', async function (assert) {
+  test("a brand-new module sub-render waits on a stalled refill rather than take another affinity's freed tab", async function (assert) {
     assert.timeout(10_000);
     let stub = makeBrowserStub();
     let pool = makePool({
@@ -304,22 +279,23 @@ module(basename(import.meta.filename), function (hooks) {
     let c = await pool.getPage('C');
 
     let pending = pool.getPage('D', 'module');
-    // A is the older of the two busy tabs, so it is the one a steal that
-    // took busy tabs would queue on, and it never frees.
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.true(await stillPending(pending), 'D waits while A and C are busy');
     c.release();
-
+    assert.true(
+      await stillPending(pending),
+      "D still waits once C's tab is free",
+    );
+    stub.gate.open();
     let d = settled(await within(pending), "D's tab");
     d.release();
     a.release();
-    assert.strictEqual(
-      d.pageId,
-      c.pageId,
-      'D waited for a tab to free and took it, rather than queueing on a busy one',
+    assert.false(
+      [a.pageId, b.pageId, c.pageId].includes(d.pageId),
+      'D took a fresh standby',
     );
   });
 
-  test('a module sub-render on an affinity whose only tab its parent holds steals an idle tab past a stalled refill', async function (assert) {
+  test("a module sub-render whose parent holds its affinity's only tab waits on a stalled refill rather than take another affinity's idle tab", async function (assert) {
     assert.timeout(10_000);
     let stub = makeBrowserStub();
     let pool = makePool({
@@ -343,67 +319,18 @@ module(basename(import.meta.filename), function (hooks) {
     let d = await pool.getPage('D');
     d.release();
 
-    let sub = settled(
-      await within(pool.getPage('C', 'module')),
-      "C's sub-render tab",
+    let pending = pool.getPage('C', 'module');
+    assert.true(
+      await stillPending(pending),
+      "the sub-render waits, with B's and D's tabs idle",
     );
+    stub.gate.open();
+    let sub = settled(await within(pending), "C's sub-render tab");
     sub.release();
     c.release();
-    assert.true(
-      [b.pageId, d.pageId].includes(sub.pageId),
-      "the sub-render took an idle tab from another affinity, not its parent's",
-    );
-  });
-
-  test('a caller woken from parking takes the freed tab without waiting on the stalled refill again', async function (assert) {
-    assert.timeout(10_000);
-    let stub = makeBrowserStub();
-    let pool = makePool({
-      maxPages: 2,
-      browserManager: stub.browserManager,
-      gate: stub.gate,
-      standbyRefillWaitMs: 1000,
-    });
-
-    let a = await pool.getPage('A');
-    let b = await pool.getPage('B');
-    b.release();
-    await pool.warmStandbys();
-
-    // C takes the warm standby and the refill that follows hangs. B is
-    // evicted, leaving A and C, both mid-render, so D parks once its wait
-    // on the refill runs out.
-    stub.hangNext();
-    let c = await pool.getPage('C');
-    let pendingAt = Date.now();
-    let pending = pool.getPage('D', 'module');
-    await new Promise((resolve) => setTimeout(resolve, 1100));
-
-    // C frees its tab, then comes back for it shortly after. D has to take
-    // the tab in that window, which a second budget-long wait would miss.
-    c.release();
-    let releasedAt = Date.now();
-    let cAgain = new Promise<Awaited<ReturnType<PagePool['getPage']>>>(
-      (resolve, reject) =>
-        setTimeout(() => pool.getPage('C').then(resolve, reject), 200),
-    );
-
-    let d = settled(await within(pending), "D's tab");
-    let tookMs = Date.now() - releasedAt;
-    let waitedMs = Date.now() - pendingAt;
-    d.release();
-    let again = settled(await within(cAgain), "C's second tab");
-    again.release();
-    a.release();
-    assert.strictEqual(d.pageId, c.pageId, 'D took the tab C freed');
-    assert.true(
-      tookMs < 200,
-      `D took it before C came back for it (${tookMs}ms after the release)`,
-    );
-    // D parked across several wakes; each park is counted once.
-    assert.true(
-      d.waits.tabStartupMs <= waitedMs,
-      `D's tab startup (${d.waits.tabStartupMs}ms) is within its wait (${waitedMs}ms)`,
+    assert.false(
+      [b.pageId, c.pageId, d.pageId].includes(sub.pageId),
+      'the sub-render took a fresh standby',
     );
   });
 
@@ -460,7 +387,7 @@ module(basename(import.meta.filename), function (hooks) {
     stub.gate.open();
     let e = settled(await within(patient), "E's standby");
     e.release();
-    assert.false(e.reused, 'E got a fresh standby rather than a stolen tab');
+    assert.false(e.reused, 'E got a fresh standby');
     assert.false(
       [a.pageId, b.pageId, c.pageId].includes(e.pageId),
       'E did not take another affinity’s tab',
@@ -490,7 +417,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.false(a.reused, 'A got a fresh standby');
   });
 
-  test('a caller that misses a standby to another waiting caller waits for the next one rather than stealing', async function (assert) {
+  test('a caller that misses a standby to another waiting caller waits for the next one rather than take an idle tab', async function (assert) {
     assert.timeout(10_000);
     let stub = makeSteppedBrowserStub();
     stub.gateFor(0).open();
@@ -503,8 +430,8 @@ module(basename(import.meta.filename), function (hooks) {
       standbyRefillWaitMs: 60_000,
     });
 
-    // A and B take the first two standbys and go idle, so a steal would
-    // have tabs to take. The refill's third creation hangs.
+    // A and B take the first two standbys and go idle. The refill's third
+    // creation hangs.
     let a = await pool.getPage('A');
     a.release();
     let b = await pool.getPage('B');
@@ -577,7 +504,7 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
-  test('a module sub-render whose parent holds its only tab steals an idle tab once the refill fails', async function (assert) {
+  test("a module sub-render whose parent holds its affinity's only tab throws once the refill fails, though other affinities' tabs are idle", async function (assert) {
     assert.timeout(15_000);
     let failing = false;
     let browserManager = makeBrowserManager(async () => {
@@ -606,20 +533,22 @@ module(basename(import.meta.filename), function (hooks) {
     let d = await pool.getPage('D');
     d.release();
 
-    let sub = settled(
-      await within(pool.getPage('C', 'module'), 8000),
-      "C's sub-render tab",
+    let outcome = await within(
+      pool.getPage('C', 'module').then(
+        () => 'resolved',
+        (error: Error) => error.message,
+      ),
+      8000,
     );
-    sub.release();
     c.release();
-    assert.notStrictEqual(
-      sub.pageId,
-      c.pageId,
-      "the sub-render took an idle tab from another affinity, not its parent's",
+    let message = settled(outcome, 'the sub-render to give up');
+    assert.true(
+      /No standby page available/.test(message),
+      `the sub-render threw rather than take another affinity's tab (got ${message})`,
     );
   });
 
-  test('a brand-new module sub-render throws once the refill fails and no tab is idle', async function (assert) {
+  test('a brand-new module sub-render throws once the refill fails', async function (assert) {
     assert.timeout(15_000);
     let failing = false;
     let browserManager = makeBrowserManager(async () => {
