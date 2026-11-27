@@ -401,7 +401,9 @@ describe('ProfileManager', () => {
   it('removes a profile', async () => {
     await manager.addProfile('@testuser:stack.cards', 'password123');
 
-    expect(await manager.removeProfile('@testuser:stack.cards')).toBe(true);
+    expect(await manager.removeProfile('@testuser:stack.cards')).toMatchObject({
+      matrixUserId: '@testuser:stack.cards',
+    });
     expect(manager.listProfiles()).toEqual([]);
     expect(manager.getActiveProfileId()).toBeNull();
   });
@@ -416,8 +418,10 @@ describe('ProfileManager', () => {
     expect(manager.getActiveProfileId()).toBe('@second:stack.cards');
   });
 
-  it('returns false when removing nonexistent profile', async () => {
-    expect(await manager.removeProfile('@nonexistent:stack.cards')).toBe(false);
+  it('returns undefined when removing nonexistent profile', async () => {
+    expect(
+      await manager.removeProfile('@nonexistent:stack.cards'),
+    ).toBeUndefined();
   });
 
   it('persists profiles to disk', async () => {
@@ -697,6 +701,28 @@ describe('reAuthenticate', () => {
     await expect(running.reAuthenticate()).rejects.toThrow(
       /no longer valid.*boxel profile add/,
     );
+  });
+
+  it("doesn't sign in again a profile another process removed", async () => {
+    const loginStub = vi.fn(async () =>
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    const promptStub = vi.fn(async () => 'typed-password');
+    const running = new ProfileManager(tmpDir, {
+      matrixLogin: loginStub,
+      promptPassword: promptStub,
+      isTty: () => true,
+    });
+    await running.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    // `boxel profile remove` in another process.
+    await new ProfileManager(tmpDir).removeProfile('@user:stack.cards');
+
+    await expect(running.reAuthenticate()).rejects.toThrow(/was removed/);
+    expect(promptStub).not.toHaveBeenCalled();
+    expect(loginStub).not.toHaveBeenCalled();
   });
 
   it('prompts for password, re-runs matrixLogin, and writes new tokens on TTY', async () => {
@@ -1101,6 +1127,34 @@ describe('boxel profile remove', () => {
     expect(d.revokeConnection).toHaveBeenCalledOnce();
     expect(d.matrixLogout).not.toHaveBeenCalled();
     expect(warnings()).toEqual([]);
+  });
+
+  it('signs out the token another process signed the profile in with while removing it was being confirmed', async () => {
+    await manager.addProfileWithAuth(
+      matrixId,
+      fakeAuth(matrixId, matrixUrl),
+      undefined,
+      realmServerUrl,
+    );
+    let d = {
+      ...deps(),
+      // `boxel profile add` in another process, while the question is open.
+      prompt: vi.fn(async () => {
+        await new ProfileManager(tmpDir).addProfileWithAuth(matrixId, {
+          accessToken: 'signed-in-again',
+          userId: matrixId,
+          deviceId: 'NEW_DEVICE',
+          matrixUrl,
+        });
+        return 'y';
+      }),
+    };
+
+    await removeProfile(manager, matrixId, d);
+
+    expect(new ProfileManager(tmpDir).getProfile(matrixId)).toBeUndefined();
+    expect(d.matrixLogout).toHaveBeenCalledOnce();
+    expect(d.matrixLogout).toHaveBeenCalledWith(matrixUrl, 'signed-in-again');
   });
 
   it('leaves the profile and its sign-ins alone when removing it is declined', async () => {

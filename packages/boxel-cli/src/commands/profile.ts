@@ -1192,12 +1192,13 @@ export async function removeProfile(
     return;
   }
 
-  if (await manager.removeProfile(profileId)) {
+  let removed = await manager.removeProfile(profileId);
+  if (removed) {
     console.log(`${FG_GREEN}\u2713${RESET} Profile removed.`);
     // Its sign-ins are ended too, rather than left live with nothing holding
     // them: an OAuth connection leaves Connected apps, and a Matrix token
     // leaves the account's session list.
-    await endDroppedSignIns(profile, undefined, signInEnders(deps));
+    await endDroppedSignIns(removed, undefined, signInEnders(deps));
 
     const newActive = manager.getActiveProfileId();
     if (newActive) {

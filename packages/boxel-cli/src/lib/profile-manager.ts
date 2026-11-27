@@ -628,19 +628,25 @@ export class ProfileManager implements RealmAuthenticator {
     );
   }
 
-  async removeProfile(profileId: string): Promise<boolean> {
+  // Returns the profile that was removed: the one saved in the profiles file,
+  // which another process may have signed in again since this one loaded it,
+  // so that its sign-ins are the ones ended. Undefined when there was no such
+  // profile.
+  async removeProfile(profileId: string): Promise<Profile | undefined> {
     if (!this.config.profiles[profileId]) {
-      return false;
+      return undefined;
     }
 
+    let removed: Profile | undefined;
     this.commit((config) => {
+      removed = config.profiles[profileId] ?? removed;
       delete config.profiles[profileId];
       if (config.activeProfile === profileId) {
         const remaining = Object.keys(config.profiles);
         config.activeProfile = remaining.length > 0 ? remaining[0] : null;
       }
     });
-    return true;
+    return removed;
   }
 
   switchProfile(profileId: string): boolean {
@@ -804,6 +810,15 @@ export class ProfileManager implements RealmAuthenticator {
       profile.matrixUserId = saved.matrixUserId;
       profile.matrixDeviceId = saved.matrixDeviceId;
       return this.getStoredMatrixAuth(targetId);
+    }
+    // A profile removed since this process loaded the file had its token
+    // signed out on purpose. Signing in again would leave a session that no
+    // profile records.
+    if (read.kind === 'ok' && !saved) {
+      throw new Error(
+        `Profile "${targetId}" was removed, so it isn't signed in again. ` +
+          `Run \`boxel profile add -u ${targetId}\` to add it back.`,
+      );
     }
 
     if (!this.isTtyFn()) {
