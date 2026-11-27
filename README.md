@@ -161,7 +161,7 @@ Live reloads are not available in this mode, however, if you use start the serve
 
 #### Using `mise run dev`
 
-Instead of running `mise run services:realm-server-base`, you can alternatively use `mise run dev` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. For faster startup, `mise run dev-minimal` skips experiments, catalog, homepage, and submission realms. `dev-minimal` does not start the host app — run it in a second terminal with `mise exec -- pnpm -C packages/host start` (the `mise exec` prefix loads the HTTPS dev cert env so host comes up on `https://localhost:4200`). Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests, `WORKER_AUTOMATION_PRIORITY_COUNT` to add workers that service automation runs and user initiated requests (default 0), and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs regardless of priority. By default there is 1 all priority worker for each realm server.
+Instead of running `mise run services:realm-server-base`, you can alternatively use `mise run dev` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. For faster startup, `mise run dev-minimal` skips experiments, catalog, homepage, and submission realms. `dev-minimal` does not start the host app — run it in a second terminal with `mise exec -- pnpm -C packages/host start` (the `mise exec` prefix loads the HTTPS dev cert env so host comes up on `https://localhost:4200`). Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests, `WORKER_AUTOMATION_PRIORITY_COUNT` to add workers that service automation runs and user initiated requests (default 0), `WORKER_SYSTEM_INDEX_COUNT` to set the workers that service only index jobs (default 1), and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs regardless of priority. By default the development worker manager starts 1 system-index worker and 1 all priority worker.
 
 ##### Turbo mode
 
@@ -179,7 +179,12 @@ This sets the following defaults (all individually overridable):
 | `PRERENDER_PAGE_POOL_MIN`    | 4      | 4     |
 | `PRERENDER_PAGE_POOL_MAX`    | 4      | 4     |
 | `WORKER_HIGH_PRIORITY_COUNT` | 0      | 4     |
+| `WORKER_SYSTEM_INDEX_COUNT`  | 1      | 1     |
 | `WORKER_ALL_PRIORITY_COUNT`  | 1      | 4     |
+
+The system-index worker takes only index jobs, so a realm's readiness and its
+writes never wait behind the HTML rendering of a large realm such as the
+catalog.
 
 To use turbo mode but override a specific value:
 

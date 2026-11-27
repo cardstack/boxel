@@ -620,6 +620,127 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  test("a paused automation's lost batch follow-up stays held, and the search passes over it after", async function (assert) {
+    await switchOn();
+    await recordAIBatch(dbAdapter, {
+      batchId: 'batch_1',
+      runId: (
+        await createAutomationRun(dbAdapter, {
+          automationId: AUTOMATION,
+          realm: REALM,
+          trigger: 'hourly',
+          slot: NOON_SLOT,
+          actsAs: OWNER,
+        })
+      ).id,
+      actsAs: OWNER,
+      realm: REALM,
+      automationId: AUTOMATION,
+      model: 'openai/gpt-4.1-mini',
+      requestCount: 2,
+      estimatedUsd: 0.01,
+      runAIReservation: 'reservation-1',
+      reservedCredits: 2,
+      deadline: new Date('2026-11-10T12:05:00.000Z'),
+      expiresAt: null,
+      state: 'in_progress',
+    });
+    let followUp = await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger: 'batch',
+      slot: 'batch_1',
+      actsAs: OWNER,
+    });
+    await query(dbAdapter, [
+      `UPDATE automation_runs SET state = 'complete' WHERE trigger = 'hourly'`,
+    ]);
+    await query(dbAdapter, [
+      `UPDATE automations SET state = 'paused', pause_reason = 'requested'`,
+    ]);
+    await madeAt(NOON);
+
+    let outcomes = (await reconcile(NOON + 10 * 60)).lostRuns;
+
+    assert.deepEqual(
+      outcomes.map((o) => [o.kind, 'run' in o ? o.run.id : undefined]),
+      [['held', followUp.id]],
+    );
+    let held = await getAutomationRun(dbAdapter, followUp.id);
+    assert.strictEqual(held?.state, 'pending', 'it is not ended');
+    let [batch] = await query(dbAdapter, [
+      `SELECT follow_up_held_at FROM ai_batches WHERE batch_id = 'batch_1'`,
+    ]);
+    assert.notStrictEqual(batch.follow_up_held_at, null);
+    assert.deepEqual(
+      (await queuedRuns()).filter((job) => job.input.runId === followUp.id),
+      [],
+      'no job is added',
+    );
+    assert.deepEqual(
+      (await reconcile(NOON + 20 * 60)).lostRuns,
+      [],
+      'a held follow-up has no job by design, so it isn’t lost',
+    );
+  });
+
+  test('a held follow-up that a job enqueued before the hold took is judged lost like any follow-up when that job is lost', async function (assert) {
+    await switchOn();
+    await recordAIBatch(dbAdapter, {
+      batchId: 'batch_1',
+      runId: (
+        await createAutomationRun(dbAdapter, {
+          automationId: AUTOMATION,
+          realm: REALM,
+          trigger: 'hourly',
+          slot: NOON_SLOT,
+          actsAs: OWNER,
+        })
+      ).id,
+      actsAs: OWNER,
+      realm: REALM,
+      automationId: AUTOMATION,
+      model: 'openai/gpt-4.1-mini',
+      requestCount: 2,
+      estimatedUsd: 0.01,
+      runAIReservation: 'reservation-1',
+      reservedCredits: 2,
+      deadline: new Date('2026-11-10T12:05:00.000Z'),
+      expiresAt: null,
+      state: 'in_progress',
+    });
+    let followUp = await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger: 'batch',
+      slot: 'batch_1',
+      actsAs: OWNER,
+    });
+    await query(dbAdapter, [
+      `UPDATE automation_runs SET state = 'complete' WHERE trigger = 'hourly'`,
+    ]);
+    // Resumed with the hold still recorded, and its old job took it.
+    await query(dbAdapter, [
+      `UPDATE automation_runs SET state = 'running' WHERE trigger = 'batch'`,
+    ]);
+    await query(dbAdapter, [
+      `UPDATE ai_batches SET follow_up_held_at = now() WHERE batch_id = 'batch_1'`,
+    ]);
+    await madeAt(NOON);
+
+    let outcomes = (await reconcile(NOON + 10 * 60)).lostRuns;
+
+    assert.deepEqual(
+      outcomes.map((o) => [o.kind, 'run' in o ? o.run.id : undefined]),
+      [['ended', followUp.id]],
+      'it does not stay running for good',
+    );
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, followUp.id))?.errorReason,
+      JOB_LOST_REASON,
+    );
+  });
+
   test("a paused automation's lost run is ended, not enqueued again", async function (assert) {
     await switchOn();
     await tick(NOON + 30);

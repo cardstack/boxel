@@ -40,8 +40,10 @@ import {
   deleteKey,
   listBindings,
   declinePolicyNotice,
+  approvalNotices,
   limitNotices,
   listKeys,
+  markApprovalNoticesRead,
   markLimitNoticesRead,
   markPolicyNoticesRead,
   policyNotices,
@@ -52,6 +54,7 @@ import {
   unshare,
   type KeyBinding,
   type KeyGrant,
+  type KeyApprovalNotice,
   type KeyLimitNotice,
   type KeyPolicyNotice,
 } from '../../security/keys.ts';
@@ -87,6 +90,7 @@ import type {
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
 import KeyGrants from './key-grants.gts';
+import KeyApprovalNotices from './key-approval-notices.gts';
 import KeyLimitNotices from './key-limit-notices.gts';
 import KeyPolicyNotices from './key-policy-notices.gts';
 import KeyTile from './key-tile.gts';
@@ -130,6 +134,11 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
           {{#if this.state.loading}}
             <BusyMessage @title='Loading…' />
           {{else}}
+            <KeyApprovalNotices
+              @notices={{this.state.approvalNotices}}
+              @onApprove={{this.openApproval}}
+              @onShareKey={{this.openShareKey}}
+            />
             <KeyLimitNotices
               @notices={{this.state.limitNotices}}
               @showsKeyUsage={{this.showsKeyUsage}}
@@ -502,6 +511,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     // Where the user's shares and keys reached a limit this day or month.
     // Empty when there are none, or when they can't be read.
     limitNotices: [] as KeyLimitNotice[],
+    // Automations that wait for key approval on the user. Empty when there
+    // are none, or when they can't be read.
+    approvalNotices: [] as KeyApprovalNotice[],
     // The request being declined, while it is.
     declining: undefined as string | undefined,
     error: undefined as string | undefined,
@@ -547,9 +559,11 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       this.state.bindings = await this.readBindings();
       this.state.notices = await this.readNotices();
       this.state.limitNotices = await this.readLimitNotices();
+      this.state.approvalNotices = await this.readApprovalNotices();
       this.args.api.visit.loaded();
       this.markNoticesRead();
       this.markLimitNoticesRead();
+      this.markApprovalNoticesRead();
       this.openAnonymousUseFromFragment();
     } catch (e) {
       if (isSignedOut(e)) {
@@ -744,6 +758,48 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       console.warn(`Could not mark the key limit notices read: ${e}`);
     });
   }
+
+  // The keys are the page; key approval notices that can't be read are left
+  // out.
+  private readApprovalNotices = async (): Promise<KeyApprovalNotice[]> => {
+    try {
+      return await approvalNotices(this.args.api.config);
+    } catch (e) {
+      if (isSignedOut(e)) {
+        throw e;
+      }
+      return [];
+    }
+  };
+
+  // As for policy notices: what this page lists has been seen.
+  private markApprovalNoticesRead() {
+    let unread = this.state.approvalNotices
+      .filter((notice) => !notice.readAt)
+      .map((notice) => notice.id);
+    if (unread.length === 0) {
+      return;
+    }
+    markApprovalNoticesRead(this.args.api.config, unread).catch((e) => {
+      console.warn(`Could not mark the key approval notices read: ${e}`);
+    });
+  }
+
+  // The approve page for the automation, which gathers every operation the
+  // user's approval is missing for, and comes back here once done.
+  private openApproval = (notice: KeyApprovalNotice) => {
+    let fragment = new URLSearchParams({
+      automation: notice.automation,
+      then: 'keys',
+    });
+    navigation.assign(withWayBack(`${pageURL('approve')}#${fragment}`));
+  };
+
+  // The share-key page for the automation's workspace.
+  private openShareKey = (notice: KeyApprovalNotice) => {
+    let fragment = new URLSearchParams({ realm: notice.realm });
+    navigation.assign(withWayBack(`${pageURL('share-key')}#${fragment}`));
+  };
 
   // Each key's usage panel, by key id, so a limit notice about the key can
   // open it.

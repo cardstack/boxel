@@ -15,10 +15,14 @@ class SpinnerUsage extends GlimmerComponent {
       this.size = v;
     }
   };
+  get usage() {
+    return `<Spinner @size={{${this.size}}} />`;
+  }
   <template>
     <FreestyleUsage
       @name='Spinner'
       @description='Default loading indicator for Boxel components.'
+      @source={{this.usage}}
     >
       <:example>
         <Spinner @size={{this.size}} />

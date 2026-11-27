@@ -3,13 +3,15 @@ import Component from '@glimmer/component';
 import { FreestyleUsage } from './freestyle-usage';
 import { Delta } from './delta';
 
+const SOURCE = '<Delta @value={{12}} />';
+
 class DeltaUsage extends Component {
   values = [12, -4, 0];
   <template>
     <FreestyleUsage
       @name='Delta'
       @description='Signed change as bare mono text. Sign is always present in text, so success and destructive hues never carry meaning alone.'
-      @source='<Delta @value={{12}} />'
+      @source={{SOURCE}}
     >
       <:example>
         <div class='foundation-row'>

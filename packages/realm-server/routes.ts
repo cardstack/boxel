@@ -147,6 +147,7 @@ import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts
 import type { HostURLResolver } from './lib/realm-host-urls.ts';
 import type { HostURLDomains } from './lib/realm-host-urls-domains.ts';
 import {
+  KEY_APPROVAL_NOTICES_PATH,
   KEY_BINDINGS_PATH,
   KEY_LIMIT_NOTICES_PATH,
   KEY_POLICY_NOTICES_PATH,
@@ -220,6 +221,7 @@ import {
   handleAutomationEstimate,
   handleAutomationPause,
   handleAutomationPreview,
+  handleAutomationNotices,
   handleAutomationPreviewFile,
   handleAutomationRemove,
   handleAutomationResume,
@@ -231,6 +233,7 @@ import {
   handleAutomationSwitchOn,
 } from './handlers/handle-automations.ts';
 import {
+  AUTOMATION_NOTICES_PATH,
   AUTOMATION_PAUSE_PATH,
   AUTOMATION_PREVIEW_FILE_PATH,
   AUTOMATION_PREVIEW_PATH,
@@ -243,6 +246,10 @@ import {
   AUTOMATION_STORAGE_PATH,
   AUTOMATION_SWITCH_ON_PATH,
 } from '@cardstack/runtime-common/automation-routes';
+import {
+  handleListKeyApprovalNotices,
+  handleMarkKeyApprovalNoticesRead,
+} from './handlers/handle-key-approval-notices.ts';
 import {
   handleListKeyLimitNotices,
   handleMarkKeyLimitNoticesRead,
@@ -693,6 +700,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleMarkKeyLimitNoticesRead(args),
   );
   router.get(
+    KEY_APPROVAL_NOTICES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyApprovalNotices(args),
+  );
+  router.post(
+    `${KEY_APPROVAL_NOTICES_PATH}/read`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMarkKeyApprovalNoticesRead(args),
+  );
+  router.get(
     `${OAUTH_PATH}/clients`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListConnectableClients(args),
@@ -940,6 +957,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     [AUTOMATION_RUN_REPORT_PATH, handleAutomationRunReport],
     [AUTOMATION_PREVIEW_FILE_PATH, handleAutomationPreviewFile],
     [AUTOMATION_STORAGE_PATH, handleAutomationStorage],
+    [AUTOMATION_NOTICES_PATH, handleAutomationNotices],
   ] as const) {
     router.get(
       path,

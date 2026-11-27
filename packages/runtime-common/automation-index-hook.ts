@@ -11,10 +11,11 @@
 // compares only the approvals already given. The full check, which tells
 // whether every operation's approvals are there, runs in a realm server once
 // the pass lands (`Realm.followAutomationKeyApprovals`): after an incremental
-// pass, in the realm that started it, over the automations
-// `automationTouchedBy` names; after a from-scratch pass, in the realm, over
-// every automation in it that isn't paused, as the worker that ran the pass
-// asks (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`).
+// pass, over the automations the hook synced, as the worker that ran the
+// pass asks, and in a realm that awaits the pass, over the automations
+// `automationTouchedBy` names, as the realm follows its own pass; after a
+// from-scratch pass, over every automation in the realm that isn't paused,
+// as the worker that ran the pass asks (`FOLLOW_AUTOMATION_KEY_APPROVALS_PATH`).
 // An edit that makes every approval match again runs the automation again,
 // and one that adds an operation needing a key no approval covers makes it
 // wait.

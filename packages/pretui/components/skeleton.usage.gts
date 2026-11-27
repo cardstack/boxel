@@ -12,10 +12,14 @@ class SkeletonUsage extends GlimmerComponent {
   @tracked height = '20px';
   setWidth = (v: string) => (this.width = v);
   setHeight = (v: string) => (this.height = v);
+  get usage() {
+    return `<Skeleton @width='${this.width}' @height='${this.height}' />`;
+  }
   <template>
     <FreestyleUsage
       @name='Skeleton'
       @description='A skeleton placeholder component to show loading states'
+      @source={{this.usage}}
     >
       <:example>
         <div class='skeleton-stack'>
