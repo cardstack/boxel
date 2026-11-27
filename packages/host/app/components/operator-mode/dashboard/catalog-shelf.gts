@@ -3,10 +3,12 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
-import { cached } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { Button } from '@cardstack/pretui/components/button';
+import { modifier } from 'ember-modifier';
 
 import {
   resolveRRIReference,
@@ -54,6 +56,10 @@ const LISTING_TYPE = {
 // across shelves, so the shelf doesn't blink, and a shelf shown again (as when
 // Hosted is switched off) starts from them. Untracked: it only remembers.
 const lastAnswers = new Map<string, Story[]>();
+
+// Held from when a shelf starts watching its distance from the screen until
+// the first report, so tests settle knowing whether the art is asked for.
+const nearScreenWaiter = buildWaiter('catalog-shelf:near-screen');
 
 interface Signature {
   Element: HTMLElement;
@@ -142,20 +148,25 @@ export default class CatalogShelf extends Component<Signature> {
   // Whether every search has answered for what it asks now. The featured
   // listings are asked for only once the index card answers, so without this
   // the other listings would fill the shelf first and then reshuffle.
+  // A search starts when its resource is first read, so all three are read
+  // before any answer is checked: otherwise each would wait for the one
+  // before it.
   private get isAnswered() {
     let answered = (resource: SearchEntriesResource) =>
       resource.entriesQuery !== undefined || resource.errors !== undefined;
-    if (!answered(this.index) || !answered(this.others)) {
+    let indexAnswered = answered(this.index);
+    let othersAnswered = answered(this.others);
+    let featuredFailed = Boolean(
+      this.featured.errors && !this.featured.isLoading,
+    );
+    let asked = this.featured.entriesQuery?.cardUrls ?? [];
+    if (!indexAnswered || !othersAnswered) {
       return false;
     }
     let wanted = this.featuredCardUrls;
-    if (
-      wanted.length === 0 ||
-      (this.featured.errors && !this.featured.isLoading)
-    ) {
+    if (wanted.length === 0 || featuredFailed) {
       return true;
     }
-    let asked = this.featured.entriesQuery?.cardUrls ?? [];
     return (
       asked.length === wanted.length &&
       wanted.every((url, i) => asked[i] === url)
@@ -183,10 +194,53 @@ export default class CatalogShelf extends Component<Signature> {
     return !this.isAnswered && this.stories.length === 0;
   }
 
+  // Whether the shelf has come within a screen of being shown. The art is
+  // the heaviest part of the dashboard, so it waits for this; each story
+  // shows its thumbnail until then.
+  @tracked private isNearScreen = false;
+
+  // Observed against the dashboard's scroller, since the scroller's overflow
+  // would otherwise clip the shelf before a margin on the viewport could
+  // reach it.
+  private trackNearScreen = modifier((element: HTMLElement) => {
+    if (this.isNearScreen) {
+      return;
+    }
+    let waiting = nearScreenWaiter.beginAsync();
+    let reported = false;
+    let report = () => {
+      if (!reported) {
+        reported = true;
+        nearScreenWaiter.endAsync(waiting);
+      }
+    };
+    let observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          this.isNearScreen = true;
+          observer.disconnect();
+        }
+        report();
+      },
+      {
+        root: element.closest<HTMLElement>('[data-dashboard-scroller]'),
+        rootMargin: '100% 0px',
+      },
+    );
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      report();
+    };
+  });
+
   // One search for every story's art: the examples' prerendered isolated
   // HTML, and nothing else, so an example without HTML yet never renders
   // live.
   private get artQuery(): SearchEntryWireQuery | undefined {
+    if (!this.isNearScreen) {
+      return undefined;
+    }
     let exampleIds = this.stories
       .map((story) => story.exampleId)
       .filter((id): id is string => Boolean(id));
@@ -228,7 +282,12 @@ export default class CatalogShelf extends Component<Signature> {
 
   <template>
     {{#if this.stories.length}}
-      <div class='catalog-shelf' data-test-catalog-shelf ...attributes>
+      <div
+        class='catalog-shelf'
+        {{this.trackNearScreen}}
+        data-test-catalog-shelf
+        ...attributes
+      >
         <SearchResults
           @query={{this.artQuery}}
           @mode='none'
