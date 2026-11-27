@@ -28,42 +28,142 @@ import type { PropSource } from '@cardstack/choreo';
 type Changeset = Parameters<Extract<PropSource, Function>>[1];
 type Sprite = Parameters<Extract<PropSource, Function>>[0];
 
-// The block an arrival lands under: the kept participant whose final box
-// ends closest above the arrival's top.
-const blockAbove = (sprite: Sprite, changeset: Changeset) => {
-  let top = sprite.final?.page.y;
-  if (top === undefined) {
-    return undefined;
+// The conversation's messages, in the pass, that have a place to go to.
+const STACKED = [
+  { role: 'message', type: 'kept' },
+  { role: 'message-live', type: 'kept' },
+  { role: 'message', type: 'inserted' },
+  { role: 'message-live', type: 'inserted' },
+] as const;
+
+interface Start {
+  /** the translateY the message starts at, from its new place */
+  y: number;
+  /** an arrival carried by the block above it, rather than rising alone */
+  travelling: boolean;
+}
+
+const startsByPass = new WeakMap<Changeset, Map<Sprite, Start>>();
+
+/**
+ * Where each message starts in this pass.
+ *
+ * A kept message starts where it was painted and takes its new size at
+ * once (translate only, so text never scales). A message that grew
+ * therefore draws its new bottom at once, and the message below it,
+ * starting where it was painted, would sit under that bottom until both
+ * landed. So no message starts above the block above it: on one clock the
+ * two keep their gap in every frame (ADR 013 §1.10, §1.20). A message that
+ * grew pushes the ones below down at once, as layout does, and a message
+ * that shrank lets them glide up.
+ *
+ * When the follow scrolled, the end is where the reader looks, and it
+ * stays put: what the follow's scroll moved lands with it, and the newest
+ * message never starts below the view's edge. What changed above the end
+ * still moves (a turn folding), relative to the end. Played as a glide,
+ * the follow kept the newest lines out of view for a move's length on
+ * every update, and a cap opening under the transcript moved it a pixel a
+ * frame. Only the scroll lands: in a transcript too short to scroll, a
+ * message that moved up because one above it shrank still glides.
+ *
+ * Not following, an arrival is fixed to the block above the same way: it
+ * starts where that block's move puts it and travels on its clock; with
+ * nothing above it moving, it rises its usual few px. Following, it fades
+ * in where it lands.
+ */
+/** each scroller's position after the last pass or scroll this layer saw */
+const scrollSeen = new WeakMap<HTMLElement, number>();
+
+/** How far the scroller moved since the last pass, and note where it is. */
+function scrolledSince(scroller: HTMLElement): number {
+  let now = scroller.scrollTop;
+  let before = scrollSeen.get(scroller);
+  if (before === undefined) {
+    // the reader's own scrolls between passes are not this pass's
+    scroller.addEventListener(
+      'scroll',
+      () => scrollSeen.set(scroller, scroller.scrollTop),
+      { passive: true },
+    );
+    before = now;
   }
-  let above: Sprite | undefined;
-  for (let s of changeset.sprites([
-    { role: 'message', type: 'kept' },
-    { role: 'message-live', type: 'kept' },
-  ])) {
-    let bottom = s.final ? s.final.page.y + s.final.page.height : undefined;
-    if (
-      bottom !== undefined &&
-      bottom <= top + 1 &&
-      (!above || bottom > above.final!.page.y + above.final!.page.height)
-    ) {
-      above = s;
+  scrollSeen.set(scroller, now);
+  return now - before;
+}
+
+function startsOf(changeset: Changeset): Map<Sprite, Start> {
+  let known = startsByPass.get(changeset);
+  if (known) {
+    return known;
+  }
+  known = new Map();
+  let stack = changeset
+    .sprites([...STACKED])
+    .filter((s) => s.final)
+    .sort((a, b) => a.final!.page.y - b.final!.page.y);
+  let painted = (s: Sprite) => -(s.delta?.y ?? 0);
+  let scroller = stack[0]?.element.closest<HTMLElement>('[data-following]');
+  let scrolled = scroller ? scrolledSince(scroller) : 0;
+  let following = scroller?.getAttribute('data-following') === 'true';
+  if (following && scrolled !== 0) {
+    // the end holds: what the bottom kept message moved on screen, as far
+    // as the scroll moved it, lands; from the bottom up no message starts
+    // below the one under it
+    let kept = stack.filter((s) => s.type === 'kept');
+    let bottom = kept.length ? painted(kept[kept.length - 1]!) : 0;
+    let base =
+      Math.sign(bottom) === Math.sign(scrolled)
+        ? Math.sign(bottom) * Math.min(Math.abs(bottom), Math.abs(scrolled))
+        : 0;
+    let below: number | undefined;
+    for (let i = stack.length - 1; i >= 0; i--) {
+      let s = stack[i]!;
+      let start: Start;
+      if (s.type === 'inserted') {
+        // it fades in where it lands: a rise would start it below the edge,
+        // and a pass during the rise would take the rise for the follow's
+        start = { y: 0, travelling: false };
+        below = below === undefined ? 0 : Math.min(below, 0);
+      } else {
+        let own = painted(s) - base;
+        let y = below === undefined ? own : Math.min(own, below);
+        start = { y, travelling: false };
+        below = y;
+      }
+      known.set(s, start);
+    }
+  } else {
+    let above: number | undefined;
+    for (let s of stack) {
+      let start: Start;
+      if (s.type === 'inserted') {
+        start = above
+          ? { y: above, travelling: true }
+          : { y: RISE, travelling: false };
+      } else {
+        start = {
+          y: above === undefined ? painted(s) : Math.max(painted(s), above),
+          travelling: false,
+        };
+      }
+      known.set(s, start);
+      above = start.y;
     }
   }
-  return above;
-};
+  startsByPass.set(changeset, known);
+  return known;
+}
 
-// An arrival is fixed to the block above it (ADR 013 §1.10, §1.20): it
-// starts where that block's move puts it and travels on the same clock, so
-// the two keep their gap in every frame and can never overlap. Following,
-// the block above starts a follow's distance lower and so does the arrival;
-// with nothing above it moving, it rises its usual few px.
-const travelAbove = (sprite: Sprite, changeset: Changeset) =>
-  -(blockAbove(sprite, changeset)?.delta?.y ?? 0);
+const startOf = (sprite: Sprite, changeset: Changeset): Start =>
+  startsOf(changeset).get(sprite) ??
+  (sprite.type === 'inserted'
+    ? { y: RISE, travelling: false }
+    : { y: -(sprite.delta?.y ?? 0), travelling: false });
 
-const arriveWithBlockAbove: PropSource = (sprite, changeset) => {
-  let travel = travelAbove(sprite, changeset);
-  return [travel ? travel : RISE, 0];
-};
+const fromStart: PropSource = (sprite, changeset) => [
+  startOf(sprite, changeset).y,
+  0,
+];
 
 // Travelling with the block above, an arrival comes up from below the
 // viewport's edge with everything else, so it needs no fade, and a fade
@@ -71,7 +171,7 @@ const arriveWithBlockAbove: PropSource = (sprite, changeset) => {
 // run mid-arrival, and the new score moves the message without fading it,
 // so its opacity snapped to full over the answer above. Otherwise it fades in.
 const fadeUnlessTravelling: PropSource = (sprite, changeset) =>
-  travelAbove(sprite, changeset) ? [1, 1] : [0, 1];
+  startOf(sprite, changeset).travelling ? [1, 1] : [0, 1];
 
 interface Signature {
   Element: HTMLDivElement;
@@ -154,33 +254,34 @@ export class TranscriptMotion extends Component<Signature> {
         {{yield}}
         {{#if this.awake}}
           <c.Parallel>
-            <c.Move
-              @of={{c.moved 'message'}}
+            {{! every message on one clock, from where startsOf puts it:
+                where it was painted, but never above the block above it.
+                Translate only: a message that grew or shrank takes its new
+                size at once, so text never scales. The streaming message
+                travels with the rest, but its growth lands as it renders }}
+            <c.Tween
+              @of={{c.kept 'message'}}
+              @y={{fromStart}}
               @duration={{DURATION.move}}
               @ease={{EASE_FOLLOW}}
-              @size={{false}}
             />
-            {{! the streaming message travels with the rest when the follow
-                scrolls, on the same clock (two speeds would let neighbors
-                overlap mid-flight), but its growth lands as it renders:
-                translate only }}
-            <c.Move
-              @of={{c.moved 'message-live'}}
+            <c.Tween
+              @of={{c.kept 'message-live'}}
+              @y={{fromStart}}
               @duration={{DURATION.move}}
               @ease={{EASE_FOLLOW}}
-              @size={{false}}
             />
             <c.Tween
               @of={{c.inserted 'message-live'}}
               @opacity={{fadeUnlessTravelling}}
-              @y={{arriveWithBlockAbove}}
+              @y={{fromStart}}
               @duration={{DURATION.move}}
               @ease={{EASE_FOLLOW}}
             />
             <c.Tween
               @of={{c.inserted 'message'}}
               @opacity={{fadeUnlessTravelling}}
-              @y={{arriveWithBlockAbove}}
+              @y={{fromStart}}
               @duration={{DURATION.move}}
               @ease={{EASE_FOLLOW}}
             />

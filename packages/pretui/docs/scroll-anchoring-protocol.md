@@ -83,14 +83,14 @@ render pass commits DOM
 
 The protocol, per scroll owner:
 
-1. **Record (end of every pass, and on every reader scroll):** the anchor element (by the priority table) and its offset in the viewport, by layout: `layoutTop(anchor) − scrollTop`. For the end anchor, record `scrollHeight − scrollTop − clientHeight`.
+1. **Record (end of every pass, and on every reader scroll):** the anchor element (by the priority table) and its offset in the viewport, by layout: `layoutTop(anchor) − scrollTop`. For the end anchor, record `contentEnd − scrollTop − clientHeight`, where `contentEnd` is the bottom of the content in flow, by layout.
 2. **Settle (phase 1 of the next pass):** read the anchor's new layout top and correct the position as below. Then re-record. If the anchor element left the DOM, fall back to its nearest surviving marked ancestor.
    - Normally the recorded offset is held: `scrollTop += layoutTop(anchor) − scrollTop − recorded`. This also undoes a clamp when content shrank. For the end anchor, pin the end.
    - While the reader scrolls (their input, or a scroll that follows it such as momentum, within a short window), only what layout moved is held: `scrollTop += layoutTop(anchor) − recordedLayoutTop`. A settle can run between their scroll and its scroll event, and holding the offset would take their step back.
    - While the component's own smooth scroll is in flight, nothing is written: the smooth scroll's target moves by `layoutTop(anchor) − recordedLayoutTop`, or to the new end while following, so the scroll is not cut short.
 3. **Measure (phase 2):** Choreo measures in the scroller's viewport space after the correction. An element that holds its place on screen reads as not moved and gets no animation. Only what really moved on screen gets a FLIP, from its painted position before to its new one.
 
-**Layout, never paint.** The anchor's position is read from layout offsets (an `offsetTop` chain), which a running FLIP's transforms don't move. Choreo works from painted positions for its starts; the anchor works from layout for its correction. The two never fight: the correction is a layout fact, and the motion is drawn on top of it.
+**Layout, never paint.** The anchor's position is read from layout offsets (an `offsetTop` chain), which a running FLIP's transforms don't move. So is the end: `scrollHeight` counts a sprite drawn below the content while its move is in flight, and pinning to it scrolls the reader into space that is gone once the move lands. A motion layer that measures that scroll draws its next move further below the end again, and the two feed each other. Choreo works from painted positions for its starts; the anchor works from layout for its correction. The two never fight: the correction is a layout fact, and the motion is drawn on top of it.
 
 **One pass, one clock.** Every cause that lands in the same frame is settled once, together, against one anchor. A click that collapses a question while a reply streams is one correction, not two that race.
 
