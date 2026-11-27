@@ -12,6 +12,7 @@ import {
 import {
   addOAuthProfile,
   addProfile,
+  noBrowserHere,
   describeSignIn,
   resolveEnvironment,
   type AddProfileDeps,
@@ -60,10 +61,13 @@ function deps({
   tty,
   answers = {},
   oauthLogin = async () => signedIn(),
+  remote = false,
 }: {
   tty: boolean;
   answers?: Record<string, string>;
   oauthLogin?: AddProfileDeps['oauthLogin'];
+  // Whether there is no browser here: SSH, or Linux with no display.
+  remote?: boolean;
 }) {
   let prompt = vi.fn(async (question: string) => {
     if (!(question in answers)) {
@@ -75,6 +79,8 @@ function deps({
     prompt,
     deps: {
       oauthLogin: vi.fn(oauthLogin),
+      oauthDeviceLogin: vi.fn(async () => signedIn()),
+      noBrowserHere: () => remote,
       revokeConnection: vi.fn(async () => true),
       secureSignOut: vi.fn(async () => {}),
       matrixLogout: vi.fn(async () => {}),
@@ -91,6 +97,55 @@ function deps({
     } satisfies AddProfileDeps,
   };
 }
+
+describe('boxel profile add --oauth, signing in with a code', () => {
+  let tmpDir: string;
+  let manager: ProfileManager;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-oauth-'));
+    manager = new ProfileManager(tmpDir);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.exitCode = undefined;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('--no-browser signs in with a code on another device', async () => {
+    let { deps: d } = deps({ tty: false });
+    await addOAuthProfile(manager, environment, d, { browser: false });
+    expect(d.oauthDeviceLogin).toHaveBeenCalledWith({
+      realmServerUrl: environment.realmServerUrl,
+    });
+    expect(d.oauthLogin).not.toHaveBeenCalled();
+    expect(manager.getProfile(matrixId)?.oauth?.accessToken).toBe(
+      'access-token-placeholder',
+    );
+  });
+
+  it('finds no browser over SSH, or on Linux with no display', () => {
+    expect(noBrowserHere({ SSH_CONNECTION: '1 2 3 4' }, 'darwin')).toBe(true);
+    expect(noBrowserHere({ SSH_TTY: '/dev/pts/0' }, 'linux')).toBe(true);
+    expect(noBrowserHere({}, 'linux')).toBe(true);
+    expect(noBrowserHere({ DISPLAY: ':0' }, 'linux')).toBe(false);
+    expect(noBrowserHere({ WAYLAND_DISPLAY: 'wayland-0' }, 'linux')).toBe(
+      false,
+    );
+    expect(noBrowserHere({}, 'darwin')).toBe(false);
+    expect(noBrowserHere({}, 'win32')).toBe(false);
+  });
+
+  it('over SSH, signs in with a code without being asked to', async () => {
+    let { deps: d } = deps({ tty: false, remote: true });
+    await addOAuthProfile(manager, environment, d);
+    expect(d.oauthDeviceLogin).toHaveBeenCalledOnce();
+    expect(d.oauthLogin).not.toHaveBeenCalled();
+  });
+});
 
 describe('boxel profile add --oauth', () => {
   let tmpDir: string;
@@ -122,7 +177,9 @@ describe('boxel profile add --oauth', () => {
 
     expect(d.oauthLogin).toHaveBeenCalledWith({
       realmServerUrl: environment.realmServerUrl,
+      deviceFallback: true,
     });
+    expect(d.oauthDeviceLogin).not.toHaveBeenCalled();
     let profile = manager.getProfile(matrixId)!;
     expect(profile).toEqual({
       displayName: 'Example',

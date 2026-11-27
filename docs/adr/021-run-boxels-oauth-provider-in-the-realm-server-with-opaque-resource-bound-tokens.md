@@ -167,7 +167,11 @@ confirmation code with each authorization request, which it shows the user
 where they started signing in, and a flow from it without one MUST be refused.
 A flow from any other client that sends one MUST be refused. Its consent MUST
 show the code, and MUST tell the user to allow only a sign-in they started
-themselves.
+themselves. In the device authorization grant the user code, which the user
+reads from the app and types in, stands in for the confirmation code. The
+provider MUST NOT offer a verification address with the user code already in
+it (`verification_uri_complete`, RFC 8628 §5.4), and a device code MUST expire
+within 10 minutes.
 
 The endpoints that need no sign-in (registration, authorization, token,
 revocation and device-code entry) MUST be rate-limited. The token endpoint's limit MUST NOT
@@ -299,6 +303,12 @@ either network or send it to error reporting: it logs only how they compared.
 
 In the device authorization grant, the user MUST enter the user code on the
 secure origin's device page, under a secure session, and see the same consent.
+The page MUST take the code only from what the user types, never from its
+address, and MUST tell the user to enter only a code their own terminal shows.
+The routes that look a user code up and take its decision MUST meet the rules
+above for a flow's details and decision. Allowing MUST create the grant and
+record it on the device code, which the app's next poll exchanges; the
+library's own pages for entering and confirming a code MUST NOT be served.
 
 ### 1.8. Errors
 

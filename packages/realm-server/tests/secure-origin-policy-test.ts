@@ -244,6 +244,12 @@ const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
     address: 'connected-apps',
     marker: '[data-test-keys-page="connected-apps"]',
   },
+  // Signed out, device sign-in asks for a sign-in before the code.
+  {
+    page: 'device',
+    address: 'device',
+    marker: '[data-test-device-sign-in-intro]',
+  },
 ];
 
 // Addresses that name a page by the `mode` query parameter, as earlier CLI
