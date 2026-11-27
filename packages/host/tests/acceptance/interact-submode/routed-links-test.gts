@@ -152,7 +152,7 @@ module('Acceptance | interact submode | routed links', function (hooks) {
           linkHrefTo?.(card);
 
         <template>
-          <@fields.author />
+          <@fields.author @format='embedded' />
           <a
             data-test-link='routed'
             href={{this.routedHref @model.author}}
