@@ -60,6 +60,7 @@
       "oauth-connections-test",
       "policy-share-audit-test",
       "published-realm-shared-key-test",
+      "realm-card-write-override-test",
       "realm-endpoints/search-test",
       "realm-policy-activation-test",
       "realm-policy-anonymous-explain-test",

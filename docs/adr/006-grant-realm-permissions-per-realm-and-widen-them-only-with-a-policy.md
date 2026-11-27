@@ -100,6 +100,12 @@ other. An automation run's commit is the exception: only a direct writer
 makes one (ADR 026 §1.5). A grant MUST NOT admit a write that changes the type
 of what it writes.
 
+Every realm route that writes a card MUST carry it out as the `create`,
+`update` or `delete` its verb is named for, as the card's type declares that
+operation, whether the caller's permissions allow the write or a grant admits
+it. How the caller was admitted MUST decide only whether the policy judges
+them.
+
 A grant MAY admit a write to module source, which a policy types as
 `TsFileDef` or `GtsFileDef`, as it admits a write to any other file. The
 realm MUST NOT refuse that write, or anything that loads the module, because
@@ -150,7 +156,10 @@ A grant reaches a write the same way on every route, because a policy author
 writes one rule per operation and type, not per route. A grant on a type is
 matched against what a write's target is. A write that leaves its target
 another type would escape the grants it was matched on, and could turn a card
-into a `RealmPolicy` after the gate judged it as its old type [10].
+into a `RealmPolicy` after the gate judged it as its old type [10]. For the
+same reason a write does what the card's type declares on every route and for
+every caller: a type that declares a soft `delete` keeps its cards whichever
+route removes one, and whoever sends it [11].
 
 Who may change a realm's code is its administrators' decision [10]. A module
 runs in the browser of everyone who loads it, with that person's sessions, and
@@ -185,6 +194,11 @@ may read a realm, nothing elsewhere takes that away.
   grant would admit a write on one route and not another, and a script that
   saves a card through a batch write would fail for a user a grant admits
   [10].
+- **Carry out the built-in write on the card routes, and refuse a grant
+  where the type declares the name.** A caller the permissions allow would
+  get a different write from one a grant admits, and a type's declaration
+  would be unreachable from the host's editor, which saves cards through those
+  routes [11].
 - **Roles or groups as subjects.** Membership already lives in the data. A
   policy predicate over a card's fields, such as
   `.teacherIds | any(. == actor())`, expresses it with nothing separate to
@@ -218,6 +232,9 @@ may read a realm, nothing elsewhere takes that away.
     any other grant writes its target, and the administrator who grants it
     accepts the risk, automation runs included; a write that changes a
     card's type is never matched on the type it replaces.
+11. Luke Melia, 2026-11-18: a writer the permissions allow and a writer a
+    grant admits run the same create, update and delete on every write route,
+    the most specific in the card's adoption chain.
 
 ## 5. Remediation
 

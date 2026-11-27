@@ -840,6 +840,55 @@ module('Unit | operation lowering', function (hooks) {
     assert.strictEqual(withPayload.operations.validate.input, undefined);
   });
 
+  test("a card's create, update and delete carry no output, whatever base each builds on", async function (assert) {
+    // A card's write routes carry out these three names and answer as they
+    // always do, so a projection would reshape an /_operations call's answer
+    // alone. The decorator refuses one where it is written; these are driven
+    // from raw records because a stored entry outlives the code that built it.
+    let { field, contains, CardDef } = api;
+    class Memo extends CardDef {
+      static displayName = 'Memo';
+      @field status = contains(StringField);
+    }
+    shim({ Memo });
+    let output = { $bxl: '{ status: .data.attributes.status }' };
+    let result = await lowerOperationDeclarations(
+      {
+        create: { base: 'create', of: () => fixtures.Activity, output },
+        update: { base: 'update', output },
+        delete: { base: 'transform', set: { status: 'withdrawn' }, output },
+        archive: { base: 'transform', set: { status: 'archived' }, output },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Memo),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(
+      result.issues.map((issue) => [issue.operation, issue.code, issue.path]),
+      [
+        ['create', 'output-on-card-route-write', 'output'],
+        ['update', 'output-on-card-route-write', 'output'],
+        ['delete', 'output-on-card-route-write', 'output'],
+      ],
+      'each of the three names is refused its projection, a soft delete on transform included',
+    );
+    for (let name of ['create', 'update', 'delete']) {
+      assert.true(result.operations[name].invalid, `the ${name} is invalid`);
+      assert.strictEqual(
+        result.operations[name].output,
+        undefined,
+        `no projection is stored for the ${name}`,
+      );
+    }
+    assert.notOk(
+      result.operations.archive.invalid,
+      'a write under any other name is invoked only through /_operations, so it keeps its projection',
+    );
+    assert.ok(result.operations.archive.output);
+  });
+
   // -------------------------------------------------------------------------
   // The source-level writes
   // -------------------------------------------------------------------------

@@ -78,7 +78,7 @@ export {
   pathsFor,
   readPlan,
   htmlDeclarationOf,
-  resolveFacadeWrite,
+  performsBuiltIn,
   resolveGatedOperation,
   resolveOperation,
   runOperation,

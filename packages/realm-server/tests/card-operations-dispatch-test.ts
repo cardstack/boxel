@@ -16,9 +16,9 @@ import {
   notApproved,
   OperationFailure,
   pendingWriteFor,
+  performsBuiltIn,
   policyGateStats,
   readPlan,
-  resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
   runOperation,
@@ -2440,18 +2440,65 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  // A card verb carries out the built-in behavior its method names, so a
-  // grant on the name reaches the verb only where the name means that
-  // behavior. A reader declined only writes, with a policy that grants
-  // `update` on `CardDef` to everyone. The target's row records `Person` and
-  // `CardDef`.
-  module('the policy gate on a card verb’s write', function () {
-    function gatedCore(
-      person:
-        | 'declares update'
-        | 'declares update on read'
-        | 'declares nothing',
-    ) {
+  // Whether a definition does exactly what the built-in behavior of its name
+  // does. A card route writes along its own path where it does, and carries
+  // the write out as the operations envelope does where it doesn't.
+  module('performsBuiltIn', function () {
+    test('the built-in behavior, and a declaration that only describes it', async function (assert) {
+      assert.true(
+        performsBuiltIn('update', { base: 'update', deterministic: true }),
+        'the built-in itself',
+      );
+      assert.true(
+        performsBuiltIn('delete', {
+          base: 'delete',
+          deterministic: true,
+          nonGrantable: true,
+          label: 'Remove',
+          optimistic: false,
+        }),
+        'a declaration that only labels it and marks it non-grantable',
+      );
+    });
+
+    test('a declaration that changes what the write does', async function (assert) {
+      assert.false(
+        performsBuiltIn('delete', { base: 'transform', deterministic: true }),
+        'rebound onto another behavior',
+      );
+      assert.false(
+        performsBuiltIn('update', {
+          base: 'update',
+          deterministic: true,
+          params: { note: { type: 'string', required: true } },
+        } as unknown as OperationDefinition),
+        'with params of its own',
+      );
+      assert.false(
+        performsBuiltIn('update', {
+          base: 'update',
+          deterministic: true,
+          input: { source: '.' },
+        } as unknown as OperationDefinition),
+        'with an input stage',
+      );
+      assert.false(
+        performsBuiltIn('create', {
+          base: 'create',
+          deterministic: true,
+          of: PERSON,
+        }),
+        'minting a type of its own',
+      );
+    });
+  });
+
+  // A reader declined only writes, with a policy that grants `update` on
+  // `CardDef` to everyone. The target's row records `Person` and `CardDef`.
+  // A card route resolves its write as the envelope resolves an entry of that
+  // name, so the gate answers it on whatever the type declares.
+  module('the policy gate on a card route’s write', function () {
+    function gatedCore(person: 'declares update' | 'declares nothing') {
       let { access, loads } = policyStub([
         { targetType: CARD_DEF, grants: ['update'] },
       ]);
@@ -2466,14 +2513,7 @@ module(basename(import.meta.filename), function () {
         ...(isPerson(ref) && person === 'declares update'
           ? {
               operations: {
-                update: { base: 'update', deterministic: true },
-              },
-            }
-          : {}),
-        ...(isPerson(ref) && person === 'declares update on read'
-          ? {
-              operations: {
-                update: { base: 'read', deterministic: true },
+                update: { base: 'transform', deterministic: true },
               },
             }
           : {}),
@@ -2509,61 +2549,34 @@ module(basename(import.meta.filename), function () {
       });
     }
 
-    test('a grant on the built-in behavior reaches the verb', async function (assert) {
-      let { core } = gatedCore('declares nothing');
-      let decision = await resolveFacadeWrite(
-        core,
-        CARD,
-        'update',
-        scope(core),
-      );
-      assert.strictEqual(decision.kind, 'granted');
+    test('a grant on the name admits the write whatever the type declares under it', async function (assert) {
+      for (let person of ['declares nothing', 'declares update'] as const) {
+        let { core } = gatedCore(person);
+        let { definition, decision } = await resolveGatedOperation(
+          core,
+          CARD,
+          'update',
+          scope(core),
+        );
+        assert.strictEqual(decision.kind, 'granted', `${person}: granted`);
+        assert.strictEqual(
+          definition.base,
+          person === 'declares update' ? 'transform' : 'update',
+          `${person}: and resolved to what the type declares`,
+        );
+      }
     });
 
-    test('a type that declares the name refuses the verb a grant the envelope would use', async function (assert) {
-      let { core } = gatedCore('declares update');
-      let { decision } = await resolveGatedOperation(
-        core,
-        CARD,
-        'update',
-        scope(core),
-      );
-      assert.strictEqual(
-        decision.kind,
-        'granted',
-        'the grant admits the declared update',
-      );
-      let failure = await refusalFrom(() =>
-        resolveFacadeWrite(core, CARD, 'update', scope(core)),
-      );
-      assert.strictEqual(
-        failure.code,
-        'operation-not-permitted',
-        'and the verb, which would not carry that update out, is refused',
-      );
-    });
-
-    test('a name declared on a base that does not write is refused before the gate judges it as a read', async function (assert) {
-      // The gate judges a declaration by its base, and a reader's reads are the
-      // ACL's to allow, so it would answer that the ACL allowed this one. The
-      // verb would then carry out its built-in write.
-      let { core, loads } = gatedCore('declares update on read');
-      let failure = await refusalFrom(() =>
-        resolveFacadeWrite(core, CARD, 'update', scope(core)),
-      );
-      assert.strictEqual(failure.code, 'operation-not-permitted');
-      assert.strictEqual(loads.count, 0, 'and no policy was loaded');
-    });
-
-    test('a caller the ACL allowed is not judged, whatever the type declares', async function (assert) {
+    test('a caller the ACL allowed is not judged, and resolves what the type declares', async function (assert) {
       let { core, loads } = gatedCore('declares update');
-      let decision = await resolveFacadeWrite(
+      let { definition, decision } = await resolveGatedOperation(
         core,
         CARD,
         'update',
         scope(core, 'none'),
       );
       assert.strictEqual(decision.kind, 'coarse');
+      assert.strictEqual(definition.base, 'transform');
       assert.strictEqual(loads.count, 0, 'and no policy was loaded');
     });
   });
