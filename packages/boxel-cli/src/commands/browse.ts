@@ -103,6 +103,15 @@ export function buildBrowseUrl(
   return url.href;
 }
 
+// A host given with `--host-url` may be a build that doesn't know
+// `signInAs` (a preview or a local build of another branch), and nothing here
+// can tell. Such a host ignores it and opens as whichever account the browser
+// holds.
+const HOST_URL_SIGN_IN_AS_NOTE =
+  "A host given with --host-url that doesn't support signInAs opens as " +
+  'whichever account the browser is signed in as. Check the account the app ' +
+  'shows.';
+
 /**
  * Build the host-app URL for a profile signed in with OAuth: the account to
  * sign in as, plus an optional `cardPath`. It carries no credential. The app
@@ -208,6 +217,9 @@ export async function browse(
     let hostUrl = hostAppUrlForProfile(profile, options.hostUrl);
     let url = buildSignInAsUrl(hostUrl, profile.matrixUserId, cardPath);
     if (options.printUrl) {
+      if (options.hostUrl) {
+        cliLog.warn(HOST_URL_SIGN_IN_AS_NOTE);
+      }
       cliLog.output(url);
       return;
     }
@@ -215,6 +227,9 @@ export async function browse(
       `Opening ${hostUrl} as ${profile.matrixUserId}. If this browser isn't ` +
         `signed in as ${profile.matrixUserId}, Boxel asks you to sign in.`,
     );
+    if (options.hostUrl) {
+      cliLog.warn(HOST_URL_SIGN_IN_AS_NOTE);
+    }
     let opened = await openBrowserFn(url);
     if (!opened) {
       cliLog.warn(
@@ -240,9 +255,10 @@ export async function browse(
 
   // A 429 rate limit is separate from the auth recovery above: re-auth wouldn't
   // help (the limit is per account). Wait+retry once when the wait is short or
-  // `--wait` was given; otherwise surface a clear, actionable message. We never
-  // fall back to opening the app without a fresh token — the CLI can't tell which
-  // account the browser holds, so a tokenless open could land on the wrong one.
+  // `--wait` was given; otherwise surface a clear, actionable message. A Matrix
+  // profile never falls back to opening the app without a fresh token: the CLI
+  // can't tell which account the browser holds, so a tokenless open could land
+  // on the wrong one. (An OAuth profile's URL names its account instead, above.)
   let token;
   try {
     token = await mintToken();
@@ -347,11 +363,13 @@ export function registerBrowseCommand(program: Command): void {
     )
     .option(
       '--host-url <url>',
-      'Override the host app URL the token is redeemed against',
+      'Override the host app URL to open (where a Matrix profile’s login ' +
+        'token is redeemed)',
     )
     .option(
       '--print-url',
-      'Print the authenticated URL instead of opening a browser (for remote shells / agents)',
+      'Print the URL instead of opening a browser (for remote shells / ' +
+        'agents); for a Matrix profile it carries a single-use login token',
     )
     .option(
       '--wait',

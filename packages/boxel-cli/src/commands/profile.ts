@@ -560,8 +560,9 @@ function addProfileContext(deps: AddProfileDeps): AddProfileContext {
 // What a profile gives up when `--oauth` replaces its Matrix sign-in.
 const OAUTH_REPLACES_MATRIX =
   "This replaces a profile signed in with Matrix. A profile signed in with OAuth can't yet run `boxel run-command` or `boxel capture`, " +
-  'sign a browser in with `boxel browse`, give out a token with getServerToken(), or list realms outside your workspaces ' +
-  '(`boxel realm list --hidden`). Run `boxel profile add` without --oauth to go back to Matrix if you need those.';
+  'give out a token with getServerToken(), or list realms outside your workspaces (`boxel realm list --hidden`), and ' +
+  '`boxel browse` opens the app for the browser to sign in rather than signing it in. Run `boxel profile add` without ' +
+  '--oauth to go back to Matrix if you need those.';
 
 function replacesMatrixProfile(
   manager: ProfileManager,

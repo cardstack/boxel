@@ -953,8 +953,11 @@ describe('browse', () => {
       expect(logged.join('\n')).toContain('@example-user:localhost');
     });
 
-    it('honours --host-url', async () => {
+    it('honours --host-url, saying such a host may not know the account', async () => {
       let openBrowserFn = vi.fn().mockResolvedValue(true);
+      let stderr = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation(() => true);
 
       await browse(undefined, {
         hostUrl: 'https://host.my-env.localhost',
@@ -966,6 +969,52 @@ describe('browse', () => {
       expect(openBrowserFn).toHaveBeenCalledWith(
         'https://host.my-env.localhost/?signInAs=%40example-user%3Alocalhost',
       );
+      let written = stderr.mock.calls.map((c) => String(c[0])).join('');
+      expect(written).toContain("doesn't support signInAs");
+      stderr.mockRestore();
+    });
+
+    it('says so under --print-url with --host-url too, on stderr only', async () => {
+      let stdout = vi
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(() => true);
+      let stderr = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation(() => true);
+
+      await browse(undefined, {
+        hostUrl: 'https://host.my-env.localhost',
+        printUrl: true,
+        profileManager: oauthProfileManager(),
+        openBrowserFn: vi.fn(),
+        log: () => {},
+      });
+
+      expect(stdout.mock.calls.map((c) => String(c[0]))).toEqual([
+        'https://host.my-env.localhost/?signInAs=%40example-user%3Alocalhost\n',
+      ]);
+      expect(stderr.mock.calls.map((c) => String(c[0])).join('')).toContain(
+        "doesn't support signInAs",
+      );
+      stdout.mockRestore();
+      stderr.mockRestore();
+    });
+
+    it('says nothing of the kind for the environment’s own host', async () => {
+      let stderr = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation(() => true);
+
+      await browse(undefined, {
+        profileManager: oauthProfileManager(),
+        openBrowserFn: vi.fn().mockResolvedValue(true),
+        log: () => {},
+      });
+
+      expect(stderr.mock.calls.map((c) => String(c[0])).join('')).not.toContain(
+        'signInAs',
+      );
+      stderr.mockRestore();
     });
 
     it('prints the URL under --print-url, since it holds no credential', async () => {
