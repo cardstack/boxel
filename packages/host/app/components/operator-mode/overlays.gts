@@ -14,6 +14,11 @@ import { isEqual, omit } from 'lodash-es';
 
 import { localId as localIdSymbol, rri } from '@cardstack/runtime-common';
 
+import {
+  followableLinkURL,
+  isPlainClick,
+  linkInside,
+} from '@cardstack/host/lib/link-clicks';
 import type CardService from '@cardstack/host/services/card-service';
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -43,6 +48,19 @@ interface OverlaySignature {
       isHovered: boolean,
     ];
   };
+}
+
+// The URL a card is saved at, or `undefined` for a card that is not saved.
+function cardURL(cardDefOrId: CardDefOrId): string | undefined {
+  let id = typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
+  if (!id) {
+    return undefined;
+  }
+  try {
+    return new URL(id).href;
+  } catch {
+    return undefined;
+  }
 }
 
 // A per-edge inset large enough to leave that edge effectively unclipped — it
@@ -306,6 +324,21 @@ export default class Overlays extends Component<OverlaySignature> {
         this.scheduleHoverClear();
       };
       let click = (e: MouseEvent) => {
+        // A click on a link inside the card belongs to the link, so the card
+        // does not also open here. The click goes on to the app's link
+        // catchers on the document, which open a routed address in the app,
+        // and the overlays of the cards around this one find the same link
+        // inside their cards and leave it too. Any click the catchers don't
+        // take keeps the browser's default. The one exception: a plain
+        // click on a followable link to this card's own URL opens the card
+        // here, with no page load, as a click on the card does.
+        if (linkInside(e, renderedCard.element)) {
+          let url = isPlainClick(e) ? followableLinkURL(e) : undefined;
+          if (!url || url.href !== cardURL(renderedCard.cardDefOrId)) {
+            return;
+          }
+          e.preventDefault();
+        }
         // prevent outer nested contains fields from triggering when inner most
         // contained field was clicked
         e.stopPropagation();
