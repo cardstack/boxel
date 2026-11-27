@@ -6,6 +6,7 @@ import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
   fetchLiveRealmEventWatchers,
+  insertPermissions,
   rri,
   upsertRealmEventWatcher,
   watcherListedCopy,
@@ -699,6 +700,19 @@ module(basename(import.meta.filename), function (hooks) {
         classroom('Room 204 D', [TEACHER, READER]),
       );
       assert.deepEqual(await sentFor(ROOM_204), []);
+    });
+
+    test('a watcher who reads only through the `users` grant still gets a copy', async function (assert) {
+      await insertPermissions(db, new URL(EDUCATION), { users: ['read'] });
+      await watch(TEACHER);
+      await education.write(
+        'classrooms/room-204.json',
+        classroom('Room 204 F', [TEACHER]),
+      );
+      assert.deepEqual(
+        (await sentFor(ROOM_204)).map(({ user }) => user),
+        [TEACHER],
+      );
     });
 
     test('a lapsed watcher is sent nothing', async function (assert) {

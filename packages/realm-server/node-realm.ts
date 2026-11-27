@@ -20,7 +20,7 @@ import {
   clearSessionRoom,
   fetchRealmEventRoom,
   fetchRealmSessionRooms,
-  fetchSessionRoom,
+  fetchSessionRooms,
   isRealmServerNotInRoomError,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -815,15 +815,22 @@ export class NodeAdapter implements RealmAdapter {
       );
       return [];
     }
+    let rooms: Map<string, string>;
+    try {
+      rooms = await fetchSessionRooms(
+        dbAdapter,
+        answered.map(({ user }) => user),
+      );
+    } catch (e) {
+      realmEventsLog.error(
+        `Error looking up session rooms for ${realmUrl}'s per-user events; skipping them`,
+        e,
+      );
+      return [];
+    }
     let sends: RealmEventSend[] = [];
     for (let { user, event } of answered) {
-      let roomId: string | null;
-      try {
-        roomId = await fetchSessionRoom(dbAdapter, user);
-      } catch (e) {
-        realmEventsLog.error(`Error looking up the session room of ${user}`, e);
-        continue;
-      }
+      let roomId = rooms.get(user);
       if (roomId) {
         sends.push(
           this.sessionRoomSend(

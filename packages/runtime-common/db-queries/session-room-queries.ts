@@ -1,5 +1,10 @@
 import type { DBAdapter } from '../db.ts';
-import { query, param } from '../expression.ts';
+import {
+  query,
+  param,
+  separatedByCommas,
+  type Expression,
+} from '../expression.ts';
 
 /**
  * Returns the stored session room id for the given matrix user or null when none exists.
@@ -19,6 +24,29 @@ export async function fetchSessionRoom(
 
   let [row] = rows;
   return (row.session_room_id as string) ?? null;
+}
+
+/**
+ * The stored session room of each of the given matrix users that has one.
+ */
+export async function fetchSessionRooms(
+  dbAdapter: DBAdapter,
+  matrixUserIds: string[],
+): Promise<Map<string, string>> {
+  let rooms = new Map<string, string>();
+  if (matrixUserIds.length === 0) {
+    return rooms;
+  }
+  let rows = await query(dbAdapter, [
+    'SELECT matrix_user_id, session_room_id FROM users',
+    'WHERE session_room_id IS NOT NULL AND matrix_user_id IN (',
+    ...separatedByCommas(matrixUserIds.map((id) => [param(id)])),
+    ')',
+  ] as Expression);
+  for (let row of rows) {
+    rooms.set(row.matrix_user_id as string, row.session_room_id as string);
+  }
+  return rooms;
 }
 
 /**

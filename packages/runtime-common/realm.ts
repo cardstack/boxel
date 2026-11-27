@@ -24206,11 +24206,17 @@ export class Realm {
     if (watchers.length === 0) {
       return [];
     }
-    let checker = new RealmPermissionChecker(
-      await fetchRealmPermissions(this.#dbAdapter, new URL(this.url)),
+    // The readers the realm's own delivery reaches (`fetchRealmSessionRooms`
+    // and the event room): their own read or write grant, or `*` read. A
+    // `users` grant reaches no one, so its readers still need a copy.
+    let permissions = await fetchRealmPermissions(
       this.#dbAdapter,
-      this.#matrixClient.serverName,
+      new URL(this.url),
     );
+    let deliveredToAll = permissions['*']?.includes('read') ?? false;
+    let delivered = (user: string) =>
+      deliveredToAll ||
+      (permissions[user] ?? []).some((p) => p === 'read' || p === 'write');
     // A few at a time: each watcher costs gate decisions, and the realm's
     // later events wait at the head of its line behind them. They share one
     // budget of decisions, so how many watchers there are can't multiply
@@ -24221,9 +24227,7 @@ export class Realm {
       WATCHERS_IN_FLIGHT,
       watchers,
       async (user): Promise<SessionRoomEvent | undefined> => {
-        // A watcher the ACL now lets read the realm hears its events the way
-        // every reader does, so a copy here would be a second one.
-        if (await checker.can(user, 'read')) {
+        if (delivered(user)) {
           return undefined;
         }
         let event = await this.#watcherEvent(user, completion, budget);
