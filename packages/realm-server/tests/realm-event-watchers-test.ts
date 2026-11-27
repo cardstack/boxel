@@ -6,8 +6,10 @@ import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
   fetchLiveRealmEventWatchers,
+  fetchSessionRooms,
   insertPermissions,
   rri,
+  upsertSessionRoom,
   upsertRealmEventWatcher,
   watcherListedCopy,
 } from '@cardstack/runtime-common';
@@ -25,6 +27,7 @@ import type { RealmHttpServer as Server } from '../server.ts';
 import {
   closeServer,
   createVirtualNetwork,
+  ensureTestUser,
   matrixURL,
   realmConfigCardJSON,
   realmSecretSeed,
@@ -703,6 +706,8 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a watcher who reads only through the `users` grant still gets a copy', async function (assert) {
+      // An account is what lets the `users` grant admit them to a read.
+      await ensureTestUser(db, TEACHER);
       await insertPermissions(db, new URL(EDUCATION), { users: ['read'] });
       await watch(TEACHER);
       await education.write(
@@ -713,6 +718,19 @@ module(basename(import.meta.filename), function (hooks) {
         (await sentFor(ROOM_204)).map(({ user }) => user),
         [TEACHER],
       );
+    });
+
+    test("watchers' session rooms are looked up together", async function (assert) {
+      await ensureTestUser(db, TEACHER);
+      await ensureTestUser(db, COLLEAGUE);
+      await upsertSessionRoom(db, TEACHER, '!teacher-room:localhost');
+      let rooms = await fetchSessionRooms(db, [TEACHER, COLLEAGUE, TEACHER]);
+      assert.deepEqual(
+        [...rooms],
+        [[TEACHER, '!teacher-room:localhost']],
+        'a user with no session room is left out',
+      );
+      assert.strictEqual((await fetchSessionRooms(db, [])).size, 0);
     });
 
     test('a lapsed watcher is sent nothing', async function (assert) {
