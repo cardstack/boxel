@@ -166,8 +166,58 @@ type RecordedAnchor =
       chain: { el: HTMLElement; offset: number; top: number }[];
     };
 
+/** an element's top by layout, which transforms do not move */
+function layoutTop(el: HTMLElement): number {
+  let y = 0;
+  for (
+    let e: HTMLElement | null = el;
+    e;
+    e = e.offsetParent as HTMLElement | null
+  ) {
+    y += e.offsetTop;
+  }
+  return y;
+}
+
+/**
+ * Where the viewport's content ends, by layout: the scroll height without
+ * what a motion layer's transforms add. A move in flight draws its sprites
+ * where they were, and a sprite drawn below the content's end adds to
+ * `scrollHeight` until it lands. Pinned to that painted end, the reader sits
+ * in space that is gone once the move lands; a motion layer that measures
+ * the pin then draws its next move further below the end, and the two feed
+ * each other until the transcript flies off by thousands of pixels. Only
+ * children in flow count: an absolutely placed overlay is never content.
+ */
+function contentEnd(el: HTMLElement): number {
+  let top = layoutTop(el) + el.clientTop;
+  let bottom = 0;
+  for (let child of Array.from(el.children)) {
+    if (!(child instanceof HTMLElement)) {
+      continue;
+    }
+    let style = getComputedStyle(child);
+    if (
+      style.display === 'none' ||
+      style.position === 'absolute' ||
+      style.position === 'fixed'
+    ) {
+      continue;
+    }
+    bottom = Math.max(
+      bottom,
+      layoutTop(child) -
+        top +
+        child.offsetHeight +
+        (parseFloat(style.marginBottom) || 0),
+    );
+  }
+  let padding = parseFloat(getComputedStyle(el).paddingBottom) || 0;
+  return Math.max(el.clientHeight, Math.ceil(bottom + padding));
+}
+
 function distanceFromEnd(el: HTMLElement): number {
-  return el.scrollHeight - el.clientHeight - el.scrollTop;
+  return contentEnd(el) - el.clientHeight - el.scrollTop;
 }
 
 /** Installs every listener and observer once, for the component's lifetime.
@@ -449,7 +499,7 @@ export class StickToBottom extends Component<StickToBottomSignature> {
     if (!el) {
       return;
     }
-    let max = Math.max(0, el.scrollHeight - el.clientHeight);
+    let max = Math.max(0, contentEnd(el) - el.clientHeight);
     let target = toDevicePixel(Math.min(Math.max(0, top), max));
     if (
       Math.abs(el.scrollTop - target) < Math.max(UNPIN_EPSILON, devicePixel())
@@ -469,8 +519,10 @@ export class StickToBottom extends Component<StickToBottomSignature> {
 
   private pinToEnd() {
     let el = this.viewport;
-    if (el && distanceFromEnd(el) > UNPIN_EPSILON) {
-      this.scrollTo(el.scrollHeight);
+    // past the end too: a scroll that landed in a move's painted overflow
+    // comes back to where the content ends
+    if (el && Math.abs(distanceFromEnd(el)) > UNPIN_EPSILON) {
+      this.scrollTo(contentEnd(el));
     }
   }
 
@@ -480,7 +532,7 @@ export class StickToBottom extends Component<StickToBottomSignature> {
       return;
     }
     this.setFollowing(true, 'api');
-    this.scrollTo(el.scrollHeight, behavior ?? 'auto');
+    this.scrollTo(contentEnd(el), behavior ?? 'auto');
   };
 
   reveal = (id: string, opts?: { block?: 'start' | 'center' }): boolean => {
@@ -746,21 +798,12 @@ export class StickToBottom extends Component<StickToBottomSignature> {
   //   3. the end, while following
   //   4. the reading line: the element a third of the way down the view
   //
-  // Positions are read from layout (offsets), which a motion layer's
-  // transforms do not move, so the correction and the motion never fight.
-  // See packages/pretui/docs/scroll-anchoring-protocol.md.
+  // Positions, and where the content ends, are read from layout (offsets),
+  // which a motion layer's transforms do not move, so the correction and the
+  // motion never fight. See packages/pretui/docs/scroll-anchoring-protocol.md.
 
-  /** an element's top by layout, which transforms do not move */
   private layoutTop(el: HTMLElement): number {
-    let y = 0;
-    for (
-      let e: HTMLElement | null = el;
-      e;
-      e = e.offsetParent as HTMLElement | null
-    ) {
-      y += e.offsetTop;
-    }
-    return y;
+    return layoutTop(el);
   }
 
   /** The element under the reading line: down through the content to the
@@ -891,15 +934,16 @@ export class StickToBottom extends Component<StickToBottomSignature> {
       // The component's own smooth scroll is on its way: writing a position
       // now would cut it short. Its target moves by what layout moved.
       let target = this.ownTarget!;
+      let end = contentEnd(el);
       if (this.following) {
-        target = el.scrollHeight;
+        target = end;
       } else if (recorded && recorded.kind !== 'end') {
         let held = recorded.chain.find((entry) => entry.el.isConnected);
         if (held) {
           target += this.layoutTop(held.el) - held.top;
         }
       }
-      let max = Math.max(0, el.scrollHeight - el.clientHeight);
+      let max = Math.max(0, end - el.clientHeight);
       if (Math.abs(Math.min(target, max) - this.ownTarget!) >= minDrift) {
         this.scrollTo(target, 'smooth');
       }

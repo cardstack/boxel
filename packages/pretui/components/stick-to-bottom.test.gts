@@ -66,8 +66,15 @@ function spacer(height: number): HTMLElement {
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+/** The distance to where the content ends by layout, as the component
+ * reads it: a row's text that spills below its box, or a move in flight,
+ * adds to `scrollHeight` but is not where the content ends. */
 function distance(el: HTMLElement): number {
-  return el.scrollHeight - el.clientHeight - el.scrollTop;
+  return (
+    Math.max(el.clientHeight, content().offsetHeight) -
+    el.clientHeight -
+    el.scrollTop
+  );
 }
 function frames(): Promise<void> {
   return new Promise((resolve) =>
@@ -251,6 +258,46 @@ module('Pretui | components/stick-to-bottom', function (hooks) {
       [],
       'its own scrolls are never reported as the reader leaving',
     );
+  });
+
+  test('following pins the end by layout, not the overflow of a move in flight', async function (assert) {
+    let state = new State();
+    await render(
+      <template>
+        <div style={{FRAME}}>
+          <StickToBottom
+            style={{ROOT}}
+            @onFollowChange={{state.onFollowChange}}
+          >
+            {{#each state.rows as |id|}}
+              <p data-transcript-id={{id}} style={{ROW}}>{{id}}</p>
+            {{/each}}
+          </StickToBottom>
+        </div>
+      </template>,
+    );
+    let el = viewport();
+    await waitUntil(() => distance(el) < 1, { timeout: 2000 });
+
+    // a motion layer draws a row where it was while its move is in flight:
+    // translated below the content's end, it adds to the scroll height
+    let row = document.querySelector(
+      "[data-transcript-id='r9']",
+    ) as HTMLElement;
+    row.style.transform = 'translateY(600px)';
+    state.append(2);
+    let layoutEnd = () => content().offsetHeight - el.clientHeight;
+    await waitUntil(() => content().offsetHeight >= 600, { timeout: 2000 });
+    await frames();
+    assert.ok(
+      el.scrollHeight - el.clientHeight > layoutEnd() + 400,
+      'the move in flight adds to the scroll height',
+    );
+    assert.ok(
+      Math.abs(el.scrollTop - layoutEnd()) < 1,
+      `pinned where the content ends (top ${el.scrollTop}, end ${layoutEnd()})`,
+    );
+    assert.strictEqual(root().dataset['following'], 'true', 'still following');
   });
 
   test('a scroll the reader did not make (content shrinking) keeps following', async function (assert) {
@@ -494,7 +541,10 @@ module('Pretui | components/stick-to-bottom', function (hooks) {
           >
             {{#each state.rows as |id|}}
               <p data-transcript-id={{id}} style={{ROW}}>
-                <button type='button' data-test-row-button={{id}}>{{id}}</button>
+                <button
+                  type='button'
+                  data-test-row-button={{id}}
+                >{{id}}</button>
               </p>
             {{/each}}
           </StickToBottom>
@@ -689,7 +739,7 @@ module('Pretui | components/stick-to-bottom', function (hooks) {
       await waitUntil(() => el.getAttribute('aria-busy') === null, {
         timeout: 2000,
       });
-      assert.strictEqual(loads, 1, "the load ran once");
+      assert.strictEqual(loads, 1, 'the load ran once');
       assert.ok(
         logged.some(
           (entry) =>
