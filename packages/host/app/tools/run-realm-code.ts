@@ -4017,7 +4017,7 @@ async function readFollowUpBatch(
   let readBatch = io.readBatchFollowUp;
   let stop = signal ?? new AbortController().signal;
   // A completed batch whose results can't be read yet is asked for again,
-  // for at most a third of the run's time left and a minute. A read that
+  // within at most a third of the run's time left and ten seconds. A read that
   // never succeeds throws `BatchNotReadableYet`, and the run's tool tells the
   // worker, which holds the follow-up for the tick to start again: the
   // batch's results must be used while OpenRouter holds them.
@@ -4026,15 +4026,13 @@ async function readFollowUpBatch(
     Math.min(FOLLOW_UP_READ_RETRY_LIMIT_MS, (endsAt - Date.now()) / 3);
   let read: AIBatchFollowUpRead | undefined;
   for (let retry = 0; !read; retry++) {
-    let wait =
-      FOLLOW_UP_READ_BACKOFF_MS[
-        Math.min(retry, FOLLOW_UP_READ_BACKOFF_MS.length - 1)
-      ];
+    let wait = FOLLOW_UP_READ_BACKOFF_MS[retry];
     try {
       read = await readBatch(batchId, stop);
     } catch (error) {
       if (
         !(error instanceof BatchNotReadableYet) ||
+        wait === undefined ||
         Date.now() + wait > retryUntil
       ) {
         throw error;
@@ -4046,9 +4044,10 @@ async function readFollowUpBatch(
 }
 
 // How long a follow-up waits before each retry of a completed batch it
-// couldn't read yet, and the most it spends retrying.
-const FOLLOW_UP_READ_BACKOFF_MS = [2_000, 5_000, 10_000, 20_000];
-const FOLLOW_UP_READ_RETRY_LIMIT_MS = 60_000;
+// couldn't read yet, and the most it spends retrying. The realm server
+// already retries its own read, so the tab asks once more.
+const FOLLOW_UP_READ_BACKOFF_MS = [2_000];
+const FOLLOW_UP_READ_RETRY_LIMIT_MS = 10_000;
 
 // The batch path's answer for a completed batch whose results it couldn't
 // read from OpenRouter: the follow-up asks again, and is held when no try

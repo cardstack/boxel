@@ -1225,22 +1225,37 @@ answers.
   its tab the batch's id (`followUpBatchId`, its slot); before the script
   runs, the tab reads `GET /_ai-batches/<id>/follow-up` with the run's token
   (`handleAIBatchFollowUp`, which answers only the batch's own follow-up run)
-  and gets an `AIBatchFollowUpRead`. A batch OpenRouter reports `completed`
-  with its results, that no run found still open past its deadline, gives
-  each request its result by `customId`; the tab reads each one as
-  `realm.resolve` reads its answer (`readResolveAnswer`). Any other batch is
-  `late` (still open, `failed`, `expired`, `cancelled`, `404`/`410` as
-  `gone`, or unreadable as `unread`): the handler sets the batch's
-  `deadline_missed_at` when it was still open, so its results are never
-  used, and the tab sends each stored body at the normal price through the
-  run's `_request-forward` (`resolveChat`), a few at a time, each a
-  `resolve` call against the run's cap, inside its time limit. Either way
+  and gets an `AIBatchFollowUpRead`. The handler reads the batch from
+  OpenRouter, retrying a network error, 5xx or 429 twice.
+  - A batch OpenRouter reports `completed` with its results, that isn't
+    late, gives each request its result by `customId`; the tab reads each
+    one as `realm.resolve` reads its answer (`readResolveAnswer`).
+  - A batch whose row says `completed` but that can't be read is answered
+    503, since its results must be used (ADR 030 §1.5). The tab asks once
+    more, then answers with `followUpBatchUnreadable`, and the worker holds
+    the follow-up (`follow-up-batch-unreadable`): nothing it staged lands,
+    the batch's `follow_up_unreadable_count` goes up, and the tick starts
+    it again only after `follow_up_retry_at` (1, 5, 15, then 60 minutes,
+    `recordAIBatchUnreadable`).
+  - Any other batch is `late` (still open, `failed`, `expired`,
+    `cancelled`, `404`/`410` as `gone`, unreadable while not completed as
+    `unread`, or already fallen back): the handler sets the batch's
+    `deadline_missed_at` whatever its status, so no later attempt uses its
+    results, and the tab sends each stored body at the normal price through
+    the run's `_request-forward` (`resolveChat`), a few at a time, each a
+    `resolve` call against the run's cap, inside its time limit.
+
+  The tab echoes `followUpBatchId` in its outcome; a follow-up whose tab
+  answers without it (a host that predates this read) is held as
+  `follow-up-tab-too-old` and started again by the tick. When the read
+  succeeds,
   the tab first reports the submitting run's plan from the batch's
   milestone on and enters that milestone, adds one task saying how it ended
   (`Batch completed: …` or `Deadline reached: … at the normal price`), and
   the script gets `realm.current.automation.batch` =
   `{ id, deadline, milestone, late, results }`. The run's log gets a
   `trigger` line saying which.
+
 - **In a Preview** nothing is submitted (ADR 030 §1.1). When the card turns
   on `batchedAI` (the worker passes `batchedAI` in the script input),
   `realm.resolve.batch` sends each request at once through `realm.resolve`'s

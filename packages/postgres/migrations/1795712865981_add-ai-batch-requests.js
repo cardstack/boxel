@@ -12,13 +12,25 @@
 //   its results only, never its requests. The row goes once the batch's
 //   follow-up has ended for good, or the batch can get none.
 //
+// - `ai_batches.follow_up_unreadable_count` counts the times the batch's
+//   follow-up was held because the batch completed and its results couldn't
+//   be read from OpenRouter, and `follow_up_retry_at` is when the tick may
+//   start that held follow-up again: each hold waits longer than the last,
+//   so a batch that stays unreadable costs a tab now and then, not every
+//   minute.
+//
 // The table is server-only, and excluded from the SQLite schema dump, as
 // `ai_batches` is.
 
 exports.shorthands = undefined;
 
 exports.up = (pgm) => {
-  pgm.sql(`ALTER TABLE ai_batches ADD COLUMN IF NOT EXISTS milestone text`);
+  pgm.sql(`
+    ALTER TABLE ai_batches
+      ADD COLUMN IF NOT EXISTS milestone text,
+      ADD COLUMN IF NOT EXISTS follow_up_unreadable_count integer NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS follow_up_retry_at timestamptz
+  `);
   pgm.sql(`
     CREATE TABLE IF NOT EXISTS ai_batch_requests (
       batch_id text PRIMARY KEY REFERENCES ai_batches (batch_id) ON DELETE CASCADE,
@@ -29,5 +41,10 @@ exports.up = (pgm) => {
 
 exports.down = (pgm) => {
   pgm.sql(`DROP TABLE IF EXISTS ai_batch_requests`);
-  pgm.sql(`ALTER TABLE ai_batches DROP COLUMN IF EXISTS milestone`);
+  pgm.sql(`
+    ALTER TABLE ai_batches
+      DROP COLUMN IF EXISTS follow_up_retry_at,
+      DROP COLUMN IF EXISTS follow_up_unreadable_count,
+      DROP COLUMN IF EXISTS milestone
+  `);
 };

@@ -7,6 +7,7 @@ import {
   type AdmittedRunKind,
   type AutomationAdmissionChecks,
 } from '../automation-admission.ts';
+import { recordAIBatchUnreadable } from '../ai-batches.ts';
 import { MAX_RUN_SECONDS } from '../automation-declaration.ts';
 import { automationVersion, versionKeyOf } from '../automation-key-approval.ts';
 import {
@@ -650,7 +651,9 @@ async function attemptRun(
   ) {
     // The batch completed, and OpenRouter couldn't be read for its results,
     // which the follow-up must use while OpenRouter holds them. Nothing the
-    // script staged lands; the tick starts the follow-up again.
+    // script staged lands; the tick starts the follow-up again once its
+    // batch's backoff has passed, which grows with each such hold.
+    await recordAIBatchUnreadable(dbAdapter, run.slot);
     return await hold(
       FOLLOW_UP_BATCH_UNREADABLE_REASON,
       "the batch completed, and its results couldn't be read from OpenRouter",

@@ -34,7 +34,10 @@
 // canceled (`holdAutomationFollowUpRuns` in `automation-runs.ts`): its run
 // goes back to pending with no job, and its batch records the hold
 // (`follow_up_held_at`). Each tick enqueues a held follow-up's job again once
-// its automation is active, and clears the hold.
+// its automation is active, and clears the hold. A follow-up held because its
+// batch completed and couldn't be read waits for its batch's
+// `follow_up_retry_at` too, which grows with each such hold
+// (`recordAIBatchUnreadable`).
 //
 // A resume makes the person who resumed the follow-up's identity, from the
 // resume on (`follow_up_acts_as`, set by `resumeAutomation`): the follow-up
@@ -252,7 +255,11 @@ async function dueBatches(
     'FROM ai_batches b JOIN automations a ON a.automation_id = b.automation_id',
     'WHERE',
     ...((which === 'held'
-      ? ['b.follow_up_held_at IS NOT NULL']
+      ? [
+          'b.follow_up_held_at IS NOT NULL AND (b.follow_up_retry_at IS NULL OR b.follow_up_retry_at <=',
+          param(nowISO),
+          '::timestamptz)',
+        ]
       : [
           'b.follow_up_run_id IS NULL AND b.follow_up_dropped_at IS NULL AND (b.deadline <=',
           param(nowISO),

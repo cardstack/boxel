@@ -48,7 +48,10 @@ import {
   readAutomationDeclaration,
 } from '@cardstack/runtime-common/automation-declaration';
 import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
-import { startResumedAIBatchFollowUps } from '@cardstack/runtime-common/ai-batch-follow-ups';
+import {
+  startDueAIBatchFollowUps,
+  startResumedAIBatchFollowUps,
+} from '@cardstack/runtime-common/ai-batch-follow-ups';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
 import { versionKeyOf } from '@cardstack/runtime-common/automation-key-approval';
 import { automationCreditsSince } from '@cardstack/runtime-common/automation-spend';
@@ -1036,6 +1039,45 @@ module(basename(import.meta.filename), function (hooks) {
         (line) => line.data?.reason === 'follow-up-batch-unreadable',
       ),
       'the held run’s log says why it was held',
+    );
+
+    // The tick waits out the batch's backoff before it starts the follow-up
+    // again, so a batch that stays unreadable doesn't cost a tab a minute.
+    let [backoff] = await query(dbAdapter, [
+      'SELECT follow_up_unreadable_count, EXTRACT(EPOCH FROM follow_up_retry_at - now()) AS wait FROM ai_batches WHERE batch_id =',
+      param(followUp.slot),
+    ]);
+    assert.strictEqual(Number(backoff.follow_up_unreadable_count), 1);
+    let wait = Number(backoff.wait);
+    let aboutAMinute = wait > 50 && wait <= 60;
+    assert.true(aboutAMinute, `the first wait is a minute (${wait})`);
+    let recordingQueue = {
+      publish: async () => ({ id: 1, done: new Promise(() => {}) }) as any,
+      destroy: async () => {},
+    } as unknown as QueuePublisher;
+    let now = Math.floor(Date.now() / 1000);
+    let early = await startDueAIBatchFollowUps(dbAdapter, {
+      queue: recordingQueue,
+      virtualNetwork,
+      now: now + 30,
+      automationId: automationId(CLEAN),
+    });
+    assert.false(
+      early.some((outcome) => outcome.batchId === followUp.slot),
+      'the follow-up waits within its backoff',
+    );
+    let later = await startDueAIBatchFollowUps(dbAdapter, {
+      queue: recordingQueue,
+      virtualNetwork,
+      now: now + 90,
+      automationId: automationId(CLEAN),
+    });
+    assert.deepEqual(
+      later
+        .filter((outcome) => outcome.batchId === followUp.slot)
+        .map((outcome) => outcome.kind),
+      ['resumed'],
+      'once the backoff has passed, the tick starts it again',
     );
   });
 

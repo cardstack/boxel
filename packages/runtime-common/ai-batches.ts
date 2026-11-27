@@ -462,6 +462,32 @@ export async function dropFinishedAIBatchRequests(
   ]);
 }
 
+// How long the tick waits before it starts again a follow-up held because its
+// batch completed and couldn't be read, by how many times that has happened:
+// 1, 5 and 15 minutes, then an hour each time after.
+export const AI_BATCH_UNREADABLE_BACKOFF_SECONDS = [60, 300, 900, 3600];
+
+// Records that a batch's follow-up was held because the batch completed and
+// its results couldn't be read from OpenRouter, and when the tick may start
+// the follow-up again (`follow_up_retry_at`), each time later than the last.
+export async function recordAIBatchUnreadable(
+  dbAdapter: DBAdapter,
+  batchId: string,
+): Promise<void> {
+  let steps = AI_BATCH_UNREADABLE_BACKOFF_SECONDS;
+  await query(dbAdapter, [
+    'UPDATE ai_batches SET follow_up_unreadable_count = follow_up_unreadable_count + 1,',
+    'follow_up_retry_at = now() + make_interval(secs => (ARRAY[',
+    ...steps.flatMap((seconds, index) =>
+      index === 0 ? [param(seconds)] : [',', param(seconds)],
+    ),
+    ']::integer[])[LEAST(follow_up_unreadable_count + 1,',
+    param(steps.length),
+    ')]) WHERE batch_id =',
+    param(batchId),
+  ] as Expression);
+}
+
 // Records that a batch's follow-up sends the batch's requests at the normal
 // price, whatever the batch's status: the batch is late from then on, so no
 // later attempt of the follow-up switches to its results after its requests

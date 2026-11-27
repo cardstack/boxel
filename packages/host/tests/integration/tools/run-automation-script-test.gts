@@ -1347,7 +1347,7 @@ return 'done';`);
         ...tool.automationRealmIO(testRealmURL),
         readBatchFollowUp: async (batchId) => {
           tries++;
-          if (tries < 3) {
+          if (tries < 2) {
             throw new BatchNotReadableYet('not yet');
           }
           return {
@@ -1364,7 +1364,7 @@ return 'done';`);
     });
     let result = JSON.parse((await done).scriptResult);
 
-    assert.strictEqual(tries, 3);
+    assert.strictEqual(tries, 2);
     assert.false(result.late);
     assert.deepEqual(result.results, ['bug']);
   });
@@ -1391,7 +1391,7 @@ return 'done';`);
     });
 
     await assert.rejects(done, /couldn't read batch batch_1 yet/);
-    assert.strictEqual(tries, 3, 'it asked within a third of its time left');
+    assert.strictEqual(tries, 2, 'it asks once more, then gives up');
   });
 
   test('a follow-up whose batch can’t be read fails its run before the script runs', async function (assert) {
