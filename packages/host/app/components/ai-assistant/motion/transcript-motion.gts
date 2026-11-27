@@ -46,22 +46,28 @@ interface Start {
 const startsByPass = new WeakMap<Changeset, Map<Sprite, Start>>();
 
 /**
- * Where each message starts in this pass, top to bottom.
+ * Where each message starts in this pass.
  *
  * A kept message starts where it was painted and takes its new size at
  * once (translate only, so text never scales). A message that grew
  * therefore draws its new bottom at once, and the message below it,
  * starting where it was painted, would sit under that bottom until both
- * landed. So no message starts above the block above it: its start is at
- * least that block's, and on one clock the two keep their gap in every
- * frame (ADR 013 §1.10, §1.20). A message that grew pushes the ones below
- * down at once, as layout does, and a message that shrank lets them glide
- * up.
+ * landed. So no message starts above the block above it: on one clock the
+ * two keep their gap in every frame (ADR 013 §1.10, §1.20). A message that
+ * grew pushes the ones below down at once, as layout does, and a message
+ * that shrank lets them glide up.
  *
- * An arrival is fixed to the block above the same way: it starts where
- * that block's move puts it and travels on its clock. Following, the
- * block above starts a follow's distance lower and so does the arrival;
- * with nothing above it moving, it rises its usual few px.
+ * Following, the end is where the reader looks, and it stays put: what the
+ * follow's scroll moved lands with it, and the newest message never starts
+ * below the view's edge. What changed above the end still moves (a turn
+ * folding, a disclosure), relative to the end. Played as a glide, the
+ * follow kept the newest lines out of view for a move's length on every
+ * update, and a cap opening under the transcript moved it a pixel a frame.
+ *
+ * Not following, an arrival is fixed to the block above the same way: it
+ * starts where that block's move puts it and travels on its clock; with
+ * nothing above it moving, it rises its usual few px. Following, it fades
+ * in where it lands.
  */
 function startsOf(changeset: Changeset): Map<Sprite, Start> {
   let known = startsByPass.get(changeset);
@@ -73,22 +79,50 @@ function startsOf(changeset: Changeset): Map<Sprite, Start> {
     .sprites([...STACKED])
     .filter((s) => s.final)
     .sort((a, b) => a.final!.page.y - b.final!.page.y);
-  let above: number | undefined;
-  for (let s of stack) {
-    let start: Start;
-    if (s.type === 'inserted') {
-      start = above
-        ? { y: above, travelling: true }
-        : { y: RISE, travelling: false };
-    } else {
-      let painted = -(s.delta?.y ?? 0);
-      start = {
-        y: above === undefined ? painted : Math.max(painted, above),
-        travelling: false,
-      };
+  let painted = (s: Sprite) => -(s.delta?.y ?? 0);
+  let following =
+    stack[0]?.element
+      .closest('[data-following]')
+      ?.getAttribute('data-following') === 'true';
+  if (following) {
+    // the end holds: offsets are taken against the bottom kept message's,
+    // and from the bottom up no message starts below the one under it
+    let kept = stack.filter((s) => s.type === 'kept');
+    let base = kept.length ? painted(kept[kept.length - 1]!) : 0;
+    let below: number | undefined;
+    for (let i = stack.length - 1; i >= 0; i--) {
+      let s = stack[i]!;
+      let start: Start;
+      if (s.type === 'inserted') {
+        // it fades in where it lands: a rise would start it below the edge,
+        // and a pass during the rise would take the rise for the follow's
+        start = { y: 0, travelling: false };
+        below = below === undefined ? 0 : Math.min(below, 0);
+      } else {
+        let own = painted(s) - base;
+        let y = below === undefined ? Math.min(own, 0) : Math.min(own, below);
+        start = { y, travelling: false };
+        below = y;
+      }
+      known.set(s, start);
     }
-    known.set(s, start);
-    above = start.y;
+  } else {
+    let above: number | undefined;
+    for (let s of stack) {
+      let start: Start;
+      if (s.type === 'inserted') {
+        start = above
+          ? { y: above, travelling: true }
+          : { y: RISE, travelling: false };
+      } else {
+        start = {
+          y: above === undefined ? painted(s) : Math.max(painted(s), above),
+          travelling: false,
+        };
+      }
+      known.set(s, start);
+      above = start.y;
+    }
   }
   startsByPass.set(changeset, known);
   return known;
