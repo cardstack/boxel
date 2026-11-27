@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import {
   ensureTrailingSlash,
   isAutomationScriptInput,
+  type AIBatchFollowUpRead,
   type AutomationScriptOutcome,
 } from '@cardstack/runtime-common';
 import { presentsAsRunToken } from '@cardstack/runtime-common/run-token';
@@ -16,6 +17,7 @@ import {
 } from '../lib/realm-runner/automation';
 import {
   resolve as resolveJSON,
+  resolveChat,
   type ProxySend,
 } from '../lib/realm-runner/research';
 import { RunLogSink } from '../lib/realm-runner/run-log-sink';
@@ -24,6 +26,7 @@ import { RealmCallFailure, RealmScriptError } from '../lib/realm-runner/runner';
 import { claimsFromRawToken } from '../services/realm';
 
 import RunRealmCodeTool, {
+  BatchNotReadableYet,
   runAutomationScript,
   type AutomationRealmIO,
   type SubmitResolveBatch,
@@ -103,10 +106,25 @@ export default class RunAutomationTool extends HostBaseTool<
     });
     let runner = new RunRealmCodeTool(this.toolContext);
     let send = this.runTokenSend(runToken);
+    let readBatchFollowUp = this.runTokenBatchFollowUp(runToken);
+    // Whether the follow-up's last read of its batch found it completed but
+    // unreadable, so the worker holds the follow-up rather than ending it.
+    let batchUnreadable = false;
     let io: AutomationRealmIO = {
       ...runner.automationRealmIO(realmURL),
       resolve: (request, signal) => resolveJSON(request, send, signal),
+      resolveChat: (body, signal) => resolveChat(body, send, signal),
       resolveBatch: this.runTokenBatchSubmit(runToken),
+      readBatchFollowUp: async (batchId, signal) => {
+        try {
+          let read = await readBatchFollowUp(batchId, signal);
+          batchUnreadable = false;
+          return read;
+        } catch (error) {
+          batchUnreadable = error instanceof BatchNotReadableYet;
+          throw error;
+        }
+      },
     };
 
     // The run's time limit counts from its start, so the time it waited for
@@ -144,6 +162,9 @@ export default class RunAutomationTool extends HostBaseTool<
               secondsCap,
               batchDeadlineMinutes: scriptInput.batchDeadlineMinutes,
               batchedAI: scriptInput.batchedAI === true,
+              ...(typeof scriptInput.followUpBatchId === 'string'
+                ? { followUpBatchId: scriptInput.followUpBatchId }
+                : {}),
               io,
               progress,
               secrets,
@@ -163,6 +184,14 @@ export default class RunAutomationTool extends HostBaseTool<
     // anyway.
     await flushBefore(progress, endsAt - FINAL_FLUSH_MARGIN_MS);
 
+    // The worker holds a follow-up whose tab doesn't say it ran the batch's
+    // follow-up, so it never commits without the batch's answers.
+    if (typeof scriptInput.followUpBatchId === 'string') {
+      outcome.followUpBatchId = scriptInput.followUpBatchId;
+      if (batchUnreadable) {
+        outcome.followUpBatchUnreadable = true;
+      }
+    }
     let commandModule = await this.loadToolModule();
     return new commandModule.JsonCard({ json: outcome });
   }
@@ -239,6 +268,52 @@ export default class RunAutomationTool extends HostBaseTool<
         );
       }
       return { id };
+    };
+  }
+
+  // A batch's follow-up reads its batch with the run's token, from the realm
+  // server's batch path, which answers only the batch's own follow-up run:
+  // the batch's results, or its requests to send at the normal price.
+  private runTokenBatchFollowUp(
+    runToken: string,
+  ): NonNullable<AutomationRealmIO['readBatchFollowUp']> {
+    let batchesURL = `${realmServerOf(runToken)}_ai-batches`;
+    return async (batchId, signal) => {
+      let response = await this.network.fetch(
+        `${batchesURL}/${encodeURIComponent(batchId)}/follow-up`,
+        {
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${runToken}`,
+          },
+          signal,
+        },
+      );
+      let text = await response.text();
+      if (response.status === 503) {
+        throw new BatchNotReadableYet(
+          `The follow-up couldn't read batch ${batchId} yet: ${batchRefusal(text)}`,
+        );
+      }
+      if (!response.ok) {
+        throw new Error(
+          `The follow-up couldn't read batch ${batchId}: ${response.status} - ${batchRefusal(text)}`,
+        );
+      }
+      let read: AIBatchFollowUpRead;
+      try {
+        read = JSON.parse(text);
+      } catch {
+        throw new Error(
+          `The follow-up couldn't read batch ${batchId}: the batch path answered with no batch`,
+        );
+      }
+      if (!read || !Array.isArray(read.requests)) {
+        throw new Error(
+          `The follow-up couldn't read batch ${batchId}: the batch path answered with no requests`,
+        );
+      }
+      return read;
     };
   }
 }

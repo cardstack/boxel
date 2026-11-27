@@ -4130,6 +4130,7 @@ export async function createAutomationRunToken(
     timeLimitSeconds = 600,
     automation,
     approveBindings = false,
+    trigger = 'test',
   }: {
     attempt?: number;
     readRealms?: string[];
@@ -4137,6 +4138,8 @@ export async function createAutomationRunToken(
     timeLimitSeconds?: number;
     automation?: string;
     approveBindings?: boolean;
+    // The run's trigger label: `batch` makes it a batch's follow-up.
+    trigger?: string;
   } = {},
 ): Promise<{ token: string; run: AutomationRun }> {
   let created = await createAutomationRun(dbAdapter, {
@@ -4144,7 +4147,7 @@ export async function createAutomationRunToken(
       `${realm.url}${automation ?? `Automation/test-${randomUUID()}`}`,
     ),
     realm: ri(realm.url),
-    trigger: 'test',
+    trigger,
     slot: randomUUID(),
     actsAs,
   });

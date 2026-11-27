@@ -165,6 +165,11 @@ export interface AutomationScriptInput extends JSONTypes.Object {
   // requests at once, at the normal price, only when it is on, as a run's
   // batch is submitted only then.
   batchedAI: boolean;
+  // For a batch's follow-up, the batch's id; null for any other run. The tab
+  // reads the batch with it before the script runs, and gives the script its
+  // results, or the answers its requests get at the normal price, as
+  // `realm.current.automation.batch`.
+  followUpBatchId: string | null;
 }
 
 export function isAutomationScriptInput(
@@ -185,6 +190,9 @@ export function isAutomationScriptInput(
     !Number.isNaN(Date.parse(input.endsAt)) &&
     (input.batchDeadlineMinutes === undefined ||
       typeof input.batchDeadlineMinutes === 'number') &&
+    (input.followUpBatchId == null ||
+      (typeof input.followUpBatchId === 'string' &&
+        input.followUpBatchId.length > 0)) &&
     !!automation &&
     typeof automation === 'object' &&
     typeof automation.url === 'string' &&
@@ -215,6 +223,15 @@ export type AutomationScriptOutcome = (
   // the tab's clock, for the run's telemetry. Absent when the script never
   // started.
   timing?: AutomationScriptTiming;
+  // The batch whose follow-up the tab ran, echoing the input's
+  // `followUpBatchId`: a tab that leaves it out never read the batch, so its
+  // script ran without the batch's answers (`run-automation.ts` holds such a
+  // follow-up for another attempt).
+  followUpBatchId?: string;
+  // Set when the follow-up's batch completed and its results couldn't be read
+  // from OpenRouter within the run. The worker holds the follow-up for the
+  // tick to start again, since the batch's results must be used.
+  followUpBatchUnreadable?: boolean;
 };
 
 export interface AutomationScriptTiming extends JSONTypes.Object {

@@ -185,9 +185,11 @@ const BOOTSTRAP = `
       return text.trim();
     };
     // A task belongs to the milestone the script is in, so the script marks
-    // one first. realm.progress.count records nothing: a run says once
-    // in its log that tasks take its place, and the script runs on.
-    let inMilestone = false;
+    // one first. A batch's follow-up starts in the batch's milestone, which
+    // the run entered again before the script. realm.progress.count records
+    // nothing: a run says once in its log that tasks take its place, and the
+    // script runs on.
+    let inMilestone = automation?.batch !== undefined;
     let countRetired = false;
     // The script's own line that made the call: the first frame of the
     // script in the stack, less the line the wrapper adds above it.

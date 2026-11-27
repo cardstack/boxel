@@ -34,7 +34,10 @@
 // canceled (`holdAutomationFollowUpRuns` in `automation-runs.ts`): its run
 // goes back to pending with no job, and its batch records the hold
 // (`follow_up_held_at`). Each tick enqueues a held follow-up's job again once
-// its automation is active, and clears the hold.
+// its automation is active, and clears the hold. A follow-up held because its
+// batch completed and couldn't be read waits for its batch's
+// `follow_up_retry_at` too, which grows with each such hold
+// (`recordAIBatchUnreadable`).
 //
 // A resume makes the person who resumed the follow-up's identity, from the
 // resume on (`follow_up_acts_as`, set by `resumeAutomation`): the follow-up
@@ -53,6 +56,14 @@
 // (`follow_up_dropped_at`), which takes it out of the tick's search. A
 // removed automation's held follow-up is canceled with its other runs, and
 // its hold cleared. The settle job still bills every such batch.
+//
+// Before its script runs, the follow-up's tab reads its batch through the
+// batch path (`/_ai-batches/<id>/follow-up`): the results of a batch that
+// completed, or, for one that has none to give, the requests the submit
+// recorded (`ai_batch_requests`), which the tab sends again at the normal
+// price. The script gets either as `realm.current.automation.batch`. Each
+// tick drops the requests of a batch whose follow-up has ended for good, or
+// that can get none (`dropFinishedAIBatchRequests`).
 
 import { BATCH_RUN_TRIGGER } from './automation-declaration.ts';
 import type { AutomationJobInput } from './automation-run-command.ts';
@@ -61,7 +72,10 @@ import {
   emitAutomationRunEvent,
   type AutomationRunEnqueuedEvent,
 } from './automation-run-telemetry.ts';
-import { AI_BATCH_FINAL_STATES } from './ai-batches.ts';
+import {
+  AI_BATCH_FINAL_STATES,
+  dropFinishedAIBatchRequests,
+} from './ai-batches.ts';
 import { insertOrFindAutomationRun } from './automation-runs.ts';
 import type { DBAdapter } from './db.ts';
 import {
@@ -146,6 +160,7 @@ export async function startDueAIBatchFollowUps(
 ): Promise<AIBatchFollowUpOutcome[]> {
   let now = options.now ?? Math.floor(Date.now() / 1000);
   await dropUnreachableFollowUps(dbAdapter, now);
+  await dropFinishedAIBatchRequests(dbAdapter);
   return [
     ...(await startFollowUps(dbAdapter, 'held', now, options)),
     ...(await startFollowUps(dbAdapter, 'due', now, options)),
@@ -240,7 +255,11 @@ async function dueBatches(
     'FROM ai_batches b JOIN automations a ON a.automation_id = b.automation_id',
     'WHERE',
     ...((which === 'held'
-      ? ['b.follow_up_held_at IS NOT NULL']
+      ? [
+          'b.follow_up_held_at IS NOT NULL AND (b.follow_up_retry_at IS NULL OR b.follow_up_retry_at <=',
+          param(nowISO),
+          '::timestamptz)',
+        ]
       : [
           'b.follow_up_run_id IS NULL AND b.follow_up_dropped_at IS NULL AND (b.deadline <=',
           param(nowISO),

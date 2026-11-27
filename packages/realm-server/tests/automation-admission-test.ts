@@ -28,6 +28,8 @@ import {
   runAutomationAttempt,
   CachingDefinitionLookup,
   type AutomationRun,
+  FOLLOW_UP_HELD_REASON,
+  type AutomationScriptInput,
   type AutomationScriptOutcome,
   type Job,
   type JobInfo,
@@ -46,7 +48,10 @@ import {
   readAutomationDeclaration,
 } from '@cardstack/runtime-common/automation-declaration';
 import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
-import { startResumedAIBatchFollowUps } from '@cardstack/runtime-common/ai-batch-follow-ups';
+import {
+  startDueAIBatchFollowUps,
+  startResumedAIBatchFollowUps,
+} from '@cardstack/runtime-common/ai-batch-follow-ups';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
 import { versionKeyOf } from '@cardstack/runtime-common/automation-key-approval';
 import { automationCreditsSince } from '@cardstack/runtime-common/automation-spend';
@@ -297,14 +302,28 @@ module(basename(import.meta.filename), function (hooks) {
 
   // A tab that answers `outcome`, counting how often it is asked. It reports
   // a fixed tab time, so a run it runs always has compute to charge.
-  function stubTab(calls: RunCommandArgs[]): Prerenderer {
-    let outcome: AutomationScriptOutcome = {
-      state: 'complete',
-      result: 'done',
-    } as AutomationScriptOutcome;
+  // A tab whose script completes. Like the host, it echoes the follow-up's
+  // batch id it was given, unless `readsBatches` is false, as a tab on a host
+  // that predates follow-ups reading their batch answers.
+  function stubTab(
+    calls: RunCommandArgs[],
+    {
+      readsBatches = true,
+      batchUnreadable = false,
+    }: { readsBatches?: boolean; batchUnreadable?: boolean } = {},
+  ): Prerenderer {
     return {
       async runCommand(args: RunCommandArgs) {
         calls.push(args);
+        let input = (args.commandInput as { json: AutomationScriptInput }).json;
+        let outcome = {
+          state: 'complete',
+          result: 'done',
+          ...(readsBatches && input.followUpBatchId
+            ? { followUpBatchId: input.followUpBatchId }
+            : {}),
+          ...(batchUnreadable ? { followUpBatchUnreadable: true } : {}),
+        } as AutomationScriptOutcome;
         return {
           status: 'ready',
           cardResultString: JSON.stringify({
@@ -325,6 +344,8 @@ module(basename(import.meta.filename), function (hooks) {
       calls = [],
       reportAutomationChange,
       reportRunChange,
+      readsBatches,
+      batchUnreadable,
     }: {
       // The job's `triggerKind`; by default a run labeled `manual` says so,
       // and any other is its trigger's.
@@ -339,9 +360,11 @@ module(basename(import.meta.filename), function (hooks) {
       calls?: RunCommandArgs[];
       reportAutomationChange?: ReportAutomationChange;
       reportRunChange?: ReportRunChange;
+      readsBatches?: boolean;
+      batchUnreadable?: boolean;
     } = {},
   ) {
-    let prerenderer = stubTab(calls);
+    let prerenderer = stubTab(calls, { readsBatches, batchUnreadable });
     let definitionLookup = new CachingDefinitionLookup(
       dbAdapter,
       prerenderer,
@@ -941,6 +964,121 @@ module(basename(import.meta.filename), function (hooks) {
       calls,
     });
     await assertHeldFor(assert, again, result, calls, 'session-revoked');
+  });
+
+  test('a follow-up whose tab answers without reading the batch is held, nothing it staged lands, and it starts again', async function (assert) {
+    await switchOn(CLEAN);
+    let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    let followUp = await batchFollowUp(submitting);
+
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(followUp, {
+      triggerKind: 'batch',
+      calls,
+      readsBatches: false,
+    });
+
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    assert.strictEqual(calls.length, 1, 'the tab ran the script');
+    assert.strictEqual(
+      (calls[0].commandInput as { json: AutomationScriptInput }).json
+        .followUpBatchId,
+      followUp.slot,
+      'the tab was given the batch to read',
+    );
+    let [batch] = await query(dbAdapter, [
+      'SELECT follow_up_held_at, follow_up_run_id FROM ai_batches WHERE batch_id =',
+      param(followUp.slot),
+    ]);
+    assert.notStrictEqual(
+      batch.follow_up_held_at,
+      null,
+      'the batch records the hold, so the tick starts the follow-up again',
+    );
+    let held = await getAutomationRun(dbAdapter, followUp.id);
+    if (held?.state === 'canceled') {
+      assert.strictEqual(
+        held.errorReason,
+        FOLLOW_UP_HELD_REASON,
+        'the attempt that used tab time ends in favor of a new pending run',
+      );
+      let replacement = await getAutomationRun(
+        dbAdapter,
+        String(batch.follow_up_run_id),
+      );
+      assert.strictEqual(replacement?.state, 'pending');
+      assert.strictEqual(replacement?.slot, followUp.slot);
+    } else {
+      assert.strictEqual(held?.state, 'pending');
+    }
+  });
+
+  test('a follow-up whose tab found its batch completed but unreadable is held, so the batch’s results are used later', async function (assert) {
+    await switchOn(CLEAN);
+    let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    let followUp = await batchFollowUp(submitting);
+
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(followUp, {
+      triggerKind: 'batch',
+      calls,
+      batchUnreadable: true,
+    });
+
+    assert.deepEqual(result, { state: 'left', reason: 'held' });
+    let [batch] = await query(dbAdapter, [
+      'SELECT follow_up_held_at, follow_up_run_id, deadline_missed_at FROM ai_batches WHERE batch_id =',
+      param(followUp.slot),
+    ]);
+    assert.notStrictEqual(batch.follow_up_held_at, null);
+    assert.strictEqual(batch.deadline_missed_at, null, 'nothing fell back');
+    assert.true(
+      // The attempt used tab time, so a new pending run of the batch took
+      // its place, and the hold is logged there.
+      (await admissionLines(String(batch.follow_up_run_id))).some(
+        (line) => line.data?.reason === 'follow-up-batch-unreadable',
+      ),
+      'the held run’s log says why it was held',
+    );
+
+    // The tick waits out the batch's backoff before it starts the follow-up
+    // again, so a batch that stays unreadable doesn't cost a tab a minute.
+    let [backoff] = await query(dbAdapter, [
+      'SELECT follow_up_unreadable_count, EXTRACT(EPOCH FROM follow_up_retry_at - now()) AS wait FROM ai_batches WHERE batch_id =',
+      param(followUp.slot),
+    ]);
+    assert.strictEqual(Number(backoff.follow_up_unreadable_count), 1);
+    let wait = Number(backoff.wait);
+    let aboutAMinute = wait > 50 && wait <= 60;
+    assert.true(aboutAMinute, `the first wait is a minute (${wait})`);
+    let recordingQueue = {
+      publish: async () => ({ id: 1, done: new Promise(() => {}) }) as any,
+      destroy: async () => {},
+    } as unknown as QueuePublisher;
+    let now = Math.floor(Date.now() / 1000);
+    let early = await startDueAIBatchFollowUps(dbAdapter, {
+      queue: recordingQueue,
+      virtualNetwork,
+      now: now + 30,
+      automationId: automationId(CLEAN),
+    });
+    assert.false(
+      early.some((outcome) => outcome.batchId === followUp.slot),
+      'the follow-up waits within its backoff',
+    );
+    let later = await startDueAIBatchFollowUps(dbAdapter, {
+      queue: recordingQueue,
+      virtualNetwork,
+      now: now + 90,
+      automationId: automationId(CLEAN),
+    });
+    assert.deepEqual(
+      later
+        .filter((outcome) => outcome.batchId === followUp.slot)
+        .map((outcome) => outcome.kind),
+      ['resumed'],
+      'once the backoff has passed, the tick starts it again',
+    );
   });
 
   test('a follow-up whose batch a resume gave another identity is held, so it starts again acting as them', async function (assert) {

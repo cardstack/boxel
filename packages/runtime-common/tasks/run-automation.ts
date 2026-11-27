@@ -8,6 +8,7 @@ import {
   type AdmittedRunKind,
   type AutomationAdmissionChecks,
 } from '../automation-admission.ts';
+import { recordAIBatchUnreadable } from '../ai-batches.ts';
 import { MAX_RUN_SECONDS } from '../automation-declaration.ts';
 import { automationVersion, versionKeyOf } from '../automation-key-approval.ts';
 import {
@@ -83,6 +84,13 @@ export type MintRunToken = (args: {
 // The realms a run's cards' modules load from, which its token lets it read.
 // Each realm resolves the prefix form through its own mappings.
 export const RUN_READ_REALMS = ['@cardstack/base/', '@cardstack/catalog/'];
+
+// Why a batch's follow-up was held after its tab answered without reading the
+// batch.
+export const FOLLOW_UP_TAB_TOO_OLD_REASON = 'follow-up-tab-too-old';
+// Why a batch's follow-up was held after its tab found the batch completed but
+// couldn't read its results.
+export const FOLLOW_UP_BATCH_UNREADABLE_REASON = 'follow-up-batch-unreadable';
 
 // How many times a commit is sent again when a write was staged while it
 // started (`overlay-changed`).
@@ -392,8 +400,11 @@ async function attemptRun(
   let hold = async (
     reason: string,
     message: string,
+    { atAdmission = true }: { atAdmission?: boolean } = {},
   ): Promise<AutomationAttemptResult> => {
-    admitted(reason);
+    if (atAdmission) {
+      admitted(reason);
+    }
     let held = await holdAutomationFollowUpRun(dbAdapter, runId, attempt);
     let current = held ? undefined : await getAutomationRun(dbAdapter, runId);
     if (
@@ -415,7 +426,9 @@ async function attemptRun(
     await logRunPlatformLine(dbAdapter, held?.held.id ?? runId, {
       kind: 'admission',
       level: 'info',
-      message: `Admission held the run (${reason}): ${message}`,
+      message: atAdmission
+        ? `Admission held the run (${reason}): ${message}`
+        : `The run was held (${reason}): ${message}`,
       data: { admitted: false, held: true, reason },
     });
     await ctx.reportRunChange?.(runId);
@@ -611,6 +624,8 @@ async function attemptRun(
     endsAt: new Date(deadline).toISOString(),
     batchDeadlineMinutes: declaration.declaration.batchDeadlineMinutes,
     batchedAI: declaration.declaration.batchedAI,
+    // A batch's follow-up: its slot is its batch's id.
+    followUpBatchId: kind === 'batch' ? run.slot : null,
   };
 
   let outcome: AutomationScriptOutcome;
@@ -648,6 +663,38 @@ async function attemptRun(
   emitAutomationRunEvent(() =>
     scriptEvent(ids, tabStartedAt, tabMs, answered, answer),
   );
+  if (
+    kind === 'batch' &&
+    result?.status === 'ready' &&
+    outcome.followUpBatchId === run.slot &&
+    outcome.followUpBatchUnreadable
+  ) {
+    // The batch completed, and OpenRouter couldn't be read for its results,
+    // which the follow-up must use while OpenRouter holds them. Nothing the
+    // script staged lands; the tick starts the follow-up again once its
+    // batch's backoff has passed, which grows with each such hold.
+    await recordAIBatchUnreadable(dbAdapter, run.slot);
+    return await hold(
+      FOLLOW_UP_BATCH_UNREADABLE_REASON,
+      "the batch completed, and its results couldn't be read from OpenRouter",
+      { atAdmission: false },
+    );
+  }
+  if (
+    kind === 'batch' &&
+    result?.status === 'ready' &&
+    outcome.followUpBatchId !== run.slot
+  ) {
+    // The tab answered without having read the batch: it runs a host that
+    // predates follow-ups reading their batch, as a tab warmed before a
+    // deploy does. Nothing the script staged lands; the follow-up is held,
+    // and the tick starts it again on another tab.
+    return await hold(
+      FOLLOW_UP_TAB_TOO_OLD_REASON,
+      "the run's tab didn't read the batch, so its script ran without the batch's answers",
+      { atAdmission: false },
+    );
+  }
   if (outcome.state === 'error') {
     // The finish discards the overlay, so nothing the script staged lands.
     return await fail(

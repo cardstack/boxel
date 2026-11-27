@@ -1007,24 +1007,63 @@ export async function resolve(
   send: ProxySend,
   signal: AbortSignal,
 ): Promise<ResolveResult> {
-  let { maxTokens, outputSchema } = request;
+  return await resolveChat(resolveChatBody(request), send, signal);
+}
+
+// Sends a chat completion body `resolveChatBody` built, as `realm.resolve`
+// sends it, and reads its answer. A batch's follow-up sends its batch's
+// requests this way when the batch has no results to give.
+export async function resolveChat(
+  body: Record<string, unknown>,
+  send: ProxySend,
+  signal: AbortSignal,
+): Promise<ResolveResult> {
   let response: Response;
   try {
     response = await send({
       url: OPENROUTER_CHAT_URL,
-      requestBody: JSON.stringify(resolveChatBody(request)),
+      requestBody: JSON.stringify(body),
       signal,
     });
   } catch (cause) {
     throw serviceError('realm.resolve: OpenRouter', cause);
   }
-  let body = await response.json();
-  if (body?.error) {
+  return readResolveAnswer(body, await response.json());
+}
+
+// Reads the chat completion `answer` to the request `body`, which
+// `resolveChatBody` built: the JSON the model answered with, checked against
+// the request's output schema and token limit as `realm.resolve` checks it.
+// A batch's results are read this way too, one request's answer at a time.
+export function readResolveAnswer(
+  body: Record<string, unknown>,
+  answer: unknown,
+): ResolveResult {
+  let maxTokens = body.max_tokens;
+  let outputSchema = (
+    body.response_format as { json_schema?: { schema?: unknown } } | undefined
+  )?.json_schema?.schema;
+  if (
+    !outputSchema ||
+    typeof outputSchema !== 'object' ||
+    Array.isArray(outputSchema)
+  ) {
+    throw new Error('realm.resolve: the request names no output schema');
+  }
+  let reply = answer as {
+    error?: { message?: string };
+    model?: unknown;
+    choices?: {
+      finish_reason?: unknown;
+      message?: { refusal?: unknown; content?: unknown };
+    }[];
+  } | null;
+  if (reply?.error) {
     throw new Error(
-      `realm.resolve: OpenRouter failed: ${body.error.message ?? JSON.stringify(body.error)}`,
+      `realm.resolve: OpenRouter failed: ${reply.error.message ?? JSON.stringify(reply.error)}`,
     );
   }
-  let choice = body?.choices?.[0];
+  let choice = reply?.choices?.[0];
   if (choice?.finish_reason === 'length') {
     throw new Error(
       `realm.resolve reached its ${maxTokens}-token limit; ask for a smaller output or split the input`,
@@ -1045,7 +1084,7 @@ export async function resolve(
   } catch {
     throw new Error('realm.resolve: the model did not answer with JSON');
   }
-  validateResolved(output, outputSchema);
+  validateResolved(output, outputSchema as Schema);
   if (jsonBytes(output) > RESOLVE_OUTPUT_BYTES) {
     throw new Error(
       `realm.resolve got an answer larger than ${RESOLVE_OUTPUT_BYTES} bytes`,
@@ -1054,6 +1093,6 @@ export async function resolve(
   assertNoCode(output);
   return {
     output: output as Record<string, unknown>,
-    model: typeof body.model === 'string' ? body.model : RESOLVE_LLM,
+    model: typeof reply?.model === 'string' ? reply.model : RESOLVE_LLM,
   };
 }
