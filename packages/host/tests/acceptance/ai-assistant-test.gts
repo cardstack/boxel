@@ -3898,15 +3898,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
   test('reopening the ai assistant panel opens it at the width saved since the page loaded', async function (assert) {
     widenApp();
-    window.localStorage.setItem('ai-assistant-panel-width', '100');
+    window.localStorage.removeItem('ai-assistant-panel-width');
     await openAssistantOnIndex();
-    assert.ok(mainPanelWidth() < 1, 'the main panel opens collapsed');
+    let openedWidth = mainPanelWidth();
 
     await dragAssistantHandleTo(400);
     let draggedWidth = mainPanelWidth();
     assert.ok(
-      draggedWidth >= 320,
-      `the drag opens the main panel (${draggedWidth.toFixed(1)}px)`,
+      Math.abs(draggedWidth - openedWidth) >= 1,
+      `the drag resizes the main panel (${openedWidth.toFixed(1)}px to ${draggedWidth.toFixed(1)}px)`,
     );
 
     await click('[data-test-close-ai-assistant]');
@@ -3931,13 +3931,24 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
   });
 
-  test('a saved ai assistant panel width of the whole window opens with the main panel collapsed', async function (assert) {
+  test('a saved ai assistant panel width of the whole window opens the main panel at 320px', async function (assert) {
     widenApp();
     window.localStorage.setItem('ai-assistant-panel-width', '100');
     await openAssistantOnIndex();
 
     let width = mainPanelWidth();
-    assert.ok(width < 1, `the main panel is collapsed (${width.toFixed(1)}px)`);
+    assert.ok(
+      Math.abs(width - 320) < 1,
+      `the main panel opens at 320px (${width.toFixed(1)}px)`,
+    );
+    assert
+      .dom('[data-test-main-panel]')
+      .doesNotHaveAttribute('inert', 'the main panel is reachable');
+    let saved = window.localStorage.getItem('ai-assistant-panel-width');
+    assert.ok(
+      Number(saved) < 99.99,
+      `the width it opens at replaces the saved one (${saved})`,
+    );
   });
 
   test('creates new session with settings even when empty new session exists', async function (assert) {

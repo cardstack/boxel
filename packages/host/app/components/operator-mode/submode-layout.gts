@@ -184,8 +184,8 @@ export default class SubmodeLayout extends Component<Signature> {
     // layout is an array of two numbers,
     // the first number is the width of the main panel,
     // the second number is the width of the ai panel.
-    // A window too narrow for both leaves the main panel no room, and saving
-    // that whole-window width would open a wider window with it collapsed.
+    // A window too narrow for both leaves the main panel no room, so its
+    // whole-window width isn't saved over the one chosen on a wider window.
     if (layout.length === 2 && this.mainPanelMinWidth > 0) {
       window.localStorage.setItem(AiAssistantPanelWidth, String(layout[1]));
     }
@@ -235,15 +235,9 @@ export default class SubmodeLayout extends Component<Signature> {
         : persistedWidth;
 
     // The width is saved as a share of the window, so it can leave the main
-    // panel under 320px, which would open it collapsed. It opens at its
-    // minimum instead. Only a saved width of the whole window, which the
-    // main panel left collapsed, opens it collapsed.
-    let mainPanelWasCollapsed =
-      persistedWidth !== undefined && persistedWidth >= 99.99;
-    if (!mainPanelWasCollapsed) {
-      defaultWidth = Math.min(defaultWidth, 100 - this.mainPanelMinWidth);
-    }
-    return defaultWidth;
+    // panel under 320px, which would open it collapsed, out of reach until
+    // dragged open. It opens at its minimum instead.
+    return Math.min(defaultWidth, 100 - this.mainPanelMinWidth);
   }
 
   get operatorModeController(): IndexController {
