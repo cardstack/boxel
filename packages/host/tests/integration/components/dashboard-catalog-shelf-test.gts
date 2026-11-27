@@ -180,6 +180,25 @@ module('Integration | dashboard | catalog shelf', function (hooks) {
     }
   });
 
+  test('asks for story art as soon as it renders when the shelf starts on screen', async function (assert) {
+    let searches = watchShelfSearches();
+    try {
+      await render(
+        <template>
+          <div data-dashboard-scroller>
+            <CatalogShelf @realmURL={{testRealmURL}} />
+          </div>
+        </template>,
+      );
+      assert.true(
+        searches.sent.has('art'),
+        'the art is asked for by the time rendering settles',
+      );
+    } finally {
+      searches.stop();
+    }
+  });
+
   test('asks for story art only once the shelf comes near the screen', async function (assert) {
     let searches = watchShelfSearches();
     try {
@@ -197,12 +216,6 @@ module('Integration | dashboard | catalog shelf', function (hooks) {
         </template>,
       );
       await waitFor('[data-test-catalog-story]');
-      // The observer first reports where the shelf is after a frame.
-      /* eslint-disable @cardstack/boxel/no-raf-for-state -- settled() doesn't wait for an IntersectionObserver callback */
-      await new Promise((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(resolve)),
-      );
-      /* eslint-enable @cardstack/boxel/no-raf-for-state */
       await settled();
       assert.false(
         searches.sent.has('art'),

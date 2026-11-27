@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
@@ -55,6 +56,10 @@ const LISTING_TYPE = {
 // across shelves, so the shelf doesn't blink, and a shelf shown again (as when
 // Hosted is switched off) starts from them. Untracked: it only remembers.
 const lastAnswers = new Map<string, Story[]>();
+
+// Held from when a shelf starts watching its distance from the screen until
+// the first report, so tests settle knowing whether the art is asked for.
+const nearScreenWaiter = buildWaiter('catalog-shelf:near-screen');
 
 interface Signature {
   Element: HTMLElement;
@@ -201,12 +206,21 @@ export default class CatalogShelf extends Component<Signature> {
     if (this.isNearScreen) {
       return;
     }
+    let waiting = nearScreenWaiter.beginAsync();
+    let reported = false;
+    let report = () => {
+      if (!reported) {
+        reported = true;
+        nearScreenWaiter.endAsync(waiting);
+      }
+    };
     let observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
           this.isNearScreen = true;
           observer.disconnect();
         }
+        report();
       },
       {
         root: element.closest<HTMLElement>('[data-dashboard-scroller]'),
@@ -214,7 +228,10 @@ export default class CatalogShelf extends Component<Signature> {
       },
     );
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      report();
+    };
   });
 
   // One search for every story's art: the examples' prerendered isolated
