@@ -276,6 +276,39 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual((await writeSource(session)).status, 403);
     });
 
+    test("the realm's Matrix account reads only the realm its session was minted for", async function (assert) {
+      // Every realm on a server shares one Matrix account, so a session
+      // minted for it in another realm is judged by that account's
+      // permissions here, which this realm grants none.
+      let elsewhere = JSON.parse(
+        createPrerenderAuth(
+          testRealmServerMatrixUserId,
+          { [`${SERVER_ORIGIN}/other/`]: ['read'] },
+          { realmAuthority: true },
+        ),
+      )[`${SERVER_ORIGIN}/other/`];
+      assert.strictEqual((await readCard(elsewhere)).status, 403);
+    });
+
+    test('capture URLs signed with it are not bound to its user', async function (assert) {
+      // A capture renders as its reader on that reader's own sessions, so a
+      // render's capture is drawn as no one.
+      let url = `${REALM_URL}_capture/person-1`;
+      let response = await request
+        .post('/test/_sign-capture-urls')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${renderSession()}`)
+        .send(JSON.stringify({ urls: [url] }));
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        response.body.signed[0],
+        { url, signedUrl: url, expiresAt: null },
+        'the URL comes back unsigned, as for a caller who is no one',
+      );
+    });
+
     test('a token claiming to be a render session under the bare realm seed is refused', async function (assert) {
       let forged = jsonwebtoken.sign(
         {

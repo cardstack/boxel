@@ -27,6 +27,7 @@ scope:
   - packages/host/app/utils/auth-service-worker-registration.ts
   - packages/host/public/auth-service-worker.js
   - packages/realm-server/prerender/affinity.ts
+  - packages/realm-server/prerender/auth.ts
   - packages/realm-server/prerender/page-pool.ts
   - packages/realm-server/prerender/render-runner.ts
   - packages/postgres/migrations/*oauth-provider*

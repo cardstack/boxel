@@ -30,9 +30,6 @@ import { PagePool } from '../prerender/page-pool.ts';
 //      violated` warning. The old shared-context row is marked
 //      `closing` upfront so `#recordSharedContextForFirstPage` takes
 //      the replace-cleanly branch.
-//   3. Cross-affinity reuse of a supplementary tab (entry-owned,
-//      not the donor affinity's primary) does NOT decrement the
-//      donor's primary `pageCount` — its bookkeeping stays intact.
 
 interface CloseControl {
   blockContextClose: boolean;

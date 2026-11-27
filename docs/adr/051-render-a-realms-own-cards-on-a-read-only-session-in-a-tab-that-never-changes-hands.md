@@ -35,8 +35,10 @@ anything that needs more than read, before any `X-Boxel-Assume-User`
 indirection and without the exact permission match, and the refusal MUST NOT
 be turned into an admission by a policy. A realm MUST judge a read presented
 with it as a read by the user it names, read fresh, except that the realm's own
-Matrix account reads every realm it serves. No verifier MAY read its `permissions` claim, which is only
-what the host reads to decide what it shows. A realm-server route MUST refuse
+Matrix account reads the realm its session names. No verifier MAY read its
+`permissions` claim, which is only what the host reads to decide what it shows.
+A capture it asks for, and a capture URL it signs, MUST be drawn as no one,
+since a capture renders on its reader's own sessions. A realm-server route MUST refuse
 it, except the federated reads `multiRealmAuthorization` serves. It MUST
 expire when the longest job that renders under it would be given up on.
 
@@ -49,21 +51,21 @@ tab to give: the caller MUST wait for a fresh standby, or fail.
 
 ## 2. Rationale
 
-Before this, an index render held day-long sessions for the realm's owner that
-carried `realm-owner` and verified under the bare realm seed, so code in the
-tab could read them and exchange one for an ordinary owner session at
-`/_realm-auth`. For a person signed in to Boxel that gains nothing, since they
-can mint such a session anyway; for an OAuth app it breaks ADR 021 §1.5 and
-§1.6. A render never legitimately writes (the host refuses writes from a
+A day-long session for the realm's owner that carries `realm-owner` and
+verifies under the bare realm seed lets code in the tab exchange it for an
+ordinary owner session at `/_realm-auth`, and a capture drawn as the owner
+renders on the owner's ordinary sessions, in a tab running the captured card's
+code. For a person signed in to Boxel that gains nothing, since they can mint
+such a session anyway; for an OAuth app it breaks ADR 021 §1.5 and §1.6. A render never legitimately writes (the host refuses writes from a
 render), and its reads travel as `GET` or `QUERY`, so a read-only session
 costs a render nothing.
 
-The session's key alone wouldn't be enough while tabs move between
-affinities: the pool used to hand an idle tab of one affinity to a caller of
-another when no standby was ready, and a timer an app's module left in the
-page would then read a person's sessions, or another realm owner's. ADR 021
-§1.5 already kept an OAuth app's own tab out of that; every tab now runs code
-some writer chose, so the rule holds for all of them. A fresh standby is
+The session's key alone isn't enough if tabs move between affinities: a pool
+that hands an idle tab of one affinity to a caller of another when no standby
+is ready lets a timer an app's module left in the page read a person's
+sessions, or another realm owner's. ADR 021 §1.5 keeps an OAuth app's own tab
+out of that; every tab runs code some writer chose, so the rule holds for all
+of them. A fresh standby is
 ready in about a second, and a tab keeps serving renders of its own affinity,
 so warm renders stay warm.
 
@@ -73,7 +75,8 @@ so warm renders stay warm.
   hands.** Chosen: it closes the exchange and the cross-affinity reads with
   no change to what a render can see, and reuses the shape of the diagnostic
   session, which already renders cards as the indexer does on a read-only
-  session.
+  session. What a render can read is still its owner's read set (see the
+  next-but-one option and ADR 021's remediation file).
 - **Bound the render's session by the grant that wrote the code**, as a tab
   token is. An index render renders the whole realm, whoever wrote each file,
   and nothing records which grant wrote which module.

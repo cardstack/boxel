@@ -233,7 +233,10 @@ path). In order:
    (`CoarsePermissionInsufficient`), so a declined search answers with no rows.
    The
    public path refuses a write presented with a render session the same way it
-   refuses a diagnostic session's.
+   refuses a diagnostic session's, and never takes one as a principal.
+   `#captureReader` draws any realm-authority caller as no one, so a capture a
+   render asks for never renders on its user's own sessions, and a capture URL
+   it signs comes back unsigned.
 4. **Exact permission match**: `JSON.stringify(token.permissions?.sort()) !==
 JSON.stringify(userPermissions.sort())` → `PermissionMismatch`.
 

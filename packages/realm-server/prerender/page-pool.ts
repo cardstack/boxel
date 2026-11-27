@@ -3527,10 +3527,7 @@ export class PagePool {
     this.#touchLRU(affinityKey);
   }
 
-  #detachAffinityEntry(
-    entry: PoolEntry,
-    opts: { notifyManager?: boolean } = {},
-  ): void {
+  #detachAffinityEntry(entry: PoolEntry): void {
     let affinityKey = entry.affinityKey;
     if (!affinityKey) return;
     let entries = this.#affinityPages.get(affinityKey);
@@ -3539,9 +3536,7 @@ export class PagePool {
     if (entries.size === 0) {
       this.#affinityPages.delete(affinityKey);
       this.#lru.delete(affinityKey);
-      if (opts.notifyManager !== false) {
-        void this.#notifyManagerAffinityEvicted(affinityKey);
-      }
+      void this.#notifyManagerAffinityEvicted(affinityKey);
     }
   }
 

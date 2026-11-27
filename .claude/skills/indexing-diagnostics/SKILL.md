@@ -2450,7 +2450,7 @@ A run whose last job failed or never ran has no charge either: check the jobs qu
 All ms values are server-observed walltime.
 
 - `launchMs` + `renderElapsedMs` ≈ `totalElapsedMs`. A small mismatch (< 100 ms) is capture overhead; a large mismatch means the render-runner retried with `clearCache: true` (you're looking at the final attempt's timings).
-- `waits.semaphoreMs` + `waits.admissionMs` + `waits.tabQueueMs` + `waits.tabStartupMs` + `waits.tabProbeMs` ≤ `launchMs`. `launchMs` is measured around the full `PagePool.getPage` call; the sub-waits cover its awaits (semaphore acquire, file admission, affinity-entry selection, standby warmup, warm-tab liveness probe) but not the synchronous bookkeeping between them (affinity reassignment, LRU touch, standby top-up kickoff). For a healthy fleet the residual is < 5 ms; a large residual is unusual and worth inspecting `PagePool` directly.
+- `waits.semaphoreMs` + `waits.admissionMs` + `waits.tabQueueMs` + `waits.tabStartupMs` + `waits.tabProbeMs` ≤ `launchMs`. `launchMs` is measured around the full `PagePool.getPage` call; the sub-waits cover its awaits (semaphore acquire, file admission, affinity-entry selection, standby warmup, warm-tab liveness probe) but not the synchronous bookkeeping between them (LRU touch, standby top-up kickoff). For a healthy fleet the residual is < 5 ms; a large residual is unusual and worth inspecting `PagePool` directly.
 - `renderElapsedMs` is wall time _inside_ `withTimeout()` — includes host fetches, store settle, and the actual render pass. It hits the configured `RENDER_TIMEOUT_MS` on a timeout.
 - `indexRoutesMs.{card,file}.*` sum to **less** than `renderElapsedMs`: each is one index-visit route step's wall-clock, and the gap between their sum and `renderElapsedMs` is the inter-route plumbing (route transitions, instantiation, settle handoffs) — the part of the per-visit floor that isn't a route step. A route step's own transition + settle is inside its number, so `meta` on a near-zero-search-doc card is mostly route machinery, not the doc build (`searchDocMs` / `searchDocSettleMs` break the doc build out of the `meta` number). An `icon` leg served by the per-type memo contributes nothing this visit and isn't recorded.
 - `Σ buildModelMs` + `cardApiLoadMs` + `readySettleMs` + `searchableLoadMs` + `fileExtractMs` + (`searchDocSettleMs` + `searchDocMs` + `serializeMs`) accounts for nearly all of `indexRoutesMs.card.meta` on an index visit — `fileExtractMs` included, because a card-instance visit's `meta` is the fused transition and does the file row's extract inside it. The remainder is the route transition plus the types / displayNames / deps resolution, a cheap prototype-chain walk. The model build is normally the larger half — a `meta` bucket that dwarfs the doc build is a Mode N question, not a Mode J one. On a fused visit the same identity holds against `renderFormatsMs.card.isolated` instead, because that render triggered the parent transition.
@@ -2599,9 +2599,9 @@ Sometimes the written diagnostics aren't enough — you want to replay the exact
 There are two paths, depending on what you have access to:
 
 - **Path A — a diagnostic session from `boxel realm-server render-token`** (the common case, on staging, production or local). The operator asks the realm server for a short-lived, read-only session that reads the card as the indexer does, then you drive Chrome MCP straight at the `/render` route. Works for any card, without changing server config or triggering a reindex.
-- **Path B — the `prerenderer-reproduce` log channel** (local dev, or when you need the indexer's exact historical session). Turn on a debug log level on the realm server, trigger a reindex, and copy the URL + session value verbatim from the log line.
+- **Path B — the `prerenderer-reproduce` log channel** (local dev, or when you need the exact render URL the indexer visited, options and nonce included). Turn on a debug log level on the realm server, trigger a reindex, and copy the URL from the log line; the sessions still come from Path A's mint.
 
-Path A is faster, doesn't require server config changes, and works against staging/prod without touching the running fleet. Path B captures the indexer's exact multi-realm session at a point in time — the right choice when you suspect cross-realm fetch auth or want to replay a render that already happened. The "Visiting a render page" / Chrome MCP / `__boxelRenderDiagnostics()` recipe below is shared between the two paths.
+Path A is faster, doesn't require server config changes, and works against staging/prod without touching the running fleet. Path B captures the exact URL of a render that already happened. The indexer's own sessions are never logged: they are render sessions (ADR 051), and a diagnostic session reads as the same user with the same scope. The "Visiting a render page" / Chrome MCP / `__boxelRenderDiagnostics()` recipe below is shared between the two paths.
 
 ### Path A — a diagnostic session (the common case)
 
@@ -2737,15 +2737,15 @@ To answer "was this card rendered for diagnosis, and by whom?", search CloudWatc
 
 When this is **not** the right path:
 
-- You need the indexer's exact session at the moment of a _historical_ render (cross-realm auth that's since changed, etc.) — use Path B.
+- You need the exact URL, options and nonce of a _historical_ render — use Path B for the URL.
 - You're triaging a stall during the indexer's own pass and want diagnostics on the _real_ indexer's tab — Path A reproduces in a fresh tab; the indexer's tab is its own thing.
 
 ### Path B — the `prerenderer-reproduce` log channel
 
-`packages/realm-server/prerender/render-runner.ts` defines a dedicated logger `prerenderer-reproduce` that emits a line **per card render** with a ready-to-use URL and the exact `boxel-session` value the indexer used (a JSON-stringified map from realm URL to realm-scoped JWT):
+`packages/realm-server/prerender/render-runner.ts` defines a dedicated logger `prerenderer-reproduce` that emits a line **per card render** with a ready-to-use URL. It never prints the sessions the render held:
 
 ```
-manually visit prerendered url <card-id> at: <boxel-host>/render/<encoded-card-id>/<nonce>/<encoded-options>/html/isolated/0 with boxel-session = {"https://localhost:4201/user/my-realm/":"eyJ…","https://cardstack.com/base/":"eyJ…", …}
+manually visit prerendered url <card-id> at: <boxel-host>/render/<encoded-card-id>/<nonce>/<encoded-options>/html/isolated/0 (with sessions from `boxel realm-server render-token`)
 ```
 
 This channel is **off** by default. Turn it on by adding `prerenderer-reproduce=debug` to `LOG_LEVELS` when starting the realm server. Example:
@@ -2756,7 +2756,7 @@ LOG_LEVELS='prerenderer-reproduce=debug' pnpm start-all
 LOG_LEVELS='*=info,prerenderer-reproduce=debug' pnpm start-all
 ```
 
-Then trigger the render you care about (see [Triggering a reindex](#triggering-a-reindex) below — this is where your user JWT gets used) and grep the realm-server log for `manually visit prerendered url`. You get two things: the URL and the indexer's full `boxel-session` value (the JSON string after `boxel-session = `). Paste that whole string verbatim into `localStorage['boxel-session']` on the host tab and navigate to the URL — don't extract just one JWT from the map, the host needs the full map to handle cross-realm fetches.
+Then trigger the render you care about (see [Triggering a reindex](#triggering-a-reindex) below — this is where your user JWT gets used) and grep the realm-server log for `manually visit prerendered url`. Mint sessions as in Path A, put the whole map into `localStorage['boxel-session']` on the host tab, and navigate to the URL — don't extract just one JWT from the map, the host needs the full map to handle cross-realm fetches.
 
 ### Minting the user JWT to trigger the reindex
 

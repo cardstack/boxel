@@ -326,8 +326,9 @@ export class RenderRunner {
   }
 
   // Drops the auth kept for every affinity not in `liveAffinityKeys`. A key
-  // can lose its last tab without being disposed (a steal moves it away), and
-  // its auth would otherwise stay for the life of the process.
+  // can lose its last tab without being disposed through here (an eviction
+  // or a retired wedged tab), and its auth would otherwise stay for the life
+  // of the process.
   pruneAuthCache(liveAffinityKeys: Set<string>) {
     for (let affinityKey of [...this.#lastAuthByAffinity.keys()]) {
       if (!liveAffinityKeys.has(affinityKey)) {

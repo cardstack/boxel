@@ -9737,14 +9737,21 @@ export class Realm {
   // to end, a capture-URL token (minted only for a reader this vouched for —
   // see `signCaptureURLs`), or a token a public realm's read path took
   // without checking it, once it passes those checks here. A delegated session
-  // reads this realm as the user it acts for. A diagnostic session and an
-  // automation run are drawn as no one: a capture outlives its request, and a
-  // capture-URL token its session, so either would carry the identity past
-  // the diagnostic session's scope or the run's row (see
-  // `RequestContext.diagnosticSession`, `RequestContext.automationRun`).
-  // Anyone else is `ANONYMOUS_RENDER`, drawn with no session at all.
+  // reads this realm as the user it acts for. A diagnostic session, an
+  // automation run and a realm-authority session (a render's) are drawn as no
+  // one: a capture outlives its request, and a capture-URL token its session,
+  // so either would carry the identity past the diagnostic session's scope or
+  // the run's row (see `RequestContext.diagnosticSession`,
+  // `RequestContext.automationRun`), and a capture a render asks for would
+  // render as its user on that user's own sessions, out of reach of the
+  // render session's read-only bound (ADR 051 §1.1). Anyone else is
+  // `ANONYMOUS_RENDER`, drawn with no session at all.
   async #captureReader(requestContext: RequestContext): Promise<string> {
-    if (requestContext.diagnosticSession || requestContext.automationRun) {
+    if (
+      requestContext.diagnosticSession ||
+      requestContext.automationRun ||
+      requestContext.realmAuthority
+    ) {
       return ANONYMOUS_RENDER;
     }
     let session = requestContext.unvouchedSession;
@@ -13733,6 +13740,10 @@ export class Realm {
           if (publicToken.realmAuthority) {
             requestContext.realmAuthority = true;
           }
+          // A render session is never a principal, here as on the main path.
+          if (publicToken.renderSession) {
+            return;
+          }
           requestContext.unvouchedSession = {
             user: publicToken.user,
             iat: publicToken.iat,
@@ -13807,10 +13818,12 @@ export class Realm {
       // A render session reads, and does nothing else, as the user it names,
       // whatever that user may do here; it never assumes another user, and
       // its `permissions` claim is never matched. It reads only while its user
-      // still may, and the realm's own Matrix account, which a realm with no
-      // human owner renders as, may read every realm it serves. A read its
-      // user may not make is refused as any of that user's would be, so a
-      // search the ACL declines answers with no rows.
+      // still may. The realm's own Matrix account, which a realm with no human
+      // owner renders as, reads this realm on a session minted for it, and is
+      // judged by its permissions anywhere else, since every realm on the
+      // server shares it. A read its user may not make is refused as any of
+      // that user's would be, so a search the ACL declines answers with no
+      // rows.
       if (token.renderSession) {
         if (!acceptedRenderSessionClaim(token)) {
           warnRefusal(
@@ -13826,8 +13839,12 @@ export class Realm {
           );
           throw new AuthorizationError('Render sessions are read-only');
         }
+        let ownAccountHere =
+          user === this.#matrixClientUserId &&
+          this.#sameRealmSpelling(token.realm) ===
+            this.#sameRealmSpelling(this.url);
         if (
-          user !== this.#matrixClientUserId &&
+          !ownAccountHere &&
           !(await realmPermissionChecker.can(user, 'read'))
         ) {
           warnRefusal(
