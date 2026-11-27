@@ -40,6 +40,7 @@ import {
   type getCard,
   type getCards,
   type getCardCollection,
+  isCardInstance,
   isFileDefInstance,
   cardTypeDisplayName,
   PermissionsContextName,
@@ -588,7 +589,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return (
       this.headerTitle ||
       this.headerType ||
-      (this.cardResource?.isLoaded ? 'Card' : 'Loading card')
+      (this.isCardLoaded ? 'Card' : 'Loading card')
     );
   }
 
@@ -666,7 +667,29 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   @cached
   private get card() {
-    return this.cardResource?.card;
+    return this.cardResource ? this.cardResource.card : this.heldCard;
+  }
+
+  // The card resource is made after the first render (see
+  // `makeCardResource`). Until then, the card the store already holds, so
+  // a card that is loaded shows from the card's first frame, with no
+  // loading state before it.
+  private get heldCard(): CardDef | undefined {
+    let held =
+      stackItemTypeToStoreReadType(this.args.item.type) === 'file-meta'
+        ? this.store.peek(this.args.item.id, { type: 'file-meta' })
+        : this.store.peek(this.args.item.id);
+    // A file's metadata stands in for a card here, as the card resource's
+    // own `card` does.
+    return isCardInstance(held) || isFileDefInstance(held)
+      ? (held as CardDef)
+      : undefined;
+  }
+
+  private get isCardLoaded() {
+    return this.cardResource
+      ? this.cardResource.isLoaded
+      : this.heldCard !== undefined;
   }
 
   private get urlForRealmLookup() {
@@ -782,7 +805,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   // Loading and error states have no body of their own to paint a
   // background, so an expanded card keeps its container's.
   private get isShowingCard() {
-    return Boolean(this.cardResource?.isLoaded) && !this.showError;
+    return this.isCardLoaded && !this.showError;
   }
 
   private get showError() {
@@ -858,7 +881,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           card-error-header-height='var(--stack-item-header-height)'
         }}
       >
-        {{#if (not this.cardResource.isLoaded)}}
+        {{#if (not this.isCardLoaded)}}
           <div class='loading' data-test-stack-item-loading-card>
             <LoadingIndicator @color='var(--boxel-dark)' />
             <span class='loading__message'>Loading card...</span>
@@ -1173,9 +1196,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
         overflow: auto;
       }
 
+      /* A card that another card opens over keeps its look under the
+         opening card while that card fades in, so the stack never shows an
+         empty card between the two. The stack's motion region sets the
+         delay to outlast the fade (motion/stack-motion.gts); with motion
+         off it is 0. A card that is uncovered shows its content at once. */
       .buried > .stack-item-card {
         border-radius: var(--boxel-border-radius-lg);
         background-color: var(--boxel-200);
+        transition: background-color 0s linear
+          var(--stack-item-covered-delay, 0s);
       }
 
       .buried .stack-item-header {
@@ -1188,6 +1218,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .buried .stack-item-content {
         display: none;
+        transition: display 0s linear var(--stack-item-covered-delay, 0s);
+        transition-behavior: allow-discrete;
       }
 
       .loading {

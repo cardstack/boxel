@@ -255,6 +255,38 @@ module('Acceptance | interact submode | routed links', function (hooks) {
     assert.strictEqual(window.location.href, pageURL, 'no page load');
   });
 
+  test('a routed link to a card the store holds opens it with no loading state first', async function (assert) {
+    await openPost();
+    assert.ok(
+      getService('store').peek(`${testRealmURL}Author/jane`),
+      'the post has loaded the card the link opens',
+    );
+    let loadingStates = 0;
+    let observer = new MutationObserver((records) => {
+      for (let record of records) {
+        for (let node of record.addedNodes) {
+          if (
+            node instanceof Element &&
+            (node.matches('[data-test-stack-item-loading-card]') ||
+              node.querySelector('[data-test-stack-item-loading-card]'))
+          ) {
+            loadingStates++;
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    try {
+      await click(link('routed'));
+    } finally {
+      observer.disconnect();
+    }
+
+    assert.dom(`[data-test-operator-mode-stack="0"] ${author}`).exists();
+    assert.strictEqual(loadingStates, 0, 'no loading state was rendered');
+  });
+
   test('a click with a modifier key is left to the browser', async function (assert) {
     await openPost();
 
