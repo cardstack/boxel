@@ -24217,6 +24217,11 @@ export class Realm {
     let delivered = (user: string) =>
       deliveredToAll ||
       (permissions[user] ?? []).some((p) => p === 'read' || p === 'write');
+    let checker = new RealmPermissionChecker(
+      permissions,
+      this.#dbAdapter,
+      this.#matrixClient.serverName,
+    );
     // A few at a time: each watcher costs gate decisions, and the realm's
     // later events wait at the head of its line behind them. They share one
     // budget of decisions, so how many watchers there are can't multiply
@@ -24230,7 +24235,12 @@ export class Realm {
         if (delivered(user)) {
           return undefined;
         }
-        let event = await this.#watcherEvent(user, completion, budget);
+        let event = await this.#watcherEvent(
+          user,
+          completion,
+          budget,
+          await checker.can(user, 'read'),
+        );
         return event ? { user, event } : undefined;
       },
     );
@@ -24251,9 +24261,9 @@ export class Realm {
   // One watcher's copy of an index completion, or undefined when they are
   // sent nothing.
   //
-  // Which cards the watcher hears of is the policy gate's own decision, asked
-  // through the capability check as each card's read by a signed-in caller
-  // the ACL declined everything, which is what a watcher is. A module is
+  // Which cards a watcher the ACL declined hears of is the policy gate's own
+  // decision, asked through the capability check as each card's read by a
+  // signed-in caller the ACL declined everything. A module is
   // asked as a `readSource`, the operation a watcher loads code through. Only
   // a pair the gate admitted outright counts. What else goes in is
   // `watcherListedCopy`'s to say.
@@ -24269,13 +24279,19 @@ export class Realm {
   // read-lane grant could admit (see `policyMayAdmit`). Such a watcher may
   // hold cards the pass changed, so it isn't kept to copies carrying their
   // own request id.
+  //
+  // A watcher the realm's permissions let read (through its `users` grant,
+  // which no delivery path reaches) is a reader, not a caller the ACL
+  // declined: the policy decides nothing for them, so their copy names every
+  // card the pass touched, unjudged.
   async #watcherEvent(
     user: string,
     completion: WatcherCompletion,
     budget: { left: number },
+    reader: boolean,
   ): Promise<RealmEventContent | undefined> {
     if (completion.kind === 'unnamed') {
-      if (!(await this.policyMayAdmit(user))) {
+      if (!reader && !(await this.policyMayAdmit(user))) {
         return undefined;
       }
       return completion.indexType === 'full'
@@ -24288,6 +24304,11 @@ export class Realm {
           };
     }
     let { invalidations } = completion;
+    if (reader) {
+      return this.#watcherCopyEvent(
+        watcherListedCopy(completion, user, invalidations, this.url),
+      );
+    }
     if (
       invalidations.length > MAX_WATCHER_GATED_INVALIDATIONS ||
       invalidations.length > budget.left
@@ -24338,7 +24359,14 @@ export class Realm {
       );
       readable.push(...chunk.filter((_url, index) => admitted[index]));
     }
-    let copy = watcherListedCopy(completion, user, readable, this.url);
+    return this.#watcherCopyEvent(
+      watcherListedCopy(completion, user, readable, this.url),
+    );
+  }
+
+  #watcherCopyEvent(
+    copy: ReturnType<typeof watcherListedCopy>,
+  ): RealmEventContent | undefined {
     if (!copy) {
       return undefined;
     }

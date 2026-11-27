@@ -8,6 +8,7 @@ import {
   fetchLiveRealmEventWatchers,
   fetchSessionRooms,
   insertPermissions,
+  revokeUserSessions,
   rri,
   upsertSessionRoom,
   upsertRealmEventWatcher,
@@ -445,6 +446,22 @@ module(basename(import.meta.filename), function (hooks) {
         'the first is renewed',
       );
     });
+    test("a revoked user's watch is not live until they renew it", async function (assert) {
+      await upsertRealmEventWatcher(db, EDUCATION, TEACHER, {
+        maxRealmsPerUser: 20,
+        now: Date.now() - 5_000,
+      });
+      await revokeUserSessions(db, TEACHER);
+      assert.deepEqual(await fetchLiveRealmEventWatchers(db, EDUCATION), []);
+      await upsertRealmEventWatcher(db, EDUCATION, TEACHER, {
+        maxRealmsPerUser: 20,
+        now: Date.now() + 2_000,
+      });
+      assert.deepEqual(
+        await fetchLiveRealmEventWatchers(db, EDUCATION, Date.now() + 2_000),
+        [TEACHER],
+      );
+    });
   });
 
   module('delivery', function () {
@@ -705,18 +722,25 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(await sentFor(ROOM_204), []);
     });
 
-    test('a watcher who reads only through the `users` grant still gets a copy', async function (assert) {
+    test('a watcher who reads only through the `users` grant is sent every card, ungated', async function (assert) {
       // An account is what lets the `users` grant admit them to a read.
       await ensureTestUser(db, TEACHER);
       await insertPermissions(db, new URL(EDUCATION), { users: ['read'] });
       await watch(TEACHER);
       await education.write(
-        'classrooms/room-204.json',
-        classroom('Room 204 F', [TEACHER]),
+        'classrooms/room-205.json',
+        classroom('Room 205 F', [COLLEAGUE]),
       );
+      let sent = await sentFor(ROOM_205);
       assert.deepEqual(
-        (await sentFor(ROOM_204)).map(({ user }) => user),
+        sent.map(({ user }) => user),
         [TEACHER],
+      );
+      assert.true(
+        (sent[0].event as { invalidations: string[] }).invalidations.includes(
+          ROOM_205,
+        ),
+        'a card no grant gives them is still named',
       );
     });
 
