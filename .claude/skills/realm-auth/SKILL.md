@@ -93,8 +93,12 @@ route map, scope ceiling (held to `read` for a capture's), §1.6 guard. One a
 realm can't admit (another server's, another realm's, expired, or whose grant
 is gone) is judged there as a session that doesn't verify: answered as nobody
 on a realm anyone may read, refused elsewhere. A tab reads the base realm on
-another server that way. Every other realm-server route refuses it on its signature, so a tab can't reach
-`_realm-auth`, `_server-session` or a key route. Like an access token, it is
+another server that way. `jwtMiddleware` admits a command's tab token on the
+routes that spend AI credits (`admitsCommandTabTokens`: `/_request-forward` and
+`/_openrouter/chat/completions`), the same way, where the grant must hold
+`boxel:spend-credit`; a capture's is refused there. Every other realm-server
+route refuses it on its signature, so a tab can't reach `_realm-auth`,
+`_server-session` or a key route. Like an access token, it is
 never asked about `isSessionRevoked`: disconnecting the app or revoking the
 user's OAuth grants ends it on its next call. Its tab holds it in memory only,
 on an affinity of its own (`<key>#oauth:...`, `isOAuthTabAffinityKey`), and the
@@ -165,7 +169,9 @@ selected, removes the `Authorization` header, and carries the caller on
 `RequestContext.oauthCaller`). The caller is then judged as its user, with the
 user's effective permissions read fresh, never `isSessionRevoked`, and never
 the exact permission match. Its scopes cap what a realm requires of it
-(`boxel:read` reads, `boxel:write` reads and writes, nothing administers), and
+(`boxel:read` reads, `boxel:write` reads and writes, nothing administers;
+`boxel:spend-credit` admits nothing in a realm and reaches only the two routes
+that spend AI credits), and
 in a realm it can't change what a policy admits (ADR 021 §1.6). The map in
 `lib/oauth-provider/registry.ts` lists what each scope reaches; every other
 route refuses the token, including every key, secure-session, token-minting

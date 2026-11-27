@@ -19,7 +19,7 @@ import AuthContainer from '../../components/auth-container.gts';
 import BusyMessage from '../../components/busy-message.gts';
 import { navigation } from '../navigation.js';
 import { asSentence } from '../sign-in-copy.js';
-import { authorizeResumeURL, pageURL, startURL } from '../urls.js';
+import { oauthResumeURL, pageURL, startURL } from '../urls.js';
 
 import CliHandoff from './cli-handoff.gts';
 import IncompleteCliLink from './incomplete-cli-link.gts';
@@ -148,10 +148,10 @@ export default class GoogleCallback extends Component {
       return;
     }
     storeSession(session);
-    let authorize = authorizeResumeURL(resume);
-    if (authorize) {
-      // On to the flow's consent, signed in.
-      navigation.replace(authorize);
+    let oauthPage = oauthResumeURL(resume);
+    if (oauthPage) {
+      // Back to the flow's consent, or to the device page, signed in.
+      navigation.replace(oauthPage);
       return;
     }
     // Back to the window's own address, so a reload shows the signed-in window

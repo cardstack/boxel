@@ -35,6 +35,7 @@ import {
   sendResponseForError,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
+  requestUser,
 } from '../middleware/index.ts';
 
 const log = logger('openrouter-passthrough');
@@ -51,7 +52,8 @@ const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
  * OpenAI-compatible client (e.g. software-factory's opencode backend)
  * can point its `baseURL` straight at the realm server.
  *
- * Auth: the realm-server JWT (via `jwtMiddleware`). The static
+ * Auth: the realm-server JWT, or a Boxel API OAuth token holding
+ * `boxel:spend-credit` (both via `jwtMiddleware`). The static
  * `Authorization` header AI-SDK clients stamp onto every request goes
  * here; we never expose the OpenRouter API key to the caller.
  *
@@ -83,15 +85,16 @@ export default function handleOpenRouterPassthrough({
     let call: OutboundErrorContext | undefined;
 
     try {
-      const token = ctxt.state.token;
-      if (!token) {
+      // The user a session or an OAuth caller names (`requestUser`, since an
+      // OAuth caller carries no session claims).
+      const matrixUserId = requestUser(ctxt);
+      if (!matrixUserId) {
         await sendResponseForForbiddenRequest(
           ctxt,
           'Token is required to forward requests',
         );
         return;
       }
-      const { user: matrixUserId } = token;
 
       const request = await fetchRequestFromContext(ctxt);
       const rawBody = await request.text();

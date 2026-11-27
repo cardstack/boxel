@@ -10040,9 +10040,18 @@ export class Realm {
       // new content up on their next load rather than reset their loader
       // mid-session (see `fromScratchAnnounces`).
       let realmEvents = isNewIndex;
-      let promise = this.#realmIndexUpdater.fullIndex(priority, {
-        realmEvents,
-      });
+      // Renders during the pass can read and cache answers from a realm with
+      // no index yet, such as the route tree before realm.json is indexed,
+      // so the pass ends by dropping this realm's index caches, as
+      // `fullIndex()` does. Only the local caches: the index job already
+      // sends realm_index_updated to every replica when it swaps the index,
+      // but that notification reaches no one where the database adapter has
+      // no notify (the browser's SQLite realm), and this process must not
+      // depend on it to stop serving what it cached during the pass.
+      // `fullIndex` here never rejects: it logs a failed pass.
+      let promise = this.#realmIndexUpdater
+        .fullIndex(priority, { realmEvents })
+        .then(() => this.clearRealmIndexCaches());
       if (isNewIndex) {
         // we only await the full indexing at boot if this is a brand new
         // index, so this event follows the pass

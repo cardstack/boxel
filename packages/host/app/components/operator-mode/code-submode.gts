@@ -16,6 +16,8 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
+import { modifier } from 'ember-modifier';
+
 import { consume, provide } from 'ember-provide-consume-context';
 import { use, resource } from 'ember-resources';
 import window from 'ember-window-mock';
@@ -61,6 +63,7 @@ import type {
 import type CardService from '@cardstack/host/services/card-service';
 import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
 import type FileUploadService from '@cardstack/host/services/file-upload';
+import type HostRouteLinksService from '@cardstack/host/services/host-route-links';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
@@ -173,6 +176,8 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service('file-upload') declare private fileUpload: FileUploadService;
+  @service('host-route-links')
+  declare private hostRouteLinks: HostRouteLinksService;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -875,6 +880,26 @@ export default class CodeSubmode extends Component<Signature> {
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 
+  // While code mode shows, a plain click on a link to a routed address,
+  // such as one in a card's preview, opens the card's file here, as a click
+  // on a linked card in the preview does. An address the app can't show
+  // opens in a new tab, so the editor stays open. See
+  // `HostRouteLinksService.followRoutedLinks`.
+  private followRoutedLinks = modifier((element: HTMLElement) =>
+    this.hostRouteLinks.followRoutedLinks(element.ownerDocument, {
+      // `cardHref` is always a card's URL, which has no `.json`, and which
+      // can have a dot (`Milestone/v1.2`).
+      opener: () => (cardHref) => {
+        void this.operatorModeStateService.updateCodePath(
+          rri(`${cardHref}.json`),
+        );
+      },
+      load: (href) => {
+        window.open(href, '_blank', 'noopener,noreferrer');
+      },
+    }),
+  );
+
   get cardPreviewFormat() {
     return this.operatorModeStateService.state.cardPreviewFormat;
   }
@@ -993,6 +1018,7 @@ export default class CodeSubmode extends Component<Signature> {
       <:default as |search|>
         <div
           class='code-mode'
+          {{this.followRoutedLinks}}
           data-test-code-mode
           data-test-save-idle={{not this.isSaving}}
         >

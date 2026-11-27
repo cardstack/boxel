@@ -504,12 +504,34 @@ export class BoxelCLIClient {
    * Perform an arbitrary fetch against a realm server URL with the server
    * JWT injected. Use for server-level endpoints not exposed as typed
    * helpers (e.g., `_request-forward` for the OpenRouter proxy).
+   *
+   * On a profile signed in with OAuth, a call to a route that spends AI
+   * credits throws `AiCreditsNotAllowedError` when the connection lacks
+   * `boxel:spend-credit`, before the request or in place of the realm
+   * server's refusal.
    */
   async authedServerFetch(
     input: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
     return this.pm.authedRealmServerFetch(input, init);
+  }
+
+  /**
+   * Whether the active profile may spend AI credits: a profile signed in with
+   * Matrix always may, and one signed in with OAuth when it was signed in
+   * with `--allow-ai-credits`. Undefined when an OAuth connection's scopes
+   * aren't known, which leaves the realm server to decide on each call.
+   */
+  canSpendAiCredits(): boolean | undefined {
+    return this.pm.canSpendAiCredits();
+  }
+
+  /**
+   * Whether the active profile is signed in with OAuth.
+   */
+  isOAuthProfile(): boolean {
+    return Boolean(this.pm.getActiveProfile()?.profile.oauth);
   }
 
   /**
@@ -525,7 +547,8 @@ export class BoxelCLIClient {
    * lifetime.
    *
    * Throws on a profile signed in with OAuth, which has no realm-server JWT
-   * to give: its token can't spend AI credits.
+   * to give. Such a profile reaches the realm server's routes, the ones that
+   * spend AI credits included, only through `authedServerFetch`.
    */
   async getServerToken(): Promise<string> {
     if (this.pm.getActiveProfile()?.profile.oauth) {
