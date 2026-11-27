@@ -52,6 +52,7 @@ module('Unit | host-route-address', function (hooks) {
   function routes(rules: RawHostRoutingRule[]): readonly HostRoute[] {
     let { routes, warnings } = validateHostRoutes(rules, {
       realmURL,
+      virtualNetwork: new VirtualNetwork(),
       lookupType: (type) => typeInfo[type.name],
     });
     let dropped = warnings.filter((w) => w.dropped);

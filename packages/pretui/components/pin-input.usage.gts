@@ -4,6 +4,9 @@ import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { PinInput } from './pin-input';
 
+const SOURCE =
+  '<PinInput @value={{this.value}} @onValueChange={{this.setValue}} />';
+
 class PinInputUsage extends Component {
   @tracked value = '';
   setValue = (v: string) => (this.value = v);
@@ -11,7 +14,7 @@ class PinInputUsage extends Component {
     <FreestyleUsage
       @name='PinInput'
       @description='OtpInput under the Mantine / Chakra name: fixed-length code entry, one character per segment. Reach for this import when a port or an agent already speaks that vocabulary; the component, its contract and its writeup are OtpInput’s.'
-      @source="<PinInput @value={{this.value}} @onValueChange={{this.setValue}} />"
+      @source={{SOURCE}}
     >
       <:example>
         <PinInput

@@ -143,6 +143,7 @@ export default class RunAutomationTool extends HostBaseTool<
               automation: scriptInput.automation,
               secondsCap,
               batchDeadlineMinutes: scriptInput.batchDeadlineMinutes,
+              batchedAI: scriptInput.batchedAI === true,
               io,
               progress,
               secrets,

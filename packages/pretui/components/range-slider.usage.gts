@@ -4,6 +4,9 @@ import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { RangeSlider } from './range-slider';
 
+const SOURCE =
+  '<RangeSlider @label=\'Vintage\' @values={{this.values}} @min={{1954}} @max={{2004}} @interval={{10}} @onValuesChange={{this.setValues}} />';
+
 class RangeSliderUsage extends Component {
   @tracked values: [number, number] = [1960, 2000];
   setValues = (values: [number, number]) => (this.values = values);
@@ -12,7 +15,7 @@ class RangeSliderUsage extends Component {
     <FreestyleUsage
       @name='RangeSlider'
       @description='Slider with range mode forced on, under the Mantine / Ant / MUI name: two thumbs over one rail, each a native range input. Reach for this import when a port or an agent already speaks that vocabulary and the value is always a pair; the engine, its accessibility and its theming are Slider’s.'
-      @source="<RangeSlider @label='Vintage' @values={{this.values}} @min={{1954}} @max={{2004}} @interval={{10}} @onValuesChange={{this.setValues}} />"
+      @source={{SOURCE}}
     >
       <:example>
         <RangeSlider

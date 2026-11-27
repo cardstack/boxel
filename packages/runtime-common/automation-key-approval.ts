@@ -80,8 +80,103 @@ export interface OperationKeyApproval {
   operation: string;
   targetType: { module: string; name: string };
   state: 'approved' | 'missing' | 'unavailable';
-  missing?: { slot: string; canApprove: KeyApprover }[];
+  missing?: MissingKeyApproval[];
+  // Every credential slot the operation sends a key in, approved or not,
+  // in the order the operation declares them. Absent for an `unavailable`
+  // operation.
+  slots?: SlotKeyApproval[];
   refusal?: { code: string; detail: string };
+}
+
+// One credential slot an operation lacks an approval for, and who can give
+// it. For an `{{apiKey}}` slot, `shares` names the realm's shares that can
+// fill it: the one its binding sends, or, with no binding, each active share
+// the approver named by `canApprove` owns. A share's `owner` is the Matrix id
+// of the key's owner, whom a route shows only as ADR 011 lets its caller see
+// them (null otherwise). A `suspended` share is resumed or swapped by its
+// owner before anyone can approve the slot.
+export interface MissingKeyApproval {
+  slot: string;
+  canApprove: KeyApprover;
+  shares?: {
+    id: string;
+    label: string;
+    owner: string | null;
+    suspended?: true;
+  }[];
+}
+
+// Where one credential slot of an operation stands for the automation:
+//
+// - `approved`: the binding a call fills the slot from is in use, and its
+//   key's owner approved the automation, at its version, to use it.
+// - `waiting`: the key's owner hasn't approved this version of the
+//   automation, or hasn't approved the operation at all.
+// - `no-share`: an `{{apiKey}}` slot with no share in the realm to fill it.
+// - `needs-reapproval`: the operation's request changed since the key's
+//   owner approved the operation.
+// - `share-suspended`: the share the binding sends is suspended.
+// - `key-rejected`: the service refused the key or connection the binding
+//   sends; the automation's approval may still stand.
+export type SlotKeyApprovalState =
+  | 'approved'
+  | 'waiting'
+  | 'no-share'
+  | 'needs-reapproval'
+  | 'share-suspended'
+  | 'key-rejected';
+
+export interface SlotKeyApproval {
+  slot: string;
+  // `userKey` for a slot filled from the payer's own key, `apiKey` for one
+  // filled from a share in the realm.
+  kind: 'userKey' | 'apiKey';
+  state: SlotKeyApprovalState;
+  // The Matrix id of the person who acts for the slot: the owner of the key
+  // its binding sends (the binding's approver, or the share's key owner),
+  // the payer for an unbound `{{userKey}}` slot, the one owner of every
+  // share in the realm for an unbound `{{apiKey}}` slot, and null when no
+  // one person can.
+  keyOwner: string | null;
+  // The share the binding sends, for an `{{apiKey}}` slot, and, for a
+  // suspended one, why: `suspended-by-writer` (a realm administrator,
+  // `suspendedBy`, suspended the share), `owner-lost-write` (the key's owner
+  // is no longer a realm administrator) or `key-deleted`.
+  share?: {
+    id: string;
+    label: string;
+    state: string;
+    suspensionReason?: string;
+    suspendedBy?: string;
+  };
+  // For an unbound `{{apiKey}}` slot, the owner of each share in the realm
+  // whose key a call can send: each of them can approve the slot.
+  shareOwners?: string[];
+  // The personal key the binding sends, for a `{{userKey}}` slot.
+  key?: { id: string; name: string };
+  // ISO time the key's owner approved the automation's current version to
+  // use the binding, for an `approved` slot (and a `key-rejected` one whose
+  // approval stands).
+  approvedAt?: string;
+}
+
+// A person other than the payer whom an automation's missing approval waits
+// on, for one operation: the key approval notice the realm server keeps for
+// them (`automation_key_approval_notices`).
+//
+// - `approve`: the recipient's key serves the operation's slot, through a
+//   share in the realm or a binding they approved, and their approval of the
+//   automation is missing or no longer matches.
+// - `share-a-key`: no share in the realm has a key for the operation's
+//   `{{apiKey}}` slot, so the recipient, a direct writer of the realm, is
+//   asked to share one.
+export interface AwaitedKeyApproval {
+  recipient: string;
+  ask: 'approve' | 'share-a-key';
+  operation: string;
+  targetType: { module: string; name: string };
+  // The origin and path the operation sends to.
+  destination: string;
 }
 
 // An automation's approvals, checked against its version.
@@ -90,6 +185,10 @@ export interface AutomationKeyApprovals {
   approved: boolean;
   version: AutomationVersionKey;
   operations: OperationKeyApproval[];
+  // Whom each missing approval waits on, besides the payer, for the key
+  // approval notices. Kept on the realm server: a route that answers the
+  // approvals leaves it out.
+  awaiting?: AwaitedKeyApproval[];
 }
 
 // Checks an automation's approvals against its version: `declaration` and

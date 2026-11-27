@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 143416,
+      "bytes": 144691,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -1866,11 +1866,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/authorize/60d161aad6.css"
+          "module": "src/shell/authorize/6d3c9eba10.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/authorize/6d3c9eba10.css"
+          "module": "src/shell/authorize/891628c586.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2010,15 +2010,15 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/7fba6dd497.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/82392b8177.css"
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/9042e19054.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/924ac1f9e1.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2039,6 +2039,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/cff92bc523.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/d3b59e55ad.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2082,7 +2086,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/sign-in/5d60b163b0.css"
+          "module": "src/shell/sign-in/4943234b7e.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2103,7 +2107,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 626429,
+      "bytes": 641071,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2546,7 +2550,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/keys.ts",
-          "size": 9080
+          "size": 9508
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2591,12 +2595,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/authorize/consent.gts",
-          "size": 11760
+          "size": 11958
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/authorize/copy.ts",
-          "size": 328
+          "size": 407
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2646,7 +2650,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approval-batch.ts",
-          "size": 9208
+          "size": 9733
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2656,7 +2660,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 42235
+          "size": 49672
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2700,8 +2704,13 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/key-approval-notices.gts",
+          "size": 5577
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-audience.gts",
-          "size": 4648
+          "size": 6033
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2726,7 +2735,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 26642
+          "size": 27881
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2791,7 +2800,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/opened-for.ts",
-          "size": 2569
+          "size": 2762
         },
         {
           "package": "@cardstack/secure-origin",
@@ -3006,7 +3015,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/telemetry/labels.ts",
-          "size": 2852
+          "size": 2909
         },
         {
           "package": "@cardstack/secure-origin",

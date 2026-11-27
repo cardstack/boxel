@@ -6,12 +6,15 @@ import { Command } from './command';
 import { Kbd } from './kbd';
 import { MenuState } from '../demo-menu';
 
+const SOURCE =
+  '<Command @items={{this.items}} @open={{this.paletteOpen}} @onOpen={{this.openPalette}} @onClose={{this.closePalette}} />';
+
 class CommandUsage extends MenuState {
   <template>
     <FreestyleUsage
       @name='Command'
       @description='CommandPalette under the shadcn / cmdk name: a search field over the same MenuNode tree Menu renders, opened by a global shortcut. Reach for this import when a port or an agent already speaks that vocabulary; the component, its contract and its writeup are CommandPalette’s.'
-      @source="<Command @items={{this.items}} @open={{this.paletteOpen}} @onOpen={{this.openPalette}} @onClose={{this.closePalette}} />"
+      @source={{SOURCE}}
     >
       <:example>
         <Button

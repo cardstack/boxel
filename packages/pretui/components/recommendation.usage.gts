@@ -34,6 +34,12 @@ const OPTIONS: RecommendationOption[] = [
   },
 ];
 
+const USAGE = `<Recommendation
+  @question='How should we bid?'
+  @options={{this.options}}
+  @onAccept={{this.accept}}
+/>`;
+
 class RecommendationUsage extends GlimmerComponent {
   @tracked log = '—';
 
@@ -44,6 +50,7 @@ class RecommendationUsage extends GlimmerComponent {
     <FreestyleUsage
       @name='Recommendation'
       @description='The agent has an opinion and the reader has to decide. One recommendation forward with its reasoning, its confidence as segments beside a word, and the alternatives one keystroke away rather than hidden. Switching to an alternative is a state change the reader made, so it goes to a polite live region; the original merely cross-faded the body, which tells a sighted reader something happened and a screen-reader user nothing at all. The confidence scale is the kit’s own Meter, so a recommendation and a data table express a level the same way.'
+      @source={{USAGE}}
     >
       <:example>
         <Recommendation

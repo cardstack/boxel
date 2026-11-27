@@ -7,6 +7,9 @@ import { Button } from './button';
 import { AiInstructions } from './ai-instructions';
 import type { AiInstruction } from './ai-instructions';
 
+const SOURCE =
+  '<AiInstructions @instructions={{this.instructions}} @onAdd={{this.add}} @onToggle={{this.toggle}} @onRemove={{this.remove}} />';
+
 // ── AiInstructions ───────────────────────────────────────────────────────
 const SEED_INSTRUCTIONS: AiInstruction[] = [
   {
@@ -44,13 +47,16 @@ class AiInstructionsUsage extends GlimmerComponent {
     );
   };
   remove = (instruction: AiInstruction) => {
-    this.instructions = this.instructions.filter((i) => i.id !== instruction.id);
+    this.instructions = this.instructions.filter(
+      (i) => i.id !== instruction.id,
+    );
   };
   reset = () => (this.instructions = SEED_INSTRUCTIONS);
 
   <template>
     <FreestyleUsage
       @name='AiInstructions'
+      @source={{SOURCE}}
       @description='Standing instructions are the part of an agent’s behaviour a person can actually edit, so the surface makes three things easy: read what is in force, switch one off without losing it, and add another. Switching off rather than deleting is the design decision worth naming — an instruction you disabled is a decision you can revisit, an instruction you deleted is one you will re-type from memory next week — which is why the switch is first in the row and Remove is the hover-revealed secondary. That remove control appears on :focus-within as well as :hover, and is permanently visible at 44px on coarse pointers, because hover is never the only affordance. An instruction that is off is struck through and labelled "off", so the state survives greyscale, and the in-force count is announced politely on every change.'
     >
       <:example>

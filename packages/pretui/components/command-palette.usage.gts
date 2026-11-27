@@ -6,11 +6,15 @@ import { CommandPalette } from './command-palette';
 import { Kbd } from './kbd';
 import { MenuState } from '../demo-menu';
 
+const SOURCE =
+  '<CommandPalette @items={{this.items}} @open={{this.paletteOpen}} @onOpen={{this.openPalette}} @onClose={{this.closePalette}} @hotkey="Mod+K" />';
+
 // ── CommandPalette ───────────────────────────────────────────────────────
 class CommandPaletteUsage extends MenuState {
   <template>
     <FreestyleUsage
       @name='CommandPalette'
+      @source={{SOURCE}}
       @description='The same MenuNode tree Menu renders in place, seen flattened and filtered. Typing searches every command beneath the current scope — including the ones nested inside submenus, with their path shown — and the matched characters are highlighted by a dependency-free fuzzy matcher that prefers word-boundary initials, so "cs" finds Copy lot link before it finds an "s" in the middle of a word. Descending into a submenu pushes a breadcrumb scope (kbar’s model) so nesting survives the flattening; Backspace or ← on an empty query pops back out, and Esc leaves one scope at a time before closing. Checkmark state travels with the node, so a toggle is a toggle in both surfaces. It is a combobox, not a menu: the input keeps focus and aria-activedescendant points at the active row, which is the pattern assistive tech actually handles for a filtered list.'
     >
       <:example>

@@ -19,10 +19,24 @@
 // commits at most once however many times its job runs: an attempt that
 // takes a run whose commit was already claimed learns that from the start
 // and finishes the run without running the script again.
+//
+// A pause, or a wait for a key approval, holds a batch's follow-up rather
+// than dropping it, and so does the follow-up's admission when it refuses
+// for one of those (`holdAutomationFollowUpRuns`): a pending run with no job,
+// until its automation is active again and the follow-up is enqueued once
+// more (`ai-batch-follow-ups.ts`, ADR 030 §1.5). A follow-up that had already
+// used something when it was held ends as canceled, billed to whom it acted
+// as for what it used, and a new pending run takes the batch's slot in its
+// place (`replaceHeldFollowUp`). A follow-up refused while its script runs
+// (a key approval it needs, or its payer losing write access or sessions) is
+// still ended, not held: see `docs/adr/remediation/030.md`.
 
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
-import { MANUAL_RUN_TRIGGER } from './automation-declaration.ts';
+import {
+  BATCH_RUN_TRIGGER,
+  MANUAL_RUN_TRIGGER,
+} from './automation-declaration.ts';
 import { logRunPlatformLine } from './automation-run-log.ts';
 import {
   clearRunMilestones,
@@ -34,6 +48,7 @@ import {
   msBetween,
 } from './automation-run-telemetry.ts';
 import type { AutomationOperationDeclaration } from './automation-declaration.ts';
+import { heldFollowUpSlot } from './automation-run-command.ts';
 import type { AutomationVersionKey } from './automation-key-approval.ts';
 import type { DBAdapter } from './db.ts';
 import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
@@ -851,14 +866,19 @@ export async function cancelAutomationRunIn(
 // already be landing. A person's pause or remove names them in
 // `canceled_by`. A pause no person asked for names no one, and records its
 // reason (such as `caps-raised`) in `error_reason`. With `pendingOnly`, a
-// running run is left to finish and only pending runs are canceled. The caller
-// writes each canceled run's last log line with `logAutomationRunEnded` once
-// its transaction commits.
+// running run is left to finish and only pending runs are canceled. With
+// `keepFollowUps`, a batch's follow-up is left for the caller to hold
+// (`holdAutomationFollowUpRuns`) rather than canceled. The caller writes each
+// canceled run's last log line with `logAutomationRunEnded` once its
+// transaction commits.
 export async function cancelUnfinishedAutomationRuns(
   querier: Querier,
   automationId: RealmResourceIdentifier,
   by: { canceledBy: string } | { reason: string },
-  { pendingOnly = false }: { pendingOnly?: boolean } = {},
+  {
+    pendingOnly = false,
+    keepFollowUps = false,
+  }: { pendingOnly?: boolean; keepFollowUps?: boolean } = {},
 ): Promise<AutomationRun[]> {
   let rows = await querier([
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
@@ -870,6 +890,7 @@ export async function cancelUnfinishedAutomationRuns(
     pendingOnly
       ? "AND state = 'pending'"
       : "AND (state = 'pending' OR (state = 'running' AND commit_started_at IS NULL))",
+    ...(keepFollowUps ? ['AND trigger <>', param(BATCH_RUN_TRIGGER)] : []),
     'RETURNING *',
   ]);
   await discardOverlays(
@@ -877,6 +898,183 @@ export async function cancelUnfinishedAutomationRuns(
     rows.map((row) => String(row.id)),
   );
   return rows.map(runFromRow);
+}
+
+// Holds the automation's batch follow-ups that haven't ended, as a pause or a
+// wait for a key approval does, inside the caller's transaction (ADR 030
+// §1.5). A pending follow-up stays pending; a job of it that starts while the
+// automation is paused or waiting holds it again at admission
+// (`holdAutomationFollowUpRun`). A running one, or a pending one an earlier
+// attempt used something for, is replaced (`replaceHeldFollowUp`): it ends
+// as canceled with `follow-up-held`, its overlay discarded, so the realm
+// server refuses its next call, its tab stops the script, and the attempt
+// that ran it charges what it used to whom it acted as, as for any canceled
+// run; a new pending run of the same batch takes its place. One whose commit
+// was claimed is left to finish, since its writes may already be landing.
+// With `runId`, only that run is held; with `pendingOnly`, a running
+// follow-up is left to finish.
+//
+// A held run starts afresh when it is enqueued again: no start, so its time
+// limit counts from the next attempt's; no admission or version, which that
+// attempt records again; and no credit hold, which that attempt's admission
+// takes again, so a held run holds nothing against its identity's balance
+// while it waits. Its batch records the hold (`follow_up_held_at`), which is
+// what starts the run again once its automation is active. Returns the held
+// runs, and the runs that ended in their place, which the caller logs and
+// reports once its transaction commits.
+export async function holdAutomationFollowUpRuns(
+  querier: Querier,
+  automationId: RealmResourceIdentifier,
+  {
+    runId,
+    pendingOnly = false,
+  }: { runId?: string; pendingOnly?: boolean } = {},
+): Promise<{ held: AutomationRun[]; ended: AutomationRun[] }> {
+  let rows = await querier([
+    'SELECT * FROM automation_runs WHERE automation_id =',
+    param(automationId),
+    'AND trigger =',
+    param(BATCH_RUN_TRIGGER),
+    pendingOnly
+      ? "AND state = 'pending'"
+      : "AND (state = 'pending' OR (state = 'running' AND commit_started_at IS NULL))",
+    ...(runId ? ['AND id =', param(runId)] : []),
+    'ORDER BY id FOR UPDATE',
+  ]);
+  let held: AutomationRun[] = [];
+  let ended: AutomationRun[] = [];
+  for (let row of rows) {
+    let run = runFromRow(row);
+    if (run.state === 'pending' && !usedSomething(run)) {
+      let [reset] = await querier([
+        'UPDATE automation_runs SET',
+        ...HELD_RUN,
+        'WHERE id =',
+        param(run.id),
+        'RETURNING *',
+      ]);
+      run = runFromRow(reset);
+      await markFollowUpHeld(querier, run);
+      held.push(run);
+    } else {
+      let replaced = await replaceHeldFollowUp(querier, run);
+      ended.push(replaced.ended);
+      held.push(replaced.held);
+    }
+  }
+  return { held, ended };
+}
+
+// Holds a batch's follow-up that `attempt` owns, once its admission found the
+// automation paused or waiting for a key approval, or found that a resume
+// made someone else its identity, as `holdAutomationFollowUpRuns` holds one.
+// Refused unless the run is running and `attempt` owns it. Answers the held
+// run, and the run that ended in its place when an earlier attempt had used
+// something for it.
+export async function holdAutomationFollowUpRun(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+): Promise<{ held: AutomationRun; ended?: AutomationRun } | undefined> {
+  return await dbAdapter.withTransaction(async (txQuery) => {
+    let [row] = await txQuery([
+      'SELECT * FROM automation_runs WHERE id =',
+      param(id),
+      "AND state = 'running' AND commit_started_at IS NULL AND attempt =",
+      param(attempt),
+      'AND trigger =',
+      param(BATCH_RUN_TRIGGER),
+      'FOR UPDATE',
+    ]);
+    if (!row) {
+      return undefined;
+    }
+    let run = runFromRow(row);
+    if (usedSomething(run)) {
+      return await replaceHeldFollowUp(txQuery, run);
+    }
+    let [reset] = await txQuery([
+      'UPDATE automation_runs SET',
+      ...HELD_RUN,
+      'WHERE id =',
+      param(id),
+      'RETURNING *',
+    ]);
+    let held = runFromRow(reset);
+    await discardOverlays(txQuery, [held.id]);
+    await markFollowUpHeld(txQuery, held);
+    return { held };
+  });
+}
+
+// The error reason of a follow-up a hold ended so a new run could take its
+// place.
+export const FOLLOW_UP_HELD_REASON = 'follow-up-held';
+
+// Ends a follow-up that is being held as canceled (`follow-up-held`), and
+// makes a new pending run of the same batch in its place, which the batch
+// then names. The ended run keeps what it used, so it is charged to the
+// identity it acted as, never to whoever a resume makes the follow-up's
+// identity later: the attempt that ran it charges it once it is done, and a
+// retry of that attempt's job does if the attempt stopped first. Its slot
+// gains a suffix naming it (`heldFollowUpSlot`), which frees the batch's slot
+// for the new run, the follow-up's slot always being its batch's id; its
+// job's dedupe key still matches it.
+async function replaceHeldFollowUp(
+  querier: Querier,
+  run: AutomationRun,
+): Promise<{ held: AutomationRun; ended: AutomationRun }> {
+  let [endedRow] = await querier([
+    "UPDATE automation_runs SET state = 'canceled', finished_at = now(), error_reason =",
+    param(FOLLOW_UP_HELD_REASON),
+    ', slot =',
+    param(heldFollowUpSlot(run.slot, run.id)),
+    'WHERE id =',
+    param(run.id),
+    'RETURNING *',
+  ]);
+  await discardOverlays(querier, [run.id]);
+  let { run: held } = await insertOrFindAutomationRun(querier, {
+    automationId: run.automationId,
+    realm: run.realm,
+    trigger: BATCH_RUN_TRIGGER,
+    slot: run.slot,
+    actsAs: run.actsAs,
+  });
+  await querier([
+    'UPDATE ai_batches SET follow_up_run_id =',
+    param(held.id),
+    '::uuid WHERE batch_id =',
+    param(run.slot),
+    'AND automation_id =',
+    param(run.automationId),
+  ]);
+  await markFollowUpHeld(querier, held);
+  return { held, ended: runFromRow(endedRow) };
+}
+
+// Whether an attempt used anything for the run that it is charged for.
+function usedSomething(run: AutomationRun): boolean {
+  return run.prerenderTabMs > 0 || run.callApiResponseBytes > 0;
+}
+
+// The columns of a held follow-up: pending again, with nothing an attempt
+// recorded for it but the attempt itself, which keeps an attempt that ran it
+// from taking it again.
+const HELD_RUN: Expression = [
+  "state = 'pending', started_at = NULL, admitted_at = NULL,",
+  'version_key = NULL, version_call_api_calls = NULL, version_operations = NULL,',
+  'credit_hold_released_at = CASE WHEN cost_ceiling_credits IS NULL THEN credit_hold_released_at ELSE now() END',
+];
+
+// Records on the follow-up's batch (its slot) that a hold is waiting on it.
+async function markFollowUpHeld(querier: Querier, run: AutomationRun) {
+  await querier([
+    'UPDATE ai_batches SET follow_up_held_at = COALESCE(follow_up_held_at, now()) WHERE batch_id =',
+    param(run.slot),
+    'AND automation_id =',
+    param(run.automationId),
+  ]);
 }
 
 // Adds the prerender tab time one attempt's script took to the run. The tab
