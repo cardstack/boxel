@@ -7,7 +7,8 @@ const USE_MATRIX =
 export const OAUTH_REFUSALS = {
   captureUrlOnly:
     "`boxel capture --url-only` doesn't work on a profile signed in with OAuth: the realm server answers an OAuth app's capture with its bytes and no served URL. " +
-    'Run it without --url-only to save the capture, or with --realm-secret-seed.',
+    'Run it without --url-only to save the capture. ' +
+    USE_MATRIX,
   browse:
     "`boxel browse` can't sign a browser in from a profile signed in with OAuth: that takes a Matrix login token, which this profile doesn't have. " +
     'A published realm still opens without signing in. ' +
@@ -19,8 +20,6 @@ export const OAUTH_REFUSALS = {
 // The same limits, said up front: in each command's help, and beside a profile
 // signed in with OAuth in `boxel profile list`.
 export const OAUTH_HELP_NOTES = {
-  runCommand:
-    '\nOn a profile signed in with OAuth, running a command needs the connection to allow writing (boxel:write).\n',
   capture:
     "\n--url-only doesn't work on a profile signed in with OAuth: the realm server answers an OAuth app's capture with its bytes and no served URL.\n",
   browse:
@@ -37,8 +36,12 @@ export const OAUTH_UNAVAILABLE_COMMANDS = [
 
 // A realm server refuses an OAuth token whose connection doesn't allow what a
 // route needs with `403` and a bearer challenge naming `insufficient_scope`
-// and the scopes the route needs (RFC 6750 §3). Returns what to tell the user
-// for such a response, and undefined for any other.
+// and the scopes that would admit it (RFC 6750 §3). The CLI's own sign-in
+// always asks for every Boxel API scope, so this mostly guards a connection
+// made another way. A challenge naming no scope means no OAuth token can do
+// it at all, such as a route that needs the realm's administer permission.
+// Returns what to tell the user for such a response, and undefined for any
+// other.
 export function describeInsufficientScope(
   response: Response,
   action: string,
@@ -50,9 +53,12 @@ export function describeInsufficientScope(
   if (!/error="insufficient_scope"/.test(challenge)) {
     return undefined;
   }
-  let needed = /scope="([^"]*)"/.exec(challenge)?.[1];
+  let needed = /scope="([^"]*)"/.exec(challenge)?.[1]?.trim();
+  if (!needed) {
+    return `${action} can't be done with an OAuth connection. ${USE_MATRIX}`;
+  }
   return (
-    `${action} needs a connection that allows ${needed ? needed.split(' ').join(' or ') : 'more access'}, ` +
-    "and this profile's OAuth connection doesn't. Run `boxel profile add --oauth` again and allow it."
+    `${action} needs a connection that allows ${needed.split(/\s+/).join(' or ')}, ` +
+    "and this profile's OAuth connection doesn't. Run `boxel profile add --oauth` again to get one that does."
   );
 }

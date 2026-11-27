@@ -109,7 +109,7 @@ export interface CaptureOptions {
   asUser?: string;
   /** The name of the Matrix server paired with the realm server, for seed mode (default: `MATRIX_SERVER_NAME`). */
   matrixServerName?: string;
-  /** Realm-server base URL override (default: derived from each card's origin). */
+  /** Realm-server base URL override (default: the profile's realm server on a profile signed in with OAuth, otherwise derived from each card's origin). */
   realmServerUrl?: string;
   /** @internal Override the ProfileManager (tests). */
   profileManager?: ProfileManager;
@@ -246,6 +246,7 @@ export async function capture(
   let authenticator = resolution.authenticator;
 
   let serverFetch = options.serverFetch;
+  let realmServerUrl = options.realmServerUrl;
   if (!serverFetch) {
     if (options.realmSecretSeed) {
       // Seed mode mints one realm-server token for the whole invocation, so
@@ -292,6 +293,14 @@ export async function capture(
     } else {
       let pm = options.profileManager ?? getProfileManager();
       serverFetch = (url, init) => pm.authedRealmServerFetch(url, init);
+      // An OAuth access token is sent only to the profile's realm server, so
+      // the capture goes there rather than to the card's own origin (a
+      // published realm's host would get no token). The server takes the
+      // realm from the request body.
+      let active = pm.getActiveProfile();
+      if (active?.profile.oauth) {
+        realmServerUrl ??= active.profile.realmServerUrl;
+      }
     }
   }
 
@@ -308,7 +317,7 @@ export async function capture(
       authenticator,
       serverFetch,
       realmFlag,
-      realmServerUrl: options.realmServerUrl,
+      realmServerUrl,
       urlOnly: options.urlOnly === true,
       outDir,
       usedFileNames,

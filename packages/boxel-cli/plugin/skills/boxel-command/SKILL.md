@@ -27,7 +27,7 @@ boxel run-command <command-specifier> --realm <realm-url> [--input '<json>'] [--
 - `--input` — JSON string passed as the command's input. Optional; some commands take no input. Keys map to the input card's field names. A `linksTo` field is given the target card's **ID string**, and a `linksToMany` field an **array of ID strings** — the host resolves each ID to the actual card before running the command.
 - `--json` — emit the raw response instead of the formatted summary.
 
-`run-command` works on a profile signed in with Matrix or with OAuth (`boxel profile add --oauth`). On OAuth, the connection must allow writing (`boxel:write`): one that only reads gets an error saying so, and `boxel profile add --oauth` again lets the user allow it. The command runs as the profile's user, limited to what the connection allows.
+`run-command` works on a profile signed in with Matrix or with OAuth (`boxel profile add --oauth`). The command runs as the profile's user, with what that user may do in the realm.
 
 ### Example
 
