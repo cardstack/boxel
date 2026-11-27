@@ -13,6 +13,7 @@ import Ellipsis from '@cardstack/boxel-icons/ellipsis';
 
 import { registerBeacon } from '@cardstack/choreo';
 import { AgentQuestion } from '@cardstack/pretui/components/agent-question';
+import { Alert } from '@cardstack/pretui/components/alert';
 import { CardEmbed } from '@cardstack/pretui/components/card-embed';
 
 import { CardPills } from '@cardstack/pretui/components/card-pills';
@@ -63,13 +64,24 @@ import { isAskUserTool } from '@cardstack/host/lib/ask-user';
 import { cardMenuEntries } from '@cardstack/host/lib/card-menu-entries';
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import {
+  AutomationGate,
+  automationIOFor,
+  isAutomationStartCall,
+  namedAutomationCalls,
+} from '@cardstack/host/lib/realm-runner/automations';
+import type { CardFieldChange } from '@cardstack/host/lib/realm-runner/edits';
+import {
   isDiffable,
   parseCompactDiff,
   resultCardChanges,
   resultDiff,
 } from '@cardstack/host/lib/realm-runner/edits';
-import type { CardFieldChange } from '@cardstack/host/lib/realm-runner/edits';
+import {
+  runRealmOf,
+  runRootURL,
+} from '@cardstack/host/lib/realm-runner/run-realm';
 import { STOPPED_BY_USER } from '@cardstack/host/lib/realm-runner/types';
+
 import { runDeliveryId } from '@cardstack/host/lib/run-delivery';
 import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
 import { plainTitle, settledTitle } from '@cardstack/host/lib/tool-title';
@@ -83,6 +95,7 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 import { DENIED_BY_USER } from '@cardstack/host/services/tool-service';
@@ -90,6 +103,10 @@ import { DENIED_BY_USER } from '@cardstack/host/services/tool-service';
 import CardRenderer from '../card-renderer';
 
 import AskUserPicker from './ask-user-picker';
+
+import AutomationConfirmationView, {
+  automationConfirmLabel,
+} from './automation-confirmation';
 import FoundEntries from './found-entries';
 
 import type { ApplyButtonState } from '../ai-assistant/apply-button';
@@ -486,6 +503,7 @@ export default class RoomMessageTool extends Component<Signature> {
   declare private quickLook: AssistantQuickLookService;
   @service declare private store: StoreService;
   @service declare private network: NetworkService;
+  @service declare private realmServer: RealmServerService;
 
   @consume(CardContextName) declare private cardContext: CardContext;
 
@@ -1303,21 +1321,102 @@ export default class RoomMessageTool extends Component<Signature> {
     this.toolService.denyTool(this.args.messageTool);
   };
 
+  // The automations the script previews, runs now or switches on, read from
+  // Boxel for the gate, while this tab offers the click that runs the
+  // script. Undefined for a script that names none.
+  @cached
+  private get automationGate(): AutomationGate | undefined {
+    if (!this.spendsOnAutomation) {
+      return undefined;
+    }
+    let attributes = this.args.messageTool.arguments?.attributes as
+      | { code?: unknown; realm?: unknown }
+      | undefined;
+    let named = namedAutomationCalls(attributes?.code);
+    let realmURL = this.runRealmURL(attributes?.realm);
+    if (!named.length || !realmURL) {
+      return undefined;
+    }
+    return new AutomationGate(
+      automationIOFor({ realmServer: this.realmServer, network: this.network }),
+      named,
+      realmURL,
+    );
+  }
+
+  // The script starts or switches on an automation, so the click spends.
+  private get spendsOnAutomation() {
+    return this.clickReasons.some((reason) =>
+      isAutomationStartCall(reason.call),
+    );
+  }
+
+  // Boxel has read every automation the script starts, and the run would
+  // refuse none of them.
+  private get automationGateReady() {
+    let confirmations = this.automationGate?.confirmations;
+    return Boolean(
+      confirmations?.length &&
+      confirmations.every((confirmation) => !confirmation.problem),
+    );
+  }
+
+  // The root URL of the workspace a script runs in: its `realm`, or the
+  // workspace the reader has open, resolved as the run resolves it.
+  private runRealmURL(realmInput: unknown): string | undefined {
+    let input =
+      typeof realmInput === 'string' && realmInput
+        ? realmInput
+        : this.operatorModeStateService.realmURL;
+    if (!input) {
+      return undefined;
+    }
+    let services = { realm: this.realm, network: this.network };
+    let realm = runRealmOf(services, input);
+    return realm ? runRootURL(services, realm) : undefined;
+  }
+
+  // The reader confirmed what the gate showed: the run gets exactly those
+  // confirmations, and starts or switches on nothing else.
+  private confirmAutomations = (gate: AutomationGate) => {
+    let confirmations = gate.confirmations;
+    let { id } = this.args.messageTool;
+    if (!confirmations || !id) {
+      return;
+    }
+    this.toolService.confirmAutomations(id, confirmations);
+    this.args.runCommand();
+  };
+
   // The gate's answers, most likely first: run the call (once, for a
   // script that names risky calls), allow those calls for the session
   // (never for one that can't be undone), or turn it down
   private get gateActions(): ToolGateAction[] {
     let named = this.clickReasons.length > 0;
-    let actions: ToolGateAction[] = [
-      {
+    let spends = this.spendsOnAutomation;
+    let automationGate = this.automationGate;
+    let actions: ToolGateAction[] = [];
+    // A run that spends on an automation is offered only once the gate shows
+    // every automation the run starts, with nothing the run would refuse.
+    if (!spends) {
+      actions.push({
         id: 'apply',
         label: named ? 'Allow once' : this.args.messageTool.actionVerb,
         kind: 'primary',
         onAct: () => this.args.runCommand(),
-      },
-    ];
+      });
+    } else if (automationGate && this.automationGateReady) {
+      actions.push({
+        id: 'apply',
+        label: automationConfirmLabel(automationGate.confirmations!),
+        kind: 'primary',
+        onAct: () => this.confirmAutomations(automationGate),
+      });
+    }
     if (named) {
-      if (!this.isDestructive) {
+      // A standing yes never covers a run that spends on an automation:
+      // each one is confirmed at its own gate.
+      if (!this.isDestructive && !spends) {
         actions.push({
           id: 'always',
           label: 'Always for this session',
@@ -3316,7 +3415,20 @@ export default class RoomMessageTool extends Component<Signature> {
               @destructive={{this.isDestructive}}
               @actions={{this.gateActions}}
               data-test-tool-call-approval
-            />
+            >
+              {{#if this.automationGate}}
+                <AutomationConfirmationView @gate={{this.automationGate}} />
+              {{else if this.spendsOnAutomation}}
+                <Alert
+                  @tone='danger'
+                  @title='Boxel can’t show the automation before the run'
+                  data-test-automation-confirmation-unnamed
+                >The script names the automation card by a path Boxel can’t read
+                  before the run. Deny the call, and ask the assistant to name
+                  the card’s path in the script, such as
+                  realm.automations.switchOn('automations/Automation/daily.json').</Alert>
+              {{/if}}
+            </ToolGate>
 
           {{/if}}
         </:gate>

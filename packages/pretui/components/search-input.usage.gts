@@ -15,6 +15,13 @@ const ROW_WIDTHS = ['18rem', '26rem', '36rem'];
 // Type-specific knob: clearable (the ✕ button). Wave-0 adaptation on
 // record: no debounce knob — realm code takes no timers; debounce belongs
 // to the consumer's data layer.
+const ROW_USAGE = `<LayoutControl @label='Toolbar' as |lc|>
+  <lc.Slot @id='search' @forms={{this.iconOnly}} @label='Search'>
+    <SearchInput @display='collapsed' @placeholder='Search' />
+  </lc.Slot>
+  …
+</LayoutControl>`;
+
 class SearchInputUsage extends Component {
   @tracked value = '';
   @tracked placeholder = 'Search components…';
@@ -104,6 +111,7 @@ class SearchInputUsage extends Component {
     <FreestyleUsage
       @name='SearchInput collapsed in a LayoutControl row'
       @description='The opened field covers the whole row, from its start, at any row width, so no neighbouring control shows beside it. Focus moves into the field on open; Escape or leaving returns it to the magnifier.'
+      @source={{ROW_USAGE}}
     >
       <:example>
         {{#each this.rowWidths as |w|}}

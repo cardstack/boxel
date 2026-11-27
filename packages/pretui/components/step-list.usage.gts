@@ -43,6 +43,15 @@ const CONSIGNMENT_STAGES: StepItem[] = [
 
 const STEP_VARIANTS = ['steps', 'track'];
 
+const STATES_USAGE = `<StepList @steps={{this.steps}} @label='Publish pipeline' />`;
+const BLOCKED_USAGE = `<StepList @steps={{this.steps}} @label='Deploy pipeline' />`;
+const TRACK_USAGE = `<StepList
+  @steps={{this.steps}}
+  @variant='track'
+  @label='Consignment pipeline'
+  @summary={{true}}
+/>`;
+
 class StepListUsage extends Component {
   checkoutSteps = CHECKOUT_STEPS;
   pipelineSteps = PIPELINE_STEPS;
@@ -132,6 +141,7 @@ class StepListUsage extends Component {
     <FreestyleUsage
       @name='StepList states'
       @description="Explicit per-step states, including the error tone Spectrum doesn't ship — a failed lint gate mid-pipeline. Complete steps tint their connector; the error marker speaks --destructive. The accent is a state channel and nothing else: no step is emphasised for being first or last."
+      @source={{STATES_USAGE}}
     >
       <:example>
         <StepList @steps={{this.pipelineSteps}} @label='Publish pipeline' />
@@ -140,6 +150,7 @@ class StepListUsage extends Component {
     <FreestyleUsage
       @name='StepList in-progress and blocked'
       @description="Two states beyond where-you-are, and a detail line under each label. 'current' means you are here; 'in-progress' means the machine is working on this one, and they are usually not the same step. 'blocked' means a precondition has not been met — which is not the same as 'error', where something failed. Each carries its own glyph as well as its own tone (a play triangle, a bar across the marker), so the five-way distinction survives greyscale. The detail slot is reserved on every step as soon as one declares a detail, so a message arriving mid-run does not shove the rail down, and a polite live region announces the most urgent stage's state and detail whenever either changes — a rail that flips from running to blocked used to tell a sighted reader something and everyone else nothing."
+      @source={{BLOCKED_USAGE}}
     >
       <:example>
         <StepList @steps={{this.deploySteps}} @label='Deploy pipeline' />
@@ -148,6 +159,7 @@ class StepListUsage extends Component {
     <FreestyleUsage
       @name='StepList track variant'
       @description="The bar rail: a consignment of second-flush Darjeeling walking the trade pipeline, with the completion summary switched on. This is the presentation the component pages' provenance panel uses — it replaced a hand-rolled track whose accent marked the last stage for being last, whose steps were div/span with no list semantics or state text, and whose count floated unassociated in the panel header. Both presentations are responsive on the component's own box (unnamed container queries, never the viewport): below 26rem the steps rail stacks into a column, below 24rem the track folds into a legend list, one stage per row — narrow the pane to watch it."
+      @source={{TRACK_USAGE}}
     >
       <:example>
         <StepList

@@ -32,6 +32,12 @@
 //   whose automation is paused, waiting for key approval or no longer switched on, or whose trigger is
 //   gone from its card.
 //
+//   A batch's follow-up whose automation is paused or waiting for key
+//   approval is held instead, never ended (`holdAutomationFollowUpRuns`, ADR
+//   030 §1.5): a pause holds it, and the tick starts it again once the
+//   automation is active. A follow-up its batch records as held waits for
+//   the tick, not for a job, so the search for lost runs passes over it.
+//
 //   A webhook delivery's run is ended too, never enqueued again: its
 //   delivery's payload lived only in its job, so a job made again would run
 //   the script without it. Its slot says it is a delivery's
@@ -72,6 +78,8 @@ import { logRunPlatformLine } from './automation-run-log.ts';
 import {
   abandonAutomationRun,
   getAutomationRun,
+  holdAutomationFollowUpRuns,
+  logAutomationRunEnded,
   type AutomationRun,
 } from './automation-runs.ts';
 import {
@@ -156,6 +164,13 @@ export type AutomationLostRunOutcome =
       kind: 'ended';
       run: AutomationRun;
       why: string;
+    }
+  | {
+      kind: 'held';
+      // The held follow-up, and the run that ended in its place when the
+      // lost run had used something (`holdAutomationFollowUpRuns`).
+      run: AutomationRun;
+      ended?: AutomationRun;
     }
   | {
       kind: 'failed';
@@ -261,6 +276,8 @@ async function reconcileLostRuns(
       param(madeBefore),
       '::timestamptz AND',
       ...noLiveJob(),
+      'AND',
+      ...notHeld(),
       ...(after ? ['AND r.id >', param(after), '::uuid'] : []),
       'ORDER BY r.id LIMIT',
       param(pageSize),
@@ -310,11 +327,29 @@ async function reconcileLostRun(
       param(runId),
       "::uuid AND r.state IN ('pending', 'running') AND",
       ...noLiveJob(),
+      'AND',
+      ...notHeld(),
     ]);
     if (!row) {
       return undefined;
     }
     let run = (await getAutomationRun(dbAdapter, runId))!;
+    // A batch's follow-up: its slot is its batch's id, and no trigger on the
+    // card names it.
+    let followUp = run.trigger === BATCH_RUN_TRIGGER;
+    if (
+      followUp &&
+      (automation?.state === 'paused' ||
+        automation?.state === 'waiting-for-key-approval')
+    ) {
+      let {
+        held: [held],
+        ended: [ended],
+      } = await holdAutomationFollowUpRuns(txQuery, automationId, { runId });
+      return held
+        ? ({ kind: 'held', run: held, ...(ended ? { ended } : {}) } as const)
+        : undefined;
+    }
     if (row.reconciled_at != null) {
       return await end(
         run,
@@ -328,9 +363,6 @@ async function reconcileLostRun(
       );
     }
     let scheduled = run.trigger !== MANUAL_RUN_TRIGGER;
-    // A batch's follow-up: its slot is its batch's id, and no trigger on the
-    // card names it.
-    let followUp = run.trigger === BATCH_RUN_TRIGGER;
     if (
       scheduled &&
       (!automation ||
@@ -417,7 +449,28 @@ async function reconcileLostRun(
     return ended ? ({ kind: 'ended', run: ended, why } as const) : undefined;
   }
 
-  if (decided?.kind === 'requeued') {
+  if (decided?.kind === 'held') {
+    if (decided.ended) {
+      // The lost run's attempt is gone, so reconcile logs its end and
+      // charges what it used to whom it acted as.
+      await logAutomationRunEnded(dbAdapter, decided.ended);
+      await chargeAutomationRun({
+        dbAdapter,
+        meteredCharges: options.meteredCharges,
+        runId: decided.ended.id,
+        log: options.log,
+      });
+      await options.reportRunChange?.(decided.ended.id);
+    }
+    await logRunPlatformLine(dbAdapter, decided.run.id, {
+      kind: 'trigger',
+      level: 'info',
+      message:
+        "Reconcile found this batch's follow-up without a job while its automation is stopped, so it is held: it starts again once the automation is resumed or active again",
+      data: { reconciled: true, held: true },
+    });
+    await options.reportRunChange?.(decided.run.id);
+  } else if (decided?.kind === 'requeued') {
     await logRunPlatformLine(dbAdapter, runId, {
       kind: 'trigger',
       level: 'warn',
@@ -484,6 +537,20 @@ function noLiveJob(): string[] {
     "j.status = 'unfulfilled' AND j.concurrency_group = 'automation:' || r.automation_id",
     "AND j.job_type = 'run-command'",
     "AND j.args->>'dedupeKey' = 'automation:' || r.automation_id || ':' || r.trigger || ':' || r.slot)",
+  ];
+}
+
+// The run, aliased `r`, isn't a pending follow-up its batch records as held:
+// one that waits for its automation to be active again, when the tick
+// enqueues its job again, whatever job of it is or isn't still queued. A
+// held follow-up that is running isn't waiting for the tick: a job enqueued
+// before the hold took it, and when that job is lost the run is judged like
+// any lost follow-up, so it never stays running for good.
+function notHeld(): string[] {
+  return [
+    "(r.state <> 'pending' OR NOT EXISTS (SELECT 1 FROM ai_batches b WHERE",
+    "r.trigger = 'batch' AND b.batch_id = r.slot AND b.automation_id = r.automation_id",
+    'AND b.follow_up_held_at IS NOT NULL))',
   ];
 }
 

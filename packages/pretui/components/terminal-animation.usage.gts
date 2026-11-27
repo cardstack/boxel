@@ -10,12 +10,24 @@ import type { TerminalLine } from './terminal-animation';
 // ── TerminalAnimation ────────────────────────────────────────────────────
 const SESSION: TerminalLine[] = [
   { id: 'l1', kind: 'comment', text: '# reprice the Kandy catalogue' },
-  { id: 'l2', kind: 'command', text: 'boxel lots pull --auction kandy-2025-11' },
+  {
+    id: 'l2',
+    kind: 'command',
+    text: 'boxel lots pull --auction kandy-2025-11',
+  },
   { id: 'l3', text: 'pulled 18 lots · 4 unsold' },
-  { id: 'l4', kind: 'command', text: 'boxel price --rule pricing.gts --mean 2025' },
+  {
+    id: 'l4',
+    kind: 'command',
+    text: 'boxel price --rule pricing.gts --mean 2025',
+  },
   { id: 'l5', text: 'lot 104  84.1  −2.8% netted' },
   { id: 'l6', text: 'lot 118  88.6  +9.4% netted' },
-  { id: 'l7', kind: 'error', text: 'warn: freight quote for colombo expires in 6 days' },
+  {
+    id: 'l7',
+    kind: 'error',
+    text: 'warn: freight quote for colombo expires in 6 days',
+  },
   { id: 'l8', kind: 'command', text: 'boxel receipt changeset-m3k1' },
   { id: 'l9', text: 'immutable · 2 files · +24 −7' },
 ];
@@ -35,10 +47,18 @@ class TerminalAnimationUsage extends GlimmerComponent {
     return 'run-' + this.replay;
   }
 
+  get usage() {
+    let bits = ['@lines={{this.lines}}', "@title='sourcing-desk — boxel'"];
+    if (this.charRate !== 26) bits.push(`@charRate={{${this.charRate}}}`);
+    if (this.lineDelay !== 0.45) bits.push(`@lineDelay={{${this.lineDelay}}}`);
+    if (!this.typing) bits.push('@typing={{false}}');
+    return `<TerminalAnimation ${bits.join(' ')} />`;
+  }
   <template>
     <FreestyleUsage
       @name='TerminalAnimation'
       @description='A command-line session, replayed. The genre’s appeal is the sense of something happening in order; the genre’s implementation problem is that everyone reaches for a timer to get it. There is none here, and no JavaScript timing of any kind: the schedule is computed once, as arithmetic, into two custom properties per line — when it appears, and how long its characters take — so the entrance is one animation-delay and the typing is a width sweep whose steps() count is that line’s own character count. Replay is identity rather than a clock: change @replayToken and the rows are re-created, so their animations start over. Typing and reading are separate rates because they read differently. The animated transcript is aria-hidden with a complete visually-hidden mirror — the StreamingText contract — so a screen reader gets the whole session at once instead of a text that appears to still be arriving, and prefers-reduced-motion lands on the finished transcript, never on a frozen midpoint.'
+      @source={{this.usage}}
     >
       <:example>
         <TerminalAnimation

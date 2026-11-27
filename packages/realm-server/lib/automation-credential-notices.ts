@@ -4,6 +4,7 @@ import {
   query,
   type DBAdapter,
 } from '@cardstack/runtime-common';
+import type { AutomationCredentialNotice } from '@cardstack/runtime-common/automation-notices';
 import {
   CREDENTIAL_REJECTED_REASON,
   type AutomationRun,
@@ -39,16 +40,7 @@ import { mintingFix } from './oauth.ts';
 // destination, is the payer's own key: its refusal already leaves its owner
 // the key's own notice (`user_key_grant_notices`).
 
-export type AutomationCredentialNotice =
-  | { kind: 'reconnect'; recipients: string[]; keyId: string }
-  | { kind: 'connect-again'; recipients: string[]; keyId: string }
-  | { kind: 'fix-client'; recipients: string[]; clientKeyId: string }
-  | {
-      kind: 'fix-share';
-      recipients: string[];
-      shareId: string;
-      realmURL: string;
-    };
+export type { AutomationCredentialNotice };
 
 // The URL fragment that opens the secure window's connect page on a
 // connection, to sign it in again.
@@ -152,6 +144,5 @@ async function shareNotice(
       matrixServerNameFromEnv(),
     ),
     shareId,
-    realmURL,
   };
 }

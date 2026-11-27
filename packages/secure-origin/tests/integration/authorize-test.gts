@@ -288,6 +288,9 @@ module('Integration | authorize', function (hooks) {
         .dom('[data-test-authorize-renew] input')
         .isChecked('keeping the connection for 30 days is the default');
       assert.dom('[data-test-authorize-expiry]').doesNotExist();
+      assert
+        .dom('[data-test-authorize-connected-apps]')
+        .hasText('You can disconnect it any time in Connected apps.');
     });
 
     test('an app that registered itself is shown as unverified', async function (assert) {
@@ -397,6 +400,9 @@ module('Integration | authorize', function (hooks) {
         .hasText(
           'The connection ends 60 minutes after you allow it. You’ll need to connect again after that.',
         );
+      assert
+        .dom('[data-test-authorize-connected-apps]')
+        .hasText('You can disconnect it any time in Connected apps.');
       await allow();
       assert.deepEqual(decisions()[0]?.body, {
         decision: 'allow',
@@ -412,6 +418,9 @@ module('Integration | authorize', function (hooks) {
       assert
         .dom('[data-test-authorize-expiry]')
         .includesText('ends 60 minutes after you allow it');
+      assert
+        .dom('[data-test-authorize-connected-apps]')
+        .hasText('You can disconnect it any time in Connected apps.');
     });
 
     test('a flow naming two resources lists each', async function (assert) {

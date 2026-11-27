@@ -22,11 +22,19 @@
 // The provider keeps no login between flows: each finish signs in afresh, and
 // the resume route the library sends the browser to next drops any library
 // session the browser brings, as the start of a flow does.
+//
+// Allow on a flow of a pre-registered app on the user's computer also records
+// the browser's network, for the code exchange to compare its own with
+// (`network-binding.ts`).
 
 import type Koa from 'koa';
 import type Provider from 'oidc-provider';
 import { errors, type InteractionResults } from 'oidc-provider';
-import { logger, type DBAdapter } from '@cardstack/runtime-common';
+import {
+  CLIENT_IP_HEADER,
+  logger,
+  type DBAdapter,
+} from '@cardstack/runtime-common';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import {
   dropCookies,
@@ -36,12 +44,18 @@ import {
   sessionCookieNames,
 } from './authorization.ts';
 import { createGrant, deleteGrant } from './grants.ts';
+import { callerNetwork } from './network-binding.ts';
 import {
   cancelConsentDecision,
+  recordFinishNetwork,
   sha256Hex,
   takeConsentDecision,
   takeConsentTickets,
 } from './objects.ts';
+import {
+  PRE_REGISTERED_CLIENTS,
+  type PreRegisteredClients,
+} from './pre-registered-clients.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -64,10 +78,12 @@ export function finishHandler({
   provider,
   dbAdapter,
   secureOriginURL,
+  preRegistered = PRE_REGISTERED_CLIENTS,
 }: {
   provider: Provider;
   dbAdapter: DBAdapter;
   secureOriginURL: URL;
+  preRegistered?: PreRegisteredClients;
 }): Koa.Middleware {
   return async function handleFinish(ctxt) {
     // The URL carries the interaction ID and a ticket.
@@ -159,6 +175,9 @@ export function finishHandler({
     if (!grantId) {
       return refuse('deleted-client');
     }
+    if (preRegistered.get(decision.clientId)?.place === 'this-computer') {
+      await recordNetwork(dbAdapter, grantId, ctxt);
+    }
     // A grant the flow didn't finish with is deleted: no code names it, so
     // it never connected the app. The interaction can expire, or another
     // request finish it, between the check above and this one.
@@ -208,6 +227,30 @@ export function resumeHandler({
     dropCookies(ctxt, sessionCookies);
     await next();
   };
+}
+
+// Records the network of the browser finishing a flow, under the grant it
+// created, before the library sends the browser on to get its code. Only the
+// exchange's log line reads it, so a failure to record it is logged and the
+// flow finishes all the same: its exchange is then logged as `unknown`.
+async function recordNetwork(
+  dbAdapter: DBAdapter,
+  grantId: string,
+  ctxt: Koa.Context,
+): Promise<void> {
+  let network = callerNetwork(ctxt.req.headers[CLIENT_IP_HEADER]);
+  if (!network) {
+    return;
+  }
+  try {
+    await recordFinishNetwork(dbAdapter, grantId, network);
+  } catch (error) {
+    log.error(
+      `failed to record a flow's network: ${
+        error instanceof Error ? error.message : 'unknown error'
+      }`,
+    );
+  }
 }
 
 // Records the result on the interaction the cookie names, and sends the

@@ -65,6 +65,16 @@ class ToasterState extends GlimmerComponent {
   setPauseOnHover = (value: boolean) => (this.pauseOnHover = value);
   setIcon = (value: boolean) => (this.icon = value);
 
+  get usage() {
+    let bits = ['@store={{this.toasts}}'];
+    if (this.placement !== 'bottom-end')
+      bits.push(`@placement='${this.placement}'`);
+    if (this.limit !== 4) bits.push(`@limit={{${this.limit}}}`);
+    if (this.seconds !== 5) bits.push(`@duration={{${this.seconds}}}`);
+    if (!this.pauseOnHover) bits.push('@pauseOnHover={{false}}');
+    return `<Toaster ${bits.join(' ')} />`;
+  }
+
   get placementValue() {
     return this.placement as ToastPlacement;
   }
@@ -129,6 +139,7 @@ class ToasterUsage extends ToasterState {
     <FreestyleUsage
       @name='Toaster'
       @description='The host Toast never had: a positioned region that stacks, ages and dismisses toasts. The auto-dismiss clock is a countdown in state, advanced by an owned timer and drawn by the life bar, so a toast leaves on time whether or not anything animates; pause-on-hover and pause-on-focus simply hold the countdown, and no elapsed time is ever measured against a wall clock or re-armed. Severity picks the live-region politeness (role=alert for warning and danger, role=status otherwise), the cap is a real queue whose clocks have not started, F6 moves focus into the region and back out, and dismissing a focused toast hands focus to its neighbour rather than dropping it on the body.'
+      @source={{this.usage}}
     >
       <:example>
         <div class='tst-row'>
