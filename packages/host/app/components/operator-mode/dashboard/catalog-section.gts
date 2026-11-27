@@ -61,19 +61,28 @@ export default class CatalogSection extends Component<Signature> {
         <CatalogShelf @realmURL={{this.shelfRealmURL}} />
       {{/if}}
       {{#if @realmIdentifiers.length}}
-        <div class='catalog-list' data-test-catalog-list>
+        {{! The role keeps the list semantics Safari drops from a list with no
+            markers. }}
+        <ul
+          class='catalog-list'
+          role='list'
+          data-workspace-list
+          data-test-catalog-list
+        >
           {{#each @realmIdentifiers as |realmIdentifier i|}}
             {{#let (add @navBase i) as |navIndex|}}
-              <Workspace
-                @realmIdentifier={{realmIdentifier}}
-                @variant='tile'
-                @navIndex={{navIndex}}
-                @isSelected={{eq @cursor.currentIndex navIndex}}
-                @selectionActive={{@cursor.isRingShown}}
-              />
+              <li class='list-item'>
+                <Workspace
+                  @realmIdentifier={{realmIdentifier}}
+                  @variant='tile'
+                  @navIndex={{navIndex}}
+                  @isSelected={{eq @cursor.currentIndex navIndex}}
+                  @selectionActive={{@cursor.isRingShown}}
+                />
+              </li>
             {{/let}}
           {{/each}}
-        </div>
+        </ul>
       {{else}}
         <p class='group-empty' data-test-catalog-empty>{{@emptyMessage}}</p>
       {{/if}}
@@ -97,7 +106,15 @@ export default class CatalogSection extends Component<Signature> {
           minmax(min(var(--dashboard-tile-min-width), 100%), 1fr)
         );
         gap: var(--boxel-sp-lg) var(--boxel-sp);
+        margin: 0;
         padding: var(--boxel-sp-xs) 0;
+        list-style: none;
+      }
+      /* A one-cell grid, so the tile fills the list's grid cell. */
+      .list-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        min-width: 0;
       }
     </style>
   </template>

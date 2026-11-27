@@ -5,7 +5,7 @@ import { module, test } from 'qunit';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { visitOperatorMode } from '../helpers';
-import { setupDashboardTest } from '../helpers/dashboard';
+import { assertList, setupDashboardTest } from '../helpers/dashboard';
 
 import {
   getRealmServerRoute,
@@ -139,6 +139,18 @@ module('Acceptance | dashboard archive', function (hooks) {
         'the Archived section stays collapsed after archiving',
       );
     assert.dom(ARCHIVED_FOLD).hasAttribute('data-state', 'closed');
+  });
+
+  test('the archived workspaces are a list, with an item for each', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+
+    await archiveOwnedWorkspace();
+    await expandArchived();
+
+    let [item] = assertList(assert, '[data-test-archived-list]', 1);
+    assert
+      .dom('[data-test-archived-workspace="Workspace A"]', item)
+      .exists('the archived workspace is the item');
   });
 
   test('hovering an archived workspace icon shows its realm URL', async function (assert) {

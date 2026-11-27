@@ -144,6 +144,51 @@ export async function pressKey(key: string) {
   await triggerKeyEvent(target, 'keydown', key);
 }
 
+export const RECENT_TILES =
+  '[data-test-workspace-recent-list] [data-test-workspace]';
+
+// Sets the width of the app under test, which the dashboard's tiles and rows
+// lay out in, and puts it back after each test.
+export function setupDashboardWidth(hooks: NestedHooks) {
+  let originalWidth: string | undefined;
+  let testingRoot = () => document.querySelector<HTMLElement>('#ember-testing');
+  hooks.afterEach(function () {
+    if (originalWidth !== undefined) {
+      testingRoot()?.style.setProperty('width', originalWidth);
+      originalWidth = undefined;
+    }
+  });
+  return (width: string) => {
+    originalWidth ??= testingRoot()?.style.width ?? '';
+    testingRoot()?.style.setProperty('width', width);
+  };
+}
+
+// Asserts the element at `selector` is a list of `count` items, as assistive
+// technology counts them: a `ul` with the list role, which Safari drops from a
+// list with no markers, whose children are all `li`s. Returns the items.
+export function assertList(
+  assert: Assert,
+  selector: string,
+  count: number,
+  message = `${selector} has ${count} items`,
+): Element[] {
+  let list = find(selector);
+  assert.strictEqual(list?.tagName, 'UL', `${selector} is a list`);
+  assert.strictEqual(
+    list?.getAttribute('role'),
+    'list',
+    `${selector} keeps its list role`,
+  );
+  let items = [...(list?.children ?? [])];
+  assert.deepEqual(
+    items.map((item) => item.tagName),
+    Array(count).fill('LI'),
+    message,
+  );
+  return items;
+}
+
 export function sectionOrder() {
   return findAll('[data-test-dashboard-section]').map((section) =>
     section.getAttribute('data-test-dashboard-section'),
