@@ -1,13 +1,15 @@
 // What an app connecting to Boxel asks for, and the user's answer: the app,
-// the account, what the app will be able to do at each resource, and whether
-// to keep the connection for 30 days. It draws only the details the provider
-// answered (`ConsentDetails`): the app as the provider names it, and what the
-// access means in Boxel's own words from its registry. The one value taken
-// from the client's request is a confirmation code, shown only in the code's
-// own form (`readConsentDetails`).
+// the account, what the app will be able to do at each resource, whether to
+// keep the connection for 30 days, and where it can be disconnected later. It
+// draws only the details the provider answered (`ConsentDetails`): the app as
+// the provider names it, and what the access means in Boxel's own words from
+// its registry. The one value taken from the client's request is a
+// confirmation code, shown only in the code's own form (`readConsentDetails`).
 //
 // Focus starts on the heading each time consent is drawn, never on Allow, so
 // a user who presses Enter or Space as the page appears agrees to nothing.
+// The heading draws no focus ring: it isn't a control, and takes focus only so
+// a screen reader starts reading there.
 // Allow and Deny aren't in a form, so Enter in the checkbox submits nothing.
 //
 // Anyone can start a flow and send a signed-in user's browser here, so a page
@@ -25,7 +27,6 @@ import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
 import Check from '@cardstack/boxel-icons/check';
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 import { Alert } from '@cardstack/pretui/components/alert';
-import { Button } from '@cardstack/pretui/components/button';
 import { Checkbox } from '@cardstack/pretui/components/checkbox';
 import { StatusChip } from '@cardstack/pretui/components/status-chip';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
@@ -39,7 +40,8 @@ import type {
   ConsentScope,
 } from '../../security/oauth-provider.ts';
 
-import { appNameShown, renewalLine } from './copy.ts';
+import AccountLine from './account-line.gts';
+import { CONNECTED_APPS_LINE, appNameShown, renewalLine } from './copy.ts';
 
 // How long Allow waits, once the page is in view and its window focused,
 // before it takes a click.
@@ -58,6 +60,10 @@ interface Signature {
     onAllow: () => void;
     onDeny: () => void;
     onSignOut: () => void;
+    // Consent for a code typed into the device page (`device-page.gts`),
+    // rather than for a flow a browser started: the code shown is the one
+    // the user typed, and the warning names the code.
+    device?: boolean;
   };
 }
 
@@ -127,17 +133,11 @@ export default class Consent extends Component<Signature> {
               </span>
             {{/if}}
           </div>
-          <p class='account'>
-            <span data-test-authorize-account>{{this.account}}</span>
-            <Button
-              type='button'
-              class='sign-out'
-              @variant='link'
-              @disabled={{this.waiting}}
-              {{on 'click' @onSignOut}}
-              data-test-authorize-sign-out
-            >Not you? Sign out</Button>
-          </p>
+          <AccountLine
+            @account={{this.account}}
+            @disabled={{this.waiting}}
+            @onSignOut={{@onSignOut}}
+          />
         </div>
 
         <h1
@@ -161,10 +161,10 @@ export default class Consent extends Component<Signature> {
           <p class='note' data-test-authorize-own-app>Boxel’s own app.</p>
         {{/if}}
 
-        {{#if this.onThisComputer}}
+        {{#if this.asksToConfirm}}
           <section class='confirm' data-test-authorize-confirmation>
             {{#if @details.confirmationCode}}
-              <p class='lead'>Check that {{this.name}} shows this code:</p>
+              <p class='lead'>{{this.confirmationLead}}</p>
               <p
                 class='code'
                 data-test-authorize-confirmation-code
@@ -220,6 +220,10 @@ export default class Consent extends Component<Signature> {
           {{#if this.expiry}}
             <p class='expiry' data-test-authorize-expiry>{{this.expiry}}</p>
           {{/if}}
+          <p
+            class='connected-apps'
+            data-test-authorize-connected-apps
+          >{{CONNECTED_APPS_LINE}}</p>
         </div>
 
         {{#if @error}}
@@ -291,28 +295,6 @@ export default class Consent extends Component<Signature> {
         height: 1rem;
         color: var(--muted-foreground);
       }
-      .account {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: var(--boxel-sp-3xs);
-        margin: 0;
-        color: var(--muted-foreground);
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        overflow-wrap: anywhere;
-      }
-      .sign-out {
-        --pretui-button-fg: var(
-          --boxel-button-link-primary-foreground,
-          var(--primary)
-        );
-        min-height: 0;
-        padding-block: 0;
-        border: 0;
-        font-size: inherit;
-        line-height: inherit;
-      }
       .title {
         margin: 0;
         padding: 0;
@@ -324,10 +306,6 @@ export default class Consent extends Component<Signature> {
       .title:focus {
         outline: none;
       }
-      .title:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
       .unverified {
         display: flex;
         flex-direction: column;
@@ -338,14 +316,16 @@ export default class Consent extends Component<Signature> {
       .lead,
       .coverage,
       .terms,
-      .expiry {
+      .expiry,
+      .connected-apps {
         margin: 0;
         overflow-wrap: anywhere;
       }
       .note,
       .coverage,
       .terms,
-      .expiry {
+      .expiry,
+      .connected-apps {
         color: var(--muted-foreground);
       }
       .confirm {
@@ -383,7 +363,8 @@ export default class Consent extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-4xs);
       }
-      .expiry {
+      .expiry,
+      .connected-apps {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
       }
@@ -456,7 +437,23 @@ export default class Consent extends Component<Signature> {
     return this.ownApp && this.args.details.app.place === 'this-computer';
   }
 
+  // Whether the page asks the user to check that they started this sign-in:
+  // for an app on their own computer, and for every code typed into the
+  // device page.
+  private get asksToConfirm(): boolean {
+    return this.onThisComputer || Boolean(this.args.device);
+  }
+
+  private get confirmationLead(): string {
+    return this.args.device
+      ? 'Check that your terminal shows this code:'
+      : `Check that ${this.name} shows this code:`;
+  }
+
   private get confirmationWarning(): string {
+    if (this.args.device) {
+      return `Only allow this if you typed this code from your own terminal, where you just started signing in to ${this.name}. If someone sent you this code, choose Deny.`;
+    }
     let matches = this.args.details.confirmationCode
       ? ' and it shows this code'
       : '';

@@ -17,6 +17,7 @@ import {
   sendResponseForSystemError,
   sendResponseForForbiddenRequest,
   fetchRequestFromContext,
+  requestUser,
 } from '../middleware/index.ts';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import {
@@ -204,11 +205,13 @@ export default function handleRequestForward({
     let upstreamStatus: number | undefined;
 
     try {
-      // 1. Validate JWT token and extract user
+      // 1. Who is calling: an automation run, or the user a session or an
+      // OAuth caller names (`requestUser`, since an OAuth caller carries no
+      // session claims).
       let authorization = ctxt.req.headers['authorization'] ?? null;
       let runToken = runTokenOf(authorization);
-      const token = ctxt.state.token;
-      if (!token && !runToken) {
+      let callerUser = runToken ? undefined : requestUser(ctxt);
+      if (!callerUser && !runToken) {
         await sendResponseForForbiddenRequest(
           ctxt,
           'Token is required to forward requests',
@@ -387,7 +390,7 @@ export default function handleRequestForward({
           ?.model;
         runModel = typeof model === 'string' ? model : undefined;
       } else {
-        matrixUserId = token.user;
+        matrixUserId = callerUser!;
       }
 
       if (

@@ -23,6 +23,12 @@ export type RealmRunnerCallMethod =
   | 'images.generate'
   | 'workspaces.create'
   | 'workspaces.delete'
+  | 'automations.estimate'
+  | 'automations.preview'
+  | 'automations.runNow'
+  | 'automations.switchOn'
+  | 'automations.readRun'
+  | 'automations.readPreviewFile'
   | 'room.enableSkills'
   | 'room.disableSkills'
   | 'room.setModel'
@@ -80,7 +86,32 @@ export interface AutomationRunContext {
   webhookPayload?: unknown;
   // True for a Preview: the run's writes are shown and then discarded.
   dryRun: boolean;
+  // For a batch's follow-up (trigger kind `batch`): the batch of
+  // `realm.resolve` requests the run before it sent with
+  // `realm.resolve.batch`, and each request's answer in the place the
+  // request had in its list.
+  batch?: AutomationBatch;
 }
+
+export interface AutomationBatch {
+  // OpenRouter's id for the batch; null for a Preview's, which sends its
+  // requests at once at the normal price and submits no batch.
+  id: string | null;
+  // When the follow-up was due at the latest (ISO 8601).
+  deadline: string;
+  // The run milestone the batch started.
+  milestone: string;
+  // True when the batch missed its deadline and its requests were sent
+  // again at the normal price after it.
+  late: boolean;
+  results: AutomationBatchResult[];
+}
+
+// One request's answer: what `realm.resolve` answers, or why the request
+// failed.
+export type AutomationBatchResult =
+  | { output: Record<string, unknown>; model: string }
+  | { error: string };
 
 export type RealmRunnerCallHandler = (
   method: RealmRunnerCallMethod,

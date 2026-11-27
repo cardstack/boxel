@@ -3,6 +3,7 @@ import {
   automationsWaitingForKeyApproval,
   followAutomationKeyApprovals,
   followEndedKeyApprovals,
+  reportKeyApprovalChanges,
 } from '../lib/automation-key-approvals.ts';
 import {
   logger,
@@ -257,6 +258,27 @@ export function handleShareKey(args: CreateRoutesArgs): Handler {
       opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       ticket,
     });
+    // A key shared into the realm can serve an `{{apiKey}}` slot an
+    // automation there waits on, so every waiting automation of the realm is
+    // checked again: the share's owner is then asked to approve it, and the
+    // realm's direct writers are no longer asked to share a key. A new share
+    // also changes what every automation of the realm shows for such a slot,
+    // so the ones the follow didn't move are reported too.
+    let realmURL = new URL(share.realm);
+    let followed = await followAutomationKeyApprovals(
+      args,
+      realmURL,
+      await automationsWaitingForKeyApproval(dbAdapter, realmURL, args),
+    );
+    await reportKeyApprovalChanges(
+      args,
+      [share.realm],
+      new Set(
+        [...followed]
+          .filter(([, { kind }]) => kind !== 'unchanged')
+          .map(([id]) => id),
+      ),
+    );
     await sendJSON(ctxt, 201, { data: serialize(share) });
   });
 }
@@ -275,15 +297,16 @@ export function handleUnshareKey(args: CreateRoutesArgs): Handler {
   });
 }
 
-export function handleSuspendKeyShare({
-  dbAdapter,
-}: CreateRoutesArgs): Handler {
+export function handleSuspendKeyShare(args: CreateRoutesArgs): Handler {
+  let { dbAdapter } = args;
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     let share = await suspendShare(dbAdapter, {
       user,
       shareId: ctxt.params.shareId,
     });
+    // The automations whose slots the share fills show it suspended.
+    await reportKeyApprovalChanges(args, [share.realm]);
     await sendJSON(ctxt, 200, { data: serialize(share) });
   });
 }
@@ -302,10 +325,21 @@ export function handleResumeKeyShare(args: CreateRoutesArgs): Handler {
       ticket: ticketOf(body),
     });
     let realmURL = new URL(share.realm);
-    await followAutomationKeyApprovals(
+    let followed = await followAutomationKeyApprovals(
       args,
       realmURL,
       await automationsWaitingForKeyApproval(dbAdapter, realmURL, args),
+    );
+    // An automation the suspension left active shows the share suspended
+    // until its realm's direct writers are told the share is back.
+    await reportKeyApprovalChanges(
+      args,
+      [share.realm],
+      new Set(
+        [...followed]
+          .filter(([, { kind }]) => kind !== 'unchanged')
+          .map(([id]) => id),
+      ),
     );
     await sendJSON(ctxt, 200, { data: serialize(share) });
   });

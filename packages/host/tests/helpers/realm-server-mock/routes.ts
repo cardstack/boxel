@@ -721,9 +721,13 @@ function registerAuthRoutes() {
   });
 
   // The app asks how many key notices the user hasn't seen when a session
-  // starts, from both listings. The mock keeps none, so the badge stays
+  // starts, from every listing. The mock keeps none, so the badge stays
   // hidden unless a test stands in its own listing.
-  for (let path of ['/_key-policy-notices', '/_key-limit-notices']) {
+  for (let path of [
+    '/_key-policy-notices',
+    '/_key-limit-notices',
+    '/_key-approval-notices',
+  ]) {
     registerRealmServerRoute({
       path,
       handler: async (req) =>
@@ -735,6 +739,20 @@ function registerAuthRoutes() {
           : null,
     });
   }
+
+  // The app reads the user's automation notices when a session starts, for
+  // the dashboard's badges. The mock keeps none, so nothing is badged unless
+  // a test stands in its own listing.
+  registerRealmServerRoute({
+    path: '/_automation-notices',
+    handler: async (req) =>
+      req.method === 'GET'
+        ? new Response(JSON.stringify({ data: [], meta: { total: 0 } }), {
+            status: 200,
+            headers: { 'content-type': 'application/vnd.api+json' },
+          })
+        : null,
+  });
 
   // The realm server edits a user's workspace list only when its Synapse
   // keeps an account for them. The mock keeps none, so it answers as the

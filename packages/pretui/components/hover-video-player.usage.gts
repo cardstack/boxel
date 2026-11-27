@@ -40,9 +40,21 @@ class HoverVideoPlayerUsage extends GlimmerComponent {
     return this.playing ? 'previewing' : 'at rest';
   }
 
+  get usage() {
+    let bits = [
+      '@src="/clips/kandy.mp4"',
+      '@poster="/clips/kandy.jpg"',
+      '@label="Repricing the Kandy catalogue"',
+    ];
+    if (this.ratio !== '16 / 9') bits.push(`@ratio="${this.ratio}"`);
+    if (!this.playOnIntent) bits.push('@playOnIntent={{false}}');
+    return `<HoverVideoPlayer ${bits.join(' ')} />`;
+  }
+
   <template>
     <FreestyleUsage
       @name='HoverVideoPlayer'
+      @source={{this.usage}}
       @description='A thumbnail that becomes a moving preview when you show interest in it, and stops when you stop. Four things the genre routinely gets wrong, fixed here. Touch: upstream binds mouseenter/mouseleave and is simply dead on a phone, so there is always a real play/pause button — fading in on hover or focus for a fine pointer, permanently visible at 44px on a coarse one. Keyboard: focusin/focusout drive the same path as the pointer, so tabbing to the card previews it. Motion preference: prefers-reduced-motion disables hover- and focus-autoplay outright, because a moving image is exactly what that preference is about — the explicit button still works, since the preference is about ambient motion and not about consent. Layout: @ratio reserves the box before the poster loads, so a grid of these does not reflow as they arrive. Playback follows ONE tracked boolean through a modifier — no timer, no rAF, no listener that outlives the element — and a refused play() is routed back to the component so the control never keeps claiming it is playing.'
     >
       <:example>

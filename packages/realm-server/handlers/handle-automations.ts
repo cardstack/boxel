@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import {
   DAYS_PER_AVERAGE_MONTH,
+  storageChargeStopped,
   getAutomationRun,
   getAutomationStorage,
   isAutomationRunId,
@@ -15,11 +16,13 @@ import {
   SupportedMimeType,
   type AutomationRun,
   type DBAdapter,
+  type Expression,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  automationsInRealm,
   cancelAutomationRunFor,
   getAutomation,
   pauseAutomation,
@@ -49,6 +52,9 @@ import {
   type RunLogLevel,
 } from '@cardstack/runtime-common/automation-run-log';
 import { admitPayer } from '@cardstack/runtime-common/automation-admission';
+import { automationNotices } from '@cardstack/runtime-common/automation-notices';
+import { automationCredentialNotices } from '../lib/automation-credential-notices.ts';
+import { startResumedAIBatchFollowUps } from '@cardstack/runtime-common/ai-batch-follow-ups';
 import {
   confirmationOf,
   KEY_APPROVAL_REFUSAL_REASONS,
@@ -57,6 +63,7 @@ import {
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   AUTOMATION_ESTIMATE_RESOURCE_TYPE,
+  AUTOMATION_NOTICE_RESOURCE_TYPE,
   AUTOMATION_RESOURCE_TYPE,
   AUTOMATION_ROUTE_AUTOMATION_PARAM,
   AUTOMATION_ROUTE_PATH_PARAM,
@@ -86,7 +93,13 @@ import {
 } from '../lib/automation-estimate.ts';
 import { buildAdmitPayerSpending } from '../lib/automation-spending.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
+import { namedToViewer } from '../lib/named-users.ts';
 import { followAutomationKeyApprovals } from '../lib/automation-key-approvals.ts';
+import {
+  followKeyApprovalNotices,
+  keyApprovalNoticeRecipients,
+  tellKeyApprovalNoticesChanged,
+} from '../lib/automation-key-approval-notices.ts';
 import { exactMeteredCredits } from '../lib/metered-charge.ts';
 import { currentPricing } from '../lib/pricing.ts';
 import {
@@ -360,12 +373,52 @@ function uncheckedKeyApprovals(retry: string): AutomationRouteError {
 
 // Key approvals as a route answers them: whether every one is there, the
 // version a confirmation approving the rest names (`confirmationOf`: the
-// version and its `callApiCalls` cap), and each operation's state.
-function serializeKeyApprovals(approvals: AutomationKeyApprovals) {
+// version and its `callApiCalls` cap), and each operation's state. The owner
+// of a share a missing approval names is shown to `caller` only as the
+// key-share listings show a share's owner (`namedToViewer`, ADR 011: a person
+// named with the caller in the share's realm), and is null otherwise.
+async function serializeKeyApprovals(
+  dbAdapter: DBAdapter,
+  caller: string,
+  realmURL: URL,
+  approvals: AutomationKeyApprovals,
+) {
+  let owners = approvals.operations.flatMap((operation) =>
+    (operation.missing ?? []).flatMap((missing) =>
+      (missing.shares ?? []).map((share) => share.owner),
+    ),
+  );
+  let isNamed = await namedToViewer(
+    (expression: Expression) => query(dbAdapter, expression),
+    caller,
+    [realmURL.href],
+    owners.filter((owner): owner is string => typeof owner === 'string'),
+  );
   return {
     approved: approvals.approved,
     version: confirmationOf(approvals.version),
-    operations: approvals.operations,
+    operations: approvals.operations.map((operation) =>
+      operation.missing
+        ? {
+            ...operation,
+            missing: operation.missing.map((missing) =>
+              missing.shares
+                ? {
+                    ...missing,
+                    shares: missing.shares.map((share) => ({
+                      ...share,
+                      owner:
+                        share.owner !== null &&
+                        isNamed(realmURL.href, share.owner)
+                          ? share.owner
+                          : null,
+                    })),
+                  }
+                : missing,
+            ),
+          }
+        : operation,
+    ),
   };
 }
 
@@ -578,6 +631,65 @@ async function estimateFor(
   });
 }
 
+// How many realms `GET /_automation-notices` reads at once.
+const NOTICE_REALMS_AT_ONCE = 4;
+
+// `GET /_automation-notices`: the session's own user's automation notices
+// across every realm they write directly, which the app's badges count (see
+// `automation-notices.ts`). The realms come from the user's own permission
+// rows, each checked as every other automation route checks it, so a
+// wildcard row, a policy grant or a bot account never lists one.
+export function handleAutomationNotices(args: CreateRoutesArgs): Handler {
+  return automationHandler(async (ctxt) => {
+    let caller = callerOf(ctxt);
+    let realmURLs = (
+      (await query(args.dbAdapter, [
+        'SELECT realm_url FROM realm_user_permissions WHERE username =',
+        param(caller),
+        'AND write ORDER BY realm_url',
+      ])) as { realm_url: string }[]
+    ).map(({ realm_url }) => realm_url);
+    // Realms are read a few at a time, so a person who writes many realms
+    // directly holds a few of the database's connections, not one per realm.
+    let noticesIn = async (realmURL: string) => {
+      if (
+        !(await isDirectWriter(
+          args.dbAdapter,
+          new URL(realmURL),
+          caller,
+          args.matrixClient.serverName,
+        ))
+      ) {
+        return [];
+      }
+      let rows = await automationsInRealm(
+        args.dbAdapter,
+        ri(args.virtualNetwork.unresolveURL(realmURL)),
+      );
+      let notices = await automationNotices(args.dbAdapter, rows, {
+        viewer: caller,
+        credentialNotices: (run) =>
+          automationCredentialNotices(args.dbAdapter, run),
+      });
+      return [...notices]
+        .filter(([, notice]) => notice.forViewer)
+        .map(([automationId, notice]) => ({
+          type: AUTOMATION_NOTICE_RESOURCE_TYPE,
+          id: args.virtualNetwork.toURLHref(automationId),
+          attributes: { realm: realmURL, ...notice },
+        }));
+    };
+    let data: Awaited<ReturnType<typeof noticesIn>> = [];
+    for (let i = 0; i < realmURLs.length; i += NOTICE_REALMS_AT_ONCE) {
+      let batch = await Promise.all(
+        realmURLs.slice(i, i + NOTICE_REALMS_AT_ONCE).map(noticesIn),
+      );
+      data.push(...batch.flat());
+    }
+    await sendJSON(ctxt, 200, { data, meta: { total: data.length } });
+  });
+}
+
 // `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>`: what
 // switching the automation on is likely to cost a month, the monthly credit
 // cap the card sets, which a switch-on agrees to, and its key approvals
@@ -628,7 +740,14 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
           monthlyCredits: declaration.caps.monthlyCredits,
           estimate,
           ...(keyApprovals
-            ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+            ? {
+                keyApprovals: await serializeKeyApprovals(
+                  args.dbAdapter,
+                  caller,
+                  realmURL,
+                  keyApprovals,
+                ),
+              }
             : {}),
         },
       },
@@ -702,7 +821,12 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
       : undefined;
     await answerChange(ctxt, args, change, caller, 201, {
       ...(estimate ? { estimate } : {}),
-      keyApprovals: serializeKeyApprovals(keyApprovals),
+      keyApprovals: await serializeKeyApprovals(
+        args.dbAdapter,
+        caller,
+        realmURL,
+        keyApprovals,
+      ),
     });
   });
 }
@@ -783,8 +907,8 @@ async function automationRequest(
   return { caller, realmURL, automationId, attributes };
 }
 
-// `POST /_automation-pause`: pauses the automation and cancels its pending
-// and running runs.
+// `POST /_automation-pause`: pauses the automation, cancels its pending and
+// running runs, and holds its batch follow-ups until a resume starts them.
 export function handleAutomationPause(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let { caller, automationId } = await automationRequest(ctxt, args);
@@ -793,6 +917,16 @@ export function handleAutomationPause(args: CreateRoutesArgs): Handler {
       { automationId, user: caller },
       actorOptions(args),
     );
+    if (change.ok) {
+      // A paused automation waits on nobody, so its key approval notices
+      // end; a resume checks its approvals again.
+      await followKeyApprovalNotices(args.dbAdapter, {
+        automationId,
+        automationURL: args.virtualNetwork.toURLHref(automationId),
+        realmURL: args.virtualNetwork.toURLHref(change.automation.realm),
+        awaiting: undefined,
+      });
+    }
     await answerChange(ctxt, args, change, caller);
   });
 }
@@ -805,7 +939,10 @@ export function handleAutomationPause(args: CreateRoutesArgs): Handler {
 // 422 with the run's refusal code in `meta.code`, and the automation stays
 // paused. A key approval the caller as payer would need doesn't refuse the
 // resume: as at switch-on, the automation resumes *waiting for key approval*
-// until it lands, and `meta.keyApprovals` says what is missing.
+// until it lands, and `meta.keyApprovals` says what is missing. Each batch
+// follow-up the pause held then acts as the caller, and starts at once when
+// its batch's deadline passed or the batch reached a final status, otherwise
+// at its deadline.
 export function handleAutomationResume(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let { caller, realmURL, automationId, attributes } =
@@ -870,12 +1007,64 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
       },
       actorOptions(args),
     );
+    if (change.ok && change.automation.state === 'waiting-for-key-approval') {
+      // As at switch-on: the resumed row is checked once more, which also
+      // records the notices of the people its approvals wait on.
+      let followed = (
+        await followAutomationKeyApprovals(args, realmURL, [automationId])
+      ).get(automationId);
+      if (followed) {
+        change = { ok: true, automation: followed.automation };
+      }
+    }
+    if (change.ok) {
+      await startHeldFollowUps(args, automationId);
+    }
     await answerChange(ctxt, args, change, caller, 200, {
       ...(keyApprovals
-        ? { keyApprovals: serializeKeyApprovals(keyApprovals) }
+        ? {
+            keyApprovals: await serializeKeyApprovals(
+              args.dbAdapter,
+              caller,
+              realmURL,
+              keyApprovals,
+            ),
+          }
         : {}),
     });
   });
+}
+
+// Starts each batch follow-up a resume lets start at once: one the pause
+// held, and one whose batch's deadline passed or that reached a final status
+// (ADR 030 §1.5). The resume has committed, so a failure here is logged, and
+// the minute tick starts what this missed.
+async function startHeldFollowUps(
+  args: CreateRoutesArgs,
+  automationId: RealmResourceIdentifier,
+) {
+  try {
+    let reportRunChange = realmServerRunChangeReporter(args);
+    for (let followUp of await startResumedAIBatchFollowUps(
+      args.dbAdapter,
+      automationId,
+      { queue: args.queue, virtualNetwork: args.virtualNetwork },
+    )) {
+      if (followUp.kind === 'failed') {
+        log.error(
+          `couldn't start batch ${followUp.batchId}'s follow-up after resuming ${automationId}; the tick starts it:`,
+          followUp.error,
+        );
+      } else if (followUp.kind === 'started' || followUp.kind === 'resumed') {
+        await reportRunChange?.(followUp.runId);
+      }
+    }
+  } catch (error) {
+    log.error(
+      `couldn't start the batch follow-ups of ${automationId} after its resume; the tick starts them:`,
+      error,
+    );
+  }
 }
 
 // `POST /_automation-remove`: switches the automation off, deleting its row
@@ -884,11 +1073,19 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
 export function handleAutomationRemove(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let { caller, automationId } = await automationRequest(ctxt, args);
+    let noticed = await keyApprovalNoticeRecipients(
+      args.dbAdapter,
+      automationId,
+    );
     let change = await removeAutomation(
       args.dbAdapter,
       { automationId, user: caller },
       actorOptions(args),
     );
+    if (change.ok) {
+      // Removing the row ended its key approval notices.
+      tellKeyApprovalNoticesChanged(noticed);
+    }
     await answerChange(ctxt, args, change, caller);
   });
 }
@@ -1254,7 +1451,9 @@ async function storageCharges(
 // file the automation's runs created that still exists, with its bytes on
 // disk and in the index, and the daily charge: what a day of that storage
 // costs at this server's prices (`dailyCredits`, before rounding, or null
-// without prices) and the storage charges written so far. A switched-on
+// without prices), the storage charges written so far, and, while the
+// automation isn't active, why and since when Boxel isn't charging for the
+// storage (`chargeStopped`, see `storageChargeStopped`). A switched-on
 // automation's payer pays the charge, and is shown under ADR 011 (see
 // `shownIdentity`).
 export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
@@ -1290,9 +1489,12 @@ export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
       fileBytes: files.reduce((sum, file) => sum + file.fileBytes, 0),
       indexBytes: files.reduce((sum, file) => sum + file.indexBytes, 0),
     };
-    let payer = row
-      ? await shownIdentity(args.dbAdapter, caller, row.payer)
-      : null;
+    let [payer, chargeStopped] = row
+      ? await Promise.all([
+          shownIdentity(args.dbAdapter, caller, row.payer),
+          storageChargeStopped(args.dbAdapter, automationId),
+        ])
+      : [null, null];
     let pricing = currentPricing();
     let dailyCredits = pricing
       ? exactMeteredCredits(
@@ -1325,6 +1527,7 @@ export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
           dailyCredits,
           pricingVersion: pricing?.version ?? null,
           charges,
+          chargeStopped,
         },
       },
     });

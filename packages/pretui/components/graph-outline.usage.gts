@@ -30,6 +30,15 @@ class GraphOutlineUsage extends GlimmerComponent {
   setActiveId = (value: string) => (this.activeId = value);
   select = (id: string) => (this.activeId = id);
 
+  get usage() {
+    let bits = ['@nodes={{this.nodes}}', '@edges={{this.edges}}'];
+    if (this.label) bits.push(`@label="${this.label}"`);
+    if (this.mode !== 'sr-only') bits.push(`@mode="${this.mode}"`);
+    if (this.activeId) bits.push(`@activeId="${this.activeId}"`);
+    bits.push('@onSelect={{this.select}}');
+    return `<GraphOutline ${bits.join(' ')} />`;
+  }
+
   get modeValue() {
     return this.mode as 'visible' | 'sr-only';
   }
@@ -38,7 +47,7 @@ class GraphOutlineUsage extends GlimmerComponent {
     <FreestyleUsage
       @name='GraphOutline'
       @description='The node graph as text: a named region, one real button per node and every incoming and outgoing connection spoken in full. It is the keyboard-readable peer of NodeCanvas, not a canvas fallback screenshot.'
-      @source='<GraphOutline @nodes={{this.nodes}} @edges={{this.edges}} @mode="visible" />'
+      @source={{this.usage}}
       @viewportMode='wide'
     >
       <:example>

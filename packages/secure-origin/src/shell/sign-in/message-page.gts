@@ -1,7 +1,8 @@
 // A page that only says something: a title, a line under it, and whatever
 // follows. Every page a sign-in ends on, or stops at, is one. A page that
 // replaces another the user was working in (`@focus`) takes focus on its
-// title, so a screen reader reads what it says.
+// title, so a screen reader reads what it says. The title draws no focus
+// ring: it isn't a control.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { focusWhen } from '@cardstack/pretui/focus';
@@ -51,10 +52,6 @@ const MessagePage: TemplateOnlyComponent<Signature> = <template>
     }
     .title:focus {
       outline: none;
-    }
-    .title:focus-visible {
-      outline: 2px solid var(--ring);
-      outline-offset: 2px;
     }
     .info {
       margin-top: 0;

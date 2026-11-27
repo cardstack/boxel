@@ -55,6 +55,12 @@ const PROMPTS: PromptTemplate[] = [
   },
 ];
 
+const USAGE = `<PromptLibrary
+  @prompts={{this.prompts}}
+  @onUse={{this.use}}
+  @onCopy={{this.copy}}
+/>`;
+
 class PromptLibraryUsage extends GlimmerComponent {
   @tracked used = '—';
 
@@ -65,6 +71,7 @@ class PromptLibraryUsage extends GlimmerComponent {
     <FreestyleUsage
       @name='PromptLibrary'
       @description='A shelf of prompts worth keeping. The search is instant and unthrottled, deliberately: a debounce here would be a re-arming timer, which a realm forbids and which this component does not need — filtering N strings on keystroke is cheaper than the render it triggers. Filtering is overridable in both directions, so the same component serves a self-contained shelf and one driven from a card’s own query. The category segments are DERIVED from the prompts in first-seen order, so a caller never keeps a second list in sync, and the result count is announced politely once per change rather than per keystroke. The grid reflows through unnamed container queries — three columns, two, then one — because a card knows its pane, not the viewport.'
+      @source={{USAGE}}
     >
       <:example>
         <PromptLibrary

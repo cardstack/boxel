@@ -1,12 +1,16 @@
 // The provider's short-lived objects, in `oauth_provider_objects`: the
-// library's interactions, sessions and authorization codes, the error
-// references Boxel's error page reads (ADR 021 §1.8), and each flow's consent
-// decision and the ticket that finishes it (§1.7).
+// library's interactions, sessions, authorization codes and device codes (with
+// a row for each device code's user code), the error references Boxel's error
+// page reads (ADR 021 §1.8), each flow's consent decision and the ticket that
+// finishes it (§1.7), and the network of the browser that finished a flow of a
+// pre-registered app on the user's computer, kept for its code exchange
+// (`network-binding.ts`).
 //
 // Each object's value is a bearer secret: an interaction's ID is in the
 // browser's URL, a session's ID is its cookie, and an authorization code, an
 // error reference and a ticket are values a browser carries too. A decision is
-// stored under its flow's interaction ID. A row is stored and found only
+// stored under its flow's interaction ID, and a finish's network under the
+// ID of the grant the flow created. A row is stored and found only
 // by the SHA-256 of that value, and never holds the value itself (ADR 021
 // §1.2). The library copies each object's value into its payload as `jti`,
 // and an interaction's ID a second time in `returnTo`, the URL the flow
@@ -23,6 +27,7 @@ import { createHash, randomBytes } from 'crypto';
 import { errors, type Adapter, type AdapterPayload } from 'oidc-provider';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import { endGrant } from './grants.ts';
+import type { CallerNetwork } from './network-binding.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -133,9 +138,10 @@ function jsonEscaped(value: string): string {
   return JSON.stringify(value).slice(1, -1);
 }
 
-// The part of the library's adapter interface it uses for none of Boxel's
-// kinds: finding by user code (the device flow is off), by UID, consuming and
-// revoking by grant. Each throws, naming the kind.
+// The part of the library's adapter interface it uses for few of Boxel's
+// kinds: finding by user code (the library's own device pages, which are never
+// served), by UID, consuming and revoking by grant. Each throws, naming the
+// kind, unless a kind's adapter supplies it.
 export abstract class OAuthProviderAdapter implements Adapter {
   readonly #kind: string;
 
@@ -330,6 +336,309 @@ export class AuthorizationCodeAdapter extends BearerKeyedAdapter {
       { bind: [grantId] },
     );
   }
+}
+
+const DEVICE_CODE_KIND = 'DeviceCode';
+const DEVICE_USER_CODE_KIND = 'DeviceUserCode';
+
+// How much longer a user code is remembered than its device code lasts, so the
+// `device` page can tell someone who typed it late that it expired, rather
+// than that it was never issued.
+const EXPIRED_USER_CODE_REMEMBERED_SECONDS = 10 * 60;
+
+// What a user code's row holds: which device code it names, by that code's
+// row key, and when that code expires. Never the device code itself.
+interface DeviceUserCodeRecord {
+  deviceCode: string;
+  expiresAt: number;
+}
+
+// The user code as the library stores it: upper case, with nothing but
+// letters and digits (the library's `normalize`).
+export function normalizeUserCode(input: string): string {
+  return input.toUpperCase().replace(/\W/g, '');
+}
+
+// The library's adapter for its device codes (RFC 8628), stored by their
+// values, which the app polls the token endpoint with. Each also carries the
+// user code the user types into the secure origin's `device` page. That is a
+// bearer value too: whoever enters it decides the device code. It is never
+// stored in the device code's row. A row of its own, keyed by the user code's
+// hash, names the device code's row. The device code's `deviceInfo` (the app's
+// address and user agent, by default) is never stored either: nothing reads
+// it.
+//
+// Boxel decides a device code itself, from its own routes (`device.ts`), by
+// writing the outcome into the row (`decideDeviceCode`): the library's own
+// pages for entering and confirming a code are never served. The token
+// endpoint then finds the outcome, as its own resume would have written it.
+//
+// A device code is exchanged once. Marking it used is atomic, and a second
+// exchange of a code that was decided ends its grant as reuse, as an
+// authorization code's does (ADR 021 §1.9).
+export class DeviceCodeAdapter extends BearerKeyedAdapter {
+  #dbAdapter: DBAdapter;
+
+  constructor(dbAdapter: DBAdapter) {
+    super(dbAdapter, DEVICE_CODE_KIND);
+    this.#dbAdapter = dbAdapter;
+  }
+
+  protected stored(payload: AdapterPayload): Record<string, unknown> {
+    let {
+      userCode: _userCode,
+      deviceInfo: _deviceInfo,
+      ...rest
+    } = super.stored(payload);
+    return rest;
+  }
+
+  // The user code's row is stored first, and only if no current row has
+  // that user code: two live device codes can't share one, since entering it
+  // would decide whichever it named. The library makes a code from 20^8, so a
+  // clash among codes alive at once is vanishingly rare, and refused when it
+  // happens: the app asks for another.
+  async upsert(
+    id: string,
+    payload: AdapterPayload,
+    expiresIn: number,
+  ): Promise<void> {
+    let userCode = payload.userCode;
+    if (typeof userCode === 'string') {
+      let record: DeviceUserCodeRecord = {
+        deviceCode: sha256Hex(id),
+        expiresAt: Math.floor(Date.now() / 1000) + expiresIn,
+      };
+      let stored = await prepareStore(
+        this.#dbAdapter,
+        DEVICE_USER_CODE_KIND,
+        userCode,
+        { ...record },
+      );
+      let rows = await this.#dbAdapter.execute(
+        `INSERT INTO oauth_provider_objects (kind, id_hash, payload, expires_at)
+           VALUES ($1, decode($2, 'hex'), $3::jsonb, now() + make_interval(secs => $4))
+           ON CONFLICT (kind, id_hash) DO UPDATE
+             SET payload = EXCLUDED.payload, expires_at = EXCLUDED.expires_at
+             WHERE oauth_provider_objects.payload->>'deviceCode' = EXCLUDED.payload->>'deviceCode'
+                OR oauth_provider_objects.expires_at <= now()
+           RETURNING 1`,
+        {
+          bind: [
+            DEVICE_USER_CODE_KIND,
+            sha256Hex(normalizeUserCode(userCode)),
+            stored,
+            expiresIn + EXPIRED_USER_CODE_REMEMBERED_SECONDS,
+          ],
+        },
+      );
+      if (rows.length === 0) {
+        throw new OAuthProviderObjectError(
+          `the OAuth provider's DeviceCode has a user code another live code has`,
+        );
+      }
+    }
+    await super.upsert(id, payload, expiresIn);
+  }
+
+  // Found past its expiry too, until it is deleted: the library checks a
+  // device code's expiry itself, and answers a poll for an expired one
+  // `expired_token`, which tells the app to start over (RFC 8628 §3.5).
+  async find(id: string): Promise<AdapterPayload | undefined> {
+    let [row] = (await this.#dbAdapter.execute(
+      `SELECT payload FROM oauth_provider_objects
+         WHERE kind = $1 AND id_hash = decode($2, 'hex')`,
+      { bind: [DEVICE_CODE_KIND, sha256Hex(id)] },
+    )) as { payload: unknown }[];
+    return row
+      ? ({ ...asRecord(row.payload), jti: id } as AdapterPayload)
+      : undefined;
+  }
+
+  async consume(id: string): Promise<void> {
+    let hash = sha256Hex(id);
+    let marked = await this.#dbAdapter.execute(
+      `UPDATE oauth_provider_objects
+          SET payload = payload || jsonb_build_object(
+                'consumed', floor(extract(epoch FROM now()))::bigint
+              )
+        WHERE kind = $1 AND id_hash = decode($2, 'hex')
+          AND payload->'consumed' IS NULL AND expires_at > now()
+        RETURNING 1`,
+      { bind: [DEVICE_CODE_KIND, hash] },
+    );
+    if (marked.length > 0) {
+      return;
+    }
+    let [row] = (await this.#dbAdapter.execute(
+      `SELECT payload->>'grantId' AS grant_id FROM oauth_provider_objects
+        WHERE kind = $1 AND id_hash = decode($2, 'hex')
+          AND payload->'consumed' IS NOT NULL`,
+      { bind: [DEVICE_CODE_KIND, hash] },
+    )) as { grant_id: string | null }[];
+    if (!row) {
+      throw new errors.ExpiredToken('device code is expired');
+    }
+    if (row.grant_id) {
+      log.info('device code reused');
+      await endGrant(this.#dbAdapter, row.grant_id, 'reuse');
+    }
+    throw new errors.InvalidGrant('device code already consumed');
+  }
+
+  async revokeByGrantId(grantId: string): Promise<void> {
+    await this.#dbAdapter.execute(
+      `DELETE FROM oauth_provider_objects
+        WHERE kind = $1 AND payload->>'grantId' = $2`,
+      { bind: [DEVICE_CODE_KIND, grantId] },
+    );
+  }
+}
+
+// A device code as the `device` page's routes see it, found by its user
+// code. `key` is the device code's row key (its hash), never the code.
+export type DeviceCodeLookup =
+  | {
+      state: 'pending';
+      key: string;
+      clientId: string;
+      params: Record<string, unknown>;
+      // Seconds until the device code expires.
+      remainingSeconds: number;
+    }
+  // Allowed, denied or exchanged already.
+  | { state: 'decided' }
+  | { state: 'expired' }
+  | { state: 'unknown' };
+
+export async function findDeviceCodeByUserCode(
+  dbAdapter: DBAdapter,
+  userCode: string,
+): Promise<DeviceCodeLookup> {
+  let normalized = normalizeUserCode(userCode);
+  if (normalized === '') {
+    return { state: 'unknown' };
+  }
+  let [row] = (await dbAdapter.execute(
+    `SELECT u.payload AS user_code,
+            d.payload AS device_code,
+            floor(extract(epoch FROM d.expires_at - now()))::bigint AS remaining
+       FROM oauth_provider_objects AS u
+       LEFT JOIN oauth_provider_objects AS d
+         ON d.kind = $3
+        AND d.id_hash = decode(u.payload->>'deviceCode', 'hex')
+      WHERE u.kind = $1 AND u.id_hash = decode($2, 'hex')
+        AND u.expires_at > now()`,
+    {
+      bind: [DEVICE_USER_CODE_KIND, sha256Hex(normalized), DEVICE_CODE_KIND],
+    },
+  )) as {
+    user_code: unknown;
+    device_code: unknown;
+    remaining: number | string | null;
+  }[];
+  if (!row) {
+    return { state: 'unknown' };
+  }
+  let named = asRecord(row.user_code) as unknown as DeviceUserCodeRecord;
+  // A device code that is gone was deleted after it expired, or with its
+  // grant when that ended.
+  if (row.device_code === null || row.device_code === undefined) {
+    return named.expiresAt <= Math.floor(Date.now() / 1000)
+      ? { state: 'expired' }
+      : { state: 'decided' };
+  }
+  if (Number(row.remaining) <= 0) {
+    return { state: 'expired' };
+  }
+  let payload = asRecord(row.device_code);
+  if (
+    payload.accountId !== undefined ||
+    payload.error !== undefined ||
+    payload.consumed !== undefined ||
+    typeof payload.clientId !== 'string' ||
+    !isRecord(payload.params)
+  ) {
+    return { state: 'decided' };
+  }
+  return {
+    state: 'pending',
+    key: named.deviceCode,
+    clientId: payload.clientId,
+    params: payload.params,
+    remainingSeconds: Number(row.remaining),
+  };
+}
+
+// What deciding a device code writes into it, as the library's own device
+// resume would: the user and grant it was allowed for, or the error a denial
+// sends the app.
+export type DeviceCodeOutcome =
+  | {
+      accountId: string;
+      grantId: string;
+      authTime: number;
+      scope: string;
+      resource: string;
+    }
+  | { error: 'access_denied'; errorDescription: string };
+
+// Writes a device code's outcome, only while nobody has decided it and it
+// hasn't expired. Answers whether it was written.
+export async function decideDeviceCode(
+  dbAdapter: DBAdapter,
+  key: string,
+  outcome: DeviceCodeOutcome,
+): Promise<boolean> {
+  let rows = await dbAdapter.execute(
+    `UPDATE oauth_provider_objects
+        SET payload = payload || $3::jsonb
+      WHERE kind = $1 AND id_hash = decode($2, 'hex')
+        AND expires_at > now()
+        AND payload->'accountId' IS NULL
+        AND payload->'error' IS NULL
+        AND payload->'consumed' IS NULL
+      RETURNING 1`,
+    { bind: [DEVICE_CODE_KIND, key, JSON.stringify(outcome)] },
+  );
+  return rows.length > 0;
+}
+
+// What the token endpoint's limits need to know about a device code a poll
+// names (`token-limit.ts`): its client, and its grant once it was allowed.
+export async function deviceCodeForPoll(
+  dbAdapter: DBAdapter,
+  deviceCode: string,
+): Promise<
+  | {
+      key: string;
+      clientId: string | null;
+      grantId: string | null;
+      consumed: boolean;
+    }
+  | undefined
+> {
+  let key = sha256Hex(deviceCode);
+  let [row] = (await dbAdapter.execute(
+    `SELECT payload->>'clientId' AS client_id,
+            payload->>'grantId' AS grant_id,
+            payload->'consumed' IS NOT NULL AS consumed
+       FROM oauth_provider_objects
+      WHERE kind = $1 AND id_hash = decode($2, 'hex') AND expires_at > now()`,
+    { bind: [DEVICE_CODE_KIND, key] },
+  )) as {
+    client_id: string | null;
+    grant_id: string | null;
+    consumed: boolean;
+  }[];
+  return row
+    ? {
+        key,
+        clientId: row.client_id,
+        grantId: row.grant_id,
+        consumed: row.consumed,
+      }
+    : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -697,4 +1006,49 @@ export async function endUndecidedFlow(
     },
   );
   return rows.length > 0 ? reference : undefined;
+}
+
+const FINISH_NETWORK_KIND = 'FinishNetwork';
+
+// How long the network of the browser that finished a flow is kept: long
+// enough for the browser to follow the library's resume and for the app to
+// exchange the code it got there, which lasts 60 seconds.
+export const FINISH_NETWORK_TTL_SECONDS = 2 * 60;
+
+// Records the network of the browser that finished a flow, under the grant
+// the flow created, for the code exchange to compare its own with
+// (`network-binding.ts`). Stored, as every object here is, by the SHA-256 of
+// the value it is found by.
+export async function recordFinishNetwork(
+  dbAdapter: DBAdapter,
+  grantId: string,
+  network: CallerNetwork,
+): Promise<void> {
+  await storeObject(
+    dbAdapter,
+    FINISH_NETWORK_KIND,
+    grantId,
+    { family: network.family, network: network.network },
+    FINISH_NETWORK_TTL_SECONDS,
+  );
+}
+
+// The network the flow that created a grant finished from. It is read, not
+// taken: Boxel's check of a token request comes before the library's, which
+// may still refuse the exchange without spending the code, and the exchange
+// that follows must find the record as the first did. It goes when it
+// expires.
+export async function findFinishNetwork(
+  dbAdapter: DBAdapter,
+  grantId: string,
+): Promise<CallerNetwork | undefined> {
+  let payload = await findObject(dbAdapter, FINISH_NETWORK_KIND, grantId);
+  if (
+    !payload ||
+    (payload.family !== 4 && payload.family !== 6) ||
+    typeof payload.network !== 'string'
+  ) {
+    return undefined;
+  }
+  return { family: payload.family, network: payload.network };
 }

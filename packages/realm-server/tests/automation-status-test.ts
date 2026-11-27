@@ -33,7 +33,14 @@ import type { AutomationListDocument } from '@cardstack/runtime-common/automatio
 import type { AutomationRunListDocument } from '@cardstack/runtime-common/automation-run-list';
 import { scriptErrorText } from '@cardstack/runtime-common/automation-run-command';
 import { tickAutomations } from '@cardstack/runtime-common/automation-tick';
-import { appendRunLog } from '@cardstack/runtime-common/automation-run-log';
+import {
+  appendRunLog,
+  logRunPlatformLine,
+} from '@cardstack/runtime-common/automation-run-log';
+import {
+  automationNotices,
+  type AutomationCredentialNotice,
+} from '@cardstack/runtime-common/automation-notices';
 import {
   cancelAutomationRun,
   createAutomationRun,
@@ -44,11 +51,13 @@ import {
 } from '@cardstack/runtime-common/automation-runs';
 import {
   checkAutomationCaps,
+  getAutomation,
   pauseAutomation,
   switchOnAutomation,
   type AutomationActorOptions,
 } from '@cardstack/runtime-common/automations';
 import type { RealmHttpServer as Server } from '../server.ts';
+import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import {
   closeServer,
   createJWT,
@@ -1563,6 +1572,432 @@ module(basename(import.meta.filename), function (hooks) {
 
     // The route the realm config's Automations entry and the automations
     // console list a realm's automations from.
+    module('automation notices', function () {
+      // A run of the automation's own (a trigger's), ended with `outcome`.
+      // A refusal at admission logs the operation it refused, as a run's
+      // admission does.
+      async function endedRun(
+        outcome:
+          | { state: 'complete' }
+          | { state: 'error'; reason: string; message: string },
+        refused?: { operation: string; module: string; name: string },
+      ) {
+        let run = await createAutomationRun(dbAdapter, {
+          automationId: rri(automationURL()),
+          realm: ri(testRealm.url),
+          trigger: 'nightly',
+          slot: randomUUID(),
+          actsAs: PAYER,
+        });
+        await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        if (refused) {
+          await logRunPlatformLine(dbAdapter, run.id, {
+            kind: 'admission',
+            level: 'error',
+            message: 'Admission refused the run',
+            data: {
+              admitted: false,
+              reason: outcome.state === 'error' ? outcome.reason : null,
+              actsAs: PAYER,
+              operation: refused.operation,
+              targetModule: refused.module,
+              targetName: refused.name,
+            },
+          });
+        } else {
+          await recordAutomationRunAdmitted(dbAdapter, run.id, 1);
+        }
+        await finishAutomationRun(dbAdapter, run.id, 1, outcome);
+        return run;
+      }
+
+      async function setState(
+        state: string,
+        pauseReason: string | null = null,
+      ) {
+        await query(dbAdapter, [
+          'UPDATE automations SET state =',
+          param(state),
+          ', pause_reason =',
+          param(pauseReason),
+          ', next_run = NULL, updated_at = clock_timestamp() WHERE automation_id =',
+          param(automationURL()),
+        ]);
+      }
+
+      async function noticeOf(user: string) {
+        let response = await statusOf(user, ['read', 'write']);
+        if (response.status !== 200) {
+          throw new Error(
+            `expected the status, got ${response.status}: ${response.text}`,
+          );
+        }
+        let attributes = attributesOf(response.body);
+        return attributes.switchedOn ? attributes.notice : undefined;
+      }
+
+      function noticesRoute(user: string) {
+        return request
+          .get('/_automation-notices')
+          .set('Accept', SupportedMimeType.JSONAPI)
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user, sessionRoom: 'test-session' },
+              realmSecretSeed,
+            )}`,
+          );
+      }
+
+      test('an active automation whose runs complete has no notice', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await endedRun({ state: 'complete' });
+        assert.strictEqual(await noticeOf(PAYER), null);
+      });
+
+      test('a pause a realm administrator asked for raises no notice', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: rri(automationURL()), user: ADMIN },
+          options(),
+        );
+        assert.strictEqual(await noticeOf(PAYER), null);
+        assert.strictEqual(await noticeOf(ADMIN), null);
+      });
+
+      test('a pause after repeated failures tells the payer, with the last failed run, once however many runs failed', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await endedRun({
+          state: 'error',
+          reason: 'script-error',
+          message: 'first',
+        });
+        let last = await endedRun({
+          state: 'error',
+          reason: 'script-error',
+          message: 'second',
+        });
+        await setState('paused', 'repeated-failures');
+        let notice = await noticeOf(PAYER);
+        assert.strictEqual(notice?.reason, 'repeated-failures');
+        assert.strictEqual(notice?.audience, 'payer');
+        assert.true(notice?.forViewer, 'the payer is told');
+        assert.strictEqual(notice?.run?.runId, last.id, 'the last failure');
+        assert.strictEqual(notice?.run?.message, 'second');
+        let other = await noticeOf(ADMIN);
+        assert.strictEqual(other?.reason, 'repeated-failures');
+        assert.false(other?.forViewer, 'another direct writer is not told');
+
+        let listed = await noticesRoute(PAYER);
+        assert.strictEqual(listed.status, 200);
+        assert.deepEqual(
+          listed.body.data.map(
+            (resource: { id: string; attributes: { reason: string } }) => [
+              resource.id,
+              resource.attributes.reason,
+            ],
+          ),
+          [[automationURL(), 'repeated-failures']],
+          'one notice for the automation, not one per failed run',
+        );
+        assert.strictEqual(listed.body.meta.total, 1);
+        let other_ = await noticesRoute(ADMIN);
+        assert.deepEqual(other_.body.data, [], 'the route lists none to ADMIN');
+      });
+
+      test('a payer whose account can no longer pay leaves the notice to every direct writer', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await setState('paused', 'payer-lost-access');
+        let notice = await noticeOf(ADMIN);
+        assert.strictEqual(notice?.reason, 'payer-lost-access');
+        assert.strictEqual(notice?.audience, 'direct-writers');
+        assert.true(notice?.forViewer, 'another direct writer is told');
+        assert.true(
+          (await noticeOf(PAYER))?.forViewer,
+          'a payer who still writes the realm directly, whose sessions were revoked, is told too',
+        );
+        let listed = await noticesRoute(ADMIN);
+        assert.deepEqual(
+          listed.body.data.map(
+            (resource: { attributes: { realm: string } }) =>
+              resource.attributes.realm,
+          ),
+          [testRealm.url],
+          'the notice names the realm',
+        );
+      });
+
+      test('a pause a person has to act on tells the payer; a webhook whose owner lost access tells every direct writer', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        for (let reason of [
+          'caps-raised',
+          'batched-ai-enabled',
+          'webhook-changed',
+          'invalid-declaration',
+        ]) {
+          await setState('paused', reason);
+          let notice = await noticeOf(PAYER);
+          assert.strictEqual(notice?.reason, reason);
+          assert.true(notice?.forViewer, `${reason} tells the payer`);
+          assert.false(
+            (await noticeOf(ADMIN))?.forViewer,
+            `${reason} tells no one else`,
+          );
+        }
+        await setState('paused', 'webhook-owner-lost-access');
+        assert.true((await noticeOf(PAYER))?.forViewer);
+        assert.true((await noticeOf(ADMIN))?.forViewer);
+      });
+
+      test('waiting for key approval names the operation a refused run needs, and ends once the automation is active again', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await setState('waiting-for-key-approval');
+        let waiting = await noticeOf(PAYER);
+        assert.strictEqual(
+          waiting?.reason,
+          'waiting-for-key-approval',
+          'a wait from switch-on or an edit names no run',
+        );
+        assert.strictEqual(waiting?.run, null);
+
+        let refused = await endedRun(
+          {
+            state: 'error',
+            reason: 'binding-needs-reapproval',
+            message: 'The declared operation "fetch" was refused',
+          },
+          {
+            operation: 'fetch',
+            module: `${testRealm.url}weather`,
+            name: 'Weather',
+          },
+        );
+        let notice = await noticeOf(PAYER);
+        assert.strictEqual(notice?.reason, 'binding-needs-reapproval');
+        assert.strictEqual(notice?.run?.runId, refused.id);
+        assert.deepEqual(notice?.operation, {
+          name: 'fetch',
+          module: `${testRealm.url}weather`,
+          typeName: 'Weather',
+        });
+        assert.false((await noticeOf(ADMIN))?.forViewer);
+
+        await endedRun(
+          {
+            state: 'error',
+            reason: 'share-suspended',
+            message: 'The share is suspended',
+          },
+          {
+            operation: 'fetch',
+            module: `${testRealm.url}weather`,
+            name: 'Weather',
+          },
+        );
+        let suspended = await noticeOf(ADMIN);
+        assert.strictEqual(suspended?.reason, 'share-suspended');
+        assert.true(
+          suspended?.forViewer,
+          'a suspended share tells every direct writer',
+        );
+
+        await setState('active');
+        assert.strictEqual(
+          await noticeOf(PAYER),
+          null,
+          'the notice ends once the last approval lands',
+        );
+
+        // An edit puts the automation back in waiting for another
+        // operation: the earlier refusal belongs to a wait that ended.
+        await setState('waiting-for-key-approval');
+        let rewaiting = await noticeOf(PAYER);
+        assert.strictEqual(
+          rewaiting?.reason,
+          'waiting-for-key-approval',
+          'a refusal from an earlier wait names no operation',
+        );
+        assert.strictEqual(rewaiting?.operation, null);
+        assert.strictEqual(rewaiting?.run, null);
+      });
+
+      test('a run from before the automation’s latest switch-on or resume raises no notice', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        let row = (await getAutomation(dbAdapter, rri(automationURL())))!;
+        await endedRun({
+          state: 'error',
+          reason: 'credential-rejected',
+          message: 'The vendor refused the connection',
+        });
+        let credentialNotices = async () => [
+          {
+            kind: 'reconnect' as const,
+            keyId: 'key-1',
+            recipients: [PAYER],
+          },
+        ];
+        assert.strictEqual(
+          (
+            await automationNotices(dbAdapter, [row], {
+              viewer: PAYER,
+              credentialNotices,
+            })
+          ).get(row.automationId)?.reason,
+          'credential-rejected',
+        );
+        // A resume (or a remove and a later switch-on) starts the schedule
+        // again.
+        await query(dbAdapter, [
+          'UPDATE automations SET scheduled_since = clock_timestamp() WHERE automation_id =',
+          param(automationURL()),
+        ]);
+        assert.strictEqual(
+          (
+            await automationNotices(dbAdapter, [row], {
+              viewer: PAYER,
+              credentialNotices,
+            })
+          ).get(row.automationId),
+          undefined,
+          'the run before the resume is not the automation’s latest run of its own',
+        );
+      });
+
+      test('waiting for credits tells the payer, and ends once a run is admitted', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        let refused = await endedRun({
+          state: 'error',
+          reason: 'insufficient-credits',
+          message: 'The balance is short',
+        });
+        await setState('waiting-for-credits');
+        let notice = await noticeOf(PAYER);
+        assert.strictEqual(notice?.reason, 'waiting-for-credits');
+        assert.strictEqual(notice?.run?.runId, refused.id);
+        await setState('active');
+        assert.strictEqual(await noticeOf(PAYER), null);
+      });
+
+      test('a run that ended on a rejected credential tells whom the credential’s fix is for, until the credential is fixed or a later run gets past it', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        let rejected = await endedRun({
+          state: 'error',
+          reason: 'credential-rejected',
+          message: 'The vendor refused the connection',
+        });
+        let row = (await getAutomation(dbAdapter, rri(automationURL())))!;
+        let current: AutomationCredentialNotice[] = [
+          { kind: 'reconnect', keyId: 'key-1', recipients: [PAYER] },
+        ];
+        let asked: string[] = [];
+        let credentialNotices = async (run: { id: string }) => {
+          asked.push(run.id);
+          return current;
+        };
+        let notice = (
+          await automationNotices(dbAdapter, [row], {
+            viewer: PAYER,
+            credentialNotices,
+          })
+        ).get(row.automationId);
+        assert.strictEqual(notice?.reason, 'credential-rejected');
+        assert.deepEqual(notice?.credential, {
+          kind: 'reconnect',
+          keyId: 'key-1',
+        });
+        assert.true(notice?.forViewer);
+        assert.strictEqual(notice?.run?.runId, rejected.id);
+        assert.deepEqual(asked, [rejected.id]);
+        assert.false(
+          (
+            await automationNotices(dbAdapter, [row], {
+              viewer: ADMIN,
+              credentialNotices,
+            })
+          ).get(row.automationId)?.forViewer,
+          'a reconnect is for the payer alone',
+        );
+
+        current = [];
+        assert.strictEqual(
+          (
+            await automationNotices(dbAdapter, [row], {
+              viewer: PAYER,
+              credentialNotices,
+            })
+          ).get(row.automationId),
+          undefined,
+          'a fixed credential ends the notice',
+        );
+
+        current = [
+          { kind: 'fix-share', shareId: 'share-1', recipients: [PAYER, ADMIN] },
+        ];
+        assert.true(
+          (
+            await automationNotices(dbAdapter, [row], {
+              viewer: ADMIN,
+              credentialNotices,
+            })
+          ).get(row.automationId)?.forViewer,
+          'a broken share tells the realm’s direct writers',
+        );
+
+        await endedRun({ state: 'complete' });
+        assert.strictEqual(
+          (
+            await automationNotices(dbAdapter, [row], {
+              viewer: ADMIN,
+              credentialNotices,
+            })
+          ).get(row.automationId),
+          undefined,
+          'a later run that completes ends the notice',
+        );
+      });
+
+      test('the automation list carries each automation’s notice', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await setState('paused', 'payer-lost-access');
+        let response = await request
+          .get('/_automations')
+          .set('Accept', SupportedMimeType.JSON)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, ADMIN, ['read', 'write'])}`,
+          );
+        let [entry] = (response.body as AutomationListDocument).data;
+        assert.strictEqual(
+          entry.attributes.notice?.reason,
+          'payer-lost-access',
+        );
+        assert.true(entry.attributes.notice?.forViewer);
+      });
+
+      test('the notices route lists nothing to a reader or a stranger', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await setState('paused', 'webhook-owner-lost-access');
+        for (let user of [READER, STRANGER]) {
+          let response = await noticesRoute(user);
+          assert.strictEqual(response.status, 200);
+          assert.deepEqual(response.body, { data: [], meta: { total: 0 } });
+        }
+        assert.strictEqual((await noticesRoute(ADMIN)).body.meta.total, 1);
+      });
+    });
+
     module("the realm's automation list", function () {
       function list(user: string, permissions: ('read' | 'write')[]) {
         return request
@@ -1680,6 +2115,7 @@ module(basename(import.meta.filename), function (hooks) {
           lastResult: null,
           lastFinishedAt: null,
           currentRun: null,
+          notice: null,
         });
         assert.deepEqual(
           nightly.attributes.triggers.map(({ label, kind }) => [label, kind]),

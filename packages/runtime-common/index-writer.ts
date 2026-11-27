@@ -3700,7 +3700,10 @@ export class Batch {
     let stored = await prior();
     if (
       stored &&
-      hostRouteTypeRefs(rules).some((ref) => !reads.has(typeLookupKey(ref)))
+      hostRouteTypeRefs(rules, {
+        realmURL: this.realmURL,
+        virtualNetwork: this.virtualNetwork,
+      }).some((ref) => !reads.has(typeLookupKey(ref)))
     ) {
       return stored;
     }
@@ -3720,6 +3723,7 @@ export class Batch {
     }
     let validation = validateHostRoutes(rules, {
       realmURL: this.realmURL,
+      virtualNetwork: this.virtualNetwork,
       lookupType: (ref) => {
         let key = typeLookupKey(ref);
         return key in types ? (types[key] ?? undefined) : 'unavailable';

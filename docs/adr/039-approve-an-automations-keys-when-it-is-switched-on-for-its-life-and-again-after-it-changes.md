@@ -106,15 +106,17 @@ the automation's version differs when the confirmation lands.
 
 ### 1.4. A notice for every key owner who must approve
 
-Each key owner a missing approval needs MUST get a notice, the payer
-included. The app's API Keys badge MUST count it, and it MUST link to the
-secure window's approve page. The notice MUST name the realm, the automation,
-and each operation with its destination. It MUST NOT name the payer to the
-key's owner except as ADR 011 §1.2 allows. When an `{{apiKey}}` slot has no
-share in the realm, the realm's direct writers MUST get a notice to share a
-key. A notice MUST end when the approval it asks for matches or the
-automation is removed. §1.3 is the switch-on shortcut for the payer's own
-notice.
+Each key owner other than the payer whose approval is missing MUST get a key
+approval notice. The app's API Keys badge MUST count it, and it MUST link to
+the secure window's approve page. The notice MUST name the realm, the
+automation, and each operation with its destination. It MUST NOT name the
+payer to the key's owner except as ADR 011 §1.2 allows. When an `{{apiKey}}`
+slot has no share in the realm, the realm's other direct writers MUST get a
+notice to share a key. A notice MUST end when the approval it asks for
+matches or the automation is removed. The payer MUST learn that the
+automation is waiting, and on whom, through the automation's own notice
+rather than a key approval notice; §1.3 is the switch-on shortcut for the
+payer's own approvals.
 
 An approval that is missing, ended or suspended MUST NOT fail a run. The
 server MUST move the automation to _waiting for key approval_ and send these

@@ -9,9 +9,14 @@ class MeterUsage extends GlimmerComponent {
   @tracked label = 'High confidence';
   setLevel = (v: number | null) => (this.level = v ?? 0);
   setLabel = (v: string) => (this.label = v);
+  get usage() {
+    return `<Meter @level={{${this.level}}} @label="${this.label}" />`;
+  }
+
   <template>
     <FreestyleUsage
       @name='Meter'
+      @source={{this.usage}}
       @description='Discrete strength meter (role=meter). Discrete beats continuous: qualitative judgments get countable bars, not percentages — Progress is for quantities.'
     >
       <:example>

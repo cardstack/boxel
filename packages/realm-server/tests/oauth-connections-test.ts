@@ -1759,7 +1759,6 @@ module(basename(import.meta.filename), function (hooks) {
           // The realm's own user is a bot account, never a direct writer.
           recipients: [OWNER, TEAMMATE].sort(),
           shareId: share.id,
-          realmURL: realmURL.href,
         },
       ]);
     });
@@ -1905,7 +1904,6 @@ module(basename(import.meta.filename), function (hooks) {
           kind: 'fix-share',
           recipients: [OWNER, TEAMMATE].sort(),
           shareId: share.id,
-          realmURL: realmURL.href,
         },
       ]);
 

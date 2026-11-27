@@ -524,6 +524,57 @@ export async function limitNotices(config: Config): Promise<KeyLimitNotice[]> {
   );
 }
 
+// A notice the user is owed while an automation waits for key approval on
+// them: their key serves operations the automation declares and their
+// approval of the automation is missing (`approve`), or no share in the
+// automation's workspace has a key for an operation and the user, a realm
+// administrator there, can share one (`share-a-key`). One notice per
+// automation, naming each operation it asks about and where the operation
+// sends. Listed while the automation waits.
+export interface KeyApprovalNoticeOperation {
+  operation: string;
+  targetType: { module: string; name: string };
+  destination: string;
+  ask: 'approve' | 'share-a-key';
+}
+
+export interface KeyApprovalNotice {
+  id: string;
+  // The automation's card and its workspace, as URLs.
+  automation: string;
+  realm: string;
+  // The automation card's title; null when the card has none.
+  title: string | null;
+  operations: KeyApprovalNoticeOperation[];
+  // When this page first listed it; null while it is unread, which the app
+  // counts in the badge on the user's avatar.
+  readAt: string | null;
+  createdAt: string;
+}
+
+// The user's key approval notices, newest first.
+export async function approvalNotices(
+  config: Config,
+): Promise<KeyApprovalNotice[]> {
+  return resources<KeyApprovalNotice>(
+    await authorizedRequest(config, '_key-approval-notices', { method: 'GET' }),
+  );
+}
+
+// Marks the key approval notices this page has shown read, which takes them
+// out of the app's badge. Only the secure origin's own session may.
+export async function markApprovalNoticesRead(
+  config: Config,
+  noticeIds: string[],
+): Promise<void> {
+  await authorizedRequest(config, '_key-approval-notices/read', {
+    method: 'POST',
+    body: {
+      data: noticeIds.map((id) => ({ type: 'key-approval-notice', id })),
+    },
+  });
+}
+
 // Marks the limit notices this page has shown read, which takes them out of
 // the app's badge. Only the secure origin's own session may.
 export async function markLimitNoticesRead(
@@ -766,14 +817,25 @@ export interface RequestSnapshot {
 // Why a slot needs approving: `new`, never approved or no longer usable;
 // `changed`, its request changed since it was approved; `automations-only`,
 // approved and unchanged, but for automations only (answered only when the
-// batch is asked for with `interactive`).
-export type BatchSlotStatus = 'new' | 'changed' | 'automations-only';
+// batch is asked for with `interactive`); `automation`, approved and
+// unchanged, but not yet for the automation an automation's batch is for.
+export type BatchSlotStatus =
+  | 'new'
+  | 'changed'
+  | 'automations-only'
+  | 'automation';
 
 // One credential slot of an operation in a batch: why it needs approving, the
 // request it would approve and its fingerprint, and what it was last approved
 // with.
 export interface BatchSlot {
+  // The slot's choice: its token, or in an automation's batch, which spans
+  // card definitions, `<n>.<token>`, so each definition's slots are chosen
+  // apart. `token` is then the slot's own token, which an approval names,
+  // and `card` the definition's display name.
   slot: string;
+  token?: string;
+  card?: string;
   key: 'userKey' | 'apiKey';
   status: BatchSlotStatus;
   snapshot: RequestSnapshot;
@@ -788,6 +850,10 @@ export interface BatchSlot {
 
 export interface BatchOperation {
   name: string;
+  // In an automation's batch, which spans card definitions: the definition
+  // the operation is on, and the key the batch names the operation by.
+  card?: { name: string; module: string; exportName: string };
+  key?: string;
   label: string;
   method: string;
   path: string;
@@ -835,6 +901,9 @@ export interface ApprovalBatch {
   card: { name: string; module: string; exportName: string };
   instance: string | null;
   review: boolean;
+  // An automation's batch: the automation card, and the version of the
+  // automation shown, which the confirmation names back.
+  automation?: { id: string; version: string };
   groups: { destination: DestinationDisplay; operations: BatchOperation[] }[];
   // Operations left for after this confirmation, which takes at most so many
   // slots.
@@ -860,16 +929,21 @@ export type BatchFillers = Record<
 
 export async function approvalBatch(
   config: Config,
-  request: {
-    target: NonNullable<WindowContextRequest['target']>;
-    review: boolean;
-    // Also answer operations approved for automations only.
-    interactive?: boolean;
-    // The operations an approval covers, by name, when it covers only some
-    // of the batch's: `fillers` then weigh only these. The batch still holds
-    // every operation.
-    operations?: string[];
-  },
+  request:
+    | {
+        target: NonNullable<WindowContextRequest['target']>;
+        review: boolean;
+        // Also answer operations approved for automations only.
+        interactive?: boolean;
+        // The operations an approval covers, by name, when it covers only
+        // some of the batch's: `fillers` then weigh only these. The batch
+        // still holds every operation.
+        operations?: string[];
+      }
+    // An automation's batch: every key approval the switched-on automation
+    // (its card) is missing that the user can give. `operations` names
+    // operations by their `key`.
+    | { automation: string; operations?: string[] },
 ): Promise<ApprovalBatch> {
   let json = await authorizedRequest(config, '_key-bindings/batch', {
     body: { data: { type: 'key-binding-batch', attributes: request } },
@@ -904,11 +978,16 @@ export async function approveOperations(
     operations,
     interactive = false,
     dailyBudgets,
+    automation,
   }: {
     realm: string;
     operations: OperationApproval[];
     interactive?: boolean;
     dailyBudgets?: Record<string, number>;
+    // The automation the approval is for, and the version of it shown: the
+    // realm server records the approval for that automation, and refuses
+    // the confirmation when the automation changed since.
+    automation?: { id: string; version: string };
   },
 ): Promise<void> {
   await authorizedRequest(config, '_key-bindings', {
@@ -922,6 +1001,7 @@ export async function approveOperations(
           ...(dailyBudgets && Object.keys(dailyBudgets).length > 0
             ? { dailyBudgets }
             : {}),
+          ...(automation ? { automation } : {}),
         },
       },
     },

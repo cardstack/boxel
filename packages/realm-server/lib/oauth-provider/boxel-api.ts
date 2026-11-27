@@ -151,7 +151,13 @@ export function admitOAuthCaller(
         scope: admitted.scopes,
       }),
     );
-    ctxt.body = { error: 'insufficient_scope' };
+    // The body names the scope too, so a caller that only sees the body,
+    // such as a command whose tab called a route that spends AI credits, can
+    // tell the user which scope to sign in again with.
+    ctxt.body = {
+      error: 'insufficient_scope',
+      scope: admitted.scopes.join(' '),
+    };
     return false;
   }
   withoutAuthorization(ctxt.req);

@@ -39,7 +39,13 @@ import type { Deferred } from './deferred.ts';
 // The high-priority pool floors at `userInitiatedPrerenderHtmlPriority` (9),
 // serving all user-initiated work — both render tiers and user indexing — and
 // never system-tier jobs; the all-priority pool floors at
-// `systemInitiatedPrerenderHtmlPriority` (0) and serves everything.
+// `systemInitiatedPrerenderHtmlPriority` (0) and serves everything. The
+// opt-in system-index lane (`--systemIndexCount`, whose workers run with
+// `--indexJobsOnly`) floors at `systemInitiatedPriority` (1) and takes only
+// index jobs; that job-type filter, not the floor, keeps prerender-html at
+// either tier off it. The local development worker manager
+// (`mise-tasks/services/worker`) runs one, so no index job for the realms it
+// serves waits behind a realm's HTML pass.
 //
 // Automation runs sit between the two initiator tiers, at
 // `automationInitiatedPriority` (5): the run-command job that runs an
@@ -53,7 +59,8 @@ import type { Deferred } from './deferred.ts';
 // it. The run-command job runs in its realm's `command:` group, which belongs
 // to no lane family, so neither rule reaches it. The tier exists so a run due
 // at a set time is not queued behind a system backlog such as a full reindex,
-// which only the all-priority pool works through. The automation pool (`--automationCount`) floors there, so
+// which only the all-priority pool (and, for its index jobs, a system-index
+// worker where one runs) works through. The automation pool (`--automationCount`) floors there, so
 // it serves automation runs and every user-initiated job and never
 // system-tier work: when no automation is due it helps with user work. The
 // all-priority pool claims automation runs too, so a deployment that runs no
@@ -63,7 +70,8 @@ import type { Deferred } from './deferred.ts';
 // waiting.
 //
 // Two kinds of system-initiated job escape the system tier, because a
-// system-tier job can only be claimed by the all-priority pool and so has no
+// system-tier job can only be claimed by the all-priority pool (or, for an
+// index job, a system-index worker, which deployments don't run) and so has no
 // way past a backlog there. An index of the base realm — the realm every card
 // in the system imports from — is enqueued at the user-initiated tier, because
 // a stale or errored base index breaks reads on every realm rather than one.

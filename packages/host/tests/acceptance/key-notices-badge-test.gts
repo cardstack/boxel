@@ -31,11 +31,14 @@ import { stubWindowOpen } from '../helpers/window-open';
 const ME = '@testuser:localhost';
 const POLICY_NOTICES_PATH = '/_key-policy-notices';
 const LIMIT_NOTICES_PATH = '/_key-limit-notices';
+const APPROVAL_NOTICES_PATH = '/_key-approval-notices';
 
 interface Unread {
-  // Unread policy notices, and unread limit notices.
+  // Unread policy notices, unread limit notices, and unread key approval
+  // notices.
   policy: number;
   limit: number;
+  approval: number;
 }
 
 // The realm server's notice listings, as far as the app reads them: the
@@ -45,6 +48,7 @@ function stubNotices(unread: Unread) {
   let listings: [string, () => number][] = [
     [POLICY_NOTICES_PATH, () => unread.policy],
     [LIMIT_NOTICES_PATH, () => unread.limit],
+    [APPROVAL_NOTICES_PATH, () => unread.approval],
   ];
   // The mock's own listings, put back when the test is done.
   let standing = listings.map(([path]) =>
@@ -95,13 +99,14 @@ module('Acceptance | key notices badge', function (hooks) {
     directRooms: ['test-auth-realm-server-session-room'],
   });
 
-  let unread: Unread = { policy: 0, limit: 0 };
+  let unread: Unread = { policy: 0, limit: 0, approval: 0 };
   let api: ReturnType<typeof stubNotices> | undefined;
   let windowOpen: ReturnType<typeof stubWindowOpen>;
 
   hooks.beforeEach(async function () {
     unread.policy = 0;
     unread.limit = 0;
+    unread.approval = 0;
     api = stubNotices(unread);
     windowOpen = stubWindowOpen(window);
     await setupAcceptanceTestRealm({
@@ -240,6 +245,41 @@ module('Acceptance | key notices badge', function (hooks) {
     assert
       .dom('[data-test-profile-api-keys-badge] [data-test-pretui-badge-spoken]')
       .hasText('3 unseen key notices');
+  });
+
+  test('the count adds in unread key approval notices', async function (assert) {
+    unread.policy = 1;
+    unread.limit = 1;
+    unread.approval = 2;
+    await visitApp();
+    await waitFor('[data-test-profile-icon-key-notices-badge]');
+    assert
+      .dom(
+        '[data-test-profile-icon-key-notices-badge] [data-test-pretui-badge-mark]',
+      )
+      .hasText('4');
+  });
+
+  test('a key approval notice recorded while the app is open shows as soon as the realm server says so', async function (assert) {
+    await visitApp();
+    await waitUntil(() => api!.reads > 0);
+    assert.dom('[data-test-profile-icon-key-notices-badge]').doesNotExist();
+
+    unread.approval = 1;
+    mockMatrixUtils.simulateRemoteMessage(
+      'test-auth-realm-server-session-room',
+      '@realm-server:localhost',
+      {
+        msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+        body: JSON.stringify({ eventType: KEY_NOTICES_UPDATED_EVENT_TYPE }),
+      },
+    );
+    await waitFor('[data-test-profile-icon-key-notices-badge]');
+    assert
+      .dom(
+        '[data-test-profile-icon-key-notices-badge] [data-test-pretui-badge-mark]',
+      )
+      .hasText('1');
   });
 
   test('a limit notice recorded while the app is open shows as soon as the realm server says so', async function (assert) {

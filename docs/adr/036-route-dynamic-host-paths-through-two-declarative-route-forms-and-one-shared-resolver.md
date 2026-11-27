@@ -65,8 +65,19 @@ link: a `linksTo` on the child or a `linksToMany` on the parent. The link
 MUST be named in `parent`, or inferred when exactly one link connects the two
 types. With two or more, validation MUST drop a route that doesn't name one.
 Membership MUST be checked by reading the link on one of the two loaded
-cards, with no search. A matched value only has to be unique within its
-parent.
+cards, with no search. A query-backed link field has no stored value:
+reading it runs a search, and the result stops at a page limit. So it MUST
+NOT count as a link here: inference MUST skip it, and validation MUST drop a
+route whose `parent` names one. The exception is a `parent` checked against
+one route's type alone: the other route's card may store a link of that
+name, so the route is kept, with a warning, for the resolver to read on
+either card. Validation reads only the type a route names, while a field
+match also finds cards of its subtypes, which can declare a field of the
+same name as stored or as query-backed. A computed link counts, because the
+index stores its value in the card's document. When its `computeVia` reads
+a query-backed field, the index leaves the value out, so the route finds no
+child card; validation can't tell this before the code runs. A matched value
+only has to be unique within its parent.
 
 ### 1.4. One resolver, run as the visitor
 
@@ -95,6 +106,10 @@ validation MUST be dropped with a warning, with its child routes. The
 routes MUST be validated when the realm is indexed, and the validated tree
 MUST be stored with the index. A field match's type MUST be read then,
 through the definitions cache, which renders a module it doesn't hold. A
+field match's type MUST be in the routing realm or in a realm the server
+maps by prefix (the base realm, the catalog), told from the module's
+address alone; validation MUST drop any other route with a warning, without
+reading its type. A
 type that can't be read (a module error, a missing export, a render
 timeout, a server that can't be reached) MUST make its route invalid, and
 the next index MUST read it again. A read that fails for a reason that may
@@ -122,7 +137,7 @@ The server MUST put the validated route tree into the page's host config
 as `hostDynamicRoutes`. For a dynamically routed page it
 MUST also add a serve rule for exactly the requested path to
 `hostRoutingMap`. A realm MUST also serve its validated route tree from a
-read-only endpoint, which HTML visits and interact mode read once per
+read-only endpoint, which HTML visits, interact mode and code mode read once per
 realm and again after the realm is indexed. The endpoint MUST answer only a
 visitor who can read the realm. A reader MUST NOT validate the tree again.
 The tree, each `where` included, is as visible as the realm, so a route MUST
