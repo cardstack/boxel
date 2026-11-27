@@ -88,16 +88,22 @@ const paintedTranslation = (sprite: Sprite) => {
 
 const STILL = ['none', 'none'];
 
-// An opened card lifts into place from just below it as it fades in. Text
-// and card content should not scale in motion (§1.5), so the entrance moves
-// it, a short distance, and the fade carries the arrival.
+/** whether a card stands in the stack under the cards the pass inserted */
+const coversACard = (changeset: Changeset) =>
+  changeset.sprites({ role: STACK_ITEM_ROLE, type: 'kept' }).length > 0;
+
+// An opened card lifts into place from just below it. Text and card content
+// should not scale in motion (§1.5), so the entrance moves it, a short
+// distance. Into an empty stack it fades in as it lifts. Over another card
+// it arrives opaque: a fade would show the two cards through each other,
+// which reads as a flicker.
 const LIFT = 24;
 const liftInOnTop: PropSource = (sprite, changeset) =>
   isTopCard(sprite, changeset) && !reducesMotion()
     ? [`translate(0px, ${LIFT}px)`, 'none']
     : STILL;
 const fadeInOnTop: PropSource = (sprite, changeset) =>
-  isTopCard(sprite, changeset) ? [0, 1] : [1, 1];
+  isTopCard(sprite, changeset) && !coversACard(changeset) ? [0, 1] : [1, 1];
 // A phone card slides up from below the viewport: its own height. Under
 // reduced motion it fades in where it stands instead.
 const slideUpOnTop: PropSource = (sprite, changeset) =>
@@ -176,8 +182,9 @@ interface Signature {
  * 300–500 ms), and the cards under it move on the same clock, so the stack
  * reads as one change.
  *
- * - the inserted top card lifts into place and fades in, easing out; on a
- *   phone it slides up from below the viewport instead;
+ * - the inserted top card lifts into place, easing out, and fades in when
+ *   no card stands under it; on a phone it slides up from below the
+ *   viewport instead;
  * - a departing card fades and drops a little, over the exit duration;
  * - a card whose box changed (uncovered, covered, or expanded) takes its
  *   new size at once and glides by transform from the center it was painted
@@ -185,8 +192,9 @@ interface Signature {
  *   A fade the card was still playing (an entrance cut short) is carried on
  *   by the region itself, so this step names only the transform.
  *
- * Under reduced motion every move lands at once, and a card fades in or out
- * where it stands, on a phone as on a wide screen (§1.5). Each transform
+ * Under reduced motion every move lands at once, and a card fades in (into
+ * an empty stack) or out where it stands, on a phone as on a wide screen
+ * (§1.5). Each transform
  * value here checks for it itself: the region's MotionConfig ('user') lands
  * separate positional values, never a whole transform string.
  */
