@@ -517,6 +517,7 @@ export interface AddProfileDeps {
   secureSignOut?: typeof secureSignOut;
   ensurePersonalRealm?: typeof ensurePersonalRealm;
   prompt?: (question: string) => Promise<string>;
+  promptPassword?: (question: string) => Promise<string>;
   // Whether a person is at the terminal to answer questions. A coding agent or
   // a script runs the CLI without a TTY, and a question asked there is never
   // answered.
@@ -533,6 +534,7 @@ interface AddProfileContext {
   secureSignOut: typeof secureSignOut;
   ensurePersonalRealm: typeof ensurePersonalRealm;
   prompt: (question: string) => Promise<string>;
+  promptPassword: (question: string) => Promise<string>;
   interactive: boolean;
   oauthLogin: (options: OAuthLoginOptions) => Promise<OAuthLoginResult>;
   revokeConnection: typeof revokeConnection;
@@ -548,6 +550,7 @@ function addProfileContext(deps: AddProfileDeps): AddProfileContext {
     secureSignOut: deps.secureSignOut ?? secureSignOut,
     ensurePersonalRealm: deps.ensurePersonalRealm ?? ensurePersonalRealm,
     prompt: deps.prompt ?? prompt,
+    promptPassword: deps.promptPassword ?? promptPassword,
     interactive: (deps.isTty ?? (() => Boolean(process.stdin.isTTY)))(),
     oauthLogin: deps.oauthLogin ?? oauthLogin,
     revokeConnection: deps.revokeConnection ?? revokeConnection,
@@ -696,10 +699,9 @@ async function addProfileViaBrowser(
     // Undefined for a new profile, which addProfileWithAuth names by default.
     displayName = manager.getProfile(auth.userId)?.displayName;
   }
-  // A secure session the profile had is ended, on the realm server that
-  // issued it, when saving the profile replaces it or drops it (as moving the
-  // profile to another realm server does), rather than left to run out its
-  // week.
+  // What the profile held before and the save replaced or dropped (a Matrix
+  // token, an OAuth connection, a secure session, which moving the profile
+  // to another realm server also drops) is ended rather than left live.
   let previous = manager.getProfile(auth.userId);
   await manager.addProfileWithAuth(
     auth.userId,
@@ -708,13 +710,7 @@ async function addProfileViaBrowser(
     realmServerUrl,
     secureSession,
   );
-  let kept = manager.getProfile(auth.userId)?.secureSession;
-  if (previous?.secureSession && kept?.token !== previous.secureSession.token) {
-    await ctx
-      .secureSignOut(previous.realmServerUrl, previous.secureSession.token)
-      .catch(() => {});
-  }
-  await endReplacedConnection(previous, ctx.revokeConnection);
+  await endDroppedSignIns(previous, manager.getProfile(auth.userId), ctx);
   if (secureSession) {
     console.log(
       `${FG_GREEN}✓${RESET} Signed in to manage keys until ${new Date(
@@ -789,7 +785,7 @@ async function addProfileViaPassword(
     return { status: 'cancelled' };
   }
 
-  const password = await promptPassword('Password: ');
+  const password = await ctx.promptPassword('Password: ');
 
   if (!password) {
     console.error(`${FG_RED}Error:${RESET} Password is required.`);
@@ -806,19 +802,108 @@ async function addProfileViaPassword(
     matrixUrl,
     realmServerUrl,
   );
-  await endReplacedConnection(previous, ctx.revokeConnection);
+  await endDroppedSignIns(previous, manager.getProfile(matrixId), ctx);
   return { status: 'added', matrixId };
 }
 
-// A Matrix sign-in that replaces an OAuth profile drops its connection, so the
-// connection is ended on the realm server rather than left live on Connected
-// apps with nothing holding it.
-async function endReplacedConnection(
+// What ends a profile's sign-ins on the servers that issued them. Tests stand
+// in for those servers through it.
+export interface SignInEnderDeps {
+  revokeConnection?: typeof revokeConnection;
+  matrixLogout?: typeof matrixLogout;
+  secureSignOut?: typeof secureSignOut;
+}
+
+type SignInEnders = Required<SignInEnderDeps>;
+
+function signInEnders(deps: SignInEnderDeps): SignInEnders {
+  return {
+    revokeConnection: deps.revokeConnection ?? revokeConnection,
+    matrixLogout: deps.matrixLogout ?? matrixLogout,
+    secureSignOut: deps.secureSignOut ?? secureSignOut,
+  };
+}
+
+// Ends, on the server that issued it, each sign-in `previous` held that
+// `kept` no longer holds: an OAuth connection, a Matrix access token and a
+// secure session. Saving a profile again, or removing it, drops them from the
+// profiles file. A Matrix access token never expires, and stays on the
+// account's session list until it is signed out.
+//
+// A sign-in `kept` still holds is left alone, so signing in again can't end
+// the new session. Each is best-effort, since the caller has already saved
+// or removed the profile: one that couldn't be ended gets a warning saying
+// how to end it. A `boxel` command already running as the profile when its
+// Matrix token is signed out takes up the new one from the profiles file
+// (`ProfileManager.reAuthenticate`).
+async function endDroppedSignIns(
   previous: Profile | undefined,
-  revoke: typeof revokeConnection = revokeConnection,
+  kept: Profile | undefined,
+  enders: SignInEnders,
 ): Promise<void> {
-  if (previous?.oauth) {
-    await revoke(previous.oauth, previous.oauth).catch(() => false);
+  if (!previous) {
+    return;
+  }
+  // `its` for a removed profile, `the replaced` for one saved again.
+  let whose = kept ? 'the replaced' : 'its';
+  if (
+    previous.oauth &&
+    previous.oauth.accessToken !== kept?.oauth?.accessToken
+  ) {
+    let ended = await enders
+      .revokeConnection(previous.oauth, previous.oauth)
+      .catch(() => false);
+    if (!ended) {
+      // Connected apps would also list the connection that replaced it, so
+      // only a removed profile's connection is sent there.
+      console.log(
+        `${FG_YELLOW}Warning:${RESET} could not end ${whose} OAuth connection. ` +
+          (kept
+            ? `It ends on its own at ${new Date(
+                previous.oauth.connectionEndsAt,
+              ).toLocaleString()}.`
+            : 'Disconnect Boxel CLI on Connected apps to end it.'),
+      );
+    }
+  }
+  if (
+    previous.matrixAccessToken &&
+    previous.matrixAccessToken !== kept?.matrixAccessToken
+  ) {
+    let ended = await enders
+      .matrixLogout(previous.matrixUrl, previous.matrixAccessToken)
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!ended) {
+      let device = previous.matrixDeviceId
+        ? ` (device ${previous.matrixDeviceId})`
+        : '';
+      console.log(
+        `${FG_YELLOW}Warning:${RESET} could not sign out ${whose} Matrix session${device}. ` +
+          "Sign it out from the session list in Element's settings to end it.",
+      );
+    }
+  }
+  if (
+    previous.secureSession &&
+    previous.secureSession.token !== kept?.secureSession?.token
+  ) {
+    let ended = await enders
+      .secureSignOut(previous.realmServerUrl, previous.secureSession.token)
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!ended) {
+      console.log(
+        `${FG_YELLOW}Warning:${RESET} could not end ${whose} key-management sign-in. ` +
+          `It ends on its own at ${new Date(
+            previous.secureSession.expiresAt,
+          ).toLocaleString()}.`,
+      );
+    }
   }
 }
 
@@ -979,19 +1064,7 @@ async function addProfileViaOAuth(
   // rather than left live with nothing holding it: an earlier OAuth
   // connection, and a Matrix token and secure session, which an OAuth
   // profile never keeps. Each is best-effort: the new profile is saved.
-  if (previous?.oauth) {
-    await endReplacedConnection(previous, ctx.revokeConnection);
-  }
-  if (previous?.matrixAccessToken) {
-    await ctx
-      .matrixLogout(previous.matrixUrl, previous.matrixAccessToken)
-      .catch(() => {});
-  }
-  if (previous?.secureSession) {
-    await ctx
-      .secureSignOut(previous.realmServerUrl, previous.secureSession.token)
-      .catch(() => {});
-  }
+  await endDroppedSignIns(previous, manager.getProfile(user.userId), ctx);
 
   console.log(describeConnectionEnd(tokens));
   await reportPersonalRealm(
@@ -1094,9 +1167,16 @@ async function switchProfile(
   }
 }
 
-async function removeProfile(
+// What removing a profile reaches beyond this module. Tests stand in for the
+// person at the terminal and for the servers its sign-ins are ended on.
+export interface RemoveProfileDeps extends SignInEnderDeps {
+  prompt?: (question: string) => Promise<string>;
+}
+
+export async function removeProfile(
   manager: ProfileManager,
   profileId: string,
+  deps: RemoveProfileDeps = {},
 ): Promise<void> {
   const profile = manager.getProfile(profileId);
   if (!profile) {
@@ -1104,27 +1184,21 @@ async function removeProfile(
     process.exit(1);
   }
 
-  const confirm = await prompt(`Remove profile ${profileId}? [y/N]: `);
+  const confirm = await (deps.prompt ?? prompt)(
+    `Remove profile ${profileId}? [y/N]: `,
+  );
   if (confirm.toLowerCase() !== 'y') {
     console.log('Cancelled.');
     return;
   }
 
-  if (await manager.removeProfile(profileId)) {
+  let removed = await manager.removeProfile(profileId);
+  if (removed) {
     console.log(`${FG_GREEN}\u2713${RESET} Profile removed.`);
-    // An OAuth profile's connection is ended too, so it leaves Connected
-    // apps rather than staying live with nothing holding it.
-    if (profile.oauth) {
-      const ended = await revokeConnection(profile.oauth, profile.oauth).catch(
-        () => false,
-      );
-      if (!ended) {
-        console.log(
-          `${FG_YELLOW}Warning:${RESET} could not end its OAuth connection. ` +
-            'Disconnect Boxel CLI on Connected apps to end it.',
-        );
-      }
-    }
+    // Its sign-ins are ended too, rather than left live with nothing holding
+    // them: an OAuth connection leaves Connected apps, and a Matrix token
+    // leaves the account's session list.
+    await endDroppedSignIns(removed, undefined, signInEnders(deps));
 
     const newActive = manager.getActiveProfileId();
     if (newActive) {
@@ -1136,13 +1210,14 @@ async function removeProfile(
   }
 }
 
-async function addProfileNonInteractive(
+export async function addProfileNonInteractive(
   manager: ProfileManager,
   matrixId: string,
   password: string,
   displayName?: string,
   matrixUrl?: string,
   realmServerUrl?: string,
+  deps: SignInEnderDeps = {},
 ): Promise<void> {
   if (!matrixId.startsWith('@') || !matrixId.includes(':')) {
     console.error(
@@ -1172,7 +1247,6 @@ async function addProfileNonInteractive(
     );
     process.exit(1);
   }
-  await endReplacedConnection(previous);
 
   if (isUpdate) {
     if (matrixUrl || realmServerUrl) {
@@ -1186,6 +1260,11 @@ async function addProfileNonInteractive(
         );
       }
     }
+    await endDroppedSignIns(
+      previous,
+      manager.getProfile(matrixId),
+      signInEnders(deps),
+    );
     console.log(
       `${FG_GREEN}\u2713${RESET} Profile updated: ${formatProfileBadge(matrixId)}`,
     );
