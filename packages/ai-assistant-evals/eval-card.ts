@@ -15,6 +15,7 @@ import {
 import { evaluationSeed } from './eval-seeds/index.ts';
 import type { ExpectedReads } from './routing.ts';
 import {
+  TEXT_FILE,
   ensureTrailingSlash,
   realmPaths,
   waitForCard,
@@ -87,8 +88,6 @@ export interface BundledFile {
 export interface EvaluationBundle extends Evaluation {
   files: BundledFile[];
 }
-
-const TEXT_EXTENSIONS = /\.(gts|gjs|ts|js|json|md|txt|css|html|csv|svg)$/i;
 
 function linkedIds(
   doc: CardDocument,
@@ -373,7 +372,7 @@ export async function prepopulate(
     let url = testRealm.fileURL(file.path).href;
     let id = testRealm.fileRRI(file.path);
     let bytes = Buffer.from(file.content, 'base64');
-    if (TEXT_EXTENSIONS.test(file.path)) {
+    if (TEXT_FILE.test(file.path)) {
       await client.putSource(testRealmUrl, url, bytes.toString('utf8'));
     } else {
       await client.putBinary(testRealmUrl, url, new Uint8Array(bytes));

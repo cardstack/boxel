@@ -71,6 +71,8 @@ const HOUSEPLANTS: Houseplant[] = [
     waterEveryDays: 5,
     wateredDaysAgo: 5,
   },
+  // The criteria read the run day off this row (its date plus one day), so
+  // its offset stays 1.
   {
     name: 'Calathea',
     species: 'Goeppertia orbifolia',

@@ -10,14 +10,14 @@
 
 import {
   RealmResponseError,
+  TEXT_FILE,
   realmPaths,
   type CardDocument,
   type RealmClient,
 } from './realm-api.ts';
 
-// Bytes worth reading. A card definition or an instance is small; a binary
-// upload is not, and nothing in the criteria turns on one.
-const TEXT_FILE = /\.(gts|ts|js|json|md|css|txt|hbs|html|csv)$/i;
+// Only text files are read (`TEXT_FILE`). A card definition or an instance is
+// small; a binary upload is not, and nothing in the criteria turns on one.
 const MAX_FILE_BYTES = 200_000;
 
 export interface WorkspaceSnapshot {

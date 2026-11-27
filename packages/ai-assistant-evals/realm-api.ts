@@ -44,6 +44,10 @@ export const MIME = {
   jsonApi: 'application/vnd.api+json',
 } as const;
 
+// Files the runner treats as text: written to a workspace as source rather
+// than bytes, and kept in a run's workspace snapshot.
+export const TEXT_FILE = /\.(gts|gjs|ts|js|json|md|txt|css|hbs|html|csv|svg)$/i;
+
 export interface CardDocument {
   data: {
     id?: RealmResourceIdentifier;

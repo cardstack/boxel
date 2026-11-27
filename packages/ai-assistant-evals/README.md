@@ -118,11 +118,13 @@ workspace and ask the assistant to upgrade it into a Boxel app, then edit the
 app in a follow-up prompt. `enchant-static-menu-page` turns a café's hand-made
 HTML menu (`eval-realm/enchantment/cafe-menu.html`, 13 dishes in three
 sections) into a card per dish and a menu card, then adds a dish and marks one
-sold out; the judge checks every dish against the page, and how far the menu
-keeps the page's look counts toward quality only. `enchant-csv-plant-tracker`
-turns a plant-care spreadsheet, which its seed script writes as a CSV, into a
-card per plant with a computed next-watering date and a dashboard of the plants
-due, then records two waterings and adds a plant.
+sold out; the judge checks every dish against the page, and whether the menu
+keeps the page's look through a theme rather than copied hex values.
+`enchant-csv-plant-tracker` turns a plant-care spreadsheet, which its seed
+script writes as a CSV, into a card per plant with a computed next-watering
+date and a dashboard of the plants due, then records two waterings and adds a
+plant. The judge reads the run day off the CSV itself (a row watered one day
+before), since the result's start time is in UTC.
 
 Three evaluations test the assistant as a guide to Boxel rather than a
 builder. Each asks five questions in one session, with a Project card open,
