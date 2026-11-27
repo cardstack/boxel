@@ -252,6 +252,16 @@ export default class SubmodeLayout extends Component<Signature> {
       : 'ai-assistant-closed';
   }
 
+  // The toast's "View in chat" can't open a panel while the assistant is
+  // hidden. Each submode mounts its own toast, so a reply that arrives in host
+  // submode is still toasted after leaving it, while unread and recent.
+  private get isAiAssistantToastHidden() {
+    return (
+      this.aiAssistantPanelService.isOpen ||
+      this.aiAssistantPanelService.isAiAssistantHidden
+    );
+  }
+
   private get allStackItems() {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
@@ -655,7 +665,7 @@ export default class SubmodeLayout extends Component<Signature> {
             />
           {{/if}}
           <AiAssistantToast
-            @hide={{this.aiAssistantPanelService.isOpen}}
+            @hide={{this.isAiAssistantToastHidden}}
             @onViewInChatClick={{this.aiAssistantPanelService.openPanel}}
           />
           {{#unless this.aiAssistantPanelService.isAiAssistantHidden}}

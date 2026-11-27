@@ -944,6 +944,32 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('[data-test-room]').exists();
     });
 
+    test('the AI assistant toast does not show in host submode', async function (assert) {
+      let roomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'Background Room',
+      });
+      await visitOperatorMode({
+        submode: 'host',
+        stacks: [[{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }]],
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+
+      mockMatrixUtils.simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'A reply that arrived in host submode.',
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      });
+      // The toast holds the reply while it is hidden.
+      await waitUntil(() =>
+        find('[data-test-ai-assistant-toast-content]')?.textContent?.includes(
+          'A reply that arrived in host submode.',
+        ),
+      );
+      assert.dom('[data-test-ai-assistant-toast]').doesNotExist();
+    });
+
     module('with the dashboard open over host submode', function () {
       async function openDashboardOverHostSubmode() {
         await visitOperatorMode({
