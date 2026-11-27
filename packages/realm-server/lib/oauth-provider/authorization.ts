@@ -114,6 +114,12 @@ export function authorizePageURL(secureOriginURL: URL): URL {
   return new URL(`${secureOriginURL.href.replace(/\/*$/, '/')}authorize`);
 }
 
+// The URL of the secure origin's device page, where a user types the user
+// code an app showed them in device sign-in (`device.ts`).
+export function devicePageURL(secureOriginURL: URL): URL {
+  return new URL(`${secureOriginURL.href.replace(/\/*$/, '/')}device`);
+}
+
 export function errorPageURL(secureOriginURL: URL, error: string): string {
   let url = authorizePageURL(secureOriginURL);
   url.searchParams.set('error', error);

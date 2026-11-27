@@ -60,6 +60,7 @@ import {
 import type { NewClientLimit } from './lib/oauth-provider/new-client-limit.ts';
 import type { CallerLimit } from './lib/oauth-provider/caller-limit.ts';
 import type { TokenLimit } from './lib/oauth-provider/token-limit.ts';
+import type { DeviceCodeLimit } from './lib/oauth-provider/device.ts';
 import { leaveCORSToOAuthProvider } from './lib/oauth-provider/serve.ts';
 import type { OAuthResourceDefinition } from './lib/oauth-provider/registry.ts';
 import {
@@ -807,6 +808,7 @@ export class RealmServer {
     oauthUnconnectedClientCap,
     oauthAuthorizationLimit,
     oauthTokenLimit,
+    oauthDeviceCodeLimit,
     __testOnlyOAuthResources,
     __testOnlyOAuthDocumentOrigins,
   }: {
@@ -900,6 +902,9 @@ export class RealmServer {
     // The provider's limits on its token endpoint. Unset, the default
     // (`token-limit.ts`).
     oauthTokenLimit?: TokenLimit;
+    // The provider's limit on entering a device sign-in's user code. Unset,
+    // the default (`device.ts`).
+    oauthDeviceCodeLimit?: DeviceCodeLimit;
     // Resources a test adds to the provider's registry. main.ts never passes
     // it: production resources are declared in the registry's code.
     __testOnlyOAuthResources?: OAuthResourceDefinition[];
@@ -1016,6 +1021,7 @@ export class RealmServer {
         unconnectedClientCap: oauthUnconnectedClientCap,
         authorizationLimit: oauthAuthorizationLimit,
         tokenLimit: oauthTokenLimit,
+        deviceCodeLimit: oauthDeviceCodeLimit,
         testOnlyResources: __testOnlyOAuthResources,
         testOnlyDocumentOrigins: __testOnlyOAuthDocumentOrigins,
       });

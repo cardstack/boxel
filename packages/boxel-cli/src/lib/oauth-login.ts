@@ -48,6 +48,10 @@ export function grantsSpendCredit(
   return scope.split(/\s+/).includes(SPEND_CREDIT_SCOPE);
 }
 
+// The device authorization grant's type (RFC 8628 §3.4).
+export const DEVICE_CODE_GRANT_TYPE =
+  'urn:ietf:params:oauth:grant-type:device_code';
+
 // The provider matches a loopback redirect by everything but its port, so the
 // host and path must be exactly these.
 const REDIRECT_HOST = '127.0.0.1';
@@ -108,6 +112,9 @@ export interface BoxelApiProvider {
   authorizationEndpoint: string;
   tokenEndpoint: string;
   revocationEndpoint?: string;
+  // Where to ask for a device code, for a sign-in with no browser here
+  // (RFC 8628). Absent on a server that doesn't offer one.
+  deviceAuthorizationEndpoint?: string;
 }
 
 export function boxelApiResource(realmServerUrl: string): string {
@@ -234,6 +241,9 @@ export async function discoverBoxelApi(
     tokenEndpoint: body.token_endpoint,
     ...(typeof body.revocation_endpoint === 'string'
       ? { revocationEndpoint: body.revocation_endpoint }
+      : {}),
+    ...(typeof body.device_authorization_endpoint === 'string'
+      ? { deviceAuthorizationEndpoint: body.device_authorization_endpoint }
       : {}),
   };
 }
@@ -372,6 +382,16 @@ export async function exchangeCode(
     },
     fetchFn,
   );
+  return issuedTokens(body, { requestedAt, startedAt });
+}
+
+// The tokens a sign-in's token response issued. A connection that renews
+// ends 30 days after consent, which came after `startedAt`, so counting from
+// `startedAt` is never later than the real end.
+function issuedTokens(
+  body: TokenResponse & { status: number },
+  { requestedAt, startedAt }: { requestedAt: number; startedAt: number },
+): OAuthTokens {
   if (
     body.status !== 200 ||
     typeof body.access_token !== 'string' ||
@@ -543,6 +563,12 @@ export interface OAuthLoginOptions {
   log?: (message: string) => void;
   makeConfirmationCodeFn?: () => string;
   now?: () => number;
+  // When no browser opens here, sign in with a code instead
+  // (`oauthDeviceLogin`) rather than wait on a link the user can only follow
+  // on this computer.
+  deviceFallback?: boolean;
+  // Waits between device sign-in polls; a test passes one that doesn't.
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface OAuthLoginResult {
@@ -567,6 +593,7 @@ export async function oauthLogin(
     makeConfirmationCodeFn = makeConfirmationCode,
     now = Date.now,
     allowAiCredits = false,
+    deviceFallback = false,
   } = options;
 
   let scopes = boxelApiScopes({ allowAiCredits });
@@ -590,6 +617,19 @@ export async function oauthLogin(
     });
 
     let opened = await openBrowserFn(authUrl);
+    if (!opened && deviceFallback && provider.deviceAuthorizationEndpoint) {
+      log(
+        "Couldn't open a browser here, so you'll sign in with a code on any device instead.",
+      );
+      callback.close();
+      // The code lasts as long as the provider says: `timeoutMs` is how long
+      // to wait on this computer's browser, which isn't being waited on.
+      return await oauthDeviceLogin({
+        ...options,
+        timeoutMs: undefined,
+        provider,
+      });
+    }
     if (opened) {
       log('Opening your browser to sign in...');
       log(`If it didn't open, visit:\n  ${authUrl}`);
@@ -643,4 +683,202 @@ export async function oauthLogin(
     stopCopyKey?.();
     callback.close();
   }
+}
+
+const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
+// RFC 8628 §3.5: each `slow_down` adds five seconds to the interval.
+const SLOW_DOWN_SECONDS = 5;
+// A poll that couldn't reach the realm server, or that it answered as busy,
+// is tried again later rather than ending the sign-in: the wait doubles each
+// time, up to this.
+const MAX_BACKOFF_SECONDS = 60;
+
+// A device code, as the provider answers a device authorization request.
+interface DeviceAuthorization {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresInSeconds: number;
+  intervalSeconds: number;
+}
+
+async function authorizeDevice(
+  provider: BoxelApiProvider,
+  endpoint: string,
+  scopes: readonly string[],
+  fetchFn: typeof fetch,
+): Promise<DeviceAuthorization> {
+  let response = await fetchFn(endpoint, {
+    signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      client_id: BOXEL_CLI_CLIENT_ID,
+      scope: scopes.join(' '),
+      resource: provider.resource,
+    }).toString(),
+  });
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await response.json()) as Record<string, unknown>;
+  } catch {
+    // An error page that isn't JSON: the status says enough.
+  }
+  if (
+    !response.ok ||
+    typeof body.device_code !== 'string' ||
+    typeof body.user_code !== 'string' ||
+    typeof body.verification_uri !== 'string' ||
+    typeof body.expires_in !== 'number'
+  ) {
+    throw new Error(
+      `The realm server didn't start a sign-in with a code: ${describeTokenError(
+        { ...(body as TokenResponse), status: response.status },
+      )}`,
+    );
+  }
+  return {
+    deviceCode: body.device_code,
+    userCode: body.user_code,
+    verificationUri: body.verification_uri,
+    expiresInSeconds: body.expires_in,
+    intervalSeconds:
+      typeof body.interval === 'number' && body.interval > 0
+        ? body.interval
+        : DEFAULT_DEVICE_POLL_INTERVAL_SECONDS,
+  };
+}
+
+// Signs in with a code, for a computer with no browser, such as over SSH or in
+// a cloud agent (RFC 8628). The CLI shows a short code and the address of the
+// secure origin's `device` page; the user opens that on any device, signs in
+// there, types the code, and allows the sign-in. The CLI polls the realm
+// server meanwhile, and answers as `oauthLogin` does once it is allowed.
+//
+// Whoever types a code into that page signs this CLI in as themselves, so the
+// CLI says to enter it only there, and never offers a link with the code
+// already in it.
+export async function oauthDeviceLogin(
+  options: OAuthLoginOptions & { provider?: BoxelApiProvider },
+): Promise<OAuthLoginResult> {
+  let {
+    realmServerUrl,
+    timeoutMs,
+    fetchFn = fetch,
+    log = console.log,
+    now = Date.now,
+    allowAiCredits = false,
+    sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
+  } = options;
+
+  let scopes = boxelApiScopes({ allowAiCredits });
+  let provider =
+    options.provider ??
+    (await discoverBoxelApi(realmServerUrl, fetchFn, scopes));
+  if (!provider.deviceAuthorizationEndpoint) {
+    throw new OAuthNotOfferedError(
+      realmServerUrl,
+      "it doesn't offer sign-in with a code; sign in on a computer with a browser",
+    );
+  }
+  let startedAt = now();
+  let device = await authorizeDevice(
+    provider,
+    provider.deviceAuthorizationEndpoint,
+    scopes,
+    fetchFn,
+  );
+  let expiresAt =
+    startedAt + Math.min(device.expiresInSeconds * 1000, timeoutMs ?? Infinity);
+
+  log(
+    `To sign in, open this page on any device:\n\n    ${device.verificationUri}\n\n` +
+      `and enter this code:\n\n    ${device.userCode}\n\n` +
+      "Only enter it on that page. If anyone asks you for this code, don't share it.",
+  );
+  log(
+    `Waiting up to ${describeDuration(expiresAt - startedAt)} for you to ` +
+      'allow the sign-in. Press Ctrl-C to stop.',
+  );
+
+  let intervalSeconds = device.intervalSeconds;
+  let tokens: OAuthTokens | undefined;
+  while (!tokens) {
+    // Never wait past the code's expiry, however long the interval has grown.
+    await sleep(
+      Math.max(0, Math.min(intervalSeconds * 1000, expiresAt - now())),
+    );
+    if (now() >= expiresAt) {
+      throw new Error(
+        'The code expired before the sign-in was allowed. Run the command again for a new one.',
+      );
+    }
+    let requestedAt = now();
+    let body: TokenResponse & { status: number };
+    try {
+      body = await tokenRequest(
+        provider,
+        {
+          grant_type: DEVICE_CODE_GRANT_TYPE,
+          device_code: device.deviceCode,
+        },
+        fetchFn,
+      );
+    } catch {
+      // No answer: the network, or the realm server, is down for now.
+      intervalSeconds = backedOff(intervalSeconds);
+      continue;
+    }
+    if (isTransient(body)) {
+      intervalSeconds = backedOff(intervalSeconds);
+      continue;
+    }
+    if (body.status === 200) {
+      tokens = issuedTokens(body, { requestedAt, startedAt });
+      break;
+    }
+    switch (body.error) {
+      case 'authorization_pending':
+        continue;
+      case 'slow_down':
+        intervalSeconds += SLOW_DOWN_SECONDS;
+        continue;
+      case 'access_denied':
+        throw new Error('The sign-in was denied.');
+      case 'expired_token':
+        throw new Error(
+          'The code expired before the sign-in was allowed. Run the command again for a new one.',
+        );
+      default:
+        throw new Error(
+          `The realm server didn't issue tokens for the sign-in: ${describeTokenError(body)}`,
+        );
+    }
+  }
+
+  let user: SignedInUser;
+  try {
+    user = await fetchSignedInUser(realmServerUrl, tokens.accessToken, fetchFn);
+  } catch (e) {
+    await revokeConnection(provider, tokens, fetchFn).catch(() => false);
+    throw e;
+  }
+  return { provider, tokens, user };
+}
+
+// A poll the realm server answered as busy or failing, which a later poll
+// may get past.
+function isTransient(body: TokenResponse & { status: number }): boolean {
+  return (
+    body.status === 429 ||
+    body.status >= 500 ||
+    body.error === 'temporarily_unavailable'
+  );
+}
+
+function backedOff(intervalSeconds: number): number {
+  return Math.min(intervalSeconds * 2, MAX_BACKOFF_SECONDS);
 }

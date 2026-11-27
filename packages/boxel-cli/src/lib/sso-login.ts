@@ -500,7 +500,8 @@ export async function startLoopbackCallback(opts?: {
                   `Timed out after ${describeDuration(timeoutMs)} waiting for ` +
                     'the browser sign-in to complete. ' +
                     (oauthRedirect
-                      ? 'Run `boxel profile add --oauth` again to start over.'
+                      ? 'Run `boxel profile add --oauth` again to start over, ' +
+                        'or add --no-browser to sign in with a code on any device.'
                       : 'Re-run with --no-browser to sign in with a username ' +
                         'and password instead.'),
                 ),

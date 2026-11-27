@@ -635,19 +635,25 @@ export class ProfileManager implements RealmAuthenticator {
     );
   }
 
-  async removeProfile(profileId: string): Promise<boolean> {
+  // Returns the profile that was removed: the one saved in the profiles file,
+  // which another process may have signed in again since this one loaded it,
+  // so that its sign-ins are the ones ended. Undefined when there was no such
+  // profile.
+  async removeProfile(profileId: string): Promise<Profile | undefined> {
     if (!this.config.profiles[profileId]) {
-      return false;
+      return undefined;
     }
 
+    let removed: Profile | undefined;
     this.commit((config) => {
+      removed = config.profiles[profileId] ?? removed;
       delete config.profiles[profileId];
       if (config.activeProfile === profileId) {
         const remaining = Object.keys(config.profiles);
         config.activeProfile = remaining.length > 0 ? remaining[0] : null;
       }
     });
-    return true;
+    return removed;
   }
 
   switchProfile(profileId: string): boolean {
@@ -790,6 +796,36 @@ export class ProfileManager implements RealmAuthenticator {
     const profile = targetId ? this.config.profiles[targetId] : undefined;
     if (!targetId || !profile) {
       throw new Error(NO_ACTIVE_PROFILE_ERROR);
+    }
+
+    // Another process may have signed this profile in again since this one
+    // loaded the profiles file, and signed out the token this process holds.
+    // The session it saved is taken up rather than asking for a password, as
+    // long as it is for the same Matrix server. Only the Matrix session is
+    // taken: the rest of the profile a running command acts as stays as it
+    // was.
+    let read = this.readProfilesFile();
+    let saved = read.kind === 'ok' ? read.config.profiles[targetId] : undefined;
+    if (
+      saved &&
+      !saved.oauth &&
+      saved.matrixAccessToken &&
+      saved.matrixAccessToken !== profile.matrixAccessToken &&
+      saved.matrixUrl === profile.matrixUrl
+    ) {
+      profile.matrixAccessToken = saved.matrixAccessToken;
+      profile.matrixUserId = saved.matrixUserId;
+      profile.matrixDeviceId = saved.matrixDeviceId;
+      return this.getStoredMatrixAuth(targetId);
+    }
+    // A profile removed since this process loaded the file had its token
+    // signed out on purpose. Signing in again would leave a session that no
+    // profile records.
+    if (read.kind === 'ok' && !saved) {
+      throw new Error(
+        `Profile "${targetId}" was removed, so it isn't signed in again. ` +
+          `Run \`boxel profile add -u ${targetId}\` to add it back.`,
+      );
     }
 
     if (!this.isTtyFn()) {
