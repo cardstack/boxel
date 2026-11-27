@@ -1,0 +1,1199 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxel-oauth-provider"
+  },
+  "spec": {
+    "annotations": {
+      "list": []
+    },
+    "description": "Boxel as an OAuth provider: connections made and ended, consents, refusals by reason, the signs of misuse the oauth-provider-group alerts fire on, and active grants by client. Built on the JSON events of the boxel:oauth-provider channel and the oauth_provider_grants table. The oauth-provider skill reads it.",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "links": [],
+    "panels": [
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "panels": [],
+        "title": "Signs of misuse (each has an alert)",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Spent codes or used refresh tokens that came back, in the selected range. Each ended its grant (reason reuse). Alert: OAuth code or refresh token reused.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short",
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 0,
+          "y": 1
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"reuse\" [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Codes and refresh tokens reused",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Flows refused for a missing, malformed or unexpected boxel_confirmation_code. Alert: 5 from one network in 15 minutes.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 5
+                }
+              ]
+            },
+            "unit": "short",
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 4,
+          "y": 1
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"authorization-refused\" | reason=\"confirmation-code\" [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Confirmation-code refusals",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Consents the user denied. Alert: 5 by one user, or from one network, in 15 minutes.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short",
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 8,
+          "y": 1
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"consent\" | outcome=\"denied\" [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Consents denied",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Code exchanges by boxel-cli from another network than the browser that finished the flow (networkMatch other). Honest causes exist: the CLI in a dev container, cloud workspace or SSH session, or a VPN on the browser alone. Alert: 3 in 30 minutes.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 3
+                }
+              ]
+            },
+            "unit": "short",
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 12,
+          "y": 1
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"token-issued\" | networkMatch=\"other\" [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "boxel-cli codes from another network",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Warnings that traffic passed a limit's alert mark (also sent to Sentry). Alert: any.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short",
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 16,
+          "y": 1
+        },
+        "id": 6,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"rate-limit-alert\" [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Rate-limit alerts",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Errors the oauth library raised that Boxel didn't handle (OAuth provider error, also in Sentry). Alert: any.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short",
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 20,
+          "y": 1
+        },
+        "id": 7,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"OAuth provider error\" [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Provider errors",
+        "type": "stat"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 5
+        },
+        "id": 8,
+        "panels": [],
+        "title": "Connections and consent",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Made: code and device-code exchanges (token-issued). Ended: grants ended, by reason (user disconnected it, client revoked a token, reuse, sessions-revoked). A session revocation that ends several of a user's grants counts each.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 6
+        },
+        "id": 9,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"token-issued\" [$__interval]))",
+            "legendFormat": "made",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (reason) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"grant-ended\" [$__interval]))",
+            "legendFormat": "ended: {{reason}}",
+            "refId": "B",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"grants-ended\" | unwrap count [$__interval]))",
+            "legendFormat": "ended: sessions-revoked (all of a user's)",
+            "refId": "C",
+            "queryType": "range"
+          }
+        ],
+        "title": "Connections made and ended",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Consent decisions on the authorize page and the device page, by outcome.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 6
+        },
+        "id": 10,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"consent\" [$__interval]))",
+            "legendFormat": "{{outcome}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Consents",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Code and device-code exchanges (token-issued) by client. A metadata-document client is named by its host.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 14
+        },
+        "id": 11,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (client) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"token-issued\" [$__interval]))",
+            "legendFormat": "{{client}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Connections made, by client",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Successful refreshes (token-refreshed) by client: how much each connected app is in use.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 14
+        },
+        "id": 12,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (client) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"token-refreshed\" [$__interval]))",
+            "legendFormat": "{{client}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Refreshes, by client",
+        "type": "timeseries"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 22
+        },
+        "id": 13,
+        "panels": [],
+        "title": "Refusals",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Authorization and device sign-in requests refused before consent (authorization-refused), by the check that refused them, and user codes the device page refused (device-code-refused: unknown, expired or decided). The oauth-provider skill's Events section says what each reason means.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 23
+        },
+        "id": 14,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (reason) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"authorization-refused\" [$__interval]))",
+            "legendFormat": "{{reason}}",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (reason) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"device-code-refused\" [$__interval]))",
+            "legendFormat": "device code: {{reason}}",
+            "refId": "B",
+            "queryType": "range"
+          }
+        ],
+        "title": "Flows refused, by reason",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Code exchanges, device-code polls and refreshes the token endpoint refused (token-refused), by OAuth error code. slow_down is a device poll faster than its interval.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 23
+        },
+        "id": 15,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (error) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"token-refused\" [$__interval]))",
+            "legendFormat": "{{error}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Token requests refused, by error",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Calls a resource refused (resource-refused): the lookup's unknown, expired, revoked and wrong-resource, and a verified caller's route-not-mapped, insufficient-scope and assume-user.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 23
+        },
+        "id": 16,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (reason) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"resource-refused\" [$__interval]))",
+            "legendFormat": "{{reason}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Calls refused, by reason",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "The 10 grants with the most route-not-mapped, insufficient-scope and assume-user refusals in the selected range. Alert: 20 for one grant in 15 minutes. Users, grants and networks appear only as pseudonyms: the first 16 hex characters of the SHA-256 of users.id, the grant ID, or the network. The oauth-provider skill's Alerts section has the SQL that finds the row.",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 31
+        },
+        "id": 17,
+        "options": {
+          "cellHeight": "sm",
+          "showHeader": true,
+          "footer": {
+            "show": false
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(10, sum by (client, grant) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"resource-refused\" | reason=~\"route-not-mapped|insufficient-scope|assume-user\" [$__range])))",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Connections refused most at routes",
+        "type": "table",
+        "transformations": [
+          {
+            "id": "labelsToFields",
+            "options": {
+              "mode": "columns"
+            }
+          },
+          {
+            "id": "merge",
+            "options": {}
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "Value": "refusals or consents"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "The 10 users who allowed the most consents in the selected range. Alert: 10 for one user in 30 minutes. Users, grants and networks appear only as pseudonyms: the first 16 hex characters of the SHA-256 of users.id, the grant ID, or the network. The oauth-provider skill's Alerts section has the SQL that finds the row.",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 31
+        },
+        "id": 18,
+        "options": {
+          "cellHeight": "sm",
+          "showHeader": true,
+          "footer": {
+            "show": false
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(10, sum by (user) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:oauth-provider\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:oauth-provider\" | event=\"consent\" | outcome=\"allowed\" | user!=\"\" [$__range])))",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Users allowing the most connections",
+        "type": "table",
+        "transformations": [
+          {
+            "id": "labelsToFields",
+            "options": {
+              "mode": "columns"
+            }
+          },
+          {
+            "id": "merge",
+            "options": {}
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "Value": "refusals or consents"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 39
+        },
+        "id": 19,
+        "panels": [],
+        "title": "Active grants (database, now)",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Grants that are not ended, not expired, and not covered by a revocation of their user's grants, by client. Read from oauth_provider_grants now, whatever the time range.",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 40
+        },
+        "id": 20,
+        "options": {
+          "cellHeight": "sm",
+          "showHeader": true,
+          "footer": {
+            "show": false
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT g.client_id AS client,\n       COUNT(*) AS active,\n       COUNT(*) FILTER (WHERE g.renewing) AS renewing,\n       COUNT(DISTINCT g.user_id) AS users\n  FROM oauth_provider_grants g\n  JOIN users u ON u.id = g.user_id\n WHERE g.ended_at IS NULL\n   AND g.expires_at > now()\n   AND (u.oauth_grants_revoked_at IS NULL OR g.created_at > u.oauth_grants_revoked_at)\n GROUP BY g.client_id\n ORDER BY active DESC;",
+            "refId": "A"
+          }
+        ],
+        "title": "Active grants by client",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Grants created per day over the selected range, by client, from oauth_provider_grants (each is one consent that finished).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 40
+        },
+        "id": 21,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT date_trunc('day', created_at) AS time,\n       client_id AS metric,\n       COUNT(*) AS grants\n  FROM oauth_provider_grants\n WHERE $__timeFilter(created_at)\n GROUP BY 1, 2\n ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Grants created per day",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "",
+    "schemaVersion": 41,
+    "tags": [
+      "oauth",
+      "boxel"
+    ],
+    "templating": {
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "utc",
+    "title": "OAuth Provider",
+    "weekStart": ""
+  }
+}

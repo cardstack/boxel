@@ -157,6 +157,14 @@ export type OAuthLookupResult =
   | { ok: true; caller: OAuthCaller }
   | { ok: false; reason: string };
 
+// Why a verified caller was refused at a route: no scope maps the route, its
+// scopes don't reach it (or don't reach the permission it requires), or it
+// asked to act as another user.
+export type OAuthCallerRefusal =
+  | 'route-not-mapped'
+  | 'insufficient-scope'
+  | 'assume-user';
+
 // What the realm server hands a realm so the realm can be one of a
 // resource's controllers (§1.3, §1.5): the resource's identifier, its scopes
 // with only their realm routes, the `WWW-Authenticate` challenge to answer a
@@ -179,4 +187,9 @@ export interface RealmOAuthResource {
     user: string;
     scopes: readonly string[];
   }): Promise<OAuthLookupResult>;
+  // Records a verified caller the realm refused, for the provider's
+  // telemetry. The realm logs its own line with the route as well. A hook
+  // that throws doesn't change the refusal: the realm logs the error and
+  // answers as it would without the hook.
+  refused?(caller: OAuthCaller, reason: OAuthCallerRefusal): void;
 }

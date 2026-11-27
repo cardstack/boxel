@@ -67,6 +67,12 @@ import {
   PRE_REGISTERED_CLIENTS,
   type PreRegisteredClients,
 } from './pre-registered-clients.ts';
+import {
+  logOAuthEvent,
+  networkOf,
+  pseudonym,
+  setNetworkPseudonymKey,
+} from './events.ts';
 import { boxelHosts } from './redirect-uris.ts';
 import { revocationHandler } from './revocation.ts';
 import { browserOriginAllowed } from './client-cors.ts';
@@ -239,6 +245,7 @@ export function startOAuthProvider({
   serverURL,
   config,
   dbAdapter,
+  realmSecretSeed,
   secureOriginURL,
   appOrigins = [],
   publishedDomains = [],
@@ -254,6 +261,8 @@ export function startOAuthProvider({
   serverURL: URL;
   config: OAuthProviderConfig;
   dbAdapter: DBAdapter;
+  // Keys the pseudonyms that name networks in events (`events.ts`).
+  realmSecretSeed: string;
   secureOriginURL: URL | undefined;
   appOrigins?: readonly string[];
   publishedDomains?: readonly string[];
@@ -287,6 +296,7 @@ export function startOAuthProvider({
   if (capWarning) {
     log.warn(capWarning);
   }
+  setNetworkPseudonymKey(realmSecretSeed);
   let issuer = oauthIssuer(serverURL);
   let registry = buildRegistry(issuer, testOnlyResources);
   let hosts = boxelHosts({
@@ -840,8 +850,17 @@ export function createOAuthProvider({
   provider.on('grant.success', (ctx: KoaContextWithOIDC) => {
     let refresh = ctx.oidc.params?.grant_type === 'refresh_token';
     let network = refresh ? undefined : networkMatchOf(ctx.req);
-    log.info(
-      `token ${refresh ? 'refreshed' : 'issued'}: client ${ctx.oidc.client?.clientId}${
+    let clientId = ctx.oidc.client?.clientId;
+    let grantId = ctx.oidc.entities.Grant?.jti;
+    logOAuthEvent(
+      'info',
+      {
+        event: refresh ? 'token-refreshed' : 'token-issued',
+        client: clientId ? clientIdForLogs(clientId) : 'unknown',
+        grant: grantId ? pseudonym(grantId) : undefined,
+        networkMatch: network,
+      },
+      `token ${refresh ? 'refreshed' : 'issued'}: client ${clientId}${
         network ? `, network ${network}` : ''
       }`,
     );
@@ -849,10 +868,17 @@ export function createOAuthProvider({
   provider.on(
     'grant.error',
     (ctx: KoaContextWithOIDC, error: { error?: string }) => {
-      log.info(
-        `token refused: ${error.error ?? 'server_error'}, client ${
-          ctx.oidc?.client?.clientId ?? 'unknown'
-        }`,
+      let clientId = ctx.oidc?.client?.clientId;
+      let code = error.error ?? 'server_error';
+      logOAuthEvent(
+        'info',
+        {
+          event: 'token-refused',
+          error: code,
+          client: clientId ? clientIdForLogs(clientId) : 'unknown',
+          network: networkOf(ctx),
+        },
+        `token refused: ${code}, client ${clientId ?? 'unknown'}`,
       );
     },
   );

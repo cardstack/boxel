@@ -14,6 +14,8 @@ import {
   type TokenBucketOutcome,
 } from '@cardstack/runtime-common';
 import { insertUser, setupDB } from './helpers/index.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
+import { oauthEvents } from './helpers/oauth-provider-events.ts';
 import {
   applicationTypeFor,
   boxelHosts,
@@ -628,6 +630,28 @@ module(basename(import.meta.filename), function () {
       nowMs += 1;
       alert.note({ admitted: true, busy: true });
       assert.strictEqual(warnings.length, 2, 'again a minute later');
+    });
+
+    test('its warning is a rate-limit-alert event carrying the sentence', async function (assert) {
+      let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+        new NewClientAlert(DEFAULT_NEW_CLIENT_LIMIT).note({
+          admitted: true,
+          busy: true,
+        });
+      });
+      assert.deepEqual(oauthEvents(lines), [
+        {
+          channel: 'boxel:oauth-provider',
+          event: 'rate-limit-alert',
+          message:
+            'more than 500 new OAuth clients within 3600 seconds; registration is refused for everyone at 2000',
+        },
+      ]);
+      assert.deepEqual(
+        lines.map(({ level }) => level),
+        ['warn'],
+        'at warn',
+      );
     });
   });
 

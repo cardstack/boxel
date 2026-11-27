@@ -38,12 +38,16 @@ import {
   assertNoSecrets,
   telemetryDuring,
 } from './helpers/oauth-provider-secrets.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
+import { oauthEvents } from './helpers/oauth-provider-events.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { testOAuthSecureOriginURL } from './helpers/oauth-provider.ts';
 import { deleteExpiredOAuthProviderRows } from '../lib/oauth-provider/cleanup.ts';
+import { pseudonym } from '../lib/oauth-provider/events.ts';
 import {
   endGrant,
   revokeUserOAuthGrants,
+  revokeUserSessionsAndOAuthGrants,
 } from '../lib/oauth-provider/grants.ts';
 import {
   AuthorizationCodeAdapter,
@@ -918,6 +922,148 @@ module(basename(import.meta.filename), function () {
     });
 
     module('storage and telemetry', function () {
+      test('an exchange and a reused code are events naming the grant and its user by pseudonym', async function (assert) {
+        let { clientId, user: who, code } = await codeFor();
+        let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+          let first = await exchangeOAuthCode(server(), clientId, code);
+          assert.strictEqual(first.status, 200, first.text);
+          let again = await exchangeOAuthCode(server(), clientId, code);
+          assert.strictEqual(again.status, 400, again.text);
+        });
+        let [grant] = await grants();
+        // A network is compared apart: the test's caller address decides it.
+        let events = oauthEvents(lines).map(
+          ({ message: _, network: __, ...event }) => event,
+        );
+        for (let { network } of oauthEvents(lines)) {
+          assert.true(
+            /^[0-9a-f]{16}$/.test(String(network ?? '0'.repeat(16))),
+            `a network is only ever a pseudonym: ${network}`,
+          );
+        }
+        // By event name: whichever check catches the reuse, the library's
+        // or Boxel's, decides whether it is logged before the grant ends.
+        assert.deepEqual(
+          events
+            .filter(({ event }) =>
+              ['token-issued', 'reuse', 'grant-ended'].includes(String(event)),
+            )
+            .sort((a, b) => String(a.event).localeCompare(String(b.event))),
+          [
+            {
+              channel: 'boxel:oauth-provider',
+              event: 'grant-ended',
+              reason: 'reuse',
+              client: clientId,
+              grant: pseudonym(grant.id),
+              user: pseudonym(who.id),
+            },
+            {
+              channel: 'boxel:oauth-provider',
+              event: 'reuse',
+              what: 'authorization code',
+              grant: pseudonym(grant.id),
+            },
+            {
+              channel: 'boxel:oauth-provider',
+              event: 'token-issued',
+              client: clientId,
+              grant: pseudonym(grant.id),
+            },
+          ],
+        );
+        let logged = lines.map(({ message }) => message).join('\n');
+        assert.false(logged.includes(grant.id), 'no grant ID is logged');
+        assert.false(logged.includes(who.id), 'no user ID is logged');
+        assert.false(logged.includes(who.matrixId), 'no Matrix ID is logged');
+      });
+
+      test('a reused refresh token is an event naming its grant', async function (assert) {
+        let { clientId, tokens } = await tokensFor();
+        let first = await refreshOAuthTokens(
+          server(),
+          clientId,
+          tokens.refresh_token!,
+        );
+        assert.strictEqual(first.status, 200, first.text);
+        await usedSecondsAgo(tokens.refresh_token!, 31);
+        let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+          let reuse = await refreshOAuthTokens(
+            server(),
+            clientId,
+            tokens.refresh_token!,
+          );
+          assert.strictEqual(reuse.status, 400, reuse.text);
+        });
+        let [grant] = await grants();
+        assert.deepEqual(
+          oauthEvents(lines)
+            .filter(({ event }) => event === 'reuse')
+            .map(({ message: _, network: __, ...event }) => event),
+          [
+            {
+              channel: 'boxel:oauth-provider',
+              event: 'reuse',
+              what: 'refresh token',
+              grant: pseudonym(grant.id),
+            },
+          ],
+        );
+      });
+
+      test("a revocation of a user's grants is one event naming the user and the count", async function (assert) {
+        let { user: who } = await tokensFor();
+        let second = await registerOAuthClient(server());
+        let code = await codeForOAuthClient(server(), second, who.session);
+        assert.strictEqual(
+          (await exchangeOAuthCode(server(), second, code)).status,
+          200,
+        );
+        let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+          await revokeUserOAuthGrants(db(), who.matrixId);
+          // A second revocation ends nothing, and logs nothing.
+          await revokeUserSessionsAndOAuthGrants(db(), who.matrixId);
+        });
+        assert.deepEqual(
+          oauthEvents(lines)
+            .filter(({ event }) => event === 'grants-ended')
+            .map(({ message: _, ...event }) => event),
+          [
+            {
+              channel: 'boxel:oauth-provider',
+              event: 'grants-ended',
+              reason: 'sessions-revoked',
+              count: 2,
+              user: pseudonym(who.id),
+            },
+          ],
+        );
+        let logged = lines.map(({ message }) => message).join('\n');
+        assert.false(logged.includes(who.id), 'no user ID is logged');
+        assert.false(logged.includes(who.matrixId), 'no Matrix ID is logged');
+      });
+
+      test('an operator revoking sessions logs the grants it ended, by user pseudonym', async function (assert) {
+        let { user: who } = await tokensFor();
+        let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+          await revokeUserSessionsAndOAuthGrants(db(), who.matrixId);
+        });
+        assert.deepEqual(
+          oauthEvents(lines)
+            .filter(({ event }) => event === 'grants-ended')
+            .map(({ message: _, ...event }) => event),
+          [
+            {
+              channel: 'boxel:oauth-provider',
+              event: 'grants-ended',
+              reason: 'sessions-revoked',
+              count: 1,
+              user: pseudonym(who.id),
+            },
+          ],
+        );
+      });
+
       test('no token, code or verifier is stored readable, logged or sent to Sentry', async function (assert) {
         let { clientId, code } = await codeFor();
         let exchanged: OAuthTokenResponse | undefined;

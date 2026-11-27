@@ -59,6 +59,8 @@ import {
   renewalOffered,
   type AccountContactLookup,
 } from './consent.ts';
+import { clientIdForLogs } from './client-metadata-document.ts';
+import { logOAuthEvent, networkOf, userPseudonym } from './events.ts';
 import { createGrant, deleteGrant } from './grants.ts';
 import {
   decideDeviceCode,
@@ -224,10 +226,18 @@ export function deviceAuthorizationHandler({
     let client = deviceFlowClient(preRegistered, form.param('client_id'));
     let check = checkDeviceAuthorization(form, client !== undefined, registry);
     if (check.refused) {
-      log.info(
-        `device authorization refused: ${check.reason}, client ${
-          client ? client.metadata.client_id : 'unknown'
-        }`,
+      let clientName = client ? client.metadata.client_id : 'unknown';
+      logOAuthEvent(
+        'info',
+        {
+          event: 'authorization-refused',
+          reason: check.reason,
+          error: check.error,
+          client: clientIdForLogs(clientName),
+          network: networkOf(ctxt),
+          flow: 'device',
+        },
+        `device authorization refused: ${check.reason}, client ${clientName}`,
       );
       return respondOAuthError(ctxt, check.status, {
         error: check.error,
@@ -410,6 +420,7 @@ export function deviceHandlers(deps: DeviceDeps): {
   // request has been answered with why there is none.
   async function findFlow(
     ctxt: Koa.Context,
+    user: string,
     userCode: string,
   ): Promise<DeviceFlow | undefined> {
     let found = await findDeviceCodeByUserCode(deps.dbAdapter, userCode);
@@ -417,12 +428,47 @@ export function deviceHandlers(deps: DeviceDeps): {
       found.state === 'pending' ? await flowOf(deps, found) : undefined;
     if (!flow) {
       let state = found.state === 'pending' ? 'unknown' : found.state;
-      log.info(`device code refused: ${state}`);
+      logOAuthEvent(
+        'info',
+        {
+          event: 'device-code-refused',
+          reason: state,
+          user: await userPseudonym(deps.dbAdapter, user),
+          network: networkOf(ctxt),
+        },
+        `device code refused: ${state}`,
+      );
       let [status, body] = NO_FLOW[state];
       respond(ctxt, status, body);
       return undefined;
     }
     return flow;
+  }
+
+  // A decision on the device page, as the consent event the authorize page's
+  // decision logs too (`consent.ts`), marked as a device flow's.
+  async function logDeviceConsent(
+    ctxt: Koa.Context,
+    flow: DeviceFlow,
+    user: string,
+    outcome: 'allowed' | 'denied',
+    renew?: boolean,
+  ): Promise<void> {
+    logOAuthEvent(
+      'info',
+      {
+        event: 'consent',
+        outcome,
+        client: clientIdForLogs(flow.client.clientId),
+        user: await userPseudonym(deps.dbAdapter, user),
+        network: networkOf(ctxt),
+        renew: renew ?? false,
+        flow: 'device',
+      },
+      `device consent ${outcome}: ${describe(flow)}${
+        renew === undefined ? '' : `, renew ${renew}`
+      }`,
+    );
   }
 
   return {
@@ -436,7 +482,7 @@ export function deviceHandlers(deps: DeviceDeps): {
       if (typeof userCode !== 'string' || userCode.length > MAX_USER_CODE) {
         return respond(ctxt, 400, { error: 'bad-request' });
       }
-      let flow = await findFlow(ctxt, userCode);
+      let flow = await findFlow(ctxt, user, userCode);
       if (!flow) {
         return;
       }
@@ -476,7 +522,7 @@ export function deviceHandlers(deps: DeviceDeps): {
       if (!request) {
         return respond(ctxt, 400, { error: 'bad-request' });
       }
-      let flow = await findFlow(ctxt, request.userCode);
+      let flow = await findFlow(ctxt, user, request.userCode);
       if (!flow) {
         return;
       }
@@ -488,7 +534,7 @@ export function deviceHandlers(deps: DeviceDeps): {
         if (!decided) {
           return respond(ctxt, 409, { error: 'decided' });
         }
-        log.info(`device consent denied: ${describe(flow)}`);
+        await logDeviceConsent(ctxt, flow, user, 'denied');
         return respond(ctxt, 200, { decision: 'deny' });
       }
 
@@ -528,7 +574,7 @@ export function deviceHandlers(deps: DeviceDeps): {
       if (!decided) {
         return respond(ctxt, 409, { error: 'decided' });
       }
-      log.info(`device consent allowed: ${describe(flow)}, renew ${renew}`);
+      await logDeviceConsent(ctxt, flow, user, 'allowed', renew);
       respond(ctxt, 200, { decision: 'allow' });
     },
   };

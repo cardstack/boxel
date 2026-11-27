@@ -25,11 +25,10 @@
 
 import { createHash, randomBytes } from 'crypto';
 import { errors, type Adapter, type AdapterPayload } from 'oidc-provider';
-import { logger, type DBAdapter } from '@cardstack/runtime-common';
+import type { DBAdapter } from '@cardstack/runtime-common';
+import { logOAuthEvent, pseudonym } from './events.ts';
 import { endGrant } from './grants.ts';
 import type { CallerNetwork } from './network-binding.ts';
-
-const log = logger('boxel:oauth-provider');
 
 const ERROR_REFERENCE_KIND = 'ErrorReference';
 
@@ -323,7 +322,15 @@ export class AuthorizationCodeAdapter extends BearerKeyedAdapter {
       throw new errors.InvalidGrant('authorization code is expired');
     }
     if (row.grant_id) {
-      log.info('authorization code reused');
+      logOAuthEvent(
+        'info',
+        {
+          event: 'reuse',
+          what: 'authorization code',
+          grant: pseudonym(row.grant_id),
+        },
+        'authorization code reused',
+      );
       await endGrant(this.#dbAdapter, row.grant_id, 'reuse');
     }
     throw new errors.InvalidGrant('authorization code already consumed');
@@ -480,7 +487,15 @@ export class DeviceCodeAdapter extends BearerKeyedAdapter {
       throw new errors.ExpiredToken('device code is expired');
     }
     if (row.grant_id) {
-      log.info('device code reused');
+      logOAuthEvent(
+        'info',
+        {
+          event: 'reuse',
+          what: 'device code',
+          grant: pseudonym(row.grant_id),
+        },
+        'device code reused',
+      );
       await endGrant(this.#dbAdapter, row.grant_id, 'reuse');
     }
     throw new errors.InvalidGrant('device code already consumed');

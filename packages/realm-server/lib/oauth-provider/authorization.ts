@@ -50,6 +50,7 @@ import {
   CONFIRMATION_CODE,
   CONFIRMATION_CODE_PARAM,
 } from '@cardstack/secure-origin/security/confirmation-code.js';
+import { logOAuthEvent, networkOf } from './events.ts';
 import type { PreRegisteredClients } from './pre-registered-clients.ts';
 import type { OAuthResource } from './registry.ts';
 
@@ -552,8 +553,17 @@ export function authorizationHandler({
       preRegistered,
     });
     if (check.refused) {
-      log.info(
-        `authorization refused: ${check.reason} (${check.error})${check.unsupported ? `: ${unsupportedForLogs(check.unsupported)}` : ''}, client ${client ? clientIdForLogs(client.clientId) : 'unknown'}`,
+      let clientName = client ? clientIdForLogs(client.clientId) : 'unknown';
+      logOAuthEvent(
+        'info',
+        {
+          event: 'authorization-refused',
+          reason: check.reason,
+          error: check.error,
+          client: clientName,
+          network: networkOf(ctxt),
+        },
+        `authorization refused: ${check.reason} (${check.error})${check.unsupported ? `: ${unsupportedForLogs(check.unsupported)}` : ''}, client ${clientName}`,
       );
       let reference = await storeRefusal(dbAdapter, {
         error: check.error,
@@ -660,8 +670,17 @@ export function renderLibraryError({
           ? 'bad-redirect-uri'
           : 'library';
     let clientId = ctx.oidc.client?.clientId;
-    log.info(
-      `authorization refused: ${reason} (${out.error}), client ${clientId ? clientIdForLogs(clientId) : 'unknown'}`,
+    let clientName = clientId ? clientIdForLogs(clientId) : 'unknown';
+    logOAuthEvent(
+      'info',
+      {
+        event: 'authorization-refused',
+        reason,
+        error: out.error,
+        client: clientName,
+        network: networkOf(ctx),
+      },
+      `authorization refused: ${reason} (${out.error}), client ${clientName}`,
     );
     let reference = await storeAuthorizationError(dbAdapter, {
       error: out.error,

@@ -26,6 +26,8 @@ import {
   oauthIssuer,
   type OAuthResource,
 } from './registry.ts';
+import { clientIdForLogs } from './client-metadata-document.ts';
+import { logCallerRefused } from './events.ts';
 import {
   bearerChallenge,
   bearerToken,
@@ -134,13 +136,21 @@ export function admitOAuthCaller(
   });
   if (!admitted.admitted) {
     if (admitted.scopes.length === 0) {
-      log.info(
+      logCallerRefused(
+        caller,
+        clientIdForLogs(caller.clientId),
+        'route-not-mapped',
+        'Boxel API',
         `token refused: route not mapped, Boxel API, client ${caller.clientId}`,
       );
       refuseOAuthToken(ctxt, api);
       return false;
     }
-    log.info(
+    logCallerRefused(
+      caller,
+      clientIdForLogs(caller.clientId),
+      'insufficient-scope',
+      'Boxel API',
       `token refused: insufficient scope, Boxel API, client ${caller.clientId}`,
     );
     ctxt.status = 403;
@@ -174,6 +184,14 @@ export function boxelApiForRealms(api: BoxelApi): RealmOAuthResource {
     challenge: (options) => bearerChallenge(api.issuer, api.resource, options),
     resolve: (token) =>
       resolveOAuthAccessToken(api.dbAdapter, token, api.resource.id),
+    refused: (caller, reason) =>
+      logCallerRefused(
+        caller,
+        clientIdForLogs(caller.clientId),
+        reason,
+        'Boxel API',
+        `token refused: ${reason.replaceAll('-', ' ')}, Boxel API realm route, client ${caller.clientId}`,
+      ),
     resolveGrant: (tabToken) =>
       resolveOAuthGrant(api.dbAdapter, tabToken, api.resource.id),
   };

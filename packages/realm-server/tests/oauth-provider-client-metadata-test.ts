@@ -28,6 +28,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { logLinesDuring } from './helpers/log-capture.ts';
+import { readableMessage } from './helpers/oauth-provider-events.ts';
 import {
   testOAuthProviderConfig,
   testOAuthSecureOriginURL,
@@ -717,7 +718,7 @@ module(basename(import.meta.filename), function () {
         AUTHORIZE_PAGE,
         `${label}: goes to the error page`,
       );
-      let messages = lines.map(({ message }) => message);
+      let messages = lines.map(({ message }) => readableMessage(message));
       assert.true(
         messages.some((message) =>
           message.startsWith(`authorization refused: ${reason} `),

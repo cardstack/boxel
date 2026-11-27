@@ -31,6 +31,8 @@ import {
   telemetryDuring,
 } from './helpers/oauth-provider-secrets.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
+import { oauthEvents } from './helpers/oauth-provider-events.ts';
 import { registerUser } from '../synapse.ts';
 import { devicePageURL } from '../lib/oauth-provider/authorization.ts';
 import type { CallerLimit } from '../lib/oauth-provider/caller-limit.ts';
@@ -41,6 +43,7 @@ import {
   DEVICE_CODE_GRANT_TYPE,
 } from '../lib/oauth-provider/pre-registered-clients.ts';
 import { RENEWING_GRANT_TTL_SECONDS } from '../lib/oauth-provider/grants.ts';
+import { pseudonym } from '../lib/oauth-provider/events.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
 const SECURE_ORIGIN = testOAuthSecureOriginURL.origin;
@@ -681,6 +684,133 @@ module(basename(import.meta.filename), function (hooks) {
         200,
         'boxel-cli still can',
       );
+    });
+  });
+
+  module('events', function () {
+    // The provider's events logged while `fn` runs.
+    async function eventsDuring(
+      fn: () => Promise<void>,
+    ): Promise<Record<string, unknown>[]> {
+      return oauthEvents(await logLinesDuring(['boxel:oauth-provider'], fn));
+    }
+
+    function eventsNamed(
+      events: Record<string, unknown>[],
+      event: string,
+    ): Record<string, unknown>[] {
+      return events.filter((e) => e.event === event);
+    }
+
+    test("the device page's decisions are consent events of a device flow, naming the user", async function (assert) {
+      let signedIn = await user();
+      let allowedCode = await startDeviceSignIn();
+      let deniedCode = await startDeviceSignIn();
+      let events = await eventsDuring(async () => {
+        await decide(allowedCode.user_code, signedIn.session, { renew: false });
+        await decide(deniedCode.user_code, signedIn.session, {
+          decision: 'deny',
+        });
+      });
+      let consents = eventsNamed(events, 'consent');
+      assert.deepEqual(
+        consents.map(({ outcome, client, user, renew, flow }) => ({
+          outcome,
+          client,
+          user,
+          renew,
+          flow,
+        })),
+        [
+          {
+            outcome: 'allowed',
+            client: BOXEL_CLI_CLIENT_ID,
+            user: pseudonym(signedIn.id),
+            renew: false,
+            flow: 'device',
+          },
+          {
+            outcome: 'denied',
+            client: BOXEL_CLI_CLIENT_ID,
+            user: pseudonym(signedIn.id),
+            renew: false,
+            flow: 'device',
+          },
+        ],
+      );
+      assert.deepEqual(
+        consents.map(({ message }) => message),
+        [
+          `device consent allowed: client ${BOXEL_CLI_CLIENT_ID}, scopes ${BOXEL_API} [boxel:read boxel:write], renew false`,
+          `device consent denied: client ${BOXEL_CLI_CLIENT_ID}, scopes ${BOXEL_API} [boxel:read boxel:write]`,
+        ],
+        'the sentences an operator reads',
+      );
+    });
+
+    test('a code the device page refuses is an event naming why and who typed it', async function (assert) {
+      let signedIn = await user();
+      let events = await eventsDuring(async () => {
+        assert.strictEqual(
+          (await lookUp('BCDF-GHJK', signedIn.session)).status,
+          404,
+        );
+      });
+      let [refused, ...others] = eventsNamed(events, 'device-code-refused');
+      assert.strictEqual(others.length, 0, 'one event');
+      assert.strictEqual(refused.reason, 'unknown');
+      assert.strictEqual(refused.user, pseudonym(signedIn.id));
+      assert.strictEqual(refused.message, 'device code refused: unknown');
+    });
+
+    test('a refused start is an authorization-refused event of a device flow', async function (assert) {
+      let events = await eventsDuring(async () => {
+        let refused = await authorizeDevice({
+          client_id: BOXEL_CLI_CLIENT_ID,
+          scope: BOXEL_API_SCOPES,
+        });
+        assert.strictEqual(refused.status, 400);
+      });
+      let [refused] = eventsNamed(events, 'authorization-refused');
+      assert.strictEqual(refused?.reason, 'unknown-resource');
+      assert.strictEqual(refused?.error, 'invalid_target');
+      assert.strictEqual(refused?.client, BOXEL_CLI_CLIENT_ID);
+      assert.strictEqual(refused?.flow, 'device');
+    });
+
+    test('a device code exchanged again is a reuse event naming its grant', async function (assert) {
+      let { session } = await user();
+      let device = await startDeviceSignIn();
+      await decide(device.user_code, session);
+      assert.strictEqual((await poll(device.device_code)).status, 200);
+      let events = await eventsDuring(async () => {
+        await poll(device.device_code);
+      });
+      let [{ id }] = (await db.execute(
+        `SELECT id FROM oauth_provider_grants`,
+      )) as { id: string }[];
+      let [reuse] = eventsNamed(events, 'reuse');
+      assert.strictEqual(reuse?.what, 'device code');
+      assert.strictEqual(reuse?.grant, pseudonym(id));
+      assert.strictEqual(
+        eventsNamed(events, 'grant-ended')[0]?.reason,
+        'reuse',
+        'and its grant ends',
+      );
+    });
+
+    test('a poll faster than the interval is a token-refused event', async function (assert) {
+      let device = await startDeviceSignIn();
+      let events = await eventsDuring(async () => {
+        for (let i = 0; i < 3; i++) {
+          await poll(device.device_code);
+        }
+      });
+      let slowDown = eventsNamed(events, 'token-refused').filter(
+        ({ error }) => error === 'slow_down',
+      );
+      assert.strictEqual(slowDown.length, 1);
+      assert.strictEqual(slowDown[0].client, BOXEL_CLI_CLIENT_ID);
     });
   });
 
