@@ -131,8 +131,8 @@ module('Acceptance | interact submode | routed links', function (hooks) {
 
       // A linked author is itself a link to the author.
       static embedded = class Embedded extends Component<typeof this> {
-        routedHref = (card: CardDefType | null | undefined) =>
-          linkHrefTo?.(card);
+        // `@model` here is the author's partial fields, not a card type.
+        routedHref = (card: unknown) => linkHrefTo?.(card as CardDefType);
 
         <template>
           <a
