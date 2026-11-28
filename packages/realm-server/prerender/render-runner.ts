@@ -67,6 +67,7 @@ import {
   readVisitMemory,
   type VisitMemory,
 } from './chrome-memory.ts';
+import { parsePostRenderResetMs, resetTabToStandby } from './tab-reset.ts';
 
 // Budget for reading an automation run's tab heap as its command ends. The
 // read sits between the script's answer and the worker's commit, inside the
@@ -95,6 +96,10 @@ export type Timings = {
   launchMs: number;
   renderMs: number;
   waits: LaunchWaits;
+  // The post-render reset the visit waited out after its render and before
+  // its response (see `tab-reset.ts`). Absent when no reset ran: the reset
+  // is off, or the visit evicted its tab.
+  resetMs?: number;
 };
 
 type PoolInfo = {
@@ -282,14 +287,87 @@ export class RenderRunner {
   // recycling. The tab itself is retired by the eviction either way.
   #onUnresponsiveTab: ((report: UnresponsiveTabReport) => void) | undefined;
 
+  // Budget for moving a tab off its rendered card before the visit releases
+  // it; `0` turns the reset off. See `tab-reset.ts`.
+  #postRenderResetMs: number;
+
   constructor(options: {
     pagePool: PagePool;
     boxelHostURL: string;
     onUnresponsiveTab?: (report: UnresponsiveTabReport) => void;
+    postRenderResetMs?: number;
   }) {
     this.#pagePool = options.pagePool;
     this.#boxelHostURL = options.boxelHostURL;
     this.#onUnresponsiveTab = options.onUnresponsiveTab;
+    this.#postRenderResetMs =
+      options.postRenderResetMs ?? parsePostRenderResetMs();
+  }
+
+  // Runs on the return path of a visit, capture or command, after its last
+  // read of the page and before `release()`, so no card outlives the render
+  // that mounted it on a pooled tab: the tab goes back to the host's empty
+  // standby route, which destroys the card's components and everything
+  // scheduled under their lifetimes. A tab that can't make that transition
+  // inside the budget is retired rather than handed to the next render with
+  // its card still running.
+  //
+  // Not run for a tab the caller already evicted (it never renders again,
+  // and a timed-out tab is the one least likely to answer), nor for a
+  // cancelled or thrown render: a cancel disposes or recycles the tab on its
+  // own path, a visit that threw is answered by a browser restart, and a
+  // capture or command that threw retires its tab
+  // (`#retireTabAfterThrow`). It runs even when the caller has gone away
+  // after its render, since the tab goes back to the pool either way.
+  //
+  // Returns how long the reset held the caller, which it waits out before
+  // its response goes back, or `undefined` when the reset is off.
+  async #resetRenderedTab(
+    page: Page,
+    affinityKey: string,
+    pageId: string,
+  ): Promise<number | undefined> {
+    if (this.#postRenderResetMs <= 0) {
+      return undefined;
+    }
+    let outcome = await resetTabToStandby(page, this.#postRenderResetMs);
+    if (outcome.status === 'reset') {
+      return outcome.elapsedMs;
+    }
+    log.warn(
+      `post-render reset of tab ${pageId} for ${affinityKey} ` +
+        (outcome.status === 'timed-out'
+          ? `did not reach the standby route within ${this.#postRenderResetMs}ms`
+          : `failed: ${outcome.error ?? 'unknown error'}`) +
+        `; retiring the tab so its rendered card cannot keep running into the next render`,
+    );
+    await this.#retireUnresetTab(affinityKey, pageId);
+    return outcome.elapsedMs;
+  }
+
+  // A capture or command that threw left its tab in whatever state the
+  // throw found it, possibly still on the rendered card, and unlike a visit
+  // its throw restarts no browser. The tab is retired instead of reset: a
+  // page that just failed a CDP call is a poor bet to make a route
+  // transition, and a retirement costs the realm one warm tab, not its
+  // BrowserContext. Skipped when the reset is off, which leaves every tab
+  // as it was before the reset existed.
+  async #retireTabAfterThrow(affinityKey: string, pageId: string) {
+    if (this.#postRenderResetMs <= 0) {
+      return;
+    }
+    log.warn(
+      `retiring tab ${pageId} for ${affinityKey}: its render threw, so it was not reset`,
+    );
+    await this.#retireUnresetTab(affinityKey, pageId);
+  }
+
+  async #retireUnresetTab(affinityKey: string, pageId: string) {
+    try {
+      await this.#pagePool.retireUnresettableTab(affinityKey, pageId);
+    } catch (e) {
+      log.warn(`Error retiring unresettable tab ${pageId}:`, e);
+    }
   }
 
   async #getPageForAffinity(
@@ -685,9 +763,18 @@ export class RenderRunner {
           poolInfo,
           'timeout',
         );
+        let renderMs = Date.now() - renderStart;
+        let resetMs = poolInfo.evicted
+          ? undefined
+          : await this.#resetRenderedTab(page, affinityKey, pageId);
         return {
           response,
-          timings: { launchMs, renderMs: Date.now() - renderStart, waits },
+          timings: {
+            launchMs,
+            renderMs,
+            waits,
+            ...(resetMs !== undefined ? { resetMs } : {}),
+          },
           pool: poolInfo,
         };
       }
@@ -732,10 +819,17 @@ export class RenderRunner {
           };
         }
       }
+      // Last, after every read of the page, including the heap above.
+      let resetMs = await this.#resetRenderedTab(page, affinityKey, pageId);
 
       return {
         response,
-        timings: { launchMs, renderMs, waits },
+        timings: {
+          launchMs,
+          renderMs,
+          waits,
+          ...(resetMs !== undefined ? { resetMs } : {}),
+        },
         pool: poolInfo,
       };
     } catch (e) {
@@ -753,6 +847,9 @@ export class RenderRunner {
         poolInfo,
         'unusable',
       );
+      if (!poolInfo.evicted) {
+        await this.#retireTabAfterThrow(affinityKey, pageId);
+      }
       let response: RunCommandResponse = {
         status: 'error',
         error: e instanceof Error ? `${e.name}: ${e.message}` : `${e}`,
@@ -1033,11 +1130,25 @@ export class RenderRunner {
         };
       }
 
+      let renderMs = Date.now() - renderStart;
+      let resetMs = poolInfo.evicted
+        ? undefined
+        : await this.#resetRenderedTab(page, affinityKey, pageId);
       return {
         response,
-        timings: { launchMs, renderMs: Date.now() - renderStart, waits },
+        timings: {
+          launchMs,
+          renderMs,
+          waits,
+          ...(resetMs !== undefined ? { resetMs } : {}),
+        },
         pool: poolInfo,
       };
+    } catch (e) {
+      if (!(e instanceof PrerenderCancelledError) && !poolInfo.evicted) {
+        await this.#retireTabAfterThrow(affinityKey, pageId);
+      }
+      throw e;
     } finally {
       release();
     }
@@ -1797,6 +1908,7 @@ export class RenderRunner {
             launchMs,
             waits,
             poolInfo,
+            affinityKey,
           );
         }
       }
@@ -2249,6 +2361,7 @@ export class RenderRunner {
             launchMs,
             waits,
             poolInfo,
+            affinityKey,
           );
         }
 
@@ -2285,6 +2398,7 @@ export class RenderRunner {
               launchMs,
               waits,
               poolInfo,
+              affinityKey,
             );
           }
           if ((await runFileExtractPass()) === 'short-circuit') {
@@ -2296,6 +2410,7 @@ export class RenderRunner {
               launchMs,
               waits,
               poolInfo,
+              affinityKey,
             );
           }
         }
@@ -2698,6 +2813,7 @@ export class RenderRunner {
         launchMs,
         waits,
         poolInfo,
+        affinityKey,
       );
     } catch (e) {
       threw = true;
@@ -2756,8 +2872,8 @@ export class RenderRunner {
   }
 
   // Awaited by every return path inside the visit's `try`, so the memory
-  // reading finishes on a tab this visit still holds: the `finally` that
-  // releases it runs only after.
+  // reading and the post-render reset finish on a tab this visit still
+  // holds: the `finally` that releases it runs only after.
   async #finalizeVisit(
     page: Page,
     response: RenderVisitResponse,
@@ -2766,6 +2882,7 @@ export class RenderRunner {
     launchMs: number,
     waits: LaunchWaits,
     poolInfo: PoolInfo,
+    affinityKey: string,
   ): Promise<{
     response: RenderVisitResponse;
     timings: Timings;
@@ -2785,9 +2902,18 @@ export class RenderRunner {
       // neither can report its own heap, while `/proc` still can.
       includeTab: !poolInfo.timedOut && !poolInfo.evicted,
     });
+    // Last, after every read of the rendered page, including the heap above.
+    let resetMs = poolInfo.evicted
+      ? undefined
+      : await this.#resetRenderedTab(page, affinityKey, pageId);
     return {
       response,
-      timings: { launchMs, renderMs, waits },
+      timings: {
+        launchMs,
+        renderMs,
+        waits,
+        ...(resetMs !== undefined ? { resetMs } : {}),
+      },
       pool: poolInfo,
       memory,
     };

@@ -163,6 +163,10 @@ module(basename(import.meta.filename), function (hooks) {
     let runner = new RenderRunner({
       pagePool: pool,
       boxelHostURL: 'http://localhost:4200',
+      // The stub tab has no standby route to reset to, so a reset would
+      // always fail and retire the tab. The post-render reset has its own
+      // browser tests; these are about which tabs a timeout closes.
+      postRenderResetMs: 0,
     });
     await pool.warmStandbys();
     return { runner, tabs };

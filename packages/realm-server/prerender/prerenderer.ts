@@ -1335,6 +1335,7 @@ export class Prerenderer {
           return;
         }
         let swaps = this.#pagePool.getUnresponsiveTabSwaps();
+        let retirements = this.#pagePool.getUnresettableTabRetirements();
         let perAffinity = snap.affinities
           .map((a) => {
             let q = a.byQueue;
@@ -1379,7 +1380,13 @@ export class Prerenderer {
             let swapCount = swaps[a.affinityKey] ?? 0;
             let swapDetail =
               swapCount > 0 ? `, unresponsiveSwaps=${swapCount}` : '';
-            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail}${swapDetail})`;
+            // Cumulative count of tabs this affinity has had retired because
+            // a render could not reset them to the standby route afterwards
+            // (see `tab-reset.ts`). Printed once non-zero, like the swaps.
+            let retiredCount = retirements[a.affinityKey] ?? 0;
+            let retiredDetail =
+              retiredCount > 0 ? `, unresettableRetired=${retiredCount}` : '';
+            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail}${swapDetail}${retiredDetail})`;
           })
           .join(' ');
         log.info(

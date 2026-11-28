@@ -31,6 +31,7 @@ type Wrapped<R> = {
     launchMs: number;
     renderMs: number;
     waits?: { semaphoreMs: number; tabQueueMs: number; tabStartupMs: number };
+    resetMs?: number;
   };
   pool: PoolMeta;
 };
