@@ -745,9 +745,12 @@ export interface OpenAIBatch {
   // ISO time: when the batch is due back, and its follow-up starts.
   deadline: string;
   requestCount: number;
-  // The follow-up waits for a resume: the automation is paused, or waiting
-  // for a key approval, and either holds the follow-up's run
-  // (`follow_up_held_at`) or hasn't made the run yet.
+  // The follow-up waits on something besides its deadline: its batch records
+  // a hold (`follow_up_held_at`: a pause or a key-approval wait put the run
+  // back to pending, or a batch that couldn't be read waits for its retry),
+  // or the automation is paused or waiting for a key approval and the
+  // follow-up hasn't started. A follow-up that keeps running, such as one
+  // whose commit was claimed before the pause, isn't held.
   followUpHeld: boolean;
 }
 
@@ -756,9 +759,9 @@ export interface OpenAIBatch {
 export const OPEN_AI_BATCHES_LISTED = 20;
 
 // The automation's open batches: each batch submitted since the automation
-// was switched on that isn't dropped and whose follow-up hasn't ended, which is every batch a pause holds and a remove
-// drops. The platform still bills each one, whatever becomes of its
-// follow-up.
+// was switched on that isn't dropped and whose follow-up hasn't ended, which
+// is every batch a pause holds and a remove drops. The platform still bills
+// each one, whatever becomes of its follow-up.
 export async function readOpenAIBatches(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
@@ -772,7 +775,8 @@ export async function readOpenAIBatches(
     "AND (b.follow_up_run_id IS NULL OR r.state IN ('pending', 'running'))",
   ];
   let rows = await query(dbAdapter, [
-    "SELECT b.batch_id, b.deadline, b.request_count, (b.follow_up_held_at IS NOT NULL OR a.state IN ('paused', 'waiting-for-key-approval')) AS held",
+    'SELECT b.batch_id, b.deadline, b.request_count,',
+    "(b.follow_up_held_at IS NOT NULL OR (a.state IN ('paused', 'waiting-for-key-approval') AND (b.follow_up_run_id IS NULL OR r.state = 'pending'))) AS held",
     ...open,
     'ORDER BY b.deadline, b.batch_id LIMIT',
     param(OPEN_AI_BATCHES_LISTED),

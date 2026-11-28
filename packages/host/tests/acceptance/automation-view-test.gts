@@ -4268,6 +4268,23 @@ module('Acceptance | automation view', function (hooks) {
       await waitFor('[data-test-automation-controls]', { timeout: 10000 });
     }
 
+    // The realm tells its direct writers that the automation's row changed.
+    function changed() {
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(
+          testRealmURL,
+          '@testuser:localhost',
+        ),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'automation',
+          automation: AUTOMATION,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+    }
+
     function controls() {
       return [
         ...document.querySelectorAll('[data-test-automation-control]'),
@@ -4462,7 +4479,7 @@ module('Acceptance | automation view', function (hooks) {
         .dom('[data-test-automation-confirm-new-payer]')
         .includesText('You become the payer')
         .includesText(
-          'Resuming the automation makes you the payer in place of @writer:localhost. Boxel charges every later run, and each follow-up run the pause held, to your credits, up to the monthly limit of 10 credits.',
+          'Resuming the automation makes you the payer in place of @writer:localhost. Boxel charges every later run to your credits, up to the monthly limit of 10 credits.',
         );
       assert
         .dom(
@@ -4480,12 +4497,14 @@ module('Acceptance | automation view', function (hooks) {
         );
     });
 
-    test('a payer whom the viewer may not see is named as another realm administrator', async function (assert) {
+    test('a payer whom the viewer may not see is named only as the current payer', async function (assert) {
       await openControls({ ...PAUSED, payer: null, viewerIsPayer: false });
       await ask('resume');
       assert
         .dom('[data-test-automation-confirm-new-payer]')
-        .includesText('in place of another realm administrator.');
+        .includesText(
+          'in place of the current payer, a person who shares no workspace with you.',
+        );
     });
 
     test('a paused automation lists the follow-up runs the pause holds, each with its batch’s deadline', async function (assert) {
@@ -4533,6 +4552,107 @@ module('Acceptance | automation view', function (hooks) {
         .dom('[data-test-automation-confirm-failure]')
         .includesText('the automation is already paused');
       assert.dom('[data-test-automation-confirm="pause"]').exists();
+    });
+
+    test('a paused automation whose card has no monthly limit offers no Resume, and says to set one', async function (assert) {
+      await realm.write(
+        'automations/nightly.json',
+        JSON.stringify({
+          ...automationJSON,
+          data: {
+            ...automationJSON.data,
+            attributes: {
+              ...automationJSON.data.attributes,
+              caps: {
+                ...automationJSON.data.attributes.caps,
+                monthlyCredits: null,
+              },
+            },
+          },
+        }),
+      );
+      await openControls(PAUSED);
+      assert.deepEqual(controls(), ['preview', 'run-now', 'remove']);
+      assert
+        .dom('[data-test-automation-resume-needs-cap]')
+        .includesText('Set a monthly limit in the automation’s editor');
+    });
+
+    test('a paused automation holding more follow-ups than the status lists says how many more', async function (assert) {
+      await openControls({
+        ...PAUSED,
+        openBatches: OPEN_BATCHES.openBatches.map((batch) => ({
+          ...batch,
+          followUpHeld: true,
+        })),
+        openBatchCount: 5,
+      });
+      assert.dom('[data-test-automation-held-more]').hasText('And 3 more.');
+    });
+
+    test('Resume mentions held follow-ups only when the pause holds some', async function (assert) {
+      await openControls(PAUSED);
+      await ask('resume');
+      assert.false(
+        dialogText('resume').includes('follow-up'),
+        'a pause that holds no follow-up says nothing about follow-ups',
+      );
+    });
+
+    test('the result of a control goes away once the automation moves on', async function (assert) {
+      await openControls(ACTIVE);
+      await ask('pause');
+      await confirm('pause');
+      await waitFor('[data-test-automation-control-done="pause"]', {
+        timeout: 10000,
+      });
+      answer = { status: 200, attributes: PAUSED };
+      changed();
+      await waitFor('[data-test-automation-control="resume"]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-control-done="pause"]')
+        .exists('the result stays while the automation is paused');
+      answer = { status: 200, attributes: ACTIVE };
+      changed();
+      await waitFor('[data-test-automation-control="pause"]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-control-done]')
+        .doesNotExist('a resume by anyone ends the pause’s result');
+    });
+
+    test('a refused Cancel run shows the realm server’s message and keeps the confirmation open', async function (assert) {
+      listedRuns = [run('run-running', { state: 'running', finishedAt: null })];
+      postAnswer = {
+        status: 409,
+        body: {
+          errors: [
+            'the run already ended, or its commit was claimed and is landing',
+          ],
+        },
+      };
+      await openControls(ACTIVE);
+      await click(
+        '[data-test-automation-runs-section] [data-test-pretui-section-toggle]',
+      );
+      await waitFor('[data-test-automation-run-cancel="run-running"]', {
+        timeout: 10000,
+      });
+      await click('[data-test-automation-run-cancel="run-running"]');
+      await waitFor('[data-test-automation-confirm="cancel-run"]', {
+        timeout: 10000,
+      });
+      await confirm('cancel-run');
+      await waitFor('[data-test-automation-confirm-failure]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-confirm-failure]')
+        .includesText('its commit was claimed and is landing');
+      assert.dom('[data-test-automation-confirm="cancel-run"]').exists();
     });
 
     test('a waiting or running run offers Cancel run, which asks first and cancels that run', async function (assert) {
