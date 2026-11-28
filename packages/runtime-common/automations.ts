@@ -728,6 +728,7 @@ export async function removeAutomation(
       })),
     );
     await dropHeldFollowUps(txQuery, automationId);
+    await dropUnchargedStorageDays(txQuery, automationId);
     await txQuery([
       'DELETE FROM automations WHERE automation_id =',
       param(automationId),
@@ -1776,6 +1777,7 @@ async function removeForCard(
     })),
   );
   await dropHeldFollowUps(txQuery, automation.automationId);
+  await dropUnchargedStorageDays(txQuery, automation.automationId);
   await txQuery([
     'DELETE FROM automations WHERE automation_id =',
     param(automation.automationId),
@@ -2274,6 +2276,27 @@ function followUpNotStarted(): Expression {
     'AND (b.follow_up_held_at IS NOT NULL OR b.follow_up_run_id IS NULL OR EXISTS (SELECT 1 FROM automation_runs r',
     "WHERE r.id = b.follow_up_run_id AND r.state = 'pending'))",
   ];
+}
+
+// Deletes a removed automation's storage days measured after its last
+// storage charge. Removing the automation stops its storage charge, and
+// switching the automation on again starts a new span from that day, so
+// those days are never charged. Every storage day kept then lies inside the
+// charge that billed it, which is how the storage view lists each charge's
+// days (`storageCharges` in the realm server's automation handlers).
+async function dropUnchargedStorageDays(
+  txQuery: Querier,
+  automationId: RealmResourceIdentifier,
+): Promise<void> {
+  await txQuery([
+    'DELETE FROM automation_storage_days WHERE automation_id =',
+    param(automationId),
+    `AND day > COALESCE((SELECT MAX(l.charge_day) FROM credits_ledger l
+       WHERE l.charge_kind = 'storage' AND l.run_id IS NULL
+         AND l.batch_id IS NULL AND l.automation_id =`,
+    param(automationId),
+    "), '-infinity'::date)",
+  ] as Expression);
 }
 
 // Clears the hold on each batch of a removed automation: its follow-up was

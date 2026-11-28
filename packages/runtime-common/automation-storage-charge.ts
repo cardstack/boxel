@@ -26,8 +26,9 @@
 // the days it covers.
 //
 // Removing an automation deletes its `automations` row and its history, so
-// the automation is no longer measured or charged. Switching the automation
-// on again starts from that day.
+// the automation is no longer measured or charged, and deletes the days
+// measured since its last charge, which no charge will cover. Switching the
+// automation on again starts from that day.
 
 import { getAutomationStorage } from './automation-files.ts';
 import type { AutomationPauseReason, AutomationState } from './automations.ts';
@@ -255,32 +256,43 @@ export async function storageChargeStopped(
     `),
      last_active AS (
        SELECT changed_at, id FROM history WHERE state = 'active'
-       ORDER BY changed_at DESC, id DESC LIMIT 1)
-     SELECT latest.state, latest.pause_reason,
-       -- The first change after the automation last became active.
-       (SELECT MIN(s.changed_at) FROM history s
-        WHERE NOT EXISTS (SELECT 1 FROM last_active l
-          WHERE (l.changed_at, l.id) >= (s.changed_at, s.id))) AS since,
-       EXISTS (SELECT 1 FROM last_active) AS was_active
+       ORDER BY changed_at DESC, id DESC LIMIT 1),
+     -- The first change after the automation last became active.
+     stop AS (
+       SELECT MIN(s.changed_at) AS since FROM history s
+       WHERE NOT EXISTS (SELECT 1 FROM last_active l
+         WHERE (l.changed_at, l.id) >= (s.changed_at, s.id)))
+     SELECT latest.state, latest.pause_reason, stop.since,
+       -- Compared at the microseconds Postgres keeps, as the charge job
+       -- compares the history with midnight.
+       to_char(CASE
+         WHEN EXISTS (SELECT 1 FROM last_active)
+           AND (stop.since AT TIME ZONE 'UTC')
+             <> date_trunc('day', stop.since AT TIME ZONE 'UTC')
+         THEN (stop.since AT TIME ZONE 'UTC')::date + 1
+         ELSE (stop.since AT TIME ZONE 'UTC')::date
+       END, 'YYYY-MM-DD') AS from_day
      FROM (SELECT * FROM history ORDER BY changed_at DESC, id DESC LIMIT 1)
-       AS latest`,
+       AS latest, stop`,
   ])) as unknown as {
     state: AutomationState;
     pause_reason: AutomationPauseReason | null;
     since: string | Date | null;
-    was_active: boolean;
+    from_day: string | null;
   }[];
-  if (!latest || latest.state === 'active' || latest.since == null) {
+  if (
+    !latest ||
+    latest.state === 'active' ||
+    latest.since == null ||
+    latest.from_day == null
+  ) {
     return null;
   }
-  let since = new Date(latest.since).toISOString();
-  let sinceDay = since.slice(0, 10);
-  let atMidnight = since === `${sinceDay}T00:00:00.000Z`;
   return {
     state: latest.state,
     pauseReason: latest.pause_reason,
-    since,
-    fromDay: latest.was_active && !atMidnight ? addDays(sinceDay, 1) : sinceDay,
+    since: new Date(latest.since).toISOString(),
+    fromDay: latest.from_day,
   };
 }
 

@@ -390,6 +390,29 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('removing an automation deletes the days measured since its last charge, and keeps the charged ones', async function (assert) {
+    await switchOn('2026-11-10');
+    await createdFile('logs/sync.jsonl', BYTES_PER_GB);
+    await charge('2026-11-10');
+    // Days measured but not charged yet, as days under a credit are.
+    for (let day of ['2026-11-11', '2026-11-12']) {
+      await dbAdapter.execute(
+        `INSERT INTO automation_storage_days (automation_id, day, realm, file_bytes, index_bytes)
+         VALUES ($1, $2::date, $3, 10, 0)`,
+        { bind: [AUTOMATION, day, REALM] },
+      );
+    }
+
+    let removed = await removeAutomation(
+      dbAdapter,
+      { automationId: AUTOMATION, user: PAYER },
+      options,
+    );
+
+    assert.true(removed.ok);
+    assert.deepEqual(await measuredDays(), ['2026-11-10']);
+  });
+
   test('an automation switched on again starts a new span on that day', async function (assert) {
     await switchOn('2026-11-10');
     await createdFile('logs/sync.jsonl', BYTES_PER_GB);
@@ -607,6 +630,20 @@ module(basename(import.meta.filename), function (hooks) {
       since: '2026-11-12T00:00:00.000Z',
       fromDay: '2026-11-12',
     });
+  });
+
+  test('an automation that stops a few microseconds after midnight is charged for that day', async function (assert) {
+    await switchOn('2026-11-10');
+    // Past midnight by less than a millisecond, which only Postgres keeps.
+    await pause('2026-11-12T00:00:00.000005Z');
+    let stopped = await storageChargeStopped(dbAdapter, AUTOMATION);
+    assert.strictEqual(stopped?.fromDay, '2026-11-13');
+    let [result] = await charge('2026-11-12');
+    assert.notStrictEqual(
+      result.outcome,
+      'stopped',
+      'the charge job counts the automation active on that day too',
+    );
   });
 
   test('an automation switched on waiting for key approval is never charged, and says so from the switch-on', async function (assert) {

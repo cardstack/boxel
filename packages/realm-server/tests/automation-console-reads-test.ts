@@ -436,6 +436,11 @@ module(basename(import.meta.filename), function (hooks) {
       let run = await newRun(OWNER);
       await writeAsRun(run.id, 'out/report.txt', 'hello world');
       await writeAsRun(run.id, 'out/log.txt', 'line one\n');
+      // A later run, which the run list puts ahead of the run that created
+      // the files.
+      let later = await newRun(OWNER);
+      await setRun(run.id, "created_at = '2026-11-14T08:00:00Z'");
+      await setRun(later.id, "created_at = '2026-11-15T08:00:00Z'");
       await query(dbAdapter, [
         'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since) VALUES (',
         param(rri(automationURL())),
@@ -510,6 +515,11 @@ module(basename(import.meta.filename), function (hooks) {
         a.fileBytes,
         'line one\n'.length + 'hello world'.length,
       );
+      assert.deepEqual(
+        a.files.map((f: { runsAhead: number | null }) => f.runsAhead),
+        [1, 1],
+        'one run is listed ahead of the run that created each file',
+      );
       let pricing = currentPricing()!;
       assert.strictEqual(
         a.dailyCredits,
@@ -548,6 +558,7 @@ module(basename(import.meta.filename), function (hooks) {
         ],
         'the storage charges written so far, newest first, each with no measured day to list',
       );
+      assert.false(a.moreCharges, 'every charge is listed');
       assert.strictEqual(
         a.chargeStopped,
         null,
@@ -629,6 +640,62 @@ module(basename(import.meta.filename), function (hooks) {
           credits: 1,
         },
       ]);
+    });
+
+    test('the route lists the newest 62 charges, says older ones exist, and the oldest listed still spans from the charge before', async function (assert) {
+      await query(dbAdapter, [
+        'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since, switched_on_at) VALUES (',
+        param(rri(automationURL())),
+        ',',
+        param(ri(realm.url)),
+        ',',
+        param(OWNER),
+        ", 'active', '{}'::jsonb, '{}'::jsonb, now(), '2026-01-01T08:00:00Z')",
+      ]);
+      let owner = await ownerUser();
+      // 63 charges, every other day, each billing the two days it covers.
+      let days: string[] = [];
+      for (let i = 0; i < 63; i++) {
+        let first = new Date(Date.UTC(2026, 0, 1 + 2 * i));
+        let last = new Date(Date.UTC(2026, 0, 2 + 2 * i));
+        for (let day of [first, last]) {
+          await query(dbAdapter, [
+            'INSERT INTO automation_storage_days (automation_id, day, realm, file_bytes, index_bytes) VALUES (',
+            param(rri(automationURL())),
+            ',',
+            param(day.toISOString().slice(0, 10)),
+            '::date,',
+            param(ri(realm.url)),
+            ', 1000, 0)',
+          ]);
+        }
+        days.push(last.toISOString().slice(0, 10));
+        await spendCredits(dbAdapter, owner.id, 1, {
+          kind: 'storage',
+          realm: ri(realm.url),
+          automationId: rri(automationURL()),
+          day: last.toISOString().slice(0, 10),
+          pricingVersion: 'test',
+        });
+      }
+
+      let response = await get(AUTOMATION_STORAGE_PATH, WRITER, {
+        automation: automationURL(),
+      });
+
+      assert.strictEqual(response.status, 200, response.text);
+      let a = response.body.data.attributes;
+      assert.strictEqual(a.charges.length, 62);
+      assert.true(a.moreCharges, 'the oldest charge is left out');
+      assert.strictEqual(a.charges[0].day, days[62]);
+      let oldest = a.charges[61];
+      assert.strictEqual(oldest.day, days[1]);
+      assert.strictEqual(
+        oldest.firstDay,
+        '2026-01-03',
+        'the oldest listed charge starts after the charge the listing leaves out',
+      );
+      assert.strictEqual(oldest.days, 2);
     });
 
     test('a paused automation’s storage says why and since when Boxel stopped charging', async function (assert) {

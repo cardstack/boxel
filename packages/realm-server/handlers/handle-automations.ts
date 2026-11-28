@@ -1446,16 +1446,17 @@ export interface StorageChargeListed {
 // day's rows.
 //
 // A charge's days are the `automation_storage_days` rows the charge summed:
-// those after the previous charge's day, through the charge's own day. Since
-// the automation was last switched on, the charge also starts no earlier
-// than the switch-on day, so days measured before a removal and never
-// charged stay out of the next switch-on's first charge, as
-// `chargeAutomationStorage` leaves them out.
+// those after the previous charge's day, through the charge's own day.
+// Removing an automation deletes the days measured since its last charge,
+// which no charge covers, so a later charge never takes in days from before a
+// removal. Since the automation was last switched on, the charge also starts
+// no earlier than the switch-on day, as `chargeAutomationStorage` does, which
+// keeps out any such day measured before removals deleted them.
 async function storageCharges(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
   realm: RealmIdentifier,
-): Promise<StorageChargeListed[]> {
+): Promise<{ charges: StorageChargeListed[]; more: boolean }> {
   let rows = await query(dbAdapter, [
     `WITH charges AS (
        SELECT charge_day, -SUM(credit_amount) AS credits
@@ -1496,9 +1497,10 @@ async function storageCharges(
        AND (o.day IS NULL OR s.charge_day < o.day OR d.day >= o.day)
      GROUP BY s.charge_day, s.credits
      ORDER BY s.charge_day DESC LIMIT`,
-    param(STORAGE_CHARGES_LISTED),
+    // One row past the listing says whether older charges exist.
+    param(STORAGE_CHARGES_LISTED + 1),
   ]);
-  return rows.map((row) => {
+  let charges = rows.slice(0, STORAGE_CHARGES_LISTED).map((row) => {
     let days = Number(row.days);
     return {
       day: String(row.day),
@@ -1509,13 +1511,44 @@ async function storageCharges(
       credits: Number(row.credits),
     };
   });
+  return { charges, more: rows.length > STORAGE_CHARGES_LISTED };
+}
+
+// For each of the automation's runs named in `runIds`, how many of the
+// automation's runs the run list puts ahead of it (newest first by when they
+// were made, as `listAutomationRuns` orders them), so a reader can open the
+// page of the run list that holds the run. A run that no longer exists is
+// left out.
+async function runsAheadOf(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+  runIds: string[],
+): Promise<Map<string, number>> {
+  let ids = [...new Set(runIds)].filter(isAutomationRunId);
+  if (ids.length === 0) {
+    return new Map();
+  }
+  let rows = await query(dbAdapter, [
+    `SELECT r.id::text AS id,
+       (SELECT COUNT(*) FROM automation_runs n
+        WHERE n.automation_id = r.automation_id
+          AND (n.created_at, n.id) > (r.created_at, r.id)) AS ahead
+     FROM automation_runs r WHERE r.automation_id =`,
+    param(automationId),
+    'AND r.id::text = ANY(',
+    param(`{${ids.join(',')}}`),
+    '::text[])',
+  ]);
+  return new Map(rows.map((row) => [String(row.id), Number(row.ahead)]));
 }
 
 // `GET /_automation-storage?realm=<realm URL>&automation=<card URL>`: every
 // file the automation's runs created that still exists, with its bytes on
-// disk and in the index, and the daily charge: what a day of that storage
-// costs at this server's prices (`dailyCredits`, before rounding, or null
-// without prices), the storage charges written so far, and, while the
+// disk and in the index and how many runs the run list puts ahead of the run
+// that created it (`runsAhead`), and the daily charge: what a day of that
+// storage costs at this server's prices (`dailyCredits`, before rounding, or
+// null without prices), the newest storage charges written so far, whether
+// older ones exist (`moreCharges`), and, while the
 // automation isn't active, why and since when Boxel isn't charging for the
 // storage (`chargeStopped`, see `storageChargeStopped`). A switched-on
 // automation's payer pays the charge, and is shown under ADR 011 (see
@@ -1540,11 +1573,12 @@ export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
     let realm = ri(args.virtualNetwork.unresolveURL(realmURL.href));
     let inRealm = (recorded: string) =>
       args.virtualNetwork.toURLHref(recorded) === realmURL.href;
-    let [allStorage, automationRow, charges] = await Promise.all([
-      getAutomationStorage(args.dbAdapter, automationId),
-      getAutomation(args.dbAdapter, automationId),
-      storageCharges(args.dbAdapter, automationId, realm),
-    ]);
+    let [allStorage, automationRow, { charges, more: moreCharges }] =
+      await Promise.all([
+        getAutomationStorage(args.dbAdapter, automationId),
+        getAutomation(args.dbAdapter, automationId),
+        storageCharges(args.dbAdapter, automationId, realm),
+      ]);
     let row =
       automationRow && inRealm(automationRow.realm) ? automationRow : undefined;
     let files = allStorage.files.filter((file) => inRealm(file.realmURL));
@@ -1553,6 +1587,11 @@ export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
       fileBytes: files.reduce((sum, file) => sum + file.fileBytes, 0),
       indexBytes: files.reduce((sum, file) => sum + file.indexBytes, 0),
     };
+    let ahead = await runsAheadOf(
+      args.dbAdapter,
+      automationId,
+      files.map((file) => file.runId),
+    );
     let [payer, chargeStopped] = row
       ? await Promise.all([
           shownIdentity(args.dbAdapter, caller, row.payer),
@@ -1585,12 +1624,14 @@ export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
             createdAt: file.createdAt,
             fileBytes: file.fileBytes,
             indexBytes: file.indexBytes,
+            runsAhead: ahead.get(file.runId) ?? null,
           })),
           fileBytes: storage.fileBytes,
           indexBytes: storage.indexBytes,
           dailyCredits,
           pricingVersion: pricing?.version ?? null,
           charges,
+          moreCharges,
           chargeStopped,
         },
       },
