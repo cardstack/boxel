@@ -240,6 +240,17 @@ module('Acceptance | automation view', function (hooks) {
     asked = [];
     askedKeyApprovals = [];
     holdKeyedReads = undefined;
+    // An in-browser test realm has no storage route either. A test that
+    // reads the storage mounts its own answer ahead of this one; every other
+    // test answers as the route answers a viewer it refuses, so the view
+    // stops asking and leaves the Storage section out.
+    getService('network').virtualNetwork.mount(
+      async (request: Request) =>
+        new URL(request.url).pathname.endsWith('/_automation-storage')
+          ? new Response(JSON.stringify({ errors: [] }), { status: 403 })
+          : null,
+      { prepend: true },
+    );
     getService('network').virtualNetwork.mount(
       async (request: Request) => {
         let url = new URL(request.url);
@@ -4295,8 +4306,8 @@ module('Acceptance | automation view', function (hooks) {
         );
       let section = text('[data-test-automation-storage]') ?? '';
       assert.ok(section.includes('Files 2'), section);
-      assert.ok(section.includes('On disk 8 KB'), section);
-      assert.ok(section.includes('In the index 2 KB'), section);
+      assert.ok(section.includes('On disk 8 kB'), section);
+      assert.ok(section.includes('In the index 2 kB'), section);
       assert.ok(section.includes('Daily charge 0.0042 credits a day'), section);
       assert.ok(section.includes('Charged this month 0 credits'), section);
       assert
