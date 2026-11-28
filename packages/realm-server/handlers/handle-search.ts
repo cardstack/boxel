@@ -18,6 +18,7 @@ import {
   runWithSearchTimeBudget,
   sanitizeConsumingRealmHeader,
   SearchBoundError,
+  isDefinitionsUnavailableError,
   SearchRequestError,
   searchEntryRealms,
   sanitizeLoggingCorrelationId,
@@ -1004,7 +1005,12 @@ export default function handleSearch(opts: {
       if (e instanceof SearchBoundError) {
         await setContextResponse(
           ctxt,
-          buildSearchErrorResponse(e.message, e.status),
+          buildSearchErrorResponse(
+            e.message,
+            e.status,
+            e.code,
+            isDefinitionsUnavailableError(e) ? e.retryAfterSeconds : undefined,
+          ),
         );
         emitTelemetry();
         return;
