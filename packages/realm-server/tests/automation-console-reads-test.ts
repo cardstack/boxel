@@ -143,6 +143,14 @@ module(basename(import.meta.filename), function (hooks) {
       .set('Authorization', auth(user));
   }
 
+  // The UTC day `n` days before today, as YYYY-MM-DD: the storage route
+  // lists the charges of the last twelve calendar months, counted from today.
+  function daysAgo(n: number): string {
+    let day = new Date();
+    day.setUTCDate(day.getUTCDate() - n);
+    return day.toISOString().slice(0, 10);
+  }
+
   module('a run’s report', function () {
     test('a direct writer reads a run’s timings, log summary, calls, writes and cost', async function (assert) {
       let run = await newRun(OWNER);
@@ -436,6 +444,11 @@ module(basename(import.meta.filename), function (hooks) {
       let run = await newRun(OWNER);
       await writeAsRun(run.id, 'out/report.txt', 'hello world');
       await writeAsRun(run.id, 'out/log.txt', 'line one\n');
+      // A later run, which the run list puts ahead of the run that created
+      // the files.
+      let later = await newRun(OWNER);
+      await setRun(run.id, "created_at = '2026-11-14T08:00:00Z'");
+      await setRun(later.id, "created_at = '2026-11-15T08:00:00Z'");
       await query(dbAdapter, [
         'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since) VALUES (',
         param(rri(automationURL())),
@@ -446,8 +459,9 @@ module(basename(import.meta.filename), function (hooks) {
         ", 'active', '{}'::jsonb, '{}'::jsonb, now())",
       ]);
       let owner = await ownerUser();
-      for (let day of ['2026-11-14', '2026-11-16']) {
-        if (day === '2026-11-16') {
+      let [earlier, latest] = [daysAgo(14), daysAgo(12)];
+      for (let day of [earlier, latest]) {
+        if (day === latest) {
           // One daily credit, so this charge draws a credit from the daily
           // bucket and a credit from the extra one: two ledger rows.
           await addToCreditsLedger(dbAdapter, {
@@ -472,12 +486,13 @@ module(basename(import.meta.filename), function (hooks) {
       }
 
       let [{ rows }] = (await dbAdapter.execute(
-        `SELECT COUNT(*) AS rows FROM credits_ledger WHERE charge_kind = 'storage' AND charge_day = '2026-11-16'`,
+        `SELECT COUNT(*) AS rows FROM credits_ledger WHERE charge_kind = 'storage' AND charge_day = $1::date`,
+        { bind: [latest] },
       )) as { rows: string }[];
       assert.strictEqual(
         Number(rows),
         2,
-        'the charge of 2026-11-16 is two ledger rows',
+        'the latest charge is two ledger rows',
       );
 
       let response = await get(AUTOMATION_STORAGE_PATH, WRITER, {
@@ -510,6 +525,11 @@ module(basename(import.meta.filename), function (hooks) {
         a.fileBytes,
         'line one\n'.length + 'hello world'.length,
       );
+      assert.deepEqual(
+        a.files.map((f: { runsAhead: number | null }) => f.runsAhead),
+        [1, 1],
+        'one run is listed ahead of the run that created each file',
+      );
       let pricing = currentPricing()!;
       assert.strictEqual(
         a.dailyCredits,
@@ -529,50 +549,176 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(
         a.charges,
         [
-          { day: '2026-11-16', credits: 2 },
-          { day: '2026-11-14', credits: 2 },
+          {
+            day: latest,
+            firstDay: latest,
+            days: 0,
+            fileBytes: 0,
+            indexBytes: 0,
+            credits: 2,
+          },
+          {
+            day: earlier,
+            firstDay: earlier,
+            days: 0,
+            fileBytes: 0,
+            indexBytes: 0,
+            credits: 2,
+          },
         ],
-        'the storage charges written so far, newest first',
+        'the storage charges written so far, newest first, each with no measured day to list',
       );
-      assert.strictEqual(
-        a.chargeStopped,
-        null,
-        'Boxel charges for the storage of an active automation',
-      );
+      assert.false(a.moreCharges, 'every charge is listed');
     });
 
-    test('a paused automation’s storage says why and since when Boxel stopped charging', async function (assert) {
+    test('each charge lists the days it billed since the charge before, from the switch-on day, with their bytes averaged', async function (assert) {
+      // Days relative to the switch-on, twenty days ago.
+      let d = (offset: number) => daysAgo(20 - offset);
       await query(dbAdapter, [
-        'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since) VALUES (',
+        'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since, switched_on_at) VALUES (',
         param(rri(automationURL())),
         ',',
         param(ri(realm.url)),
         ',',
         param(OWNER),
-        ", 'active', '{}'::jsonb, '{}'::jsonb, now())",
+        ", 'active', '{}'::jsonb, '{}'::jsonb, now(),",
+        param(`${d(0)}T09:00:00Z`),
+        ')',
       ]);
-      await dbAdapter.execute(
-        `UPDATE automations SET state = 'paused', pause_reason = 'payer-lost-access' WHERE automation_id = $1`,
-        { bind: [rri(automationURL())] },
-      );
-      await dbAdapter.execute(
-        `UPDATE automation_state_changes
-         SET changed_at = CASE state WHEN 'paused' THEN '2026-11-15T10:00:00Z'::timestamptz
-                                     ELSE '2026-11-14T08:00:00Z'::timestamptz END
-         WHERE automation_id = $1`,
-        { bind: [rri(automationURL())] },
-      );
+      // The day two days before the switch-on was measured before a removal
+      // and never charged, and no measurement was kept for the day three
+      // days after it, so neither is billed.
+      let measured: [string, number, number][] = [
+        [d(-2), 9000, 900],
+        [d(0), 1000, 100],
+        [d(1), 2000, 200],
+        [d(2), 3000, 300],
+        [d(4), 4000, 0],
+        [d(5), 6000, 100],
+      ];
+      for (let [day, fileBytes, indexBytes] of measured) {
+        await query(dbAdapter, [
+          'INSERT INTO automation_storage_days (automation_id, day, realm, file_bytes, index_bytes) VALUES (',
+          param(rri(automationURL())),
+          ',',
+          param(day),
+          '::date,',
+          param(ri(realm.url)),
+          ',',
+          param(fileBytes),
+          ',',
+          param(indexBytes),
+          ')',
+        ]);
+      }
+      let owner = await ownerUser();
+      for (let day of [d(2), d(5)]) {
+        let spent = await spendCredits(dbAdapter, owner.id, 1, {
+          kind: 'storage',
+          realm: ri(realm.url),
+          automationId: rri(automationURL()),
+          day,
+          pricingVersion: 'test',
+        });
+        assert.strictEqual(
+          spent,
+          'charged',
+          `the storage through ${day} is charged`,
+        );
+      }
 
       let response = await get(AUTOMATION_STORAGE_PATH, WRITER, {
         automation: automationURL(),
       });
 
       assert.strictEqual(response.status, 200, response.text);
-      assert.deepEqual(response.body.data.attributes.chargeStopped, {
-        state: 'paused',
-        pauseReason: 'payer-lost-access',
-        since: '2026-11-15T10:00:00.000Z',
+      assert.deepEqual(response.body.data.attributes.charges, [
+        {
+          day: d(5),
+          firstDay: d(4),
+          days: 2,
+          fileBytes: 5000,
+          indexBytes: 50,
+          credits: 1,
+        },
+        {
+          day: d(2),
+          firstDay: d(0),
+          days: 3,
+          fileBytes: 2000,
+          indexBytes: 200,
+          credits: 1,
+        },
+      ]);
+    });
+
+    test('the route lists the charges of the last twelve calendar months, says older ones exist, and the oldest listed still spans from the charge before', async function (assert) {
+      await query(dbAdapter, [
+        'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since, switched_on_at) VALUES (',
+        param(rri(automationURL())),
+        ',',
+        param(ri(realm.url)),
+        ',',
+        param(OWNER),
+        ", 'active', '{}'::jsonb, '{}'::jsonb, now(), now() - interval '3 years')",
+      ]);
+      let owner = await ownerUser();
+      let now = new Date();
+      // The `n`th day of the month `back` months before the current UTC
+      // month (day 0 is the last day of the month before).
+      let dayOf = (back: number, n: number) =>
+        new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, n))
+          .toISOString()
+          .slice(0, 10);
+      async function measure(day: string) {
+        await query(dbAdapter, [
+          'INSERT INTO automation_storage_days (automation_id, day, realm, file_bytes, index_bytes) VALUES (',
+          param(rri(automationURL())),
+          ',',
+          param(day),
+          '::date,',
+          param(ri(realm.url)),
+          ', 1000, 0)',
+        ]);
+      }
+      // One charge on the 1st of each of the last 14 months, each billing
+      // that day alone, except that the oldest listed month's charge also
+      // bills the last day of the month before it, measured after that
+      // month's charge, which the listing leaves out.
+      for (let back = 13; back >= 0; back--) {
+        if (back === 11) {
+          await measure(dayOf(11, 0));
+        }
+        let day = dayOf(back, 1);
+        await measure(day);
+        await spendCredits(dbAdapter, owner.id, 1, {
+          kind: 'storage',
+          realm: ri(realm.url),
+          automationId: rri(automationURL()),
+          day,
+          pricingVersion: 'test',
+        });
+      }
+
+      let response = await get(AUTOMATION_STORAGE_PATH, WRITER, {
+        automation: automationURL(),
       });
+
+      assert.strictEqual(response.status, 200, response.text);
+      let a = response.body.data.attributes;
+      assert.deepEqual(
+        a.charges.map((c: { day: string }) => c.day),
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((back) => dayOf(back, 1)),
+        'one charge for each of the last twelve calendar months, newest first',
+      );
+      assert.true(a.moreCharges, 'the two older charges are left out');
+      let oldest = a.charges[a.charges.length - 1];
+      assert.strictEqual(
+        oldest.firstDay,
+        dayOf(11, 0),
+        'the oldest listed charge starts after the charge the listing leaves out',
+      );
+      assert.strictEqual(oldest.days, 2);
     });
 
     test('a payer who shares no grant with the viewer is hidden, and nothing is listed for an automation whose runs created nothing', async function (assert) {

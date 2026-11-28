@@ -240,6 +240,17 @@ module('Acceptance | automation view', function (hooks) {
     asked = [];
     askedKeyApprovals = [];
     holdKeyedReads = undefined;
+    // An in-browser test realm has no storage route either. A test that
+    // reads the storage mounts its own answer ahead of this one; every other
+    // test answers as the route answers a viewer it refuses, so the view
+    // stops asking and leaves the Storage section out.
+    getService('network').virtualNetwork.mount(
+      async (request: Request) =>
+        new URL(request.url).pathname.endsWith('/_automation-storage')
+          ? new Response(JSON.stringify({ errors: [] }), { status: 403 })
+          : null,
+      { prepend: true },
+    );
     getService('network').virtualNetwork.mount(
       async (request: Request) => {
         let url = new URL(request.url);
@@ -2924,10 +2935,10 @@ module('Acceptance | automation view', function (hooks) {
           .dom('[data-test-automation-run-storage-rules]')
           .includesText('Storage isn’t part of any one run’s total')
           .includesText(
-            'Boxel charges for every day the automation’s status reads On',
+            'Boxel charges for every day the automation exists, whatever the automation’s status: On, paused, waiting for credits, waiting for key approval or done.',
           )
           .includesText(
-            'Boxel doesn’t charge for a day the automation spends wholly paused, waiting for credits, waiting for key approval or done',
+            'Boxel stops charging only when a realm administrator removes the automation, or when someone deletes the files.',
           );
       });
 
@@ -3194,7 +3205,10 @@ module('Acceptance | automation view', function (hooks) {
         .hasValue('10', 'the monthly limit starts as the card’s own');
       assert
         .dom('[data-test-automation-switch-on-payer]')
-        .includesText('Boxel charges every scheduled run');
+        .includesText('Boxel charges every scheduled run')
+        .includesText(
+          'Pausing the automation doesn’t stop the storage charge; removing the automation or deleting the files does.',
+        );
       assert.dom('[data-test-automation-switch-on-reconfirm]').doesNotExist();
     });
 
@@ -4168,6 +4182,566 @@ module('Acceptance | automation view', function (hooks) {
       });
       assert.dom('[data-test-automation-key-approval-fix]').doesNotExist();
       assert.dom('[data-test-automation-state="On"]').exists();
+    });
+  });
+
+  module('storage', function (hooks) {
+    // What the storage route answers, and how many times the view asked.
+    let storage: Record<string, unknown> | undefined;
+    let storageAsked: number;
+
+    // The current UTC month and the one before, as YYYY-MM, since the view
+    // totals the charges of the current month.
+    let now = new Date();
+    let thisMonth = now.toISOString().slice(0, 7);
+    let lastMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15),
+    )
+      .toISOString()
+      .slice(0, 7);
+
+    hooks.beforeEach(function () {
+      storage = undefined;
+      storageAsked = 0;
+      getService('network').virtualNetwork.mount(
+        async (request: Request) => {
+          let url = new URL(request.url);
+          if (!url.pathname.endsWith('/_automation-storage')) {
+            return null;
+          }
+          storageAsked++;
+          return storage
+            ? new Response(
+                JSON.stringify({
+                  data: {
+                    type: 'automation-storage',
+                    id: AUTOMATION,
+                    attributes: storage,
+                  },
+                }),
+                {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                },
+              )
+            : new Response(JSON.stringify({ errors: [] }), { status: 403 });
+        },
+        { prepend: true },
+      );
+    });
+
+    function answerStorage(attributes: Record<string, unknown>) {
+      storage = {
+        switchedOn: true,
+        payer: '@testuser:localhost',
+        viewerIsPayer: true,
+        files: [],
+        fileBytes: 0,
+        indexBytes: 0,
+        dailyCredits: 0,
+        pricingVersion: 'test',
+        charges: [],
+        chargeStopped: null,
+        ...attributes,
+      };
+    }
+
+    // A YYYY-MM-DD day as the view sets it.
+    function shortDay(day: string, withYear = false) {
+      let [y, m, d] = day.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        ...(withYear ? { year: 'numeric' } : {}),
+      });
+    }
+
+    async function openStorage() {
+      await openIsolated();
+      await waitFor('[data-test-automation-storage-lead]', { timeout: 10000 });
+    }
+
+    test('a direct writer sees each file the runs created, the totals and the daily charge', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      answerStorage({
+        files: [
+          {
+            path: 'digests/2030-01-01.md',
+            run: 'done',
+            createdAt: '2030-01-01T08:31:00.000Z',
+            fileBytes: 3000,
+            indexBytes: 1000,
+            runsAhead: 0,
+          },
+          {
+            path: 'digests/2029-12-31.md',
+            run: 'earlier',
+            createdAt: '2029-12-31T08:31:00.000Z',
+            fileBytes: 5000,
+            indexBytes: 1000,
+            runsAhead: 1,
+          },
+        ],
+        fileBytes: 8000,
+        indexBytes: 2000,
+        dailyCredits: 0.0042,
+      });
+      await openStorage();
+
+      assert
+        .dom('[data-test-automation-storage-file]')
+        .exists({ count: 2 }, 'one row for each file');
+      assert
+        .dom(
+          '[data-test-automation-storage-file="digests/2030-01-01.md"] [data-test-automation-storage-file-bytes]',
+        )
+        .hasText('3 kB');
+      assert
+        .dom(
+          '[data-test-automation-storage-file="digests/2030-01-01.md"] [data-test-automation-storage-index-bytes]',
+        )
+        .hasText('1 kB');
+      assert
+        .dom(
+          '[data-test-automation-storage-file="digests/2029-12-31.md"] [data-test-automation-storage-show-run="earlier"]',
+        )
+        .hasAttribute(
+          'aria-label',
+          'Show the run that created digests/2029-12-31.md',
+        );
+      let section = text('[data-test-automation-storage]') ?? '';
+      assert.ok(section.includes('Files 2'), section);
+      assert.ok(section.includes('On disk 8 kB'), section);
+      assert.ok(section.includes('In the index 2 kB'), section);
+      assert.ok(section.includes('Daily charge 0.0042 credits a day'), section);
+      assert.ok(
+        section.includes('Boxel charged this month 0 credits'),
+        section,
+      );
+      assert
+        .dom('[data-test-automation-storage-charges]')
+        .doesNotExist('no charge yet, so no charge history');
+    });
+
+    test('the charge history shows one row a month that opens to the month’s charges and the days each covers, with a total', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      answerStorage({
+        files: [
+          {
+            path: 'digests/2030-01-01.md',
+            run: 'done',
+            createdAt: '2030-01-01T08:31:00.000Z',
+            fileBytes: 3000,
+            indexBytes: 1000,
+          },
+        ],
+        fileBytes: 3000,
+        indexBytes: 1000,
+        dailyCredits: 0.4,
+        charges: [
+          {
+            day: `${thisMonth}-05`,
+            firstDay: `${thisMonth}-02`,
+            days: 3,
+            fileBytes: 2500000,
+            indexBytes: 40000,
+            credits: 2,
+          },
+          {
+            day: `${thisMonth}-01`,
+            firstDay: `${thisMonth}-01`,
+            days: 1,
+            fileBytes: 2900000,
+            indexBytes: 40000,
+            credits: 1,
+          },
+          {
+            day: `${lastMonth}-20`,
+            firstDay: `${lastMonth}-18`,
+            days: 3,
+            fileBytes: 1500000,
+            indexBytes: 20000,
+            credits: 1,
+          },
+        ],
+        moreCharges: false,
+      });
+      await openStorage();
+
+      let month = `[data-test-automation-storage-month="${thisMonth}"]`;
+      let total = '[data-test-automation-storage-total]';
+      // The figures a row sets: its days billed and its credits.
+      let figures = (selector: string) =>
+        [...document.querySelectorAll(`${selector} [data-numeric]`)].map(
+          (cell) => cell.textContent?.replace(/\s+/g, ' ').trim(),
+        );
+      assert.deepEqual(
+        figures(month),
+        ['4', '3'],
+        'the month bills 4 days for 3 credits',
+      );
+      assert
+        .dom(`${month} [data-test-automation-storage-charge-bytes]`)
+        .hasText(
+          '2.6 MB on disk, 40 kB in the index',
+          'the month’s bytes a day weigh each charge by its days',
+        );
+      assert
+        .dom('[data-test-automation-storage-charge]')
+        .doesNotExist('every month starts closed');
+      assert.deepEqual(
+        figures(total),
+        ['7', '4'],
+        'the months listed bill 7 days for 4 credits',
+      );
+      assert
+        .dom('[data-test-automation-storage-older]')
+        .doesNotExist('nothing older is left out');
+
+      await click(`${month} button`);
+      let multiDay = `[data-test-automation-storage-charge="${thisMonth}-05"]`;
+      await waitFor(multiDay);
+      assert
+        .dom(`${multiDay} [data-test-automation-storage-charge-days]`)
+        .hasText(
+          `${shortDay(`${thisMonth}-02`)} – ${shortDay(`${thisMonth}-05`, true)}`,
+          'a charge that covers several days shows the span',
+        );
+      assert
+        .dom(`${multiDay} [data-test-automation-storage-charge-bytes]`)
+        .hasText('2.5 MB on disk, 40 kB in the index');
+      assert
+        .dom(
+          `[data-test-automation-storage-charge="${thisMonth}-01"] [data-test-automation-storage-charge-days]`,
+        )
+        .hasText(
+          shortDay(`${thisMonth}-01`, true),
+          'a charge for one day shows the day alone',
+        );
+      assert
+        .dom(`[data-test-automation-storage-charge="${lastMonth}-20"]`)
+        .doesNotExist('the other month stays closed');
+      assert.ok(
+        text('[data-test-automation-storage]')?.includes(
+          'Boxel charged this month 3 credits',
+        ),
+      );
+    });
+
+    test('a paused automation still shows the daily charge, since Boxel charges for storage in every state', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+      };
+      answerStorage({
+        files: [
+          {
+            path: 'digests/2030-01-01.md',
+            run: 'done',
+            createdAt: '2030-01-01T08:31:00.000Z',
+            fileBytes: 3000,
+            indexBytes: 1000,
+          },
+        ],
+        fileBytes: 3000,
+        indexBytes: 1000,
+        dailyCredits: 0.0042,
+      });
+      await openStorage();
+
+      assert.ok(
+        text('[data-test-automation-storage]')?.includes(
+          'Daily charge 0.0042 credits a day',
+        ),
+      );
+      assert
+        .dom('[data-test-automation-storage-lead]')
+        .includesText(
+          'Pausing the automation doesn’t stop the storage charge; removing the automation or deleting the files does.',
+        );
+    });
+
+    test('an automation whose runs created no files says storage costs nothing yet', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      answerStorage({});
+      await openStorage();
+
+      assert
+        .dom('[data-test-automation-storage-empty]')
+        .includesText('Storage costs nothing yet')
+        .includesText(
+          'The automation’s runs haven’t created any files, so storage costs nothing yet.',
+        );
+      assert.dom('[data-test-automation-storage-files]').doesNotExist();
+      assert.dom('[data-test-automation-storage-charges]').doesNotExist();
+      assert
+        .dom('[data-test-automation-storage-totals]')
+        .doesNotExist('nothing to total');
+    });
+
+    test('Show the run opens the Runs section at the page that holds the run', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      let runsAsked: string[] = [];
+      getService('network').virtualNetwork.mount(
+        async (request: Request) => {
+          let url = new URL(request.url);
+          if (!url.pathname.endsWith('/_automation-runs')) {
+            return null;
+          }
+          let page = url.searchParams.get('page') ?? '1';
+          runsAsked.push(page);
+          let runs =
+            page === '2' ? [run('older'), run('oldest')] : [run('newest')];
+          return new Response(
+            JSON.stringify({
+              data: runs.map(({ id, ...attributes }) => ({
+                type: 'automation-run-item',
+                id,
+                attributes,
+              })),
+              meta: {
+                directWriter: true,
+                page: Number(page),
+                pages: 2,
+                total: 22,
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        },
+        { prepend: true },
+      );
+      answerStorage({
+        files: [
+          {
+            path: 'digests/2029-11-01.md',
+            run: 'oldest',
+            createdAt: '2029-11-01T08:31:00.000Z',
+            fileBytes: 3000,
+            indexBytes: 1000,
+            runsAhead: 21,
+          },
+          {
+            path: 'digests/gone.md',
+            run: 'gone',
+            createdAt: '2029-10-01T08:31:00.000Z',
+            fileBytes: 3000,
+            indexBytes: 1000,
+            runsAhead: null,
+          },
+        ],
+        fileBytes: 6000,
+        indexBytes: 2000,
+      });
+      await openStorage();
+
+      assert
+        .dom(
+          '[data-test-automation-storage-file="digests/gone.md"] [data-test-automation-storage-show-run]',
+        )
+        .doesNotExist('a run that no longer exists has nothing to show');
+      await click('[data-test-automation-storage-show-run="oldest"]');
+      await waitFor('[data-test-automation-run="oldest"]', { timeout: 10000 });
+      assert.strictEqual(
+        runsAsked[runsAsked.length - 1],
+        '2',
+        'the 22nd run is on the second page of 20',
+      );
+      assert
+        .dom(
+          '[data-test-automation-runs-section] [data-test-automation-run="oldest"]',
+        )
+        .exists();
+    });
+
+    test('a status read that changes neither the state nor the last run reads the storage no more', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      answerStorage({});
+      await openStorage();
+      await settled();
+      let readsBefore = storageAsked;
+      let statusAsked = asked.length;
+
+      let job = (state: string) =>
+        mockMatrixUtils.simulateRemoteMessage(
+          mockMatrixUtils.getRoomIdForRealmAndUser(
+            testRealmURL,
+            '@testuser:localhost',
+          ),
+          testRealmInfo.realmUserId!,
+          {
+            eventName: 'job',
+            runId: 'run-live',
+            automation: AUTOMATION,
+            state,
+            step: 'script',
+            milestone: null,
+            realmURL: testRealmURL,
+          },
+          { type: APP_BOXEL_REALM_EVENT_TYPE },
+        );
+      job('running');
+      await waitUntil(() => asked.length > statusAsked, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(
+        storageAsked,
+        readsBefore,
+        'the same state and last run read nothing',
+      );
+
+      answer = {
+        status: 200,
+        attributes: {
+          ...ACTIVE,
+          lastRun: {
+            runId: 'run-live',
+            state: 'complete',
+            startedAt: '2030-01-02T08:30:00.000Z',
+            finishedAt: '2030-01-02T08:31:00.000Z',
+            plan: [],
+            milestones: [],
+          },
+        },
+      };
+      statusAsked = asked.length;
+      job('complete');
+      await waitUntil(() => storageAsked > readsBefore, { timeout: 10000 });
+      assert.strictEqual(
+        storageAsked,
+        readsBefore + 1,
+        'a new last run reads the storage once',
+      );
+    });
+
+    test('a history that leaves older charges out says how far back the history goes', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      answerStorage({
+        charges: [
+          { day: `${thisMonth}-03`, credits: 1 },
+          { day: `${lastMonth}-28`, credits: 2 },
+        ],
+        moreCharges: true,
+      });
+      await openStorage();
+
+      assert
+        .dom(`[data-test-automation-storage-month="${lastMonth}"]`)
+        .exists('every month the route lists is whole');
+      assert
+        .dom('[data-test-automation-storage-older]')
+        .hasText('Boxel lists the charges of the last 12 months.');
+    });
+
+    test('a server that lists 30 charges without saying whether it left older ones out has its oldest month left out', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      let charges = [
+        ...Array.from({ length: 28 }, (_, i) => ({
+          day: `${thisMonth}-${String(28 - i).padStart(2, '0')}`,
+          credits: 1,
+        })),
+        { day: `${lastMonth}-28`, credits: 1 },
+        { day: `${lastMonth}-27`, credits: 1 },
+      ];
+      answerStorage({ charges, moreCharges: undefined });
+      await openStorage();
+
+      assert
+        .dom(`[data-test-automation-storage-month="${thisMonth}"]`)
+        .exists();
+      assert
+        .dom(`[data-test-automation-storage-month="${lastMonth}"]`)
+        .doesNotExist('that month may be missing charges');
+      assert.dom('[data-test-automation-storage-older]').exists();
+    });
+
+    test('a charge a server lists only by its day and credits reads as a charge for that day', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      answerStorage({
+        charges: [{ day: `${thisMonth}-03`, credits: 1 }],
+        moreCharges: undefined,
+      });
+      await openStorage();
+
+      await click(`[data-test-automation-storage-month="${thisMonth}"] button`);
+      let row = `[data-test-automation-storage-charge="${thisMonth}-03"]`;
+      await waitFor(row);
+      assert
+        .dom(`${row} [data-test-automation-storage-charge-days]`)
+        .hasText(shortDay(`${thisMonth}-03`, true));
+      assert
+        .dom(`${row} [data-test-automation-storage-charge-bytes]`)
+        .doesNotExist();
+      assert
+        .dom('[data-test-automation-storage-older]')
+        .doesNotExist('a short list from such a server is whole');
+    });
+
+    test('charges for files since deleted are still listed, with no file to show', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      answerStorage({
+        charges: [
+          {
+            day: `${thisMonth}-03`,
+            firstDay: `${thisMonth}-01`,
+            days: 3,
+            fileBytes: 1000,
+            indexBytes: 0,
+            credits: 1,
+          },
+        ],
+      });
+      await openStorage();
+
+      assert
+        .dom('[data-test-automation-storage-empty]')
+        .includesText('No files')
+        .includesText(
+          'No file the automation’s runs created still exists, so a day of storage costs nothing.',
+        );
+      assert.dom('[data-test-automation-storage-totals]').exists();
+      assert.dom('[data-test-automation-storage-charges]').exists();
+    });
+
+    test('a storage read the realm server fails says so, and Boxel reads again', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      let failing = true;
+      let fails = 0;
+      getService('network').virtualNetwork.mount(
+        async (request: Request) => {
+          if (
+            !failing ||
+            !new URL(request.url).pathname.endsWith('/_automation-storage')
+          ) {
+            return null;
+          }
+          fails++;
+          return new Response(JSON.stringify({ errors: [] }), { status: 500 });
+        },
+        { prepend: true },
+      );
+      answerStorage({});
+      await openIsolated();
+      await waitFor('[data-test-automation-storage-unreachable]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-storage-unreachable]')
+        .includesText('Boxel couldn’t read the storage')
+        .includesText('Boxel tries again every few seconds.');
+
+      failing = false;
+      await waitFor('[data-test-automation-storage-lead]', { timeout: 10000 });
+      assert.ok(fails >= 1);
+      assert.dom('[data-test-automation-storage-unreachable]').doesNotExist();
+    });
+
+    test("a viewer who isn't a direct writer sees no storage", async function (assert) {
+      answerStorage({});
+      await openIsolated();
+      await waitUntil(() => asked.length > 0, { timeout: 10000 });
+      await settled();
+      assert.dom('[data-test-automation-storage]').doesNotExist();
+      assert.strictEqual(storageAsked, 0, 'the view never reads the storage');
     });
   });
 });
