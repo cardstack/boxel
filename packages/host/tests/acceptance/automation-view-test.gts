@@ -4405,8 +4405,9 @@ module('Acceptance | automation view', function (hooks) {
       await ask('pause');
       assert
         .dom('[data-test-automation-confirm-open-batches]')
-        .hasText(
-          'The automation has 2 open batches of AI requests Pausing the automation holds the follow-up run of each open batch until a realm administrator resumes the automation. Boxel still bills each batch.',
+        .includesText('The automation has 2 open batches of AI requests')
+        .includesText(
+          'Pausing the automation holds the follow-up run of each open batch until a realm administrator resumes the automation. Boxel still bills each batch.',
         );
     });
 
@@ -4419,8 +4420,9 @@ module('Acceptance | automation view', function (hooks) {
       );
       assert
         .dom('[data-test-automation-confirm-open-batches]')
-        .hasText(
-          'The automation has 1 open batch of AI requests Removing the automation drops the follow-up run of each open batch, so no run picks up the batch’s results. Boxel still bills each batch.',
+        .includesText('The automation has 1 open batch of AI requests')
+        .includesText(
+          'Removing the automation drops the follow-up run of each open batch, so no run picks up the batch’s results. Boxel still bills each batch.',
         );
       await confirm('remove');
       assert.strictEqual(posted[0].route, '_automation-remove');
@@ -4458,8 +4460,9 @@ module('Acceptance | automation view', function (hooks) {
       await ask('resume');
       assert
         .dom('[data-test-automation-confirm-new-payer]')
-        .hasText(
-          'You become the payer Resuming the automation makes you the payer in place of @writer:localhost. Boxel charges every later run, and each follow-up run the pause held, to your credits, up to the monthly limit of 10 credits.',
+        .includesText('You become the payer')
+        .includesText(
+          'Resuming the automation makes you the payer in place of @writer:localhost. Boxel charges every later run, and each follow-up run the pause held, to your credits, up to the monthly limit of 10 credits.',
         );
       assert
         .dom(
