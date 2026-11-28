@@ -9,7 +9,6 @@ import {
   recordAutomationFiles,
   ri,
   rri,
-  storageChargeStopped,
   VirtualNetwork,
   dbAdapterQuerier,
 } from '@cardstack/runtime-common';
@@ -17,7 +16,6 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   pauseAutomation,
   removeAutomation,
-  resumeAutomation,
   setAutomationWaitingForCredits,
   switchOnAutomation,
   waitForKeyApproval,
@@ -141,20 +139,9 @@ module(basename(import.meta.filename), function (hooks) {
       `UPDATE automations SET switched_on_at = $1::timestamptz WHERE automation_id = $2`,
       { bind: [`${day}T08:00:00Z`, AUTOMATION] },
     );
-    await changedAt(`${day}T08:00:00Z`);
   }
 
-  // Dates the automation's latest state change at `time`, as though the
-  // change were written then.
-  async function changedAt(time: string) {
-    await dbAdapter.execute(
-      `UPDATE automation_state_changes SET changed_at = $1::timestamptz
-       WHERE id = (SELECT MAX(id) FROM automation_state_changes WHERE automation_id = $2)`,
-      { bind: [time, AUTOMATION] },
-    );
-  }
-
-  async function pause(time: string) {
+  async function pause() {
     let paused = await pauseAutomation(
       dbAdapter,
       { automationId: AUTOMATION, user: PAYER },
@@ -163,24 +150,6 @@ module(basename(import.meta.filename), function (hooks) {
     if (!paused.ok) {
       throw new Error(`expected a pause, got ${paused.reason}`);
     }
-    await changedAt(time);
-  }
-
-  async function resume(time: string) {
-    let resumed = await resumeAutomation(
-      dbAdapter,
-      {
-        automationId: AUTOMATION,
-        user: PAYER,
-        declaration: declaration(),
-        admit: async () => undefined,
-      },
-      options,
-    );
-    if (!resumed.ok) {
-      throw new Error(`expected a resume, got ${resumed.reason}`);
-    }
-    await changedAt(time);
   }
 
   async function measuredDays() {
@@ -439,89 +408,28 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(await charge('2026-11-10'), []);
   });
 
-  test('a paused automation is not charged for the days it spends paused', async function (assert) {
+  test('a paused automation is still charged for every day it spends paused', async function (assert) {
     await switchOn('2026-11-10');
     await createdFile('logs/sync.jsonl', BYTES_PER_GB);
-    await pause('2026-11-10T20:00:00Z');
+    await pause();
 
-    let [pausedPartway] = await charge('2026-11-10');
-    assert.strictEqual(
-      pausedPartway.outcome,
-      'charged',
-      'the automation was active for part of the day',
-    );
-    for (let day of ['2026-11-11', '2026-11-12']) {
+    for (let day of ['2026-11-10', '2026-11-11', '2026-11-12']) {
       let [result] = await charge(day);
-      assert.strictEqual(result.outcome, 'stopped', `${day} is not charged`);
+      assert.strictEqual(result.outcome, 'charged', `${day} is charged`);
     }
 
-    assert.deepEqual(await measuredDays(), ['2026-11-10']);
-    assert.deepEqual(
-      (await storageCharges()).map(({ day, credits }) => [day, credits]),
-      [['2026-11-10', 20]],
-    );
-  });
-
-  test('a resumed automation is charged again from the day of the resume', async function (assert) {
-    await switchOn('2026-11-10');
-    await createdFile('logs/sync.jsonl', BYTES_PER_GB);
-    await charge('2026-11-10');
-    await pause('2026-11-10T20:00:00Z');
-    await charge('2026-11-11');
-    await charge('2026-11-12');
-    await resume('2026-11-13T09:00:00Z');
-
-    let [result] = await charge('2026-11-13');
-
-    assert.strictEqual(result.outcome, 'charged');
-    assert.strictEqual(result.firstDay, '2026-11-11');
-    assert.strictEqual(result.lastDay, '2026-11-13');
-    assert.strictEqual(
-      result.fileStorageGbMonths,
-      1 / DAYS_PER_AVERAGE_MONTH,
-      'only the day of the resume is charged',
-    );
-    assert.deepEqual(await measuredDays(), ['2026-11-10', '2026-11-13']);
+    assert.deepEqual(await measuredDays(), [
+      '2026-11-10',
+      '2026-11-11',
+      '2026-11-12',
+    ]);
     assert.deepEqual(
       (await storageCharges()).map(({ day, credits }) => [day, credits]),
       [
         ['2026-11-10', 20],
-        ['2026-11-13', 20],
+        ['2026-11-11', 20],
+        ['2026-11-12', 20],
       ],
-    );
-  });
-
-  test('a day with a pause and a resume inside the day is charged', async function (assert) {
-    await switchOn('2026-11-09');
-    await createdFile('logs/sync.jsonl', BYTES_PER_GB);
-    await pause('2026-11-09T22:00:00Z');
-    await charge('2026-11-09');
-    await resume('2026-11-10T03:00:00Z');
-    await pause('2026-11-10T04:00:00Z');
-
-    let [result] = await charge('2026-11-10');
-
-    assert.strictEqual(
-      result.outcome,
-      'charged',
-      'the automation was active for an hour of the day',
-    );
-    let [after] = await charge('2026-11-11');
-    assert.strictEqual(after.outcome, 'stopped');
-  });
-
-  test('a day that begins paused is not charged', async function (assert) {
-    await switchOn('2026-11-09');
-    await createdFile('logs/sync.jsonl', BYTES_PER_GB);
-    await charge('2026-11-09');
-    await pause('2026-11-10T00:00:00Z');
-
-    let [result] = await charge('2026-11-10');
-
-    assert.strictEqual(
-      result.outcome,
-      'stopped',
-      'a pause at the first instant of the day leaves no active part of the day',
     );
   });
 
@@ -532,7 +440,6 @@ module(basename(import.meta.filename), function (hooks) {
     await createdFile('logs/sync.jsonl', BYTES_PER_GB);
     await charge('2026-11-10');
     await stop();
-    await changedAt('2026-11-10T20:00:00Z');
     let [result] = await charge('2026-11-11');
     return {
       outcome: result.outcome,
@@ -541,13 +448,13 @@ module(basename(import.meta.filename), function (hooks) {
     };
   }
 
-  const STOPPED = {
-    outcome: 'stopped',
-    measured: ['2026-11-10'],
-    charged: ['2026-11-10'],
+  const STILL_CHARGED = {
+    outcome: 'charged',
+    measured: ['2026-11-10', '2026-11-11'],
+    charged: ['2026-11-10', '2026-11-11'],
   };
 
-  test('an automation waiting for credits is not charged', async function (assert) {
+  test('an automation waiting for credits is still charged', async function (assert) {
     let result = await chargeAfterStop(async () => {
       let row = await setAutomationWaitingForCredits(dbAdapter, AUTOMATION, {
         payer: PAYER,
@@ -555,98 +462,30 @@ module(basename(import.meta.filename), function (hooks) {
       });
       assert.strictEqual(row?.state, 'waiting-for-credits');
     });
-    assert.deepEqual(result, STOPPED);
+    assert.deepEqual(result, STILL_CHARGED);
   });
 
-  test('an automation waiting for key approval is not charged', async function (assert) {
+  test('an automation waiting for key approval is still charged', async function (assert) {
     let result = await chargeAfterStop(async () => {
       let row = await waitForKeyApproval(dbAdapter, AUTOMATION, {
         payer: PAYER,
       });
       assert.strictEqual(row?.state, 'waiting-for-key-approval');
     });
-    assert.deepEqual(result, STOPPED);
+    assert.deepEqual(result, STILL_CHARGED);
   });
 
-  test('a done automation is not charged', async function (assert) {
-    // Whatever code spends the last trigger writes the state; the history
-    // records every writer of `automations.state` alike.
+  test('a done automation is still charged', async function (assert) {
     let result = await chargeAfterStop(async () => {
       await dbAdapter.execute(
         `UPDATE automations SET state = 'done', next_run = NULL WHERE automation_id = $1`,
         { bind: [AUTOMATION] },
       );
     });
-    assert.deepEqual(result, STOPPED);
+    assert.deepEqual(result, STILL_CHARGED);
   });
 
-  test('an automation that stops says why and since when the charge stopped', async function (assert) {
-    await switchOn('2026-11-10');
-    assert.strictEqual(
-      await storageChargeStopped(dbAdapter, AUTOMATION),
-      null,
-      'an active automation is charged',
-    );
-
-    await pause('2026-11-11T20:00:00Z');
-    assert.deepEqual(await storageChargeStopped(dbAdapter, AUTOMATION), {
-      state: 'paused',
-      pauseReason: 'requested',
-      since: '2026-11-11T20:00:00.000Z',
-      fromDay: '2026-11-12',
-    });
-
-    await resume('2026-11-12T09:00:00Z');
-    assert.strictEqual(
-      await storageChargeStopped(dbAdapter, AUTOMATION),
-      null,
-      'a resumed automation is charged again',
-    );
-
-    await setAutomationWaitingForCredits(dbAdapter, AUTOMATION, {
-      payer: PAYER,
-      waiting: true,
-    });
-    await changedAt('2026-11-13T05:30:00Z');
-    await pause('2026-11-14T10:00:00Z');
-    assert.deepEqual(
-      await storageChargeStopped(dbAdapter, AUTOMATION),
-      {
-        state: 'paused',
-        pauseReason: 'requested',
-        since: '2026-11-13T05:30:00.000Z',
-        fromDay: '2026-11-14',
-      },
-      'the charge stopped when the automation first left active',
-    );
-  });
-
-  test('an automation that stops at midnight stops being charged from that day', async function (assert) {
-    await switchOn('2026-11-10');
-    await pause('2026-11-12T00:00:00Z');
-    assert.deepEqual(await storageChargeStopped(dbAdapter, AUTOMATION), {
-      state: 'paused',
-      pauseReason: 'requested',
-      since: '2026-11-12T00:00:00.000Z',
-      fromDay: '2026-11-12',
-    });
-  });
-
-  test('an automation that stops a few microseconds after midnight is charged for that day', async function (assert) {
-    await switchOn('2026-11-10');
-    // Past midnight by less than a millisecond, which only Postgres keeps.
-    await pause('2026-11-12T00:00:00.000005Z');
-    let stopped = await storageChargeStopped(dbAdapter, AUTOMATION);
-    assert.strictEqual(stopped?.fromDay, '2026-11-13');
-    let [result] = await charge('2026-11-12');
-    assert.notStrictEqual(
-      result.outcome,
-      'stopped',
-      'the charge job counts the automation active on that day too',
-    );
-  });
-
-  test('an automation switched on waiting for key approval is never charged, and says so from the switch-on', async function (assert) {
+  test('an automation switched on waiting for key approval is charged from the switch-on day', async function (assert) {
     let result = await switchOnAutomation(
       dbAdapter,
       {
@@ -659,7 +498,6 @@ module(basename(import.meta.filename), function (hooks) {
       options,
     );
     assert.true(result.ok);
-    await changedAt('2026-11-10T08:00:00Z');
     await dbAdapter.execute(
       `UPDATE automations SET switched_on_at = '2026-11-10T08:00:00Z' WHERE automation_id = $1`,
       { bind: [AUTOMATION] },
@@ -668,17 +506,8 @@ module(basename(import.meta.filename), function (hooks) {
 
     let [result10] = await charge('2026-11-10');
 
-    assert.strictEqual(
-      result10.outcome,
-      'stopped',
-      'the switch-on day is not charged',
-    );
-    assert.deepEqual(await storageChargeStopped(dbAdapter, AUTOMATION), {
-      state: 'waiting-for-key-approval',
-      pauseReason: null,
-      since: '2026-11-10T08:00:00.000Z',
-      fromDay: '2026-11-10',
-    });
+    assert.strictEqual(result10.outcome, 'charged');
+    assert.strictEqual(result10.firstDay, '2026-11-10');
   });
 
   test('a file that no longer exists is not charged', async function (assert) {

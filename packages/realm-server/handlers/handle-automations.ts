@@ -1,7 +1,6 @@
 import type Koa from 'koa';
 import {
   DAYS_PER_AVERAGE_MONTH,
-  storageChargeStopped,
   getAutomationRun,
   getAutomationStorage,
   isAutomationRunId,
@@ -1268,10 +1267,10 @@ export function handleAutomationRunCancel(args: CreateRoutesArgs): Handler {
 // The longest realm-local path a staged-file read may name.
 const MAX_PATH_CHARS = 4096;
 
-// How many of the automation's storage charges the storage view lists, newest
-// first: an automation is charged at most once a day, so two months of daily
-// charges, which keeps the totals of the current and the previous month whole.
-const STORAGE_CHARGES_LISTED = 62;
+// How many calendar months of storage charges the storage view lists: the
+// current UTC month and the ones before it. An automation is charged at most
+// once a day, so that is at most 366 charges, and every month listed is whole.
+const STORAGE_CHARGE_MONTHS = 12;
 
 // The run a console read names, in the realm it names, once the caller is
 // known to directly write that realm. A run of another realm answers as no
@@ -1438,7 +1437,9 @@ export interface StorageChargeListed {
   credits: number;
 }
 
-// The automation's storage charges in its realm's ledger rows, newest first:
+// The automation's storage charges of the last `STORAGE_CHARGE_MONTHS`
+// calendar months in its realm's ledger rows, newest first, and whether it
+// has older ones:
 // each covers the measured days since the one before, and is written once
 // those days cost a whole credit (see `automation-storage-charge.ts`). A
 // charge drawn from more than one of the payer's credit buckets is one ledger
@@ -1457,6 +1458,7 @@ async function storageCharges(
   automationId: RealmResourceIdentifier,
   realm: RealmIdentifier,
 ): Promise<{ charges: StorageChargeListed[]; more: boolean }> {
+  let since = firstListedDay();
   let rows = await query(dbAdapter, [
     `WITH charges AS (
        SELECT charge_day, -SUM(credit_amount) AS credits
@@ -1473,6 +1475,9 @@ async function storageCharges(
          LAG(charge_day) OVER (ORDER BY charge_day) AS previous_day
        FROM charges
      ),
+     listed AS (SELECT`,
+    param(since),
+    `::date AS since),
      switched_on AS (
        SELECT (switched_on_at AT TIME ZONE 'UTC')::date AS day
        FROM automations WHERE automation_id =`,
@@ -1495,12 +1500,22 @@ async function storageCharges(
     `AND d.day <= s.charge_day
        AND (s.previous_day IS NULL OR d.day > s.previous_day)
        AND (o.day IS NULL OR s.charge_day < o.day OR d.day >= o.day)
+     WHERE s.charge_day >= (SELECT since FROM listed)
      GROUP BY s.charge_day, s.credits
-     ORDER BY s.charge_day DESC LIMIT`,
-    // One row past the listing says whether older charges exist.
-    param(STORAGE_CHARGES_LISTED + 1),
+     ORDER BY s.charge_day DESC`,
   ]);
-  let charges = rows.slice(0, STORAGE_CHARGES_LISTED).map((row) => {
+  let [older] = await query(dbAdapter, [
+    `SELECT 1 FROM credits_ledger
+     WHERE charge_kind = 'storage' AND run_id IS NULL AND batch_id IS NULL
+       AND automation_id =`,
+    param(automationId),
+    'AND realm =',
+    param(realm),
+    'AND charge_day <',
+    param(since),
+    '::date LIMIT 1',
+  ]);
+  let charges = rows.map((row) => {
     let days = Number(row.days);
     return {
       day: String(row.day),
@@ -1511,7 +1526,21 @@ async function storageCharges(
       credits: Number(row.credits),
     };
   });
-  return { charges, more: rows.length > STORAGE_CHARGES_LISTED };
+  return { charges, more: Boolean(older) };
+}
+
+// The first day the storage view lists charges from: the first of the month
+// `STORAGE_CHARGE_MONTHS - 1` months before the current UTC month.
+function firstListedDay(now: Date = new Date()): string {
+  return new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth() - (STORAGE_CHARGE_MONTHS - 1),
+      1,
+    ),
+  )
+    .toISOString()
+    .slice(0, 10);
 }
 
 // For each of the automation's runs named in `runIds`, how many of the
@@ -1547,12 +1576,10 @@ async function runsAheadOf(
 // disk and in the index and how many runs the run list puts ahead of the run
 // that created it (`runsAhead`), and the daily charge: what a day of that
 // storage costs at this server's prices (`dailyCredits`, before rounding, or
-// null without prices), the newest storage charges written so far, whether
-// older ones exist (`moreCharges`), and, while the
-// automation isn't active, why and since when Boxel isn't charging for the
-// storage (`chargeStopped`, see `storageChargeStopped`). A switched-on
-// automation's payer pays the charge, and is shown under ADR 011 (see
-// `shownIdentity`).
+// null without prices), the storage charges of the last
+// `STORAGE_CHARGE_MONTHS` calendar months, and whether older ones exist
+// (`moreCharges`). A switched-on automation's payer pays the charge, in
+// every state, and is shown under ADR 011 (see `shownIdentity`).
 export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let caller = callerOf(ctxt);
@@ -1592,12 +1619,9 @@ export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
       automationId,
       files.map((file) => file.runId),
     );
-    let [payer, chargeStopped] = row
-      ? await Promise.all([
-          shownIdentity(args.dbAdapter, caller, row.payer),
-          storageChargeStopped(args.dbAdapter, automationId),
-        ])
-      : [null, null];
+    let payer = row
+      ? await shownIdentity(args.dbAdapter, caller, row.payer)
+      : null;
     let pricing = currentPricing();
     let dailyCredits = pricing
       ? exactMeteredCredits(
@@ -1632,7 +1656,6 @@ export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
           pricingVersion: pricing?.version ?? null,
           charges,
           moreCharges,
-          chargeStopped,
         },
       },
     });

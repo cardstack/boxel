@@ -2935,10 +2935,10 @@ module('Acceptance | automation view', function (hooks) {
           .dom('[data-test-automation-run-storage-rules]')
           .includesText('Storage isn’t part of any one run’s total')
           .includesText(
-            'Boxel charges for every day the automation’s status reads On',
+            'Boxel charges for every day the automation exists, whatever the automation’s status: On, paused, waiting for credits, waiting for key approval or done.',
           )
           .includesText(
-            'Boxel doesn’t charge for a day the automation spends wholly paused, waiting for credits, waiting for key approval or done',
+            'Boxel stops charging only when a realm administrator removes the automation, or when someone deletes the files.',
           );
       });
 
@@ -3205,7 +3205,10 @@ module('Acceptance | automation view', function (hooks) {
         .hasValue('10', 'the monthly limit starts as the card’s own');
       assert
         .dom('[data-test-automation-switch-on-payer]')
-        .includesText('Boxel charges every scheduled run');
+        .includesText('Boxel charges every scheduled run')
+        .includesText(
+          'Pausing the automation doesn’t stop the storage charge; removing the automation or deleting the files does.',
+        );
       assert.dom('[data-test-automation-switch-on-reconfirm]').doesNotExist();
     });
 
@@ -4318,10 +4321,9 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-storage-charges]')
         .doesNotExist('no charge yet, so no charge history');
-      assert.dom('[data-test-automation-storage-stopped]').doesNotExist();
     });
 
-    test('the charge history shows the days each charge covers, a month at a time with each month’s total', async function (assert) {
+    test('the charge history shows one row a month that opens to the month’s charges and the days each covers, with a total', async function (assert) {
       answer = { status: 200, attributes: ACTIVE };
       answerStorage({
         files: [
@@ -4349,8 +4351,8 @@ module('Acceptance | automation view', function (hooks) {
             day: `${thisMonth}-01`,
             firstDay: `${thisMonth}-01`,
             days: 1,
-            fileBytes: 2000000,
-            indexBytes: 30000,
+            fileBytes: 2900000,
+            indexBytes: 40000,
             credits: 1,
           },
           {
@@ -4362,10 +4364,43 @@ module('Acceptance | automation view', function (hooks) {
             credits: 1,
           },
         ],
+        moreCharges: false,
       });
       await openStorage();
 
+      let month = `[data-test-automation-storage-month="${thisMonth}"]`;
+      let total = '[data-test-automation-storage-total]';
+      // The figures a row sets: its days billed and its credits.
+      let figures = (selector: string) =>
+        [...document.querySelectorAll(`${selector} [data-numeric]`)].map(
+          (cell) => cell.textContent?.replace(/\s+/g, ' ').trim(),
+        );
+      assert.deepEqual(
+        figures(month),
+        ['4', '3'],
+        'the month bills 4 days for 3 credits',
+      );
+      assert
+        .dom(`${month} [data-test-automation-storage-charge-bytes]`)
+        .hasText(
+          '2.6 MB on disk, 40 kB in the index',
+          'the month’s bytes a day weigh each charge by its days',
+        );
+      assert
+        .dom('[data-test-automation-storage-charge]')
+        .doesNotExist('every month starts closed');
+      assert.deepEqual(
+        figures(total),
+        ['7', '4'],
+        'the months listed bill 7 days for 4 credits',
+      );
+      assert
+        .dom('[data-test-automation-storage-older]')
+        .doesNotExist('nothing older is left out');
+
+      await click(`${month} button`);
       let multiDay = `[data-test-automation-storage-charge="${thisMonth}-05"]`;
+      await waitFor(multiDay);
       assert
         .dom(`${multiDay} [data-test-automation-storage-charge-days]`)
         .hasText(
@@ -4373,52 +4408,19 @@ module('Acceptance | automation view', function (hooks) {
           'a charge that covers several days shows the span',
         );
       assert
-        .dom(`${multiDay} [data-test-automation-storage-charge-count]`)
-        .hasText('Boxel billed 3 days');
-      assert
         .dom(`${multiDay} [data-test-automation-storage-charge-bytes]`)
         .hasText('2.5 MB on disk, 40 kB in the index');
-
-      let oneDay = `[data-test-automation-storage-charge="${thisMonth}-01"]`;
       assert
-        .dom(`${oneDay} [data-test-automation-storage-charge-days]`)
+        .dom(
+          `[data-test-automation-storage-charge="${thisMonth}-01"] [data-test-automation-storage-charge-days]`,
+        )
         .hasText(
           shortDay(`${thisMonth}-01`, true),
           'a charge for one day shows the day alone',
         );
       assert
-        .dom(`${oneDay} [data-test-automation-storage-charge-count]`)
-        .doesNotExist();
-
-      assert
-        .dom(`[data-test-automation-storage-month="${thisMonth}"]`)
-        .includesText('3');
-      assert
-        .dom(`[data-test-automation-storage-month="${thisMonth}"]`)
-        .includesText('Boxel charged in');
-      assert
-        .dom(`[data-test-automation-storage-month="${lastMonth}"]`)
-        .includesText('1');
-      let rows = [
-        ...document.querySelectorAll(
-          '[data-test-automation-storage-charges] tbody tr',
-        ),
-      ].map(
-        (row) =>
-          row.getAttribute('data-test-automation-storage-charge') ??
-          `month ${row.getAttribute('data-test-automation-storage-month')}`,
-      );
-      assert.deepEqual(
-        rows,
-        [
-          `${thisMonth}-05`,
-          `${thisMonth}-01`,
-          `month ${thisMonth}`,
-          `${lastMonth}-20`,
-          `month ${lastMonth}`,
-        ],
-        'newest first, each month closing with the month’s total',
-      );
+        .dom(`[data-test-automation-storage-charge="${lastMonth}-20"]`)
+        .doesNotExist('the other month stays closed');
       assert.ok(
         text('[data-test-automation-storage]')?.includes(
           'Boxel charged this month 3 credits',
@@ -4426,7 +4428,7 @@ module('Acceptance | automation view', function (hooks) {
       );
     });
 
-    test('a paused automation says Boxel isn’t charging for storage, and from which day', async function (assert) {
+    test('a paused automation still shows the daily charge, since Boxel charges for storage in every state', async function (assert) {
       answer = {
         status: 200,
         attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
@@ -4444,32 +4446,19 @@ module('Acceptance | automation view', function (hooks) {
         fileBytes: 3000,
         indexBytes: 1000,
         dailyCredits: 0.0042,
-        chargeStopped: {
-          state: 'paused',
-          pauseReason: 'requested',
-          since: '2030-01-14T10:00:00.000Z',
-          fromDay: '2030-01-15',
-        },
       });
       await openStorage();
 
-      assert
-        .dom('[data-test-automation-storage-stopped="paused"]')
-        .includesText('Boxel isn’t charging for storage')
-        .includesText(
-          'The automation is paused, so Boxel doesn’t charge for the automation’s storage.',
-        )
-        .includesText(
-          'The files stay in the workspace, and Boxel charges again from the day the automation’s status reads On again.',
-        );
-      assert
-        .dom('[data-test-automation-storage-stopped-from]')
-        .hasText(shortDay('2030-01-15', true));
       assert.ok(
         text('[data-test-automation-storage]')?.includes(
-          'Daily charge None while the automation is paused',
+          'Daily charge 0.0042 credits a day',
         ),
       );
+      assert
+        .dom('[data-test-automation-storage-lead]')
+        .includesText(
+          'Pausing the automation doesn’t stop the storage charge; removing the automation or deleting the files does.',
+        );
     });
 
     test('an automation whose runs created no files says storage costs nothing yet', async function (assert) {
@@ -4624,7 +4613,7 @@ module('Acceptance | automation view', function (hooks) {
       );
     });
 
-    test('a list that leaves older charges out gives the oldest month no total', async function (assert) {
+    test('a history that leaves older charges out says how far back the history goes', async function (assert) {
       answer = { status: 200, attributes: ACTIVE };
       answerStorage({
         charges: [
@@ -4636,14 +4625,33 @@ module('Acceptance | automation view', function (hooks) {
       await openStorage();
 
       assert
+        .dom(`[data-test-automation-storage-month="${lastMonth}"]`)
+        .exists('every month the route lists is whole');
+      assert
+        .dom('[data-test-automation-storage-older]')
+        .hasText('Boxel lists the charges of the last 12 months.');
+    });
+
+    test('a server that lists 30 charges without saying whether it left older ones out has its oldest month left out', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      let charges = [
+        ...Array.from({ length: 28 }, (_, i) => ({
+          day: `${thisMonth}-${String(28 - i).padStart(2, '0')}`,
+          credits: 1,
+        })),
+        { day: `${lastMonth}-28`, credits: 1 },
+        { day: `${lastMonth}-27`, credits: 1 },
+      ];
+      answerStorage({ charges, moreCharges: undefined });
+      await openStorage();
+
+      assert
         .dom(`[data-test-automation-storage-month="${thisMonth}"]`)
-        .includesText('1');
+        .exists();
       assert
         .dom(`[data-test-automation-storage-month="${lastMonth}"]`)
-        .doesNotExist('the oldest month may be missing charges');
-      assert
-        .dom(`[data-test-automation-storage-charge="${lastMonth}-28"]`)
-        .exists('the oldest month’s charges are still listed');
+        .doesNotExist('that month may be missing charges');
+      assert.dom('[data-test-automation-storage-older]').exists();
     });
 
     test('a charge a server lists only by its day and credits reads as a charge for that day', async function (assert) {
@@ -4654,19 +4662,18 @@ module('Acceptance | automation view', function (hooks) {
       });
       await openStorage();
 
+      await click(`[data-test-automation-storage-month="${thisMonth}"] button`);
       let row = `[data-test-automation-storage-charge="${thisMonth}-03"]`;
+      await waitFor(row);
       assert
         .dom(`${row} [data-test-automation-storage-charge-days]`)
         .hasText(shortDay(`${thisMonth}-03`, true));
       assert
-        .dom(`${row} [data-test-automation-storage-charge-count]`)
-        .doesNotExist();
-      assert
         .dom(`${row} [data-test-automation-storage-charge-bytes]`)
         .doesNotExist();
       assert
-        .dom(`[data-test-automation-storage-month="${thisMonth}"]`)
-        .exists('a short list from such a server is whole');
+        .dom('[data-test-automation-storage-older]')
+        .doesNotExist('a short list from such a server is whole');
     });
 
     test('charges for files since deleted are still listed, with no file to show', async function (assert) {
