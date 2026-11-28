@@ -1962,6 +1962,17 @@ The run's steps and milestones come from the listed run, which the run list read
 
 To see why a run looks the way it does on the card, read what the card read: the run's row in the run list route, then the report and the log through the console's reads (_Calling them in development_). A row that reads not started on a run that ended means the row's `step` never reached it: an `error` at `admission` never ran the script. A milestone with no "Last run took" means the one run the card compares with (item 2) reached no milestone of that name, or the page shown holds no such run. Host tests mount virtual-network handlers that answer the three realm-server routes (`tests/acceptance/automation-view-test.gts`, the _a run opened_ module).
 
+## The storage view
+
+The Automation card's isolated view shows a direct writer what the automation's runs store and what that storage has cost, in a **Storage** section between _Runs_ and _Script_ (`StorageSection` in the catalog's `automation/automation.gts`). The daily storage charge belongs to the automation, not to any run (_The daily storage charge_ in the `pricing` skill), so this is the one place the charge shows apart from a run's cost tab.
+
+- **Reading it.** The section reads `/_automation-storage` (_The console's reads_) through the host's `read-automation-run` tool with `read: 'storage'`, through the same `automationStorage` resource as a run's cost tab. The view asks only once the status route says the viewer is a direct writer, and reads again whenever the automation's state or last run changes. A refusal hides the section. A read that fails on the way says so and is tried again.
+- **Totals**: the number of files, their bytes on disk and in the search index, the daily charge (`dailyCredits`, to two significant figures, or "None while the automation is …" while Boxel isn't charging), and the credits charged in the current UTC month.
+- **Files**: each file a run created that still exists, with when, its sizes, and **Show the run**, which opens the Runs section on the run that created the file.
+- **Charges**: the listed charges newest first in a Pret UI `StatementTable`, a month at a time, each month closing with a subtotal. A row shows the span from `firstDay` to `day` and, for a span of more than one day, how many days it billed, plus the bytes billed a day. A charge from a server that lists only `{ day, credits }` reads as a one-day charge.
+- **Stopped**: while `chargeStopped` is set, a callout says the automation is paused, waiting for credits, waiting for key approval or done, so Boxel doesn't charge for the storage, the files stay in the workspace and the charge starts again the day the status reads On again, and it names `fromDay`.
+- **Empty**: with no file and no charge, the section leaves out the totals and says storage costs nothing yet. With charges but no file left, it says a day of storage costs nothing and still lists the charges.
+
 ## The automation command
 
 One attempt of a run is a `run-command` job naming `AUTOMATION_COMMAND`
