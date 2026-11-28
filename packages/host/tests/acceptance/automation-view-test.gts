@@ -4480,6 +4480,9 @@ module('Acceptance | automation view', function (hooks) {
         );
       assert.dom('[data-test-automation-storage-files]').doesNotExist();
       assert.dom('[data-test-automation-storage-charges]').doesNotExist();
+      assert
+        .dom('[data-test-automation-storage-totals]')
+        .doesNotExist('nothing to total');
     });
 
     test("a viewer who isn't a direct writer sees no storage", async function (assert) {
