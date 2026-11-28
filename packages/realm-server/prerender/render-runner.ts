@@ -2262,8 +2262,8 @@ export class RenderRunner {
         // broken card must still yield a good file row, so run the
         // standalone extract transition. On the eviction path no fallback
         // is possible (nothing can run on an unusable page), so the file
-        // half is absent for that attempt and its row degrades to an error
-        // row until the next index of the file. Auth failure is the other
+        // half is absent for that attempt and the indexer gives the file
+        // row the page's error instead (`routeIndexVisitResult`). Auth failure is the other
         // exception: the extract would hit the same wall, so mirror the
         // card error onto the file half and end the visit — the same
         // short-circuit a standalone extract pass takes on auth failure.
