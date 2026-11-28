@@ -139,6 +139,16 @@ interface QueryFieldPlanEntry {
 // own before the first has settled.
 type QueryFieldPlanCache = Map<string, Promise<QueryFieldPlanEntry[]>>;
 
+// A single assembly pass's memo of `queryTargetsFileMeta` answers, keyed by
+// the type refs a query field's filter names. Whether the realm holds file
+// rows or instance rows of those types is a property of the realm, not of the
+// row being served, and asking it costs up to two realm-wide existence checks per
+// type. Without the memo a page of N cards with Q query-backed fields asks it
+// N x Q times. It holds the in-flight promise so the concurrent roots of one
+// layer share one check, and it lives only as long as the pass, so there is
+// nothing to invalidate.
+type FileMetaTargetCache = Map<string, Promise<boolean>>;
+
 type Options = {
   loadLinks?: true;
   linkFields?: string[];
@@ -859,25 +869,48 @@ export class RealmIndexQueryEngine {
   async queryTargetsFileMeta(
     filter: Filter | undefined,
     opts?: Options,
+    answers?: FileMetaTargetCache,
   ): Promise<boolean> {
     if (!filter) {
       return false;
     }
     let refs: CodeRef[] = [];
     collectFilterRefs(filter, refs);
-    let fileMatch = false;
-    let instanceMatch = false;
+    if (!answers) {
+      return await this.refsTargetFileMeta(refs, opts);
+    }
+    let key = JSON.stringify(refs);
+    let cached = answers.get(key);
+    if (!cached) {
+      cached = this.refsTargetFileMeta(refs, opts);
+      answers.set(key, cached);
+      // A failed check is not an answer: forget it so the next row asks
+      // again rather than every remaining row failing with it.
+      cached.catch(() => answers.delete(key));
+    }
+    return await cached;
+  }
+
+  private async refsTargetFileMeta(
+    refs: CodeRef[],
+    opts?: Options,
+  ): Promise<boolean> {
+    // Any instance row settles the answer as false, so check for instances
+    // first: a card type's instance check finds a row at once, while its file
+    // check has to read the realm's rows to learn there are none.
     for (let ref of refs) {
-      if (await this.#indexQueryEngine.hasFileType(this.realmURL, ref, opts)) {
-        fileMatch = true;
-      }
       if (
         await this.#indexQueryEngine.hasInstanceType(this.realmURL, ref, opts)
       ) {
-        instanceMatch = true;
+        return false;
       }
     }
-    return fileMatch && !instanceMatch;
+    for (let ref of refs) {
+      if (await this.#indexQueryEngine.hasFileType(this.realmURL, ref, opts)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // Every `boxel_index.types` membership key this ref can legitimately match:
@@ -1079,6 +1112,7 @@ export class RealmIndexQueryEngine {
     realmURL: URL,
     opts: Options | undefined,
     plans: QueryFieldPlanCache,
+    fileMetaTargets: FileMetaTargetCache,
   ): Promise<void> {
     if (!resource.meta?.adoptsFrom) {
       return;
@@ -1113,6 +1147,7 @@ export class RealmIndexQueryEngine {
           resource,
           realmURL,
           opts,
+          fileMetaTargets,
         });
       this.applyQueryResults({
         fieldDefinition,
@@ -1275,7 +1310,8 @@ export class RealmIndexQueryEngine {
     resource: LooseCardResource | FileMetaResource,
     realmURL: URL,
     queryFieldDefs: Record<string, QueryFieldMeta>,
-    opts?: Options,
+    opts: Options | undefined,
+    fileMetaTargets: FileMetaTargetCache,
   ): Promise<void> {
     for (let [fieldName, meta] of Object.entries(queryFieldDefs)) {
       if (opts?.linkFields && !opts.linkFields.includes(fieldName)) {
@@ -1296,6 +1332,7 @@ export class RealmIndexQueryEngine {
           resource,
           realmURL,
           opts,
+          fileMetaTargets,
         });
       this.applyQueryResults({
         fieldDefinition,
@@ -1317,6 +1354,7 @@ export class RealmIndexQueryEngine {
     resource,
     realmURL,
     opts,
+    fileMetaTargets,
   }: {
     fieldDefinition: FieldDefinition;
     fieldName: string;
@@ -1324,6 +1362,7 @@ export class RealmIndexQueryEngine {
     resource: LooseCardResource | FileMetaResource;
     realmURL: URL;
     opts?: Options;
+    fileMetaTargets: FileMetaTargetCache;
   }): Promise<{
     results: (CardResource<Saved> | FileMetaResource)[];
     errors: QueryFieldErrorDetail[];
@@ -1402,7 +1441,9 @@ export class RealmIndexQueryEngine {
       let realmResults: (CardResource<Saved> | FileMetaResource)[] = [];
       if (realm === this.realmURL.href) {
         try {
-          if (await this.queryTargetsFileMeta(query.filter, opts)) {
+          if (
+            await this.queryTargetsFileMeta(query.filter, opts, fileMetaTargets)
+          ) {
             let { files, meta } = await this.#indexQueryEngine.searchFiles(
               this.realmURL,
               query,
@@ -1913,6 +1954,9 @@ export class RealmIndexQueryEngine {
     // the whole pass. Every root of one type asks the same question of the
     // same definitions, and the walk is what reads them.
     let queryFieldPlans: QueryFieldPlanCache = new Map();
+    // Whether a query field's types are file meta, asked once per distinct
+    // set of types for the whole pass rather than once per field per root.
+    let fileMetaTargets: FileMetaTargetCache = new Map();
     let vnForIdentity = this.#realm.virtualNetwork;
     let realmPath = new RealmPaths(realmURL, vnForIdentity);
     // `omit`/root ids may arrive in either resolved-URL or registered-alias
@@ -2071,12 +2115,14 @@ export class RealmIndexQueryEngine {
                     realmURL,
                     storedDefs,
                     opts,
+                    fileMetaTargets,
                   )
                 : this.populateQueryFields(
                     resource,
                     realmURL,
                     opts,
                     queryFieldPlans,
+                    fileMetaTargets,
                   );
             if (timings) {
               await timings.busyTime('populate', runPopulate);
