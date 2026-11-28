@@ -26,6 +26,7 @@ import type {
   ShortcutPlatform,
   CheckState,
 } from '../internal/menu';
+import SearchIcon from '@cardstack/boxel-icons/search';
 import { Kbd } from './kbd';
 
 // ── Fuzzy matching (the palette's engine) ────────────────────────────────
@@ -113,6 +114,54 @@ export function fuzzyMatch(query: string, text: string): FuzzyMatch | null {
   return { score, ranges };
 }
 
+/** How strictly a query must match: 'fuzzy' (default) any in-order subsequence,
+ * 'words' every query word starts a word of the text, 'prefix' the text starts
+ * with the query. */
+export type PaletteMatch = 'fuzzy' | 'words' | 'prefix';
+
+// a word is a run of letters or digits, so punctuation around it, as in
+// "Open (advanced)", never hides where it starts
+const WORD = /[\p{L}\p{N}]+/gu;
+const DELIMITERS = /[^\p{L}\p{N}]+/u;
+
+/** The strict modes of the palette's matcher; 'fuzzy' is `fuzzyMatch`. */
+export function matchText(
+  mode: PaletteMatch,
+  query: string,
+  text: string,
+): FuzzyMatch | null {
+  if (mode === 'fuzzy') {
+    return fuzzyMatch(query, text);
+  }
+  let needle = query.trim().toLowerCase();
+  if (!needle) {
+    return { score: 0, ranges: [] };
+  }
+  let haystack = text.toLowerCase();
+  let bonus = Math.max(0, 16 - Math.floor(text.length / 4));
+  if (mode === 'prefix') {
+    return haystack.startsWith(needle)
+      ? { score: 100 + bonus, ranges: [[0, needle.length]] }
+      : null;
+  }
+  let starts = [...haystack.matchAll(WORD)].map((m) => m.index as number);
+  let used = new Set<number>();
+  let ranges: [number, number][] = [];
+  for (let word of needle.split(DELIMITERS)) {
+    let start = starts.find(
+      (at) => !used.has(at) && haystack.startsWith(word, at),
+    );
+    if (start === undefined) {
+      return null;
+    }
+    used.add(start);
+    ranges.push([start, start + word.length]);
+  }
+  ranges.sort((a, b) => a[0] - b[0]);
+  // a label that starts with the query outranks one matching a later word
+  return { score: 60 + bonus + (ranges[0][0] === 0 ? 20 : 0), ranges };
+}
+
 export interface MatchSegment {
   text: string;
   hit: boolean;
@@ -158,6 +207,8 @@ interface PaletteEntry {
   checked?: string;
   description?: string;
   haystack: string;
+  /** description, keywords and path, matched one by one in the strict modes */
+  fields: string[];
 }
 
 interface PaletteRow extends PaletteEntry {
@@ -193,6 +244,18 @@ export interface CommandPaletteSignature {
     onSelect?: (node: LeafNode) => void;
     /** force the shortcut platform */
     platform?: ShortcutPlatform;
+    /** singular noun for what the palette lists (default 'command'); the
+     * screen-reader count reads "4 signs", "1 sign", "No signs" */
+    resultNoun?: string;
+    /** plural of @resultNoun when it isn't the noun plus "s" */
+    resultNounPlural?: string;
+    /** how strict matching is: 'fuzzy' (default) any in-order subsequence,
+     * 'words' each query word starts a word, 'prefix' the text starts with
+     * the query. Stricter modes drop weak matches from the list and count. */
+    match?: PaletteMatch;
+    /** renders a button that looks like a search field and opens the palette
+     * (needs @onOpen); the text is its label, e.g. 'Search signs…' */
+    triggerLabel?: string;
   };
   Element: HTMLDialogElement;
 }
@@ -261,7 +324,13 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
     return this.args.placeholder ?? 'Type a command or search…';
   }
   get emptyMessage(): string {
-    return this.args.emptyMessage ?? 'No matching commands';
+    return this.args.emptyMessage ?? `No matching ${this.nounPlural}`;
+  }
+  get noun(): string {
+    return this.args.resultNoun ?? 'command';
+  }
+  get nounPlural(): string {
+    return this.args.resultNounPlural ?? `${this.noun}s`;
   }
   get listId(): string {
     return `${this.guid}-list`;
@@ -292,6 +361,9 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
       haystack: [label, node.description, node.keywords, ...path]
         .filter(Boolean)
         .join(' '),
+      fields: [node.description, node.keywords, ...path].filter(
+        (field): field is string => !!field,
+      ),
     };
   }
 
@@ -382,16 +454,27 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
       }));
     }
     let scored: { entry: PaletteEntry; match: FuzzyMatch }[] = [];
+    let mode = this.args.match ?? 'fuzzy';
     for (let entry of scoped) {
-      let onLabel = fuzzyMatch(query, entry.label);
+      let onLabel = matchText(mode, query, entry.label);
       if (onLabel) {
         scored.push({ entry, match: onLabel });
         continue;
       }
       // a keyword/description/path hit still counts, but ranks below every
       // label hit and highlights nothing (the match is not in the label)
-      let wider = fuzzyMatch(query, entry.haystack);
-      if (wider) {
+      // the strict modes anchor at the start of the text, so each field is
+      // matched on its own; joined, only the label's own start would count
+      let wider =
+        mode === 'fuzzy'
+          ? matchText(mode, query, entry.haystack)
+          : entry.fields
+              .map((field) => matchText(mode, query, field))
+              .reduce<FuzzyMatch | null>(
+                (best, match) =>
+                  match && (!best || match.score > best.score) ? match : best,
+                null,
+              );      if (wider) {
         scored.push({ entry, match: { score: wider.score - 40, ranges: [] } });
       }
     }
@@ -439,7 +522,10 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
       return '';
     }
     let count = this.rows.length;
-    return count === 1 ? '1 command' : `${count} commands`;
+    if (count === 0) {
+      return `No ${this.nounPlural}`;
+    }
+    return count === 1 ? `1 ${this.noun}` : `${count} ${this.nounPlural}`;
   }
   isActive = (row: PaletteRow): boolean => row.key === this.activeRow?.key;
 
@@ -575,6 +661,8 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
     this.args.onOpen();
   };
 
+  openFromTrigger = () => this.args.onOpen?.();
+
   /** Focuses the input whenever the palette opens. */
   focusOnOpen = modifier(
     (el: HTMLInputElement, [open]: [boolean | undefined]) => {
@@ -586,6 +674,24 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
   );
 
   <template>
+    {{! a trigger with no @onOpen would be a dead control }}
+    {{#if @triggerLabel}}{{#if @onOpen}}
+      <button
+        type='button'
+        class='pal-trigger'
+        aria-haspopup='dialog'
+        {{on 'click' this.openFromTrigger}}
+        data-test-pretui-palette-trigger
+      >
+        <SearchIcon
+          class='pal-trigger-icon'
+          width='16'
+          height='16'
+          aria-hidden='true'
+        />
+        {{@triggerLabel}}
+      </button>
+    {{/if}}{{/if}}
     <dialog
       class='pretui-palette'
       aria-label={{this.label}}
@@ -697,7 +803,7 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
             {{/each}}
           </menu>
         {{else}}
-          <div class='pal-empty'>{{this.emptyMessage}}</div>
+          <div class='pal-empty' data-test-pretui-palette-empty>{{this.emptyMessage}}</div>
         {{/if}}
 
         {{! one polite announcement of the result count — never per keystroke
@@ -810,8 +916,49 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
           padding-block: 4px;
           padding-inline: 0;
         }
+        /* iOS zooms into inputs under 16px on focus; the same token as every
+           other Pret UI text input */
+        @media (pointer: coarse) {
+          .pal-input,
+          .pal-ghost {
+            font-size: var(--boxel-form-control-touch-font-size);
+          }
+        }
         .pal-input:focus {
           outline: none;
+        }
+        .pal-trigger {
+          display: inline-flex;
+          align-items: center;
+          inline-size: var(--pretui-palette-trigger-width, auto);
+          max-inline-size: 100%;
+          gap: var(--boxel-sp-3xs);
+          min-height: var(--boxel-form-control-height-sm);
+          padding-inline: var(--boxel-sp-xs);
+          background: var(--field);
+          color: var(--muted-foreground);
+          border: 1px solid var(--input);
+          border-radius: calc(var(--radius) - 0.125rem);
+          font-family: inherit;
+          font-size: var(--boxel-font-size-sm);
+          text-align: start;
+          cursor: pointer;
+        }
+        .pal-trigger:hover {
+          background: var(--hover);
+          border-color: color-mix(in oklch, var(--foreground) 30%, var(--input));
+        }
+        .pal-trigger:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        @media (pointer: coarse) {
+          .pal-trigger {
+            font-size: var(--boxel-form-control-touch-font-size);
+          }
+        }
+        .pal-trigger-icon {
+          flex: none;
         }
         .pal-input::placeholder {
           color: var(--muted-foreground);
