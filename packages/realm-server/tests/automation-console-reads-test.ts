@@ -529,16 +529,106 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(
         a.charges,
         [
-          { day: '2026-11-16', credits: 2 },
-          { day: '2026-11-14', credits: 2 },
+          {
+            day: '2026-11-16',
+            firstDay: '2026-11-16',
+            days: 0,
+            fileBytes: 0,
+            indexBytes: 0,
+            credits: 2,
+          },
+          {
+            day: '2026-11-14',
+            firstDay: '2026-11-14',
+            days: 0,
+            fileBytes: 0,
+            indexBytes: 0,
+            credits: 2,
+          },
         ],
-        'the storage charges written so far, newest first',
+        'the storage charges written so far, newest first, each with no measured day to list',
       );
       assert.strictEqual(
         a.chargeStopped,
         null,
         'Boxel charges for the storage of an active automation',
       );
+    });
+
+    test('each charge lists the days it billed since the charge before, from the switch-on day, with their bytes averaged', async function (assert) {
+      await query(dbAdapter, [
+        'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since, switched_on_at) VALUES (',
+        param(rri(automationURL())),
+        ',',
+        param(ri(realm.url)),
+        ',',
+        param(OWNER),
+        ", 'active', '{}'::jsonb, '{}'::jsonb, now(), '2026-11-10T09:00:00Z')",
+      ]);
+      // 2026-11-08 was measured before a removal and never charged, and
+      // 2026-11-13 the automation spent wholly stopped, so neither is billed.
+      let measured: [string, number, number][] = [
+        ['2026-11-08', 9000, 900],
+        ['2026-11-10', 1000, 100],
+        ['2026-11-11', 2000, 200],
+        ['2026-11-12', 3000, 300],
+        ['2026-11-14', 4000, 0],
+        ['2026-11-15', 6000, 100],
+      ];
+      for (let [day, fileBytes, indexBytes] of measured) {
+        await query(dbAdapter, [
+          'INSERT INTO automation_storage_days (automation_id, day, realm, file_bytes, index_bytes) VALUES (',
+          param(rri(automationURL())),
+          ',',
+          param(day),
+          '::date,',
+          param(ri(realm.url)),
+          ',',
+          param(fileBytes),
+          ',',
+          param(indexBytes),
+          ')',
+        ]);
+      }
+      let owner = await ownerUser();
+      for (let day of ['2026-11-12', '2026-11-15']) {
+        let spent = await spendCredits(dbAdapter, owner.id, 1, {
+          kind: 'storage',
+          realm: ri(realm.url),
+          automationId: rri(automationURL()),
+          day,
+          pricingVersion: 'test',
+        });
+        assert.strictEqual(
+          spent,
+          'charged',
+          `the storage through ${day} is charged`,
+        );
+      }
+
+      let response = await get(AUTOMATION_STORAGE_PATH, WRITER, {
+        automation: automationURL(),
+      });
+
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body.data.attributes.charges, [
+        {
+          day: '2026-11-15',
+          firstDay: '2026-11-14',
+          days: 2,
+          fileBytes: 5000,
+          indexBytes: 50,
+          credits: 1,
+        },
+        {
+          day: '2026-11-12',
+          firstDay: '2026-11-10',
+          days: 3,
+          fileBytes: 2000,
+          indexBytes: 200,
+          credits: 1,
+        },
+      ]);
     });
 
     test('a paused automation’s storage says why and since when Boxel stopped charging', async function (assert) {
@@ -572,6 +662,7 @@ module(basename(import.meta.filename), function (hooks) {
         state: 'paused',
         pauseReason: 'payer-lost-access',
         since: '2026-11-15T10:00:00.000Z',
+        fromDay: '2026-11-16',
       });
     });
 

@@ -4170,4 +4170,314 @@ module('Acceptance | automation view', function (hooks) {
       assert.dom('[data-test-automation-state="On"]').exists();
     });
   });
+
+  module('storage', function (hooks) {
+    // What the storage route answers, and how many times the view asked.
+    let storage: Record<string, unknown> | undefined;
+    let storageAsked: number;
+
+    // The current UTC month and the one before, as YYYY-MM, since the view
+    // totals the charges of the current month.
+    let now = new Date();
+    let thisMonth = now.toISOString().slice(0, 7);
+    let lastMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15),
+    )
+      .toISOString()
+      .slice(0, 7);
+
+    hooks.beforeEach(function () {
+      storage = undefined;
+      storageAsked = 0;
+      getService('network').virtualNetwork.mount(
+        async (request: Request) => {
+          let url = new URL(request.url);
+          if (!url.pathname.endsWith('/_automation-storage')) {
+            return null;
+          }
+          storageAsked++;
+          return storage
+            ? new Response(
+                JSON.stringify({
+                  data: {
+                    type: 'automation-storage',
+                    id: AUTOMATION,
+                    attributes: storage,
+                  },
+                }),
+                {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                },
+              )
+            : new Response(JSON.stringify({ errors: [] }), { status: 403 });
+        },
+        { prepend: true },
+      );
+    });
+
+    function answerStorage(attributes: Record<string, unknown>) {
+      storage = {
+        switchedOn: true,
+        payer: '@testuser:localhost',
+        viewerIsPayer: true,
+        files: [],
+        fileBytes: 0,
+        indexBytes: 0,
+        dailyCredits: 0,
+        pricingVersion: 'test',
+        charges: [],
+        chargeStopped: null,
+        ...attributes,
+      };
+    }
+
+    // A YYYY-MM-DD day as the view sets it.
+    function shortDay(day: string, withYear = false) {
+      let [y, m, d] = day.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        ...(withYear ? { year: 'numeric' } : {}),
+      });
+    }
+
+    async function openStorage() {
+      await openIsolated();
+      await waitFor('[data-test-automation-storage-lead]', { timeout: 10000 });
+    }
+
+    test('a direct writer sees each file the runs created, the totals and the daily charge', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      answerStorage({
+        files: [
+          {
+            path: 'digests/2030-01-01.md',
+            run: 'done',
+            createdAt: '2030-01-01T08:31:00.000Z',
+            fileBytes: 3000,
+            indexBytes: 1000,
+          },
+          {
+            path: 'digests/2029-12-31.md',
+            run: 'earlier',
+            createdAt: '2029-12-31T08:31:00.000Z',
+            fileBytes: 5000,
+            indexBytes: 1000,
+          },
+        ],
+        fileBytes: 8000,
+        indexBytes: 2000,
+        dailyCredits: 0.0042,
+      });
+      await openStorage();
+
+      assert
+        .dom('[data-test-automation-storage-file]')
+        .exists({ count: 2 }, 'one row for each file');
+      assert
+        .dom(
+          '[data-test-automation-storage-file="digests/2030-01-01.md"] [data-test-automation-storage-file-bytes]',
+        )
+        .hasText('3 kB');
+      assert
+        .dom(
+          '[data-test-automation-storage-file="digests/2030-01-01.md"] [data-test-automation-storage-index-bytes]',
+        )
+        .hasText('1 kB');
+      assert
+        .dom(
+          '[data-test-automation-storage-file="digests/2029-12-31.md"] [data-test-automation-storage-show-run="earlier"]',
+        )
+        .hasAttribute(
+          'aria-label',
+          'Show the run that created digests/2029-12-31.md',
+        );
+      let section = text('[data-test-automation-storage]') ?? '';
+      assert.ok(section.includes('Files 2'), section);
+      assert.ok(section.includes('On disk 8 KB'), section);
+      assert.ok(section.includes('In the index 2 KB'), section);
+      assert.ok(section.includes('Daily charge 0.0042 credits a day'), section);
+      assert.ok(section.includes('Charged this month 0 credits'), section);
+      assert
+        .dom('[data-test-automation-storage-charges]')
+        .doesNotExist('no charge yet, so no charge history');
+      assert.dom('[data-test-automation-storage-stopped]').doesNotExist();
+    });
+
+    test('the charge history shows the days each charge covers, a month at a time with each month’s total', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      answerStorage({
+        files: [
+          {
+            path: 'digests/2030-01-01.md',
+            run: 'done',
+            createdAt: '2030-01-01T08:31:00.000Z',
+            fileBytes: 3000,
+            indexBytes: 1000,
+          },
+        ],
+        fileBytes: 3000,
+        indexBytes: 1000,
+        dailyCredits: 0.4,
+        charges: [
+          {
+            day: `${thisMonth}-05`,
+            firstDay: `${thisMonth}-02`,
+            days: 3,
+            fileBytes: 2500000,
+            indexBytes: 40000,
+            credits: 2,
+          },
+          {
+            day: `${thisMonth}-01`,
+            firstDay: `${thisMonth}-01`,
+            days: 1,
+            fileBytes: 2000000,
+            indexBytes: 30000,
+            credits: 1,
+          },
+          {
+            day: `${lastMonth}-20`,
+            firstDay: `${lastMonth}-18`,
+            days: 3,
+            fileBytes: 1500000,
+            indexBytes: 20000,
+            credits: 1,
+          },
+        ],
+      });
+      await openStorage();
+
+      let multiDay = `[data-test-automation-storage-charge="${thisMonth}-05"]`;
+      assert
+        .dom(`${multiDay} [data-test-automation-storage-charge-days]`)
+        .hasText(
+          `${shortDay(`${thisMonth}-02`)} – ${shortDay(`${thisMonth}-05`, true)}`,
+          'a charge that covers several days shows the span',
+        );
+      assert
+        .dom(`${multiDay} [data-test-automation-storage-charge-count]`)
+        .hasText('3 days billed');
+      assert
+        .dom(`${multiDay} [data-test-automation-storage-charge-bytes]`)
+        .hasText('2.5 MB on disk, 40 kB in the index');
+
+      let oneDay = `[data-test-automation-storage-charge="${thisMonth}-01"]`;
+      assert
+        .dom(`${oneDay} [data-test-automation-storage-charge-days]`)
+        .hasText(
+          shortDay(`${thisMonth}-01`, true),
+          'a charge for one day shows the day alone',
+        );
+      assert
+        .dom(`${oneDay} [data-test-automation-storage-charge-count]`)
+        .doesNotExist();
+
+      assert
+        .dom(`[data-test-automation-storage-month="${thisMonth}"]`)
+        .includesText('3');
+      assert
+        .dom(`[data-test-automation-storage-month="${thisMonth}"]`)
+        .includesText('Charged in');
+      assert
+        .dom(`[data-test-automation-storage-month="${lastMonth}"]`)
+        .includesText('1');
+      let rows = [
+        ...document.querySelectorAll(
+          '[data-test-automation-storage-charges] tbody tr',
+        ),
+      ].map(
+        (row) =>
+          row.getAttribute('data-test-automation-storage-charge') ??
+          `month ${row.getAttribute('data-test-automation-storage-month')}`,
+      );
+      assert.deepEqual(
+        rows,
+        [
+          `${thisMonth}-05`,
+          `${thisMonth}-01`,
+          `month ${thisMonth}`,
+          `${lastMonth}-20`,
+          `month ${lastMonth}`,
+        ],
+        'newest first, each month closing with the month’s total',
+      );
+      assert.ok(
+        text('[data-test-automation-storage]')?.includes(
+          'Charged this month 3 credits',
+        ),
+      );
+    });
+
+    test('a paused automation says Boxel isn’t charging for storage, and from which day', async function (assert) {
+      answer = {
+        status: 200,
+        attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+      };
+      answerStorage({
+        files: [
+          {
+            path: 'digests/2030-01-01.md',
+            run: 'done',
+            createdAt: '2030-01-01T08:31:00.000Z',
+            fileBytes: 3000,
+            indexBytes: 1000,
+          },
+        ],
+        fileBytes: 3000,
+        indexBytes: 1000,
+        dailyCredits: 0.0042,
+        chargeStopped: {
+          state: 'paused',
+          pauseReason: 'requested',
+          since: '2030-01-14T10:00:00.000Z',
+          fromDay: '2030-01-15',
+        },
+      });
+      await openStorage();
+
+      assert
+        .dom('[data-test-automation-storage-stopped="paused"]')
+        .includesText('Boxel isn’t charging for storage')
+        .includesText(
+          'The automation is paused, so Boxel doesn’t charge for the automation’s storage.',
+        )
+        .includesText(
+          'The files stay in the workspace, and Boxel charges again from the day the automation’s status reads On again.',
+        );
+      assert
+        .dom('[data-test-automation-storage-stopped-from]')
+        .hasText(shortDay('2030-01-15', true));
+      assert.ok(
+        text('[data-test-automation-storage]')?.includes(
+          'Daily charge None while the automation is paused',
+        ),
+      );
+    });
+
+    test('an automation whose runs created no files says storage costs nothing yet', async function (assert) {
+      answer = { status: 200, attributes: ACTIVE };
+      answerStorage({});
+      await openStorage();
+
+      assert
+        .dom('[data-test-automation-storage-empty]')
+        .includesText('Storage costs nothing yet')
+        .includesText(
+          'The automation’s runs haven’t created any files, so storage costs nothing yet.',
+        );
+      assert.dom('[data-test-automation-storage-files]').doesNotExist();
+      assert.dom('[data-test-automation-storage-charges]').doesNotExist();
+    });
+
+    test("a viewer who isn't a direct writer sees no storage", async function (assert) {
+      answerStorage({});
+      await openIsolated();
+      await waitUntil(() => asked.length > 0, { timeout: 10000 });
+      await settled();
+      assert.dom('[data-test-automation-storage]').doesNotExist();
+      assert.strictEqual(storageAsked, 0, 'the view never reads the storage');
+    });
+  });
 });

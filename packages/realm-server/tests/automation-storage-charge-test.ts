@@ -570,6 +570,7 @@ module(basename(import.meta.filename), function (hooks) {
       state: 'paused',
       pauseReason: 'requested',
       since: '2026-11-11T20:00:00.000Z',
+      fromDay: '2026-11-12',
     });
 
     await resume('2026-11-12T09:00:00Z');
@@ -591,9 +592,21 @@ module(basename(import.meta.filename), function (hooks) {
         state: 'paused',
         pauseReason: 'requested',
         since: '2026-11-13T05:30:00.000Z',
+        fromDay: '2026-11-14',
       },
       'the charge stopped when the automation first left active',
     );
+  });
+
+  test('an automation that stops at midnight stops being charged from that day', async function (assert) {
+    await switchOn('2026-11-10');
+    await pause('2026-11-12T00:00:00Z');
+    assert.deepEqual(await storageChargeStopped(dbAdapter, AUTOMATION), {
+      state: 'paused',
+      pauseReason: 'requested',
+      since: '2026-11-12T00:00:00.000Z',
+      fromDay: '2026-11-12',
+    });
   });
 
   test('an automation switched on waiting for key approval is never charged, and says so from the switch-on', async function (assert) {
@@ -627,6 +640,7 @@ module(basename(import.meta.filename), function (hooks) {
       state: 'waiting-for-key-approval',
       pauseReason: null,
       since: '2026-11-10T08:00:00.000Z',
+      fromDay: '2026-11-10',
     });
   });
 

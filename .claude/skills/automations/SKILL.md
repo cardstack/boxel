@@ -2469,18 +2469,28 @@ from its path.
 `indexBytes`; `switchedOn` and the `payer`, who pays the storage charge;
 `dailyCredits`, what one day of that storage costs at the server's prices
 before rounding (`exactMeteredCredits` of a day's GB-months, `null` without
-prices) with `pricingVersion`; and `charges`, the last 30 storage charges in
-`credits_ledger` as `{ day, credits }`, newest first. A charge covers the
-active days since the previous one and is written once those days cost a
-whole credit (_The daily storage charge_ in the `pricing` skill).
+prices) with `pricingVersion`; and `charges`, the last 62 storage charges in
+`credits_ledger`, newest first (an automation is charged at most once a day,
+so the current and the previous month are whole). A charge covers the active days since the
+previous one and is written once those days cost a whole credit (_The daily
+storage charge_ in the `pricing` skill), so each one lists its span:
+`{ day, firstDay, days, fileBytes, indexBytes, credits }`, where `day` is the
+charge's last day (the day the ledger names it by), `firstDay` the first day
+it billed, `days` how many days it billed (fewer than the span when the
+automation spent a day in it wholly stopped), and `fileBytes` and
+`indexBytes` the bytes measured on those days, averaged. The days are the
+`automation_storage_days` rows after the previous charge's day, starting no
+earlier than the switch-on day, the same rows `chargeAutomationStorage`
+summed (`storageCharges` in `handle-automations.ts`).
 `chargeStopped` says why and since when Boxel isn't charging for the
 storage: null while the automation is active (and for an automation that
-isn't switched on), otherwise `{ state, pauseReason, since }`, the
-automation's current state and pause reason and the time the automation last
+isn't switched on), otherwise `{ state, pauseReason, since, fromDay }`, the
+automation's current state and pause reason, the time the automation last
 left `active` (the switch-on time for an automation that was never active),
-read from `automation_state_changes` (`storageChargeStopped`). The charge stops
-from the first day the automation spends wholly stopped: the day after `since`
-when the automation was active earlier that day, otherwise `since`'s own day.
+and the first day Boxel doesn't charge, read from `automation_state_changes`
+(`storageChargeStopped`). The charge stops from the first day the automation
+spends wholly stopped: `fromDay` is the day after `since` when the automation
+was active earlier that day, otherwise `since`'s own day.
 
 ### Calling them in development
 

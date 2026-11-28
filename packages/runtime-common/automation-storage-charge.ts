@@ -232,14 +232,15 @@ async function chargeOne(
 // reason, and `since`, when the automation last left `active` (or, for an
 // automation that was never active, when the automation was switched on).
 // Null for an active automation, and for one with no history. The charge
-// stops from the first day the automation spends wholly stopped: the day
-// after `since` when the automation was active earlier that day, otherwise
-// `since`'s own day (a stop at exactly midnight, or an automation that was
-// never active).
+// stops from the first day the automation spends wholly stopped, `fromDay`
+// (YYYY-MM-DD): the day after `since` when the automation was active earlier
+// that day, otherwise `since`'s own day (a stop at exactly midnight, or an
+// automation that was never active).
 export interface StorageChargeStopped {
   state: Exclude<AutomationState, 'active'>;
   pauseReason: AutomationPauseReason | null;
   since: string;
+  fromDay: string;
 }
 
 export async function storageChargeStopped(
@@ -259,21 +260,27 @@ export async function storageChargeStopped(
        -- The first change after the automation last became active.
        (SELECT MIN(s.changed_at) FROM history s
         WHERE NOT EXISTS (SELECT 1 FROM last_active l
-          WHERE (l.changed_at, l.id) >= (s.changed_at, s.id))) AS since
+          WHERE (l.changed_at, l.id) >= (s.changed_at, s.id))) AS since,
+       EXISTS (SELECT 1 FROM last_active) AS was_active
      FROM (SELECT * FROM history ORDER BY changed_at DESC, id DESC LIMIT 1)
        AS latest`,
   ])) as unknown as {
     state: AutomationState;
     pause_reason: AutomationPauseReason | null;
     since: string | Date | null;
+    was_active: boolean;
   }[];
   if (!latest || latest.state === 'active' || latest.since == null) {
     return null;
   }
+  let since = new Date(latest.since).toISOString();
+  let sinceDay = since.slice(0, 10);
+  let atMidnight = since === `${sinceDay}T00:00:00.000Z`;
   return {
     state: latest.state,
     pauseReason: latest.pause_reason,
-    since: new Date(latest.since).toISOString(),
+    since,
+    fromDay: latest.was_active && !atMidnight ? addDays(sinceDay, 1) : sinceDay,
   };
 }
 
