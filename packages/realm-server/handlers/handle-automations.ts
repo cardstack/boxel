@@ -1365,6 +1365,12 @@ export function handleAutomationRunReport(args: CreateRoutesArgs): Handler {
             ...(summary.stagedFilesReplacedBy
               ? { stagedReplacedBy: summary.stagedFilesReplacedBy }
               : {}),
+            ...(summary.stagedFilesDropped
+              ? { stagedDropped: summary.stagedFilesDropped }
+              : {}),
+            ...(summary.stagedFilesKeptUntil
+              ? { stagedKeptUntil: summary.stagedFilesKeptUntil }
+              : {}),
             ...(summary.committedPaths
               ? { committed: summary.committedPaths }
               : {}),

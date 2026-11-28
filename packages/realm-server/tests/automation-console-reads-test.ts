@@ -25,6 +25,7 @@ import {
   logRunPlatformLine,
 } from '@cardstack/runtime-common/automation-run-log';
 import { callApiLogLine } from '@cardstack/runtime-common/automation-run-limits';
+import { previewFilesKeptUntil } from '@cardstack/runtime-common/automation-runs';
 import {
   AUTOMATION_PREVIEW_FILE_PATH,
   AUTOMATION_RUN_REPORT_PATH,
@@ -306,7 +307,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(ownAttributes.viewerCanceled);
     });
 
-    test('a complete Preview’s report lists the files it staged, or the Preview that replaced them', async function (assert) {
+    test('a complete Preview’s report lists the files it staged and how long Boxel keeps them, or the Preview that replaced them', async function (assert) {
       let run = await newRun(WRITER, { dryRun: true });
       await setRun(run.id, `state = 'complete', finished_at = now()`);
       await dbAdapter.execute(
@@ -325,6 +326,8 @@ module(basename(import.meta.filename), function (hooks) {
           { path: 'out/a.json', size: 1 },
           { path: 'out/b.json', size: 2 },
         ],
+        // The files last a few days past the Preview's finish.
+        stagedKeptUntil: previewFilesKeptUntil(a.timings.finishedAt),
       });
 
       let later = await newRun(WRITER, { dryRun: true });

@@ -736,3 +736,63 @@ function iso(value: PgPrimitive | undefined): string | null {
   }
   return new Date(value as string).toISOString();
 }
+
+// One of an automation's open batches, as the automation's status reports
+// it: a batch whose follow-up run hasn't ended, so pausing or removing the
+// automation changes when, or whether, that follow-up runs.
+export interface OpenAIBatch {
+  batchId: string;
+  // ISO time: when the batch is due back, and its follow-up starts.
+  deadline: string;
+  requestCount: number;
+  // The follow-up waits on something besides its deadline: its batch records
+  // a hold (`follow_up_held_at`: a pause or a key-approval wait put the run
+  // back to pending, or a batch that couldn't be read waits for its retry),
+  // or the automation is paused or waiting for a key approval and the
+  // follow-up hasn't started. A follow-up that keeps running, such as one
+  // whose commit was claimed before the pause, isn't held.
+  followUpHeld: boolean;
+}
+
+// How many open batches the status lists, earliest deadline first.
+// `openBatchCount` counts them all.
+export const OPEN_AI_BATCHES_LISTED = 20;
+
+// The automation's open batches: each batch submitted since the automation
+// was switched on that isn't dropped and whose follow-up hasn't ended, which
+// is every batch a pause holds and a remove drops. The platform still bills
+// each one, whatever becomes of its follow-up.
+export async function readOpenAIBatches(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+): Promise<{ batches: OpenAIBatch[]; count: number }> {
+  let open: Expression = [
+    'FROM ai_batches b JOIN automations a ON a.automation_id = b.automation_id',
+    'LEFT JOIN automation_runs r ON r.id = b.follow_up_run_id',
+    'WHERE b.automation_id =',
+    param(automationId),
+    'AND b.submitted_at >= a.switched_on_at AND b.follow_up_dropped_at IS NULL',
+    "AND (b.follow_up_run_id IS NULL OR r.state IN ('pending', 'running'))",
+  ];
+  let rows = await query(dbAdapter, [
+    'SELECT b.batch_id, b.deadline, b.request_count,',
+    "(b.follow_up_held_at IS NOT NULL OR (a.state IN ('paused', 'waiting-for-key-approval') AND (b.follow_up_run_id IS NULL OR r.state = 'pending'))) AS held",
+    ...open,
+    'ORDER BY b.deadline, b.batch_id LIMIT',
+    param(OPEN_AI_BATCHES_LISTED),
+  ]);
+  let batches = rows.map((row) => ({
+    batchId: String(row.batch_id),
+    deadline: new Date(row.deadline as string).toISOString(),
+    requestCount: Number(row.request_count),
+    followUpHeld: Boolean(row.held),
+  }));
+  if (batches.length < OPEN_AI_BATCHES_LISTED) {
+    return { batches, count: batches.length };
+  }
+  let [{ count }] = (await query(dbAdapter, [
+    'SELECT COUNT(*)::int AS count',
+    ...open,
+  ])) as { count: number }[];
+  return { batches, count: Number(count) };
+}

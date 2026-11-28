@@ -239,7 +239,7 @@ The views get the row from `GET <realm>/_automation-status?automation=<card URL>
 
 - **200** with `{ data: null, meta: { directWriter: false } }` unless the caller is a direct writer of the realm (`isDirectWriter`), asked of the session the realm vouches for (`#sessionPrincipal`): a reader, a writer by the `*` or `users` row, a revoked session, a session delegated to another realm, an anonymous caller on a realm anyone can read, and a realm-authority or diagnostic session never see the row. The answer isn't a 403, so the card's own read never counts as an auth failure: the host's `authErrorEventMiddleware` sends a `boxel-auth-error` event for any 401 or 403 that comes back through `authedFetch`, and an auth-error guard that listens fails whatever it is rendering or loading at the time. The listeners are the prerender routes, where the card has no tools and asks nothing, and the in-page indexer (`CardPrerender`) the host's tests mount, where a refusal fails the next card module the realm indexes. A person's browser has no listener, so there a refusal does no harm beyond the event. The card reads `meta.directWriter: false` as "show the card's own fields alone". A caller the ACL refuses whom the realm hands to its policy gets the same answer whether or not a grant reaches them, since `#statusViewer` asks as no one for any caller the ACL refused: a grant can admit them to the card, never to the row, and the answer runs nothing a grant admits, so an archived realm gives it as it does while active. That covers a signed-in caller in a realm that names a policy, and a caller who isn't signed in where the policy opens `read` or `query` to such callers, on any type (`ANONYMOUS_AUTOMATION_VIEW`, counted for nothing: the answer is fixed and reads nothing). Anyone else is refused before the route runs: a caller who isn't signed in gets 401, with the `actor-required` body in a realm that names a policy (`#refusalUnderPolicy`) and the ACL's own body in one that doesn't, and a signed-in caller of a realm that names no policy gets the ACL's 403. The Realm Runner has no call that reaches these routes, so its `REQUIRES_READ` and `REQUIRES_WRITE` tables (ADR 022 §1.4) don't name them.
 - **400** when `automation` is missing, not a URL, or outside the realm, asked only for a direct writer.
-- **200** with `{ data: { type: 'automation-status', id, attributes }, meta: { directWriter: true } }` for a direct writer. `attributes` is `{ switchedOn: false }` when no row exists. Otherwise it holds `state`, `pauseReason`, `payer`, `viewerIsPayer`, `nextRun`, `lastResult`, `lastFinishedAt`, `failuresInARow` and `lastFailure` (the failure streak and its latest run's id, `reason`, `message` and `finishedAt`, or null; see _Pausing after repeated failures_), `pauseProblems` (what the declaration reader found, each `{ code, path, message }`, when `pauseReason` is `invalid-declaration`, else null), and `triggers`, one per trigger the card declares, in the card's order: `label`, `runs`, and for a bounded trigger `runsLeft` (with `runsLeftAtLeast` past `REMAINING_RUNS_LIMIT`) and `until`, plus `nextRun` and `spent`. Times are ISO strings.
+- **200** with `{ data: { type: 'automation-status', id, attributes }, meta: { directWriter: true } }` for a direct writer. `attributes` is `{ switchedOn: false }` when no row exists. Otherwise it holds `state`, `pauseReason`, `payer`, `viewerIsPayer`, `nextRun`, `lastResult`, `lastFinishedAt`, `failuresInARow` and `lastFailure` (the failure streak and its latest run's id, `reason`, `message` and `finishedAt`, or null; see _Pausing after repeated failures_), `pauseProblems` (what the declaration reader found, each `{ code, path, message }`, when `pauseReason` is `invalid-declaration`, else null), `openBatches` and `openBatchCount` (the automation's batches of AI requests whose follow-up run hasn't ended, `readOpenAIBatches` in `ai-batches.ts`: each `{ batchId, deadline, requestCount, followUpHeld }`, earliest deadline first, at most `OPEN_AI_BATCHES_LISTED`, with `followUpHeld` true when the batch records a hold (`follow_up_held_at`) or when the automation is paused or waiting for key approval and the follow-up hasn't started; a follow-up left running, such as one whose commit was claimed, isn't held), and `triggers`, one per trigger the card declares, in the card's order: `label`, `runs`, and for a bounded trigger `runsLeft` (with `runsLeftAtLeast` past `REMAINING_RUNS_LIMIT`) and `until`, plus `nextRun` and `spent`. Times are ISO strings.
 
 Both shapes carry `lastRun`, the automation's last run that started and has ended (`readLastRunMilestones`), and `currentRun`, its run in progress (`readCurrentRunMilestones`), each with its milestones (_Run milestones and tasks_) or null. A Preview is a test of the script, so neither is ever one. A run can start and end before switch-on (a Run now), so neither depends on the row.
 
@@ -2417,6 +2417,53 @@ window opened. The AI assistant's switch-on follows the same path: switch on,
 then open the window with `automation` for what the person gives, and name who
 gives the rest from `shares`.
 
+### The card's controls
+
+Beside the switch-on screen, the isolated view's _Status_ section gives a
+direct writer the automation's controls (`AutomationControls` in the
+catalog's `automation/automation.gts`), each a Pret UI `Button` with an icon
+that opens a Pret UI `AlertDialog` before anything is sent, and each a POST
+through the `automation-request` tool:
+
+| Control  | Shown when                                                                                 | Route                 | The confirmation says                                                                                                                                                                                                                           |
+| -------- | ------------------------------------------------------------------------------------------ | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preview  | always                                                                                     | `_automation-preview` | the script runs now and saves nothing, and Boxel charges the clicker for running the Preview                                                                                                                                                    |
+| Run now  | always                                                                                     | `_automation-run-now` | the script runs now and saves what it writes, on or off, and Boxel charges the clicker for running the automation                                                                                                                               |
+| Pause    | switched on, not paused or done                                                            | `_automation-pause`   | Boxel cancels the automation and ignores triggers until a resume; with open batches, that the pause holds each batch's follow-up and Boxel still charges for the batched AI requests already sent                                               |
+| Resume   | paused, for any reason but `caps-raised` / `batched-ai-enabled`, with a card monthly limit | `_automation-resume`  | follow-ups the pause held start; a run the pause stopped partway saved nothing and doesn't restart, nor do triggers that fired while paused; a viewer who isn't the payer is told they become the payer (named only where ADR 011 allows)       |
+| Turn off | switched on                                                                                | `_automation-remove`  | unlike a pause, Boxel forgets the payer and the limits they agreed to, so turning on again shows the switch-on screen; the card and script stay; with open batches, each batch's follow-up is dropped and the batched AI requests still charged |
+
+Preview and Run now send one `click` (`crypto.randomUUID()`) per
+confirmation, so confirming again after a lost answer names the run the
+first confirm started. Their 202 answer's run id opens that run's row under
+_Runs_ (the same reveal a notice's _Show the run_ uses, reading page 1
+again), whose detail shows the log, the timings, the cost and a Preview's
+staged files. Resume sends the card's own `caps.monthlyCredits`, as switch-on
+does; a paused automation whose card sets no monthly limit offers no Resume
+and a _Set a monthly limit to resume_ `Callout` whose button opens the
+card's editor (`@editCard`). A refused request keeps the dialog open with the
+route's `errors[0]`, titled by what Boxel didn't do; a request that lands
+closes it and leaves a `Callout` saying what happened, which takes focus and
+stays until the status has read past the control's outcome. A paused
+automation whose `openBatches` has a held follow-up lists each one, with its
+batch's deadline, in a _Follow-up runs on hold_ `Callout`.
+
+Each waiting or running run in the _Runs_ list (not one whose `step` is
+`commit`) has a **Cancel run** button, which confirms in an `AlertDialog` and
+posts `_automation-run-cancel` with the run's id. A canceled run then shows
+who canceled it, as every canceled run does.
+
+A complete Preview's _Writes_ tab lists its staged files, each with a
+**Show** toggle that reads the file through `GET /_automation-preview-file`
+(`StagedFile`): UTF-8 text opens in a Pret UI `CodeBlock`, an image (by
+extension) as a Pret UI `Image` from a blob URL, and any other file as a
+download, never as raw bytes. The tab says how long Boxel keeps the files
+(`writes.stagedKeptUntil`), or when and why Boxel dropped them
+(`writes.stagedDropped`; see _The batch a Preview keeps_).
+
+Host tests answer the routes with a virtual-network handler
+(`tests/acceptance/automation-view-test.gts`, the _controls_ module).
+
 ### The console's reads
 
 The three GETs take the realm and the run or card as query parameters, check
@@ -2599,6 +2646,17 @@ completed keeps nothing, and records that one. The finishes of one
 person's Previews of one automation take a transaction-scoped advisory
 lock, so two finishing together never both keep a batch. A Preview is
 never the automation's `lastSuccessAt`.
+
+A Preview's files are temporary. Boxel keeps a complete Preview's batch for
+`PREVIEW_FILES_KEPT_DAYS` (5) after the Preview finishes, or until the
+automation is turned off, whichever comes first (`dropPreviewFiles` in
+`automation-runs.ts`): the minute tick drops expired batches
+(`dropExpiredPreviewFiles`), and `removeAutomation` drops the automation's.
+Each drop records `preview_files_dropped_at` and
+`preview_files_dropped_reason` (`expired` or `turned-off`) on the Preview's
+run, which the run's report gives as `stagedFilesDropped`; a batch still kept
+reports `stagedFilesKeptUntil`. A Preview stores nothing in the realm, so its
+files never count toward the automation's storage.
 
 To read a batch by hand:
 

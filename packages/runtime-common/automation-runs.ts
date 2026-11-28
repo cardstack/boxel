@@ -98,6 +98,12 @@ export interface AutomationRun extends AutomationRunCounts {
   // For a complete Preview whose batch a later one by the same person
   // replaced: that Preview.
   previewReplacedBy: string | null;
+  // For a complete Preview whose files Boxel dropped (see
+  // `dropPreviewFiles`): when, and why.
+  previewFilesDropped: {
+    at: string;
+    reason: PreviewFilesDropReason;
+  } | null;
   // The queue attempt (the job's reservation id) that owns the run, once one
   // has started it.
   attempt: number | null;
@@ -864,8 +870,10 @@ export async function cancelAutomationRunIn(
 // realm server refuses its next call and its tab stops the script. A running
 // run whose commit was claimed is left to finish, since its writes may
 // already be landing. A person's pause or remove names them in
-// `canceled_by`. A pause no person asked for names no one, and records its
-// reason (such as `caps-raised`) in `error_reason`. With `pendingOnly`, a
+// `canceled_by`, and a person's pause also records its reason (`requested`)
+// in `error_reason`, so the run reads as canceled by that pause. A pause no
+// person asked for names no one, and records its reason (such as
+// `caps-raised`) in `error_reason`. With `pendingOnly`, a
 // running run is left to finish and only pending runs are canceled. With
 // `keepFollowUps`, a batch's follow-up is left for the caller to hold
 // (`holdAutomationFollowUpRuns`) rather than canceled. The caller writes each
@@ -874,7 +882,9 @@ export async function cancelAutomationRunIn(
 export async function cancelUnfinishedAutomationRuns(
   querier: Querier,
   automationId: RealmResourceIdentifier,
-  by: { canceledBy: string } | { reason: string },
+  by:
+    | { canceledBy: string; reason?: string }
+    | { canceledBy?: undefined; reason: string },
   {
     pendingOnly = false,
     keepFollowUps = false,
@@ -882,9 +892,9 @@ export async function cancelUnfinishedAutomationRuns(
 ): Promise<AutomationRun[]> {
   let rows = await querier([
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
-    param('canceledBy' in by ? by.canceledBy : null),
+    param(by.canceledBy ?? null),
     ', error_reason =',
-    param('reason' in by ? by.reason : null),
+    param(by.reason ?? null),
     'WHERE automation_id =',
     param(automationId),
     pendingOnly
@@ -1549,6 +1559,13 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     actsAs: String(row.acts_as),
     dryRun: row.dry_run === true || row.dry_run === 1,
     previewReplacedBy: (row.preview_replaced_by as string | null) ?? null,
+    previewFilesDropped:
+      row.preview_files_dropped_at == null
+        ? null
+        : {
+            at: new Date(row.preview_files_dropped_at as string).toISOString(),
+            reason: row.preview_files_dropped_reason as PreviewFilesDropReason,
+          },
     attempt: row.attempt == null ? null : Number(row.attempt),
     scriptId: (row.script_id as RealmResourceIdentifier | null) ?? null,
     scriptHash: (row.script_hash as string | null) ?? null,
@@ -1623,4 +1640,65 @@ function iso(value: PgPrimitive | undefined): string | null {
     return null;
   }
   return new Date(value as string).toISOString();
+}
+
+// A Preview's staged files are temporary: Boxel keeps a complete Preview's
+// files for this many days after the Preview finishes, or until the
+// automation is turned off, whichever comes first. A Preview stores nothing
+// in the realm, so its files never count toward the automation's storage.
+export const PREVIEW_FILES_KEPT_DAYS = 5;
+
+// Why Boxel dropped a complete Preview's files: they outlived
+// `PREVIEW_FILES_KEPT_DAYS` (`expired`), or the automation was turned off
+// (`turned-off`). A later Preview replacing them is recorded apart, in
+// `preview_replaced_by`.
+export type PreviewFilesDropReason = 'expired' | 'turned-off';
+
+// When a complete Preview that finished at `finishedAt` (ISO) loses its
+// files, unless the automation is turned off first.
+export function previewFilesKeptUntil(finishedAt: string): string {
+  return new Date(
+    Date.parse(finishedAt) + PREVIEW_FILES_KEPT_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+}
+
+// Drops the files of the Previews that still keep them, and records on each
+// Preview's run when and why: every such Preview of `automationId` (the
+// automation was turned off), or every one that finished before `olderThan`
+// (Unix seconds; the files expired). One statement, so a Preview's run and
+// its files change together. Returns the runs whose files were dropped.
+export async function dropPreviewFiles(
+  querier: Querier,
+  which:
+    | { automationId: RealmResourceIdentifier; reason: 'turned-off' }
+    | { olderThan: number; reason: 'expired' },
+): Promise<string[]> {
+  let rows = await querier([
+    'WITH dropped AS (UPDATE automation_runs SET preview_files_dropped_at = now(), preview_files_dropped_reason =',
+    param(which.reason),
+    'WHERE dry_run AND preview_files_dropped_at IS NULL AND id IN (SELECT run_id FROM automation_preview_files) AND',
+    ...(('automationId' in which
+      ? ['automation_id =', param(which.automationId)]
+      : [
+          'finished_at <',
+          param(new Date(which.olderThan * 1000).toISOString()),
+          '::timestamptz',
+        ]) as Expression),
+    'RETURNING id), gone AS (DELETE FROM automation_preview_files WHERE run_id IN (SELECT id FROM dropped))',
+    'SELECT id FROM dropped',
+  ]);
+  return rows.map((row) => String(row.id));
+}
+
+// Drops the files of every complete Preview that finished more than
+// `PREVIEW_FILES_KEPT_DAYS` before `now` (Unix seconds). The minute tick runs
+// this.
+export async function dropExpiredPreviewFiles(
+  dbAdapter: DBAdapter,
+  now: number,
+): Promise<string[]> {
+  return await dropPreviewFiles(dbAdapterQuerier(dbAdapter), {
+    olderThan: now - PREVIEW_FILES_KEPT_DAYS * 24 * 60 * 60,
+    reason: 'expired',
+  });
 }

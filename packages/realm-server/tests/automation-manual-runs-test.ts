@@ -31,7 +31,16 @@ import {
   type ManualRunRequest,
   type ManualRunStart,
 } from '@cardstack/runtime-common/automation-manual-runs';
-import type { AutomationActorOptions } from '@cardstack/runtime-common/automations';
+import {
+  removeAutomation,
+  switchOnAutomation,
+  type AutomationActorOptions,
+} from '@cardstack/runtime-common/automations';
+import {
+  dropExpiredPreviewFiles,
+  PREVIEW_FILES_KEPT_DAYS,
+  previewFilesKeptUntil,
+} from '@cardstack/runtime-common/automation-runs';
 import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
@@ -435,6 +444,107 @@ module(basename(import.meta.filename), function (hooks) {
       earlierReport.stagedFilesReplacedBy,
       later.id,
       'the earlier Preview, finishing last, keeps nothing and names the later one',
+    );
+  });
+
+  test("a Preview's files are kept for days, then dropped when they expire or when the automation is turned off, and the report says which", async function (assert) {
+    let automationId = rri(`${realm.url}${WRITES}`);
+    // One complete Preview per person, so neither replaces the other.
+    async function completedPreview(user: string) {
+      let run = await createAutomationRun(dbAdapter, {
+        automationId,
+        realm: ri(realm.url),
+        trigger: 'manual',
+        slot: randomUUID(),
+        actsAs: user,
+        dryRun: true,
+      });
+      await startAutomationRunAttempt(dbAdapter, run.id, 1);
+      await stageRunOverlayFile(
+        dbAdapter,
+        { runId: run.id, attempt: 1 },
+        `out/${run.id}.txt`,
+        new TextEncoder().encode('staged'),
+        10,
+      );
+      await finishAutomationRun(dbAdapter, run.id, 1, { state: 'complete' });
+      return run;
+    }
+    let old = await completedPreview(CLICKER);
+    let recent = await completedPreview(OWNER);
+
+    let kept = await reportFor(old.id);
+    assert.strictEqual(
+      kept.stagedFiles?.length,
+      1,
+      'a Preview keeps its files',
+    );
+    assert.strictEqual(
+      kept.stagedFilesKeptUntil,
+      previewFilesKeptUntil(kept.run.finishedAt!),
+      `the report says Boxel keeps them ${PREVIEW_FILES_KEPT_DAYS} days past the finish`,
+    );
+    assert.strictEqual(kept.stagedFilesDropped, undefined);
+
+    // The clicker's Preview finished longer ago than Boxel keeps files.
+    await query(dbAdapter, [
+      `UPDATE automation_runs SET finished_at = now() - interval '6 days' WHERE id =`,
+      param(old.id),
+    ]);
+    let dropped = await dropExpiredPreviewFiles(
+      dbAdapter,
+      Math.floor(Date.now() / 1000),
+    );
+    assert.deepEqual(dropped, [old.id], 'only the expired Preview is dropped');
+    let expired = await reportFor(old.id);
+    assert.deepEqual(expired.stagedFiles, [], 'its files are gone');
+    assert.strictEqual(expired.stagedFilesDropped?.reason, 'expired');
+    assert.strictEqual(expired.stagedFilesKeptUntil, undefined);
+    assert.deepEqual(
+      await readAutomationPreviewFile(
+        dbAdapter,
+        { runId: old.id, path: `out/${old.id}.txt`, user: CLICKER },
+        options,
+      ),
+      { ok: false, reason: 'missing' },
+      'and its file no longer reads',
+    );
+    assert.deepEqual(
+      await dropExpiredPreviewFiles(dbAdapter, Math.floor(Date.now() / 1000)),
+      [],
+      'dropping again drops nothing',
+    );
+    assert.strictEqual(
+      (await reportFor(recent.id, OWNER)).stagedFiles?.length,
+      1,
+      'a recent Preview keeps its files',
+    );
+
+    // Turning the automation off drops the rest.
+    let switchedOn = await switchOnAutomation(
+      dbAdapter,
+      {
+        automationId,
+        realm: ri(realm.url),
+        user: OWNER,
+        declaration: declarationOf(WRITES),
+      },
+      options,
+    );
+    assert.true(switchedOn.ok, 'the automation switches on');
+    let turnedOff = await removeAutomation(
+      dbAdapter,
+      { automationId, user: OWNER },
+      options,
+    );
+    assert.true(turnedOff.ok, 'the automation turns off');
+    let afterTurnOff = await reportFor(recent.id, OWNER);
+    assert.deepEqual(afterTurnOff.stagedFiles, []);
+    assert.strictEqual(afterTurnOff.stagedFilesDropped?.reason, 'turned-off');
+    assert.strictEqual(
+      (await reportFor(old.id)).stagedFilesDropped?.reason,
+      'expired',
+      'a Preview dropped earlier keeps the reason it was dropped for',
     );
   });
 
