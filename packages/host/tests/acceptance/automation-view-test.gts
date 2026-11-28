@@ -383,7 +383,7 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-state-sentence]')
       .hasText(
-        'Nobody has turned this automation on, so Boxel runs nothing. A realm administrator can turn this automation on, and that person then pays for every run.',
+        'The automation is off, so Boxel runs nothing. A realm administrator can turn the automation on, and that person then pays for every run.',
       );
     assert.dom('[data-test-automation-status]').includesText('Nobody yet');
     assert.dom('[data-test-automation-trigger-progress]').doesNotExist();
@@ -4619,9 +4619,9 @@ module('Acceptance | automation view', function (hooks) {
           'An edit to the card removed the automation’s monthly limit while the automation was paused.',
         );
       await click('[data-test-automation-set-limit]');
-      await waitFor('[data-test-automation-link-script]', { timeout: 10000 });
+      await waitFor('[data-test-card-format="edit"]', { timeout: 10000 });
       assert
-        .dom('[data-test-automation-link-script]')
+        .dom('[data-test-card-format="edit"]')
         .exists('Set the monthly limit opens the automation’s editor');
     });
 
