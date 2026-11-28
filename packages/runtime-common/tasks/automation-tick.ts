@@ -11,6 +11,8 @@ import { taskRunChangeReporter } from '../automation-run-events.ts';
 import { tickAutomations } from '../automation-tick.ts';
 import { readRunDeclaration } from '../automation-run-limits.ts';
 import { startDueAIBatchFollowUps } from '../ai-batch-follow-ups.ts';
+import { dropExpiredPreviewFiles } from '../automation-runs.ts';
+import { now as clockNow } from '../clock.ts';
 
 // The cron enqueues this job with no arguments; the tick handles whatever is
 // due when it runs.
@@ -186,6 +188,25 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
             );
             break;
         }
+      }
+      // A Preview's staged files are temporary: each tick drops the files
+      // of every Preview that finished more than `PREVIEW_FILES_KEPT_DAYS`
+      // ago.
+      try {
+        let dropped = await dropExpiredPreviewFiles(
+          dbAdapter,
+          Math.floor(clockNow() / 1000),
+        );
+        for (let runId of dropped) {
+          await reportRunChange?.(runId);
+        }
+        if (dropped.length > 0) {
+          log.info(
+            `${tag}: dropped the staged files of ${dropped.length} Preview run(s) past the days Boxel keeps them`,
+          );
+        }
+      } catch (error) {
+        log.error(`${tag}: dropping expired Preview files failed:`, error);
       }
       return result;
     } finally {

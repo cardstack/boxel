@@ -88,6 +88,7 @@ import { logRunPlatformLine } from './automation-run-log.ts';
 import {
   cancelAutomationRunIn,
   cancelUnfinishedAutomationRuns,
+  dropPreviewFiles,
   getAutomationRun,
   holdAutomationFollowUpRuns,
   insertOrFindAutomationRun,
@@ -728,6 +729,8 @@ export async function removeAutomation(
       })),
     );
     await dropHeldFollowUps(txQuery, automationId);
+    // A Preview's files last only while the automation is on.
+    await dropPreviewFiles(txQuery, { automationId, reason: 'turned-off' });
     await txQuery([
       'DELETE FROM automations WHERE automation_id =',
       param(automationId),
@@ -1776,6 +1779,10 @@ async function removeForCard(
     })),
   );
   await dropHeldFollowUps(txQuery, automation.automationId);
+  await dropPreviewFiles(txQuery, {
+    automationId: automation.automationId,
+    reason: 'turned-off',
+  });
   await txQuery([
     'DELETE FROM automations WHERE automation_id =',
     param(automation.automationId),
@@ -1912,7 +1919,9 @@ async function pause(
     ...(await cancelUnfinishedAutomationRuns(
       txQuery,
       automationId,
-      pausedBy ? { canceledBy: pausedBy } : { reason },
+      // A person's pause names them as who canceled each run, and the pause
+      // as why.
+      pausedBy ? { canceledBy: pausedBy, reason } : { reason },
       { pendingOnly: keepRunning, keepFollowUps: true },
     )),
   );

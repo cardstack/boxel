@@ -30,7 +30,9 @@ import {
 import {
   getAutomationRun,
   insertOrFindAutomationRun,
+  previewFilesKeptUntil,
   type AutomationRun,
+  type PreviewFilesDropReason,
 } from './automation-runs.ts';
 import {
   isDeclarationOf,
@@ -245,6 +247,13 @@ export interface AutomationRunReport {
   // The later Preview, by the same person of the same automation, whose
   // batch replaced this one's: its files are gone.
   stagedFilesReplacedBy?: string;
+  // When Boxel dropped this Preview's files, and why (the files expired, or
+  // the automation was turned off): its files are gone.
+  stagedFilesDropped?: { at: string; reason: PreviewFilesDropReason };
+  // While the files are kept: when Boxel drops them, unless the automation
+  // is turned off first (`PREVIEW_FILES_KEPT_DAYS` after the Preview
+  // finished).
+  stagedFilesKeptUntil?: string;
   // A run whose commit landed: the realm-local paths the commit saved, as
   // its commit line records them. Absent when the run's log dropped that
   // line at its cap; the row's `writes` still counts them.
@@ -254,6 +263,24 @@ export interface AutomationRunReport {
 export type AutomationRunReportRead =
   | { ok: true; report: AutomationRunReport }
   | { ok: false; reason: 'missing' | 'not-a-direct-writer' };
+
+// What became of a complete Preview's files: replaced by a later Preview,
+// dropped (expired, or the automation turned off), or kept until a time.
+function stagedFilesFate(run: AutomationRun): {
+  stagedFilesReplacedBy?: string;
+  stagedFilesDropped?: { at: string; reason: PreviewFilesDropReason };
+  stagedFilesKeptUntil?: string;
+} {
+  if (run.previewReplacedBy) {
+    return { stagedFilesReplacedBy: run.previewReplacedBy };
+  }
+  if (run.previewFilesDropped) {
+    return { stagedFilesDropped: run.previewFilesDropped };
+  }
+  return run.finishedAt
+    ? { stagedFilesKeptUntil: previewFilesKeptUntil(run.finishedAt) }
+    : {};
+}
 
 // Where a run is, for a direct writer of its realm: its row, timings, cost,
 // log, and the batch it staged (a Preview) or saved (a run that committed).
@@ -289,9 +316,7 @@ export async function readAutomationRunReport(
   };
   if (run.dryRun && run.state === 'complete') {
     report.stagedFiles = await listAutomationPreviewFiles(dbAdapter, run.id);
-    if (run.previewReplacedBy) {
-      report.stagedFilesReplacedBy = run.previewReplacedBy;
-    }
+    Object.assign(report, stagedFilesFate(run));
   }
   if (run.committedAt) {
     let paths = committedPathsOf(runLog.lines);
@@ -357,6 +382,8 @@ export interface AutomationRunSummary {
   // As in `AutomationRunReport`.
   stagedFiles?: StagedRunFile[];
   stagedFilesReplacedBy?: string;
+  stagedFilesDropped?: { at: string; reason: PreviewFilesDropReason };
+  stagedFilesKeptUntil?: string;
   committedPaths?: string[];
 }
 
@@ -451,9 +478,7 @@ export async function readAutomationRunSummary(
   };
   if (run.dryRun && run.state === 'complete') {
     summary.stagedFiles = await listAutomationPreviewFiles(dbAdapter, run.id);
-    if (run.previewReplacedBy) {
-      summary.stagedFilesReplacedBy = run.previewReplacedBy;
-    }
+    Object.assign(summary, stagedFilesFate(run));
   }
   if (run.committedAt) {
     let paths = committedPathsOf(commitLines);

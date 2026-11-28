@@ -2421,33 +2421,45 @@ gives the rest from `shares`.
 
 Beside the switch-on screen, the isolated view's _Status_ section gives a
 direct writer the automation's controls (`AutomationControls` in the
-catalog's `automation/automation.gts`), each a Pret UI `Button` that opens a
-Pret UI `AlertDialog` before anything is sent, and each a POST through the
-`automation-request` tool:
+catalog's `automation/automation.gts`), each a Pret UI `Button` with an icon
+that opens a Pret UI `AlertDialog` before anything is sent, and each a POST
+through the `automation-request` tool:
 
-| Control | Shown when                                                      | Route                 | The confirmation says                                                                                                                                                       |
-| ------- | --------------------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Preview | always                                                          | `_automation-preview` | the script runs now and saves nothing, and the Preview is charged to the clicker                                                                                            |
-| Run now | always                                                          | `_automation-run-now` | the script runs now and saves what it writes, on or off, charged to the clicker                                                                                             |
-| Pause   | switched on, not paused or done                                 | `_automation-pause`   | waiting and running runs are canceled; with open batches, that the pause holds each batch's follow-up until a resume, and Boxel still bills each batch                      |
-| Resume  | paused, for any reason but `caps-raised` / `batched-ai-enabled` | `_automation-resume`  | follow-ups the pause held start; a viewer who isn't the payer is told they become the payer in place of the payer (or "another realm administrator" when ADR 011 hides who) |
-| Remove  | switched on                                                     | `_automation-remove`  | the card and script stay; with open batches, that removing drops each batch's follow-up, and Boxel still bills each batch                                                   |
+| Control  | Shown when                                                                                 | Route                 | The confirmation says                                                                                                                                                                                                                           |
+| -------- | ------------------------------------------------------------------------------------------ | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preview  | always                                                                                     | `_automation-preview` | the script runs now and saves nothing, and Boxel charges the clicker for running the Preview                                                                                                                                                    |
+| Run now  | always                                                                                     | `_automation-run-now` | the script runs now and saves what it writes, on or off, and Boxel charges the clicker for running the automation                                                                                                                               |
+| Pause    | switched on, not paused or done                                                            | `_automation-pause`   | Boxel cancels the automation and ignores triggers until a resume; with open batches, that the pause holds each batch's follow-up and Boxel still charges for the batched AI requests already sent                                               |
+| Resume   | paused, for any reason but `caps-raised` / `batched-ai-enabled`, with a card monthly limit | `_automation-resume`  | follow-ups the pause held start; a run the pause stopped partway saved nothing and doesn't restart, nor do triggers that fired while paused; a viewer who isn't the payer is told they become the payer (named only where ADR 011 allows)       |
+| Turn off | switched on                                                                                | `_automation-remove`  | unlike a pause, Boxel forgets the payer and the limits they agreed to, so turning on again shows the switch-on screen; the card and script stay; with open batches, each batch's follow-up is dropped and the batched AI requests still charged |
 
-Preview and Run now send a fresh `click` (`crypto.randomUUID()`) per
-confirmation. Their 202 answer's run id opens that run's row under _Runs_
-(the same reveal a notice's _Show the run_ uses), whose detail shows the
-log, the timings, the cost and a Preview's staged files. Resume sends the
-card's own `caps.monthlyCredits`, as switch-on does. A refused request keeps
-the dialog open with the route's `errors[0]`; a request that lands closes it
-and leaves a `Callout` saying what happened (for a resume by someone who
-wasn't the payer, that they are the payer now). A paused automation whose
-`openBatches` has a held follow-up lists each one, with its batch's deadline,
-in a _Follow-up runs on hold_ `Callout`.
+Preview and Run now send one `click` (`crypto.randomUUID()`) per
+confirmation, so confirming again after a lost answer names the run the
+first confirm started. Their 202 answer's run id opens that run's row under
+_Runs_ (the same reveal a notice's _Show the run_ uses, reading page 1
+again), whose detail shows the log, the timings, the cost and a Preview's
+staged files. Resume sends the card's own `caps.monthlyCredits`, as switch-on
+does; a paused automation whose card sets no monthly limit offers no Resume
+and a _Set a monthly limit to resume_ `Callout` whose button opens the
+card's editor (`@editCard`). A refused request keeps the dialog open with the
+route's `errors[0]`, titled by what Boxel didn't do; a request that lands
+closes it and leaves a `Callout` saying what happened, which takes focus and
+stays until the status has read past the control's outcome. A paused
+automation whose `openBatches` has a held follow-up lists each one, with its
+batch's deadline, in a _Follow-up runs on hold_ `Callout`.
 
 Each waiting or running run in the _Runs_ list (not one whose `step` is
 `commit`) has a **Cancel run** button, which confirms in an `AlertDialog` and
 posts `_automation-run-cancel` with the run's id. A canceled run then shows
 who canceled it, as every canceled run does.
+
+A complete Preview's _Writes_ tab lists its staged files, each with a
+**Show** toggle that reads the file through `GET /_automation-preview-file`
+(`StagedFile`): UTF-8 text opens in a Pret UI `CodeBlock`, an image (by
+extension) as a Pret UI `Image` from a blob URL, and any other file as a
+download, never as raw bytes. The tab says how long Boxel keeps the files
+(`writes.stagedKeptUntil`), or when and why Boxel dropped them
+(`writes.stagedDropped`; see _The batch a Preview keeps_).
 
 Host tests answer the routes with a virtual-network handler
 (`tests/acceptance/automation-view-test.gts`, the _controls_ module).
@@ -2634,6 +2646,17 @@ completed keeps nothing, and records that one. The finishes of one
 person's Previews of one automation take a transaction-scoped advisory
 lock, so two finishing together never both keep a batch. A Preview is
 never the automation's `lastSuccessAt`.
+
+A Preview's files are temporary. Boxel keeps a complete Preview's batch for
+`PREVIEW_FILES_KEPT_DAYS` (5) after the Preview finishes, or until the
+automation is turned off, whichever comes first (`dropPreviewFiles` in
+`automation-runs.ts`): the minute tick drops expired batches
+(`dropExpiredPreviewFiles`), and `removeAutomation` drops the automation's.
+Each drop records `preview_files_dropped_at` and
+`preview_files_dropped_reason` (`expired` or `turned-off`) on the Preview's
+run, which the run's report gives as `stagedFilesDropped`; a batch still kept
+reports `stagedFilesKeptUntil`. A Preview stores nothing in the realm, so its
+files never count toward the automation's storage.
 
 To read a batch by hand:
 

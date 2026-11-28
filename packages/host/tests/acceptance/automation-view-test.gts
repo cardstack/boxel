@@ -4178,6 +4178,10 @@ module('Acceptance | automation view', function (hooks) {
     let posted: { route: string; body: any }[];
     let postAnswer: { status: number; body: Record<string, unknown> };
     let listedRuns: Run[];
+    // Each run's report, and each staged file's bytes by path, as the realm
+    // server's console reads answer them.
+    let reports: Map<string, Record<string, unknown>>;
+    let previewFiles: Map<string, Uint8Array>;
 
     const CONTROL_ROUTES = [
       '_automation-preview',
@@ -4192,6 +4196,8 @@ module('Acceptance | automation view', function (hooks) {
       posted = [];
       postAnswer = { status: 200, body: { data: { type: 'automation' } } };
       listedRuns = [];
+      reports = new Map();
+      previewFiles = new Map();
       getService('network').virtualNetwork.mount(
         async (request: Request) => {
           let url = new URL(request.url);
@@ -4217,8 +4223,34 @@ module('Acceptance | automation view', function (hooks) {
               },
             );
           }
-          // An opened run reads its report and log, which these tests
-          // don't look at.
+          if (route === '_automation-run-report') {
+            let id = url.searchParams.get('run') ?? '';
+            let attributes = reports.get(id);
+            if (attributes) {
+              return new Response(
+                JSON.stringify({
+                  data: { type: 'automation-run-report', id, attributes },
+                }),
+                {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                },
+              );
+            }
+          }
+          if (route === '_automation-preview-file') {
+            let bytes = previewFiles.get(url.searchParams.get('path') ?? '');
+            return bytes
+              ? new Response(new Blob([new Uint8Array(bytes)]), {
+                  status: 200,
+                  headers: { 'content-type': 'application/octet-stream' },
+                })
+              : new Response(JSON.stringify({ errors: ['no such file'] }), {
+                  status: 404,
+                  headers: { 'content-type': 'application/json' },
+                });
+          }
+          // An opened run reads its log, which these tests don't look at.
           if (
             route === '_automation-run-report' ||
             route === '_automation-run-log' ||
@@ -4320,19 +4352,24 @@ module('Acceptance | automation view', function (hooks) {
       assert.deepEqual(controls(), ['preview', 'run-now']);
     });
 
-    test('an active automation offers Preview, Run now, Pause and Remove', async function (assert) {
+    test('an active automation offers Preview, Run now, Pause and Turn off', async function (assert) {
       await openControls(ACTIVE);
-      assert.deepEqual(controls(), ['preview', 'run-now', 'pause', 'remove']);
+      assert.deepEqual(controls(), ['preview', 'run-now', 'pause', 'turn-off']);
     });
 
     test('a paused automation offers Resume in place of Pause', async function (assert) {
       await openControls(PAUSED);
-      assert.deepEqual(controls(), ['preview', 'run-now', 'resume', 'remove']);
+      assert.deepEqual(controls(), [
+        'preview',
+        'run-now',
+        'resume',
+        'turn-off',
+      ]);
     });
 
     test('an automation paused for a raised limit resumes through the switch-on screen, not the Resume control', async function (assert) {
       await openControls({ ...PAUSED, pauseReason: 'caps-raised' });
-      assert.deepEqual(controls(), ['preview', 'run-now', 'remove']);
+      assert.deepEqual(controls(), ['preview', 'run-now', 'turn-off']);
       assert.dom('[data-test-automation-switch-on]').exists();
     });
 
@@ -4350,7 +4387,9 @@ module('Acceptance | automation view', function (hooks) {
         'the confirmation says a Preview saves nothing',
       );
       assert.true(
-        dialogText('preview').includes('Boxel charges the Preview to you.'),
+        dialogText('preview').includes(
+          'Boxel charges you for running the Preview.',
+        ),
         'the confirmation says who pays',
       );
       listedRuns = [
@@ -4417,33 +4456,34 @@ module('Acceptance | automation view', function (hooks) {
       });
     });
 
-    test('Pause’s confirmation says pausing holds each open batch’s follow-up until a resume, and Boxel still bills each batch', async function (assert) {
+    test('Pause’s confirmation says pausing holds each batch’s follow-up until a resume, and Boxel still charges for the batched AI requests sent', async function (assert) {
       await openControls({ ...ACTIVE, ...OPEN_BATCHES });
       await ask('pause');
       assert
         .dom('[data-test-automation-confirm-open-batches]')
-        .includesText('The automation has 2 open batches of AI requests')
+        .includesText('The automation is waiting on batched AI requests')
         .includesText(
-          'Pausing the automation holds the follow-up run of each open batch until a realm administrator resumes the automation. Boxel still bills each batch.',
+          'The automation sent 2 batches of batched AI requests that haven’t come back. Pausing holds the follow-up run that picks up each batch’s results until a realm administrator resumes the automation. Boxel still charges for the batched AI requests the automation already sent.',
         );
     });
 
-    test('Remove’s confirmation says removing drops each open batch’s follow-up, and Boxel still bills each batch; Remove removes', async function (assert) {
+    test('Turn off’s confirmation says how turning off differs from a pause, and that turning off drops each batch’s follow-up while Boxel still charges for the batched AI requests sent; Turn off turns off', async function (assert) {
       await openControls({ ...ACTIVE, ...OPEN_BATCHES, openBatchCount: 1 });
-      await ask('remove');
-      assert.true(
-        dialogText('remove').includes('The card and the script stay'),
-        'the confirmation says the card and script stay',
-      );
+      await ask('turn-off');
+      assert
+        .dom('[data-test-automation-confirm-turn-off-vs-pause]')
+        .hasText(
+          'Unlike a pause, turning off forgets the payer and the limits the payer agreed to. Turning the automation on again shows the switch-on screen, with a new estimate and a new agreement to pay. The card and the script stay.',
+        );
       assert
         .dom('[data-test-automation-confirm-open-batches]')
-        .includesText('The automation has 1 open batch of AI requests')
+        .includesText('The automation is waiting on batched AI requests')
         .includesText(
-          'Removing the automation drops the follow-up run of each open batch, so no run picks up the batch’s results. Boxel still bills each batch.',
+          'The automation sent 1 batch of batched AI requests that haven’t come back. Turning off drops the follow-up run of each batch, so no run picks up the batch’s results. Boxel still charges for the batched AI requests the automation already sent.',
         );
-      await confirm('remove');
+      await confirm('turn-off');
       assert.strictEqual(posted[0].route, '_automation-remove');
-      await waitFor('[data-test-automation-control-done="remove"]', {
+      await waitFor('[data-test-automation-control-done="turn-off"]', {
         timeout: 10000,
       });
     });
@@ -4519,17 +4559,17 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-held-follow-ups]')
         .includesText(
-          'The pause holds the follow-up run of each batch of AI requests below.',
+          'The pause holds each follow-up run until a realm administrator resumes the automation.',
         );
       assert
         .dom('[data-test-automation-held-follow-up="batch_soon"]')
-        .includesText('A batch of 3 AI requests');
+        .includesText('Batched AI: 3 requests');
       assert
         .dom('[data-test-automation-held-follow-up="batch_soon"]')
         .includesText('Due back Jan 1');
       assert
         .dom('[data-test-automation-held-follow-up="batch_late"]')
-        .includesText('A batch of 1 AI request');
+        .includesText('Batched AI: 1 request');
     });
 
     test('an active automation lists no held follow-ups', async function (assert) {
@@ -4572,10 +4612,197 @@ module('Acceptance | automation view', function (hooks) {
         }),
       );
       await openControls(PAUSED);
-      assert.deepEqual(controls(), ['preview', 'run-now', 'remove']);
+      assert.deepEqual(controls(), ['preview', 'run-now', 'turn-off']);
       assert
         .dom('[data-test-automation-resume-needs-cap]')
-        .includesText('Set a monthly limit in the automation’s editor');
+        .includesText(
+          'An edit to the card removed the automation’s monthly limit while the automation was paused.',
+        );
+      await click('[data-test-automation-set-limit]');
+      await waitFor('[data-test-automation-link-script]', { timeout: 10000 });
+      assert
+        .dom('[data-test-automation-link-script]')
+        .exists('Set the monthly limit opens the automation’s editor');
+    });
+
+    test('a run a person’s pause canceled says the pause canceled it', async function (assert) {
+      listedRuns = [
+        run('run-paused', {
+          state: 'canceled',
+          errorReason: 'requested',
+          canceledBy: '@testuser:localhost',
+          canceledByAPerson: true,
+          viewerCanceled: true,
+        }),
+      ];
+      await openControls(PAUSED);
+      await click(
+        '[data-test-automation-runs-section] [data-test-pretui-section-toggle]',
+      );
+      await waitFor('[data-test-automation-run="run-paused"]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-run="run-paused"]')
+        .includesText('You paused the automation, which canceled the run.');
+    });
+
+    test('Resume says what becomes of the runs the pause stopped', async function (assert) {
+      await openControls(PAUSED);
+      await ask('resume');
+      assert
+        .dom('[data-test-automation-confirm-canceled-runs]')
+        .hasText(
+          'A run the pause stopped partway saved nothing, and Boxel doesn’t start that run again. Triggers that fired while the automation was paused don’t run either.',
+        );
+    });
+
+    // A complete Preview's run, opened on the Writes tab, with the staged
+    // files the report lists.
+    async function openPreviewWrites(writes: Record<string, unknown>) {
+      listedRuns = [
+        run('run-preview', {
+          startedBy: 'preview',
+          trigger: null,
+          slot: null,
+        }),
+      ];
+      reports.set('run-preview', {
+        dryRun: true,
+        state: 'complete',
+        timings: {
+          createdAt: '2030-01-01T08:30:00.000Z',
+          startedAt: '2030-01-01T08:30:05.000Z',
+          commitStartedAt: null,
+          committedAt: null,
+          finishedAt: '2030-01-01T08:31:00.000Z',
+          queuedMs: 5000,
+          runMs: 55000,
+          commitMs: null,
+        },
+        log: { lines: 0, dropped: 0, byLevel: {}, byKind: {} },
+        callApiCalls: [],
+        resolveCalls: [],
+        writes: { count: 0, ...writes },
+        cost: {
+          credits: 0,
+          creditsByKind: {},
+          callApiCalls: 0,
+          callApiResponseBytes: 0,
+          resolveCalls: 0,
+          writes: 0,
+          aiCreditsSpent: 0,
+          aiCreditsReserved: 0,
+        },
+      });
+      await openControls(ACTIVE);
+      await click(
+        '[data-test-automation-runs-section] [data-test-pretui-section-toggle]',
+      );
+      await waitFor('[data-test-automation-run="run-preview"]', {
+        timeout: 10000,
+      });
+      await click(
+        '[data-test-automation-runs] button[aria-label^="Expand Preview run"]',
+      );
+      await waitFor('[data-test-automation-run-tabs]', { timeout: 10000 });
+      let tab = [
+        ...document.querySelectorAll(
+          '[data-test-automation-run-tabs] [role="tab"]',
+        ),
+      ].find((element) => element.textContent?.trim() === 'Writes');
+      await click(tab as HTMLElement);
+    }
+
+    test('a staged text file opens as text, an image as the image, and any other file as a download, with when Boxel drops them', async function (assert) {
+      previewFiles.set(
+        'digests/today.md',
+        new TextEncoder().encode('# Today\n\nFound 14 open issues.\n'),
+      );
+      // A one-pixel PNG.
+      previewFiles.set(
+        'digests/chart.png',
+        Uint8Array.from(
+          atob(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          ),
+          (c) => c.charCodeAt(0),
+        ),
+      );
+      previewFiles.set('digests/data.bin', new Uint8Array([0, 159, 146, 150]));
+      await openPreviewWrites({
+        count: 3,
+        staged: [
+          { path: 'digests/chart.png', size: 68 },
+          { path: 'digests/data.bin', size: 4 },
+          { path: 'digests/today.md', size: 30 },
+        ],
+        stagedKeptUntil: '2030-01-06T08:31:00.000Z',
+      });
+      assert
+        .dom('[data-test-automation-run-staged-kept]')
+        .includesText(
+          'or until a realm administrator turns off the automation, whichever comes first. A Preview stores nothing in the workspace.',
+        );
+      assert
+        .dom('[data-test-automation-staged-content]')
+        .doesNotExist('the files stay closed until asked for');
+
+      await click(
+        '[data-test-automation-run-staged-toggle="digests/today.md"]',
+      );
+      await waitFor('[data-test-automation-staged-text]', { timeout: 10000 });
+      assert
+        .dom('[data-test-automation-staged-content="digests/today.md"]')
+        .includesText('Found 14 open issues.');
+
+      await click(
+        '[data-test-automation-run-staged-toggle="digests/chart.png"]',
+      );
+      await waitFor('[data-test-automation-staged-image] img', {
+        timeout: 10000,
+      });
+      assert.true(
+        (
+          document.querySelector(
+            '[data-test-automation-staged-image] img',
+          ) as HTMLImageElement
+        ).src.startsWith('blob:'),
+        'an image shows as the image',
+      );
+
+      await click(
+        '[data-test-automation-run-staged-toggle="digests/data.bin"]',
+      );
+      await waitFor('[data-test-automation-staged-binary]', {
+        timeout: 10000,
+      });
+      assert
+        .dom(
+          '[data-test-automation-staged-content="digests/data.bin"] a[download="data.bin"]',
+        )
+        .exists('any other file is a download, never raw bytes');
+
+      await click(
+        '[data-test-automation-run-staged-toggle="digests/today.md"]',
+      );
+      assert
+        .dom('[data-test-automation-staged-content="digests/today.md"]')
+        .doesNotExist('Hide closes the file');
+    });
+
+    test('a Preview whose files Boxel dropped says when and why', async function (assert) {
+      await openPreviewWrites({
+        staged: [],
+        stagedDropped: {
+          at: '2030-01-06T08:32:00.000Z',
+          reason: 'turned-off',
+        },
+      });
+      assert
+        .dom('[data-test-automation-run-writes-sentence]')
+        .includesText('when Boxel turned off the automation.');
+      assert.dom('[data-test-automation-run-staged-kept]').doesNotExist();
     });
 
     test('a paused automation holding more follow-ups than the status lists says how many more', async function (assert) {

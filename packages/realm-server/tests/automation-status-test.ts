@@ -1636,6 +1636,28 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
+      test("a person's pause lists them as who canceled each run, and the pause as why", async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        let running = await made('nightly', '2026-11-10T08:30:00.000Z', 20);
+        let paused = await pauseAutomation(
+          dbAdapter,
+          { automationId: rri(automationURL()), user: ADMIN },
+          options(),
+        );
+        assert.true(paused.ok, 'the automation pauses');
+        let run = (await listed()).data.find(({ id }) => id === running.id);
+        assert.deepEqual(
+          [
+            run?.attributes.state,
+            run?.attributes.errorReason,
+            run?.attributes.canceledBy,
+            run?.attributes.canceledByAPerson,
+          ],
+          ['canceled', 'requested', ADMIN, true],
+        );
+      });
+
       test('who canceled a run and who it acts as are hidden from a writer who shares no grant with them', async function (assert) {
         await writeAutomation();
         let run = await made('manual', randomUUID(), 10, { actsAs: PAYER });
