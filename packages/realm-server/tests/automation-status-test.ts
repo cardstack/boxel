@@ -22,6 +22,7 @@ import {
   type DBAdapter,
   type Realm,
 } from '@cardstack/runtime-common';
+import { recordAIBatch } from '@cardstack/runtime-common/ai-batches';
 import {
   automationRef,
   readAutomationDeclaration,
@@ -606,6 +607,119 @@ module(basename(import.meta.filename), function (hooks) {
           `reads as ${state}`,
         );
       }
+    });
+
+    test('a switched-on automation reads with its open batches, and a pause holds their follow-ups', async function (assert) {
+      await writeAutomation();
+      await switchOn();
+      let submitting = await createAutomationRun(dbAdapter, {
+        automationId: rri(automationURL()),
+        realm: ri(testRealm.url),
+        trigger: 'nightly',
+        slot: 'slot-submitting',
+        actsAs: PAYER,
+      });
+      async function submit(
+        batchId: string,
+        deadline: string,
+        submittedAt?: string,
+      ) {
+        await recordAIBatch(dbAdapter, {
+          batchId,
+          runId: submitting.id,
+          actsAs: PAYER,
+          realm: ri(testRealm.url),
+          automationId: rri(automationURL()),
+          model: 'openai/gpt-4.1-mini',
+          requestCount: 3,
+          estimatedUsd: 0.01,
+          runAIReservation: `reservation-${batchId}`,
+          reservedCredits: 2,
+          deadline: new Date(deadline),
+          expiresAt: null,
+          state: 'in_progress',
+          submittedAt: submittedAt ? new Date(submittedAt) : undefined,
+        });
+      }
+      await submit('batch_late', '2026-11-10T20:00:00.000Z');
+      await submit('batch_soon', '2026-11-10T19:00:00.000Z');
+      // A batch whose follow-up ran to the end is no longer open.
+      await submit('batch_done', '2026-11-10T18:30:00.000Z');
+      let followUp = await createAutomationRun(dbAdapter, {
+        automationId: rri(automationURL()),
+        realm: ri(testRealm.url),
+        trigger: 'batch',
+        slot: 'batch_done',
+        actsAs: PAYER,
+      });
+      await query(dbAdapter, [
+        `UPDATE automation_runs SET state = 'complete' WHERE id =`,
+        param(followUp.id),
+      ]);
+      await query(dbAdapter, [
+        `UPDATE ai_batches SET follow_up_run_id =`,
+        param(followUp.id),
+        `WHERE batch_id = 'batch_done'`,
+      ]);
+      // A batch submitted before the automation's switch-on gets no
+      // follow-up, and neither does a batch marked dropped.
+      await submit(
+        'batch_before',
+        '2026-11-10T18:45:00.000Z',
+        '2020-01-01T00:00:00.000Z',
+      );
+      await submit('batch_dropped', '2026-11-10T18:50:00.000Z');
+      await query(dbAdapter, [
+        `UPDATE ai_batches SET follow_up_dropped_at = now() WHERE batch_id = 'batch_dropped'`,
+      ]);
+
+      let active = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      assert.deepEqual(
+        active.switchedOn
+          ? [active.openBatches, active.openBatchCount]
+          : undefined,
+        [
+          [
+            {
+              batchId: 'batch_soon',
+              deadline: '2026-11-10T19:00:00.000Z',
+              requestCount: 3,
+              followUpHeld: false,
+            },
+            {
+              batchId: 'batch_late',
+              deadline: '2026-11-10T20:00:00.000Z',
+              requestCount: 3,
+              followUpHeld: false,
+            },
+          ],
+          2,
+        ],
+        'an active automation lists each open batch, earliest deadline first, its follow-up not held',
+      );
+
+      let paused = await pauseAutomation(
+        dbAdapter,
+        { automationId: rri(automationURL()), user: ADMIN },
+        options(),
+      );
+      assert.true(paused.ok, 'the automation pauses');
+      let held = attributesOf((await statusOf(ADMIN, ['read', 'write'])).body);
+      assert.deepEqual(
+        held.switchedOn
+          ? held.openBatches.map(({ batchId, followUpHeld }) => [
+              batchId,
+              followUpHeld,
+            ])
+          : undefined,
+        [
+          ['batch_soon', true],
+          ['batch_late', true],
+        ],
+        'a paused automation holds the follow-up of each open batch',
+      );
     });
 
     test('an automation paused for an invalid declaration reads with the problems the reader found', async function (assert) {

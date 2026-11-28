@@ -44,6 +44,7 @@ import {
   type AutomationNotice,
   type CredentialNotices,
 } from './automation-notices.ts';
+import { readOpenAIBatches, type OpenAIBatch } from './ai-batches.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
 import { dbAdapterQuerier, param, type Querier } from './expression.ts';
@@ -163,6 +164,13 @@ export type AutomationStatusAttributes =
       // What tells the realm's direct writers the automation stopped doing
       // its job, and what fixes it (`automation-notices.ts`), or null.
       notice: AutomationNotice | null;
+      // The automation's batches of AI requests whose follow-up run hasn't
+      // ended, earliest deadline first, at most `OPEN_AI_BATCHES_LISTED` of
+      // them, and how many there are in all. A pause holds each follow-up
+      // until a resume (`followUpHeld`), and a remove drops it, while the
+      // platform still bills the batch either way (ADR 030 §1.5).
+      openBatches: OpenAIBatch[];
+      openBatchCount: number;
     };
 
 // The answer to a direct writer of the realm.
@@ -282,6 +290,7 @@ export async function answerAutomationStatus({
   let notice: AutomationNotice | null = null;
   let spentThisMonth = 0;
   let spentToday = 0;
+  let openBatches: { batches: OpenAIBatch[]; count: number } | undefined;
   let lastRunUsage = lastRun
     ? await readRunUsage(dbAdapterQuerier(dbAdapter), lastRun.runId)
     : null;
@@ -300,6 +309,7 @@ export async function answerAutomationStatus({
       dbAdapterQuerier(dbAdapter),
       automationId,
     );
+    openBatches = await readOpenAIBatches(dbAdapter, automationId);
     let entry = await readInstance(url);
     let read = entry
       ? readAutomationDeclaration(entry, { automationTypeKey, virtualNetwork })
@@ -348,6 +358,7 @@ export async function answerAutomationStatus({
       lastRunUsage,
       keyApprovals,
       notice,
+      openBatches,
     }),
   };
 }
@@ -374,6 +385,7 @@ export function automationStatusDocument({
   lastRunUsage = null,
   keyApprovals,
   notice = null,
+  openBatches,
 }: {
   url: string;
   row: AutomationRow | undefined;
@@ -393,6 +405,8 @@ export function automationStatusDocument({
   keyApprovals?: AutomationKeyApprovalStatus;
   // Read only for a switched-on automation.
   notice?: AutomationNotice | null;
+  // Read only for a switched-on automation.
+  openBatches?: { batches: OpenAIBatch[]; count: number };
 }): AutomationStatusDocument {
   return {
     data: {
@@ -427,6 +441,8 @@ export function automationStatusDocument({
             lastRunUsage,
             ...(keyApprovals ? { keyApprovals } : {}),
             notice,
+            openBatches: openBatches?.batches ?? [],
+            openBatchCount: openBatches?.count ?? 0,
           }
         : {
             switchedOn: false,

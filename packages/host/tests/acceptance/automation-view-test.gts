@@ -4170,4 +4170,419 @@ module('Acceptance | automation view', function (hooks) {
       assert.dom('[data-test-automation-state="On"]').exists();
     });
   });
+
+  // The controls a direct writer drives the automation with, each a POST to
+  // one of the realm server's automation routes, which an in-browser test
+  // can't answer: each test says what the routes answer.
+  module('controls', function (hooks) {
+    let posted: { route: string; body: any }[];
+    let postAnswer: { status: number; body: Record<string, unknown> };
+    let listedRuns: Run[];
+
+    const CONTROL_ROUTES = [
+      '_automation-preview',
+      '_automation-run-now',
+      '_automation-pause',
+      '_automation-resume',
+      '_automation-remove',
+      '_automation-run-cancel',
+    ];
+
+    hooks.beforeEach(function () {
+      posted = [];
+      postAnswer = { status: 200, body: { data: { type: 'automation' } } };
+      listedRuns = [];
+      getService('network').virtualNetwork.mount(
+        async (request: Request) => {
+          let url = new URL(request.url);
+          let route = url.pathname.split('/').pop() ?? '';
+          if (route === '_automation-runs') {
+            return new Response(
+              JSON.stringify({
+                data: listedRuns.map(({ id, ...attributes }) => ({
+                  type: 'automation-run-item',
+                  id,
+                  attributes,
+                })),
+                meta: {
+                  directWriter: true,
+                  page: 1,
+                  pages: 1,
+                  total: listedRuns.length,
+                },
+              }),
+              {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              },
+            );
+          }
+          // An opened run reads its report and log, which these tests
+          // don't look at.
+          if (
+            route === '_automation-run-report' ||
+            route === '_automation-run-log' ||
+            route === '_automation-storage'
+          ) {
+            return new Response(JSON.stringify({ errors: ['not here'] }), {
+              status: 404,
+              headers: { 'content-type': 'application/json' },
+            });
+          }
+          if (!CONTROL_ROUTES.includes(route) || request.method !== 'POST') {
+            return null;
+          }
+          posted.push({ route, body: await request.json() });
+          return new Response(JSON.stringify(postAnswer.body), {
+            status: postAnswer.status,
+            headers: { 'content-type': 'application/json' },
+          });
+        },
+        { prepend: true },
+      );
+    });
+
+    const OFF = { switchedOn: false, lastRun: null, currentRun: null };
+    const PAUSED = { ...ACTIVE, state: 'paused', pauseReason: 'requested' };
+    const OPEN_BATCHES = {
+      openBatches: [
+        {
+          batchId: 'batch_soon',
+          deadline: '2030-01-01T11:00:00.000Z',
+          requestCount: 3,
+          followUpHeld: false,
+        },
+        {
+          batchId: 'batch_late',
+          deadline: '2030-01-01T12:00:00.000Z',
+          requestCount: 1,
+          followUpHeld: false,
+        },
+      ],
+      openBatchCount: 2,
+    };
+
+    async function openControls(status: Record<string, unknown>) {
+      answer = { status: 200, attributes: status };
+      await openIsolated();
+      await waitFor('[data-test-automation-controls]', { timeout: 10000 });
+    }
+
+    function controls() {
+      return [
+        ...document.querySelectorAll('[data-test-automation-control]'),
+      ].map((el) => el.getAttribute('data-test-automation-control'));
+    }
+
+    async function ask(control: string) {
+      await click(`[data-test-automation-control="${control}"]`);
+      await waitFor(`[data-test-automation-confirm="${control}"]`, {
+        timeout: 10000,
+      });
+    }
+
+    async function confirm(control: string) {
+      await click(
+        `[data-test-automation-confirm="${control}"] [data-test-pretui-alertdialog-confirm]`,
+      );
+      await waitUntil(() => posted.length > 0, { timeout: 10000 });
+    }
+
+    function dialogText(control: string) {
+      return text(`[data-test-automation-confirm="${control}"]`) ?? '';
+    }
+
+    test("a viewer who isn't a direct writer gets no controls", async function (assert) {
+      await openIsolated();
+      await waitFor('[data-test-automation-who-pays]', { timeout: 10000 });
+      assert.dom('[data-test-automation-controls]').doesNotExist();
+    });
+
+    test('an automation nobody switched on offers Preview and Run now', async function (assert) {
+      await openControls(OFF);
+      assert.deepEqual(controls(), ['preview', 'run-now']);
+    });
+
+    test('an active automation offers Preview, Run now, Pause and Remove', async function (assert) {
+      await openControls(ACTIVE);
+      assert.deepEqual(controls(), ['preview', 'run-now', 'pause', 'remove']);
+    });
+
+    test('a paused automation offers Resume in place of Pause', async function (assert) {
+      await openControls(PAUSED);
+      assert.deepEqual(controls(), ['preview', 'run-now', 'resume', 'remove']);
+    });
+
+    test('an automation paused for a raised limit resumes through the switch-on screen, not the Resume control', async function (assert) {
+      await openControls({ ...PAUSED, pauseReason: 'caps-raised' });
+      assert.deepEqual(controls(), ['preview', 'run-now', 'remove']);
+      assert.dom('[data-test-automation-switch-on]').exists();
+    });
+
+    test('Preview asks first, starts a Preview for this click, and opens the Preview’s row under Runs', async function (assert) {
+      postAnswer = {
+        status: 202,
+        body: { data: { type: 'automation-run', id: 'run-preview' } },
+      };
+      await openControls(ACTIVE);
+      await ask('preview');
+      assert.true(
+        dialogText('preview').includes(
+          'Boxel runs the script now and saves nothing',
+        ),
+        'the confirmation says a Preview saves nothing',
+      );
+      assert.true(
+        dialogText('preview').includes('Boxel charges the Preview to you.'),
+        'the confirmation says who pays',
+      );
+      listedRuns = [
+        run('run-preview', {
+          startedBy: 'preview',
+          trigger: null,
+          slot: null,
+          state: 'running',
+          finishedAt: null,
+        }),
+      ];
+      await confirm('preview');
+      assert.strictEqual(posted[0].route, '_automation-preview');
+      assert.strictEqual(posted[0].body.data.id, AUTOMATION);
+      assert.strictEqual(
+        typeof posted[0].body.data.attributes.click,
+        'string',
+        'the request names the click',
+      );
+      await waitFor('[data-test-automation-control-done="preview"]', {
+        timeout: 10000,
+      });
+      await waitUntil(
+        () =>
+          document
+            .querySelector('[data-test-automation-run="run-preview"]')
+            ?.closest('li')
+            ?.querySelector('button[aria-expanded="true"]'),
+        { timeout: 10000 },
+      );
+      assert
+        .dom('[data-test-automation-confirm="preview"]')
+        .doesNotExist('the confirmation closes');
+    });
+
+    test('Run now asks first and starts a run that commits', async function (assert) {
+      postAnswer = {
+        status: 202,
+        body: { data: { type: 'automation-run', id: 'run-now-1' } },
+      };
+      await openControls(OFF);
+      await ask('run-now');
+      assert.true(
+        dialogText('run-now').includes(
+          'saves what the script writes, whether or not the automation is on',
+        ),
+      );
+      await confirm('run-now');
+      assert.strictEqual(posted[0].route, '_automation-run-now');
+      await waitFor('[data-test-automation-control-done="run-now"]', {
+        timeout: 10000,
+      });
+    });
+
+    test('Pause asks first, says nothing about batches when there are none, and pauses', async function (assert) {
+      await openControls({ ...ACTIVE, openBatches: [], openBatchCount: 0 });
+      await ask('pause');
+      assert.dom('[data-test-automation-confirm-open-batches]').doesNotExist();
+      await confirm('pause');
+      assert.strictEqual(posted[0].route, '_automation-pause');
+      assert.strictEqual(posted[0].body.data.id, AUTOMATION);
+      await waitFor('[data-test-automation-control-done="pause"]', {
+        timeout: 10000,
+      });
+    });
+
+    test('Pause’s confirmation says pausing holds each open batch’s follow-up until a resume, and Boxel still bills each batch', async function (assert) {
+      await openControls({ ...ACTIVE, ...OPEN_BATCHES });
+      await ask('pause');
+      assert
+        .dom('[data-test-automation-confirm-open-batches]')
+        .hasText(
+          'The automation has 2 open batches of AI requests Pausing the automation holds the follow-up run of each open batch until a realm administrator resumes the automation. Boxel still bills each batch.',
+        );
+    });
+
+    test('Remove’s confirmation says removing drops each open batch’s follow-up, and Boxel still bills each batch; Remove removes', async function (assert) {
+      await openControls({ ...ACTIVE, ...OPEN_BATCHES, openBatchCount: 1 });
+      await ask('remove');
+      assert.true(
+        dialogText('remove').includes('The card and the script stay'),
+        'the confirmation says the card and script stay',
+      );
+      assert
+        .dom('[data-test-automation-confirm-open-batches]')
+        .hasText(
+          'The automation has 1 open batch of AI requests Removing the automation drops the follow-up run of each open batch, so no run picks up the batch’s results. Boxel still bills each batch.',
+        );
+      await confirm('remove');
+      assert.strictEqual(posted[0].route, '_automation-remove');
+      await waitFor('[data-test-automation-control-done="remove"]', {
+        timeout: 10000,
+      });
+    });
+
+    test('the payer resumes at the card’s monthly limit and stays the payer', async function (assert) {
+      await openControls(PAUSED);
+      await ask('resume');
+      assert
+        .dom('[data-test-automation-confirm-new-payer]')
+        .doesNotExist('the payer is not told the payer changes');
+      assert
+        .dom(
+          '[data-test-automation-confirm="resume"] [data-test-pretui-alertdialog-confirm]',
+        )
+        .hasText('Resume');
+      await confirm('resume');
+      assert.strictEqual(posted[0].route, '_automation-resume');
+      assert.strictEqual(posted[0].body.data.attributes.monthlyCredits, 10);
+      await waitFor('[data-test-automation-control-done="resume"]', {
+        timeout: 10000,
+      });
+      assert.dom('[data-test-automation-control-new-payer]').doesNotExist();
+    });
+
+    test('another direct writer who resumes is told that resuming makes them the payer, before and after', async function (assert) {
+      await openControls({
+        ...PAUSED,
+        payer: '@writer:localhost',
+        viewerIsPayer: false,
+      });
+      await ask('resume');
+      assert
+        .dom('[data-test-automation-confirm-new-payer]')
+        .hasText(
+          'You become the payer Resuming the automation makes you the payer in place of @writer:localhost. Boxel charges every later run, and each follow-up run the pause held, to your credits, up to the monthly limit of 10 credits.',
+        );
+      assert
+        .dom(
+          '[data-test-automation-confirm="resume"] [data-test-pretui-alertdialog-confirm]',
+        )
+        .hasText('Resume and pay');
+      await confirm('resume');
+      await waitFor('[data-test-automation-control-new-payer]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-control-new-payer]')
+        .hasText(
+          'You are now the automation’s payer. Boxel charges every later run to your credits, up to the monthly limit of 10 credits.',
+        );
+    });
+
+    test('a payer whom the viewer may not see is named as another realm administrator', async function (assert) {
+      await openControls({ ...PAUSED, payer: null, viewerIsPayer: false });
+      await ask('resume');
+      assert
+        .dom('[data-test-automation-confirm-new-payer]')
+        .includesText('in place of another realm administrator.');
+    });
+
+    test('a paused automation lists the follow-up runs the pause holds, each with its batch’s deadline', async function (assert) {
+      await openControls({
+        ...PAUSED,
+        openBatches: OPEN_BATCHES.openBatches.map((batch) => ({
+          ...batch,
+          followUpHeld: true,
+        })),
+        openBatchCount: 2,
+      });
+      assert
+        .dom('[data-test-automation-held-follow-ups]')
+        .includesText(
+          'The pause holds the follow-up run of each batch of AI requests below.',
+        );
+      assert
+        .dom('[data-test-automation-held-follow-up="batch_soon"]')
+        .includesText('A batch of 3 AI requests');
+      assert
+        .dom('[data-test-automation-held-follow-up="batch_soon"]')
+        .includesText('Due back Jan 1');
+      assert
+        .dom('[data-test-automation-held-follow-up="batch_late"]')
+        .includesText('A batch of 1 AI request');
+    });
+
+    test('an active automation lists no held follow-ups', async function (assert) {
+      await openControls({ ...ACTIVE, ...OPEN_BATCHES });
+      assert.dom('[data-test-automation-held-follow-ups]').doesNotExist();
+    });
+
+    test('a refused control shows the realm server’s message and keeps the confirmation open', async function (assert) {
+      postAnswer = {
+        status: 409,
+        body: { errors: ['the automation is already paused'] },
+      };
+      await openControls(ACTIVE);
+      await ask('pause');
+      await confirm('pause');
+      await waitFor('[data-test-automation-confirm-failure]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-confirm-failure]')
+        .includesText('the automation is already paused');
+      assert.dom('[data-test-automation-confirm="pause"]').exists();
+    });
+
+    test('a waiting or running run offers Cancel run, which asks first and cancels that run', async function (assert) {
+      listedRuns = [
+        run('run-running', {
+          state: 'running',
+          finishedAt: null,
+        }),
+        run('run-pending', {
+          slot: '2030-01-01T07:30:00.000Z',
+          state: 'pending',
+          startedAt: null,
+          finishedAt: null,
+          step: null,
+        }),
+        run('run-done', { slot: '2030-01-01T06:30:00.000Z' }),
+      ];
+      await openControls(ACTIVE);
+      await click(
+        '[data-test-automation-runs-section] [data-test-pretui-section-toggle]',
+      );
+      await waitFor('[data-test-automation-run="run-done"]', {
+        timeout: 10000,
+      });
+      assert.dom('[data-test-automation-run-cancel="run-running"]').exists();
+      assert.dom('[data-test-automation-run-cancel="run-pending"]').exists();
+      assert
+        .dom('[data-test-automation-run-cancel="run-done"]')
+        .doesNotExist('an ended run has nothing to cancel');
+      await click('[data-test-automation-run-cancel="run-running"]');
+      await waitFor('[data-test-automation-confirm="cancel-run"]', {
+        timeout: 10000,
+      });
+      assert.true(
+        dialogText('cancel-run').includes(
+          'Boxel stops the run and saves nothing the run wrote.',
+        ),
+      );
+      postAnswer = {
+        status: 200,
+        body: { data: { type: 'automation-run', id: 'run-running' } },
+      };
+      await confirm('cancel-run');
+      assert.strictEqual(posted[0].route, '_automation-run-cancel');
+      assert.strictEqual(posted[0].body.data.type, 'automation-run');
+      assert.strictEqual(posted[0].body.data.id, 'run-running');
+      await waitUntil(
+        () =>
+          !document.querySelector(
+            '[data-test-automation-confirm="cancel-run"]',
+          ),
+        { timeout: 10000 },
+      );
+    });
+  });
 });
